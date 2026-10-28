@@ -1,0 +1,34 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18240-2aa0-7ce2-8c42-febe6e92df06).
+[codex] Turn started (01a18240-2af2-7222-aa26-60284075a979).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e cruzar o pedido de comandos com a allowlist real do Edge,...
+[codex] Running command: /bin/bash -lc "git diff --find-renames --unified=80 main...HEAD -- docs/engineering/OLT_CAPTU...
+[codex] Command completed: /bin/bash -lc "git diff --find-renames --unified=80 main...HEAD -- docs/engineering/OLT_CAPTU... (exit 0)
+[codex] Running command: /bin/bash -lc 'nl -ba agents/edge/internal/olt/huawei.go; nl -ba agents/edge/internal/olt/zte...
+[codex] Command completed: /bin/bash -lc 'nl -ba agents/edge/internal/olt/huawei.go; nl -ba agents/edge/internal/olt/zte... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o pedido de coleta promete cobertu...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o pedido de coleta promete cobertura que a allowlist e os parsers não oferecem, e o relato registra credenciais de acesso e inclui conclusões não demonstradas no próprio diff.
+
+Findings:
+- [high] A coleta de paginação pede comandos fora da allowlist (docs/engineering/OLT_CAPTURE_REQUEST.md:25-26)
+  O documento manda desligar paginação com `scroll 512` ou `terminal length 0` e capturar também com paginação ligada. Esses comandos não estão na allowlist Huawei/ZTE, que aceita somente os comandos da tabela, e o Edge não consegue executar os ajustes de terminal. A captura manual pode funcionar, mas a alegação de que é exatamente o que o Edge executa e que os parsers tratarão os dois casos não é sustentada; além disso, o comportamento de paginação pode truncar saídas e enviesar inventário. Alinhe o procedimento à allowlist ou implemente uma forma permitida e validada de controlar paginação antes de solicitar as capturas.
+  Recommendation: Remova o requisito de duas condições de paginação ou documente que são capturas manuais fora do fluxo do Edge e não garantidas pelo parser; se forem necessárias ao Edge, adicione suporte explícito com limites e testes.
+- [medium] O relatório expõe detalhes sensíveis de acesso e recuperação (docs/integrations/GENIEACS_4WNET_SURVEY.md:47)
+  O arquivo versionado informa os caminhos exatos de credenciais e backup no host (`~/.fibercore-genieacs-*`), descreve que o backup contém a senha antiga e fornece o procedimento de restauração via PUT. Não há senha ou token em claro no diff, mas esses detalhes ajudam alguém com acesso ao host/repositório a localizar material secreto e restaurar configuração anterior. A garantia de que credenciais nunca foram registradas conflita com a divulgação operacional desses detalhes.
+  Recommendation: Remova nomes de arquivos e receita de restauração do documento versionado; mantenha evidência de que backup seguro existe sem revelar localização ou mecanismo operacional.
+- [medium] O pedido de sanitização pode deixar identificadores correlacionáveis (docs/engineering/OLT_CAPTURE_REQUEST.md:5)
+  A instrução exige substituir serials por valores fictícios consistentes em todos os arquivos, mas também exige manter fabricante, modelo, porta, ONT-ID, estados e valores ópticos e salvar a saída crua com prompt/banner. Isso pode preservar identificadores ou metadados que associem as capturas a um assinante/site, apesar da lista de campos a remover. Como os arquivos são destinados ao repositório versionado, uma sanitização incompleta pode publicar dados operacionais ou pessoais.
+  Recommendation: Instrua a revisar e remover identificadores adicionais de prompts, banners e campos não listados antes do commit; evite chamar a saída de crua sem ressalvar a necessidade de sanitização.
+- [medium] O status de correção mistura verificação pontual com garantia permanente (docs/integrations/GENIEACS_4WNET_SURVEY.md:32)
+  A tabela marca a porta CWMP como corrigida com base em respostas HTTP observadas e afirma que o preset fica desativado por uma precondição que nunca casa, enquanto o inventário e o método descrevem apenas a inspeção anterior por GET. O diff não traz evidência versionada das alterações atuais nem de validação após reinícios/configuração; assim, operadores podem concluir que o serviço está corrigido de forma durável embora o texto só sustente um teste pontual e leitura da API.
+  Recommendation: Qualifique a conclusão como verificação pontual datada e registre evidência sanitizada da configuração efetiva e da validação pós-alteração, sem incluir segredos.
+
+Next steps:
+- Revisar a instrução de paginação contra a allowlist efetiva e esclarecer o que o Edge realmente consegue capturar.
+- Remover do relatório caminhos de arquivos de segredo/backup e limitar as conclusões de correção à evidência disponível.

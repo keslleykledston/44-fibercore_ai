@@ -44,12 +44,14 @@ Método: login na UI do GenieACS com a credencial do `.env` e **apenas requisiç
 
 ## Correções aplicadas em 2026-10-28 (autorizadas pelo responsável)
 
-Backup prévio completo (presets, provisions, chaves `cwmp.*`) em arquivo 0600 fora do repositório (`~/.fibercore-genieacs-backup-20261028.json`; contém a senha antiga, não versionar). Restaurar = `PUT` dos mesmos documentos em `/api/presets`, `/api/provisions`, `/api/config`.
+Backup prévio completo (presets, provisions, chaves `cwmp.*`) mantido **fora do repositório**, com o responsável; contém dados sensíveis e não é versionado. A credencial CWMP nova também foi entregue fora do repositório. Nenhum caminho, senha ou procedimento de restauração é registrado aqui.
+
+**Escopo da evidência:** as verificações abaixo são **pontuais, de 2026-10-28**, feitas por requisições HTTP logo após a alteração. Não houve reinício do GenieACS nem nova verificação posterior; a persistência da configuração não foi demonstrada. Reexecutar após qualquer reinício/atualização.
 
 | Alteração | Verificação |
 |---|---|
-| `cwmp.auth = AUTH(<usuário>, <senha forte>)` (chave correta). A chave morta `cwmp.Auth` foi removida. Credencial em arquivo 0600 (`~/.fibercore-genieacs-cwmp-credentials`). | Inform sem credencial → 401; com `admin:admin` → 401; com a credencial nova → 200 |
-| Preset `Disparar_Homologacao`: precondição `DeviceID.ID = "__preset_desativado__"` (nunca casa) — preset desativado, não apagado | Precondição conferida na API |
+| `cwmp.auth = AUTH(<usuário>, <senha forte>)` (chave correta). A chave morta `cwmp.Auth` foi removida. Credencial em arquivo 0600 (`~/.fibercore-genieacs-cwmp-credentials`). | Inform sem credencial → 401; com `admin:admin` → 401; com a credencial nova → 200 (teste pontual) |
+| Preset `Disparar_Homologacao`: precondição `DeviceID.ID = "__preset_desativado__"` (nunca casa) — preset desativado, não apagado | Precondição relida pela API (leitura pontual) |
 | Provision `homologacao_ont_universal`: sem senha/SSID no script; usa `args[0]`=SSID, `args[1]`=senha; sem args não escreve; guardas contra parâmetro ausente | Script relido |
 | Provision `auditoria_ont_leitura`: guardas (`declare(...).value[0]` quebrava em CPEs `Device:2` → causa do fault `script.TypeError`) | O fault antigo some no próximo inform do dispositivo |
 

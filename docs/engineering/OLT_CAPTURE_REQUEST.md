@@ -2,12 +2,12 @@
 
 Hoje os parsers Huawei/ZTE foram escritos contra **fixtures sintéticas** (`agents/edge/internal/olt/testdata/README.md`). Sem saída real, o nível fica `identified` e nada é habilitado. Se o formato real divergir, corrijo o parser com a captura real, não o contrário.
 
-**Só leitura.** Usuário de visualização na OLT. Nenhum comando de configuração. Rodar manualmente por SSH e salvar a saída **crua** (com prompt e banner; não reformatar).
+**Só leitura.** Usuário de visualização na OLT. Nenhum comando de configuração. Rodar manualmente por SSH e salvar a saída sem reformatar (preservando colunas, espaços e quebras de linha), **sanitizada** conforme abaixo.
 
 ## Quais equipamentos
 Uma captura por **modelo de OLT + versão exata de firmware** em uso (ex.: Huawei MA5800-X7 R018, ZTE C300 V2.1). Se houver vários firmwares do mesmo modelo, uma por firmware. Começar pelos mais numerosos na rede.
 
-## Comandos (exatamente os que o Edge executa; allowlist em `huawei.go`/`zte.go`)
+## Comandos (os comandos que os drivers executam; allowlist em `huawei.go`/`zte.go`)
 
 | Fabricante | Comando | Observação |
 |---|---|---|
@@ -27,13 +27,18 @@ Se o comando exigir outro modo/forma na sua versão (ex.: entrar em `config` ou 
 3. Uma PON com **muitas ONUs** (≥ 32, para ver paginação).
 4. Se der: duas ONUs com `Rx` ausente/`N/A`.
 
-## Paginação
-Capturar com a paginação desligada (Huawei: `scroll 512` ou equivalente; ZTE: `terminal length 0`) **e** uma vez com ela ligada, preservando o texto `---- More ( Press 'Q' to break ) ----`, para o driver tratar os dois casos.
+## Paginação (limite conhecido)
+O Edge **não** executa ajustes de terminal (`scroll`, `terminal length`): estão fora da allowlist e continuarão fora. O driver atual também **não trata** o marcador `---- More ----`; hoje ele depende de a conta de leitura da OLT já estar com paginação desligada. Por isso:
+- Capture a saída **como o Edge a veria** (conta de leitura nas configurações dela). Se a saída vier truncada ou com `---- More ----`, **envie assim mesmo e avise**: isso é uma lacuna do driver a corrigir (com testes), não algo a contornar na captura.
+- Se, para obter a saída completa, você precisar ligar/desligar paginação manualmente, anote no `lab_run.md` que foi um ajuste manual fora do fluxo do Edge.
 
 ## Sanitização (antes de enviar)
 - Trocar números de série/GPON SN por valores inventados **mantendo formato e tamanho** (mesma mistura de letras/dígitos), de forma consistente (mesmo SN real → mesmo SN fictício em todos os arquivos).
 - Remover/trocar nomes de cliente, descrições, IPs, MACs, nomes de OLT/site, senhas e comunidades SNMP. Manter posições `F/S/P`, ONT-IDs, estados e valores ópticos.
+- Revisar manualmente prompts, banners, mensagens de login/aviso legal e qualquer campo não listado acima (hostname, localização, contatos, datas/horas que identifiquem o site, descrições livres) e remover/trocar antes de commitar. Em dúvida, remover.
+- Manter fabricante, modelo, firmware, `F/S/P`, ONT-ID, estados e valores ópticos (necessários ao parser); se a combinação de porta + estados puder identificar um assinante/site, trocar a numeração de forma consistente e anotar.
 - Não enviar `display current-configuration`/`show running-config`.
+- Nada vai ao repositório antes dessa revisão; capturas não sanitizadas ficam fora do Git.
 
 ## Onde colocar
 `docs/engineering/captures/<fabricante>_<modelo>/<firmware>/` com um arquivo por comando (`display_version.txt`, `ont_info_summary_0-1-0.txt`, …) e um `lab_run.md` com: data, modelo, firmware exato, quem executou, porta usada, se a paginação estava ligada. Formato exigido em `docs/engineering/DRIVER_SDK_INTERFACE.md`.
