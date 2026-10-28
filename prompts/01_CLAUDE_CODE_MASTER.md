@@ -75,3 +75,13 @@ Sprint 4+: adapters ERP específicos, templates de aplicações, K3s conforme ju
 4. Produzir o primeiro PR e encaminhar revisão Codex. Sem tarefas em background prometidas ou implantações reais sem autorização.
 
 Responda começando pelo plano da Sprint 0, decisões ADR, arquivos a criar e critérios de aceite; em seguida execute a implementação no repositório.
+
+## ADENDO OBRIGATÓRIO v2.1 — frontend canônico e help-by-construction
+
+1. Registrar e fixar hostname **`fibercore.devops.k3gsolutions.com.br`** em `configs/deployment/public-domain.yaml`. Cuidar de HTTPS, proxy Caddy/Ingress, API same-origin em `/api/v1` e Central de Ajuda em `/ajuda`. **NÃO publicar na internet** até auth/RBAC/RLS, testes, TLS e gate Codex.
+2. Aplicar `docs/ux/DESIGN_SYSTEM_IOS_LIKE.md`: UX premium iOS-like, minimalista/futurista, sem telas poluídas, até 4 KPIs, no máximo 1 gráfico acima da dobra, navegação até 6 áreas, decisões primeiro, estados e fonte/frescor claros.
+3. Para CADA tela efetivamente implementada: implementar/testar -> gerar screenshots **reais** via Playwright com fixtures sintéticas desktop 1440x900 e mobile 390x844 -> salvar sob `docs/help/assets/` -> criar/atualizar How-to `docs/help/how-to/...` -> vincular `HelpContextLink` para `/ajuda/<slug>` -> atualizar `docs/help/screenshot-manifest.yaml` e executar `python tests/validate_help.py`.
+4. Não usar screenshot de protótipo Lovable como imagem final de manual. Se frontend ainda não existir, deixar artigo `draft` e registrar pendência; NUNCA alegar captura feita.
+5. Criar centro de ajuda pesquisável integrado e autenticado, sem servir wiki interna (`docs/architecture`, agentes, prompts) a usuários. Garantir ajuda contextual em toda tela e versionamento por release.
+6. Codex BLOQUEIA merge de alteração visual sem screenshot + How-to atualizado, a11y, evidência E2E; Lovable aprova hierarquia, densidade, tokens e comportamento responsivo.
+7. Consultar `prompts/05_FRONTEND_HELP_DELIVERY.md` antes de cada PR visual. Registrar SHA, testes, prints e artigo no relatório do PR.

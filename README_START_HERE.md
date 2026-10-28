@@ -1,6 +1,6 @@
-# FiberCore AI — Construction Build Kit v2.0
+# FiberCore AI — Construction Build Kit v2.1
 
-**Data-base:** 2026-10-27 · **Projeto:** K3G OLT SaaS / FiberCore AI · **Estado:** pacote de planejamento, especificação e bootstrap (não é SaaS pronto).
+**Data-base:** 2026-10-28 · **Projeto:** K3G OLT SaaS / FiberCore AI · **Estado:** pacote de planejamento, especificação e bootstrap (não é SaaS pronto).
 
 ## Como usar (ordem)
 
@@ -54,3 +54,11 @@
 - Catálogo é projeto de perfil/capacidades; perfis de comandos reais exigem firmware, CLI/OIDs comprovados e fixtures de laboratório.
 - Versões/imagens do Compose são **exemplos a congelar por digest após validação**.
 - Metas de SLA, capacidade e cronograma são propostas a validar por benchmark. Compose não oferece sozinho atualização sem downtime nem recuperação automática ao estado healthy após toda falha.
+
+## Adendo v2.1 — hostname público, design e ajuda por tela
+
+- **Frontend oficial:** `https://fibercore.devops.k3gsolutions.com.br` (URL **planejada**, não confirma DNS/TLS/deploy). Help integrado `/ajuda`; API same-origin `/api/v1`.
+- **UI:** minimalista, futurista, iOS-like, sem poluição. Regras completas em `docs/ux/DESIGN_SYSTEM_IOS_LIKE.md` e tokens em `configs/ui/design-tokens.json`.
+- **Entrega funcional de qualquer tela = manual + capturas reais.** Gerar Playwright 1440×900 / 390×844, imagens em `docs/help/assets/`, how-to por funcionalidade e link contextual na UI. Testar `python tests/validate_help.py`. Não usar screenshot do mock Lovable como documentação final.
+- **Deployment:** `docs/architecture/PUBLIC_ENDPOINTS.md`, `infra/deploy/Caddyfile.example`, `infra/deploy/PRODUCTION_CHECKLIST.md`. Publicação bloqueada enquanto scaffold `DEMO_MODE=true`/auth pendente.
+- Leia também `prompts/05_FRONTEND_HELP_DELIVERY.md` para execução visual integrada ao Claude + Lovable + Codex.

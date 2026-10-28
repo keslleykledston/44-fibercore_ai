@@ -58,3 +58,7 @@ PostgreSQL PITR/WAL + backup externo testado, NATS stream snapshots conforme ret
 ## Serviços do bootstrap
 
 `postgres`, `nats`, `api-core`; `prometheus` em profile `observability`; agentes reais e GenieACS **não** são instalados ou substituídos no compose de núcleo. Serviços futuros `web`, `edge-gateway`, `worker`, `catalog`, `usp-controller-adapter`, `copilot` só recebem profiles quando houver implementação e testes reais.
+
+## Hostname frontend e SLO de publicação
+
+Publicar somente em `https://fibercore.devops.k3gsolutions.com.br` após aprovação. Monitorar status/latência HTTP no ingress, validade de certificado, erros 4xx/5xx, redirect HTTP->HTTPS, rotas `/ajuda` e `/api/v1`. Alertar separadamente indisponibilidade de frontend, API e módulo opcional. Rollbacks não podem apagar documentação nem invalidar URLs de ajuda; manter `help_slug` estável ou redirects versionados.

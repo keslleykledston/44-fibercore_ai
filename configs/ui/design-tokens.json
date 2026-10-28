@@ -1,0 +1,62 @@
+{
+  "meta": {
+    "system": "FiberCore iOS-like",
+    "version": "2.1.0",
+    "description": "Conceito visual; valores iniciais sujeitos a contrast check WCAG 2.2 AA"
+  },
+  "fontFamily": "-apple-system, BlinkMacSystemFont, Inter, \"Segoe UI\", sans-serif",
+  "colors": {
+    "light": {
+      "background": "#F6F7F9",
+      "surface": "#FFFFFF",
+      "text": "#17202B",
+      "muted": "#626F7C",
+      "border": "#E7EBF0",
+      "accent": "#2876D0"
+    },
+    "dark": {
+      "background": "#0E1118",
+      "surface": "#171C25",
+      "text": "#F3F6FA",
+      "muted": "#AAB4C1",
+      "border": "#2E3745",
+      "accent": "#6AAFFF"
+    }
+  },
+  "spacingScalePx": [
+    4,
+    8,
+    12,
+    16,
+    24,
+    32,
+    48
+  ],
+  "radiiPx": {
+    "button": 10,
+    "card": 14,
+    "modal": 16
+  },
+  "interaction": {
+    "touchTargetMinPx": 44,
+    "motionDurationMs": {
+      "fast": 120,
+      "standard": 180,
+      "slow": 220
+    },
+    "respectReducedMotion": true
+  },
+  "layout": {
+    "maxPrimaryNavItems": 6,
+    "maxDashboardKpisAboveFold": 4,
+    "maxDashboardChartsInitiallyVisible": 1,
+    "desktopScreenshot": [
+      1440,
+      900
+    ],
+    "mobileScreenshot": [
+      390,
+      844
+    ]
+  }
+}

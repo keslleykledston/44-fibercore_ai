@@ -107,9 +107,28 @@ services:
     restart: unless-stopped
     security_opt: [no-new-privileges:true]
     read_only: true
+  proxy:
+    # Profile "public": reverse proxy do frontend/API (ADR-0012). NÃO sobe por padrão. Só o proxy é publicável.
+    profiles: [public]
+    image: caddy:2.8-alpine
+    volumes:
+      - ../deploy/${FIBERCORE_CADDYFILE:-Caddyfile.dev}:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "127.0.0.1:${FIBERCORE_PROXY_HTTP_PORT:-18480}:80"
+    depends_on:
+      api-core: {condition: service_healthy}
+    networks: [control]
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp]
 networks:
   control:
     driver: bridge
 volumes:
   pg_data: {}
   nats_data: {}
+  caddy_data: {}
+  caddy_config: {}

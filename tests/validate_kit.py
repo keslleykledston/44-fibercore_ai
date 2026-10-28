@@ -18,4 +18,9 @@ assert all(not p.get("certified_operations") for p in yaml.safe_load((ROOT / "co
 api = yaml.safe_load((ROOT / "contracts/fibercore-v2.openapi.yaml").read_text(encoding="utf-8"))
 assert api['openapi'].startswith('3.')
 assert len(api['paths']) >= 9
-print(f"PASS: {len(YAMLS)} YAML, schemas, {len(ids)} modules, {len(api['paths'])} paths")
+deploy = yaml.safe_load((ROOT / "configs/deployment/public-domain.yaml").read_text(encoding="utf-8"))
+assert deploy["public_frontend"]["hostname"] == "fibercore.devops.k3gsolutions.com.br"
+assert api["servers"][0]["url"] == "/api/v1", "API public prefix drift"
+assert (ROOT / "docs/ux/DESIGN_SYSTEM_IOS_LIKE.md").is_file()
+assert (ROOT / "docs/engineering/SCREENSHOT_AND_HOWTO_PIPELINE.md").is_file()
+print(f"PASS: {len(YAMLS)} YAML, schemas, {len(ids)} modules, {len(api['paths'])} paths; domain/UX/how-to contracts")

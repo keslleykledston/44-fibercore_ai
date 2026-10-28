@@ -29,3 +29,7 @@ Cada módulo em `configs/modules.yaml` deve declarar:
 - Se versão major do adapter difere, bloquear recurso afetado (não plataforma inteira).
 - Novas operações somente com capability `certified` e feature flag por tenant/canary.
 - É proibido instalar plugins arbitrários executáveis vindos de tenants. Catálogo de drivers assinado/revisado, bundles imutáveis, SBOM e testes de supply chain.
+
+## Módulo lógico Help Center
+
+`help-center` será integrado no runtime `web`, **não requer container isolado**. Expor liveness do frontend e teste sintético da rota `/ajuda`; falha de conteúdo de ajuda não derruba o inventário ou módulos de rede. Somente publicar artigos com status `published`, screenshots reais e versão revisada. Documentação interna permanece inacessível pelo público.

@@ -45,3 +45,7 @@ Estados: `DRAFT -> PREVIEWED -> PENDING_APPROVAL -> APPROVED -> DISPATCHED -> AC
 ## Testes obrigatórios
 
 Tenant A busca Tenant B = 403/404 sem existência revelada; admin de plataforma sem delegação não acessa dado cliente; replay nonce/job rejeitado; transição de estados ilegal rejeitada; request com OLT IP fora allowlist negada; PSK em logs/webhooks ausente; import CSV malicioso validado; CPE dual-stack só uma alteração simultânea.
+
+## Gate para publicar o domínio público
+
+O hostname `fibercore.devops.k3gsolutions.com.br` não deve ser exposto antes de remover `DEMO_MODE`, integrar autenticação/RBAC/RLS reais, testar session/CSRF, validar TLS e restringir portas internas. Central de Ajuda `/ajuda` apenas com manuais de usuários revisados; capturas devem usar dados sintéticos sem PII/IPs reais. Revisão Codex de segurança obrigatória com artefatos de evidência. A plataforma não ganha permissão automática de publicar DNS/rede sem aprovação da equipe de infraestrutura.

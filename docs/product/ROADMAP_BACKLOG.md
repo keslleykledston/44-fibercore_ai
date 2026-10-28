@@ -59,3 +59,30 @@
 ## Ordem de paralelismo
 
 Codex não revisa códigos ainda não finalizados; Lovable pode trabalhar telas usando mocks e contratos versionados em paralelo ao Edge. Claude deve concluir caminhos verticais antes de abrir mais serviços. Sem **merge autônomo de PR crítico** e sem writes em equipamentos sem aceite humano.
+
+## Backlog adicional obrigatório — v2.1 (domínio e Help-by-construction)
+
+**Sprint 0:** registrar ADR do hostname, manifesto canônico e fluxos Caddy/Ingress; manter proxy público desabilitado enquanto auth/RLS estiverem incompletos; gerar `configs/ui/design-tokens.json` e definir contrato `/ajuda`, `/api/v1`.
+
+**Sprint 1 / primeira UI:** construir AppShell e biblioteca de componentes conforme design system; documentação/central de ajuda com roteamento contextual e busca por título; criar Playwright com seed sintética e caso E2E para screenshots; sem dados falsos em produção.
+
+**Cada sprint visual:** capturar desktop 1440×900 e mobile 390×844, atualizar artigo respectivo + índice + last_verified e revê-los no Codex. Mudança de UI exige regenerar captura (do sistema funcionando, não do Lovable). Registrar status `draft` antes disso.
+
+**Gate de publicação:** DNS e TLS em `fibercore.devops.k3gsolutions.com.br`, apenas 443/80 no proxy, Same-Origin API, testes de autenticação isolada e controle de acesso, CSP/cookies, rollback, monitoramento e checklist `infra/deploy/PRODUCTION_CHECKLIST.md`.
+
+## Adendo v2.1 — backlog adicional (domínio, design system, ajuda por construção)
+
+Inventário em 2026-10-28: backend/Edge/jobs/ERP/NOC prontos e testados; **nenhuma tela existe**. Tarefas existentes preservadas; as abaixo são novas.
+
+- [x] ADR-0012 domínio/proxy/`/api/v1` · ADR-0013 design system+ajuda · ADR-0014 sessão BFF (Proposed).
+- [x] OpenAPI `servers: /api/v1`; proxy Caddy (profile `public`) com E2E `scripts/test-proxy.sh`; `validate_help.py` no gate.
+- [ ] W1 `apps/web` scaffold Next.js/TS/Tailwind + tokens + AppShell + tema claro/escuro (proposta Lovable → integração).
+- [ ] W2 BFF de sessão (login/logout/workspace) + testes de segurança.
+- [ ] W3 Pipeline Playwright (`apps/web/e2e/help-screenshots.spec.ts`) + fixtures sintéticas + `HelpContextLink`.
+- [ ] W4 Central de Ajuda `/ajuda` (busca, deep link, só `docs/help`).
+- [ ] W5 Tela Rede: OLT/PON/ONU (frescor, `support_level`) + How-to `rede/consultar-onu`.
+- [ ] W6 Tela NOC: fila de incidentes (silêncio de Edge ≠ offline) + How-to `noc/acompanhar-incidente`.
+- [ ] W7 Tela Administração/Módulos + How-to `administracao/saude-modulos`.
+- [ ] W8 Telas ERP (importar CSV, revisar associações) e Jobs (preview/aprovação; escrita bloqueada visível) com How-to.
+- [ ] W9 Hardening de publicação: MFA/refresh/rate-limit, CSP, HSTS (só após TLS real), DNS/TLS/ACME reais, Codex PASS.
+

@@ -1,6 +1,6 @@
 # Implementation status (evidência, não promessa)
 
-Atualizado: 2026-10-27 | Branch: `sprint3/10-job-gate` | Estado: **Sprint 0 concluída (PR 1–4 mergeados); Sprint 1 em andamento (PR 5)**
+Atualizado: 2026-10-27 | Branch: `addendum/11-v2.1-foundation` | Estado: **Sprint 0 concluída (PR 1–4 mergeados); Sprint 1 em andamento (PR 5)**
 
 | Item Sprint 0 | Status | Prova | Pendência |
 |---|---|---|---|
@@ -38,3 +38,11 @@ Edge-fleet: registro via CLI, `POST /v1/edge/heartbeat` (bearer edge_agent, inte
 | Job gate (máquina de estados CAS, aprovações, TTL, envelope Ed25519, verificação no Edge, nonce persistido) | Feito (PR 10) | pytest 97 + go test -race PASS; golden Python→Go de assinatura |
 | Escrita real em rede | **BLOQUEADA** (`HOMOLOGATED_WRITES` vazio no Cloud; `ReadOnlyOps` compilado no Edge) | testes de bloqueio |
 | USP adapter / release center | Não iniciado | — |
+
+## Adendo v2.1 (domínio, design system, ajuda)
+| Item | Status | Prova |
+|---|---|---|
+| Kit v2.1 importado sem sobrescrever arquivos modificados (merge manual de modules.yaml/OpenAPI/Makefile/.env.example) | Feito | `validate_kit.py` PASS (15 módulos), `validate_help.py` PASS (3 artigos `draft`) |
+| `/api/v1` + proxy Caddy (profile `public`), rotas internas bloqueadas | Feito (dev, HTTP loopback) | `scripts/test-proxy.sh` 10/10 PASS |
+| DNS/TLS/publicação em `fibercore.devops.k3gsolutions.com.br` | **NÃO realizado** (depende de infra e gate) | — |
+| Frontend `apps/web`, design system, Playwright, Central de Ajuda | **Não iniciado** (W1–W9) | — |

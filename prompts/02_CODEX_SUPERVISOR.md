@@ -34,3 +34,9 @@ Papel: Principal Reviewer / Security Architect / SRE Reviewer. **Não reimplemen
 - Parecer final com data/commit SHA; anexar em `docs/reviews/CODEX_REVIEW_<PR>.md`.
 
 Faça perguntas apenas quando informações reais ausentes são bloqueadoras da revisão; caso contrário anote limites e siga com o material disponível.
+
+## Novos checks obrigatórios v2.1
+
+11. `PUBLIC_DOMAIN`: configuração aponta para **`https://fibercore.devops.k3gsolutions.com.br`**; `/ajuda` no frontend; `/api/v1` same-origin mapeada para `/v1` interno; TLS e proxy sem exposição de NBI/DB/NATS; **BLOCK** se scaffold `DEMO_MODE` ou auth/RLS incompletos forem publicados.
+12. `MINIMAL_IOS_LIKE_UX`: aplicar tokens e spec premium iOS-like com pouca densidade, acessibilidade, fontes e frescor visíveis, não imitar logos Apple, testes desktop/mobile.
+13. `HELP_BY_CONSTRUCTION`: PR visual somente `PASS` se tiver capturas reais Playwright de frontend integrado (desktop 1440x900, mobile 390x844), artigo `docs/help/how-to`, `help_slug` em UI, manifesto atualizado, revisão de screenshot sem dados sensíveis e E2E rastreável; **BLOCK** se captura fake, desatualizada ou manual incoerente. Para telas ainda não implementadas, manter `draft` e não alegar conclusão.

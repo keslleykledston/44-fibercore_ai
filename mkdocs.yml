@@ -13,3 +13,6 @@ nav:
   - Integrations: erp/ERP_INTEGRATIONS.md
   - Copilot: ai/COPILOT_SPEC.md
   - UX: ux/UX_SPEC.md
+  - UI Design System: ux/DESIGN_SYSTEM_IOS_LIKE.md
+  - Public Routes: architecture/PUBLIC_ENDPOINTS.md
+  - How-to Pipeline: engineering/SCREENSHOT_AND_HOWTO_PIPELINE.md

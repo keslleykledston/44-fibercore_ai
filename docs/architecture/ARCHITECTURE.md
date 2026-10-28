@@ -75,3 +75,7 @@ Compose atende desenvolvimento e piloto controlado, mas não HA real. Gatilhos: 
 ### ADRs obrigatórias
 
 `ADR-0001`: monólito modular; `0002`: agent outbound; `0003`: GenieACS existente; `0004`: USP desacoplado; `0005`: outbox+JetStream; `0006`: multi-tenant RLS; `0007`: no implicit retries writes; `0008`: Compose->K3s; `0009`: dual-stack resolution; `0010`: opt-in LLM gateway. Modelo em docs/wiki/adr/TEMPLATE.md.
+
+## Endereço público e separação de documentação
+
+O hostname único de frontend é `fibercore.devops.k3gsolutions.com.br` com HTTPS obrigatório. Frontend `/`, Central de Ajuda do usuário `/ajuda`, API mesmo origin `/api/v1`; especificação e modelo de rede em `docs/architecture/PUBLIC_ENDPOINTS.md`. Documentação técnica MkDocs/ADRs é INTERNA e não entra no bundle publicado da Central de Ajuda. A publicação depende de autenticação real e revisão de segurança, inexistentes no scaffold.

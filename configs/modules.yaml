@@ -127,3 +127,13 @@ modules:
     capabilities: [explain, summarize, suggest]
     failure_mode: disable_without_core_impact
     feature_flag: false
+  - id: help-center
+    kind: optional
+    version: 0.1.0
+    critical: false
+    requires: [identity-access]
+    optional_dependencies: [postgres]
+    capabilities: [contextual_help, search_article, validated_howto]
+    failure_mode: isolated
+    feature_flag: false
+    # logical module: runs inside the Next.js frontend, not an extra container.

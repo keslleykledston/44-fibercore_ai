@@ -1,0 +1,20 @@
+# CANONICAL deployment intent; planning only, not a live DNS or TLS configuration.
+version: 1
+product: FiberCore AI
+public_frontend:
+  hostname: fibercore.devops.k3gsolutions.com.br
+  canonical_url: https://fibercore.devops.k3gsolutions.com.br
+  protocol: https
+  tls_required: true
+  public_routes:
+    app: /
+    help_center: /ajuda
+    api: /api/v1
+  private_routes:
+    - /internal
+    - /metrics
+  allowed_public_ports: [80, 443]
+  default_authentication: required
+  preproduction_visibility: internal_only
+  release_gate: authenticated_frontend_and_security_review
+  notes: 'DNS, certificação TLS e implantação dependem de configuração real da infraestrutura; nenhum endpoint está publicado apenas por este manifesto.'

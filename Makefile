@@ -4,7 +4,7 @@ PY := $(VENV)/bin/python
 COMPOSE := docker compose --env-file .env.dev -f infra/compose/compose.yaml
 TEST_PG_PORT ?= 55432
 
-.PHONY: venv env-dev validate lint test-api compose-config up down logs
+.PHONY: venv env-dev validate validate-help lint test-api compose-config up down logs
 venv:
 	test -d $(VENV) || python3 -m venv $(VENV)
 	$(VENV)/bin/pip install -q -e 'apps/api[dev]'
@@ -20,6 +20,10 @@ env-dev:  ## gera .env.dev com segredos aleatórios (nunca toca .env)
 
 validate: venv
 	$(PY) tests/validate_kit.py
+	$(PY) tests/validate_help.py
+
+validate-help: venv
+	$(PY) tests/validate_help.py
 
 lint: venv
 	$(VENV)/bin/ruff check apps/api

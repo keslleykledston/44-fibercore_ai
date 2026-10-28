@@ -1,0 +1,31 @@
+# EXEMPLO para o Claude Code adaptar após frontend + auth completos.
+# Não usar para publicar o scaffold DEMO_MODE=true.
+# Caddy obtém/renova certificados quando DNS e ACME estiverem configurados.
+{
+    email {$ACME_EMAIL}
+}
+
+fibercore.devops.k3gsolutions.com.br {
+    encode zstd gzip
+
+    @api path /api /api/*
+    handle @api {
+        uri strip_prefix /api
+        reverse_proxy api-core:8000
+    }
+
+    handle {
+        reverse_proxy web:3000
+    }
+
+    header {
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    log {
+        output stdout
+        format json
+    }
+}

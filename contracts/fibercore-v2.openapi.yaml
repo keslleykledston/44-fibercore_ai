@@ -1,12 +1,12 @@
 openapi: 3.1.0
 info:
   title: FiberCore AI Public/Operator API
-  version: 0.6.0-draft
+  version: 0.7.0-draft
   description: >-
     Contrato evolutivo orientado a multi-tenancy; implementação segura é obrigatória
     antes de tráfego real. Tenant é derivado de claims autenticadas e validação de memberships.
 servers:
-  - url: /v1
+  - url: /api/v1
 tags:
   - name: Platform
   - name: Network

@@ -1,0 +1,33 @@
+# DEV/TESTE apenas: HTTP em loopback, sem TLS. Produção usa infra/deploy/Caddyfile.example (HTTPS automático, host real).
+{
+    auto_https off
+    admin off
+}
+
+:80 {
+    encode zstd gzip
+
+    # /api/v1/* -> api-core:8000/v1/*  (remove SOMENTE o prefixo /api)
+    @api path /api /api/*
+    handle @api {
+        uri strip_prefix /api
+        reverse_proxy api-core:8000
+    }
+
+    # Rotas internas NUNCA publicas
+    @internal path /internal /internal/* /metrics /metrics/* /docs /docs/* /openapi.json /livez /readyz
+    handle @internal {
+        respond "not found" 404
+    }
+
+    handle {
+        reverse_proxy web:3000
+    }
+
+    header {
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        X-Frame-Options "DENY"
+        -Server
+    }
+}

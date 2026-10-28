@@ -1,0 +1,10 @@
+# Internal documentation preview ONLY; SaaS's /ajuda must be served by authenticated Next.js route.
+site_name: FiberCore AI - Central de Ajuda (prévia local)
+site_description: Conteúdo de usuário com artigos inicialmente em rascunho
+# mkdocs expects docs_dir; run `mkdocs serve -f mkdocs.help.yml` only for preview.
+docs_dir: docs/help
+nav:
+  - Início: README.md
+  - Consultar ONU: how-to/rede/consultar-onu.md
+  - Incidentes: how-to/noc/acompanhar-incidente.md
+  - Saúde dos Módulos: how-to/administracao/saude-modulos.md

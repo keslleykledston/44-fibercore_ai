@@ -109,3 +109,11 @@ Se `acs-cwmp` ficar indisponível: mostrar dados em cache com selo STALE; nenhum
 8. Deploy, rollback e restauração de backup testados, sem alegar zero downtime antes de múltiplas réplicas.
 9. Contratos REST versionados e testes automáticos executados no CI.
 10. PR sem atualização de wiki/ADR/memória e parecer Codex não chega a `main`.
+
+## Adendo de produto v2.1 — Domínio, experiência premium e Central de Ajuda
+
+**Requisito não negociável:** frontend publicado **somente após aceite de segurança** em `https://fibercore.devops.k3gsolutions.com.br` e `/ajuda` integrado; API same-origin em `/api/v1`. Nenhum backend GenieACS NBI/USP/Mongo/DB é publicado na internet.
+
+**UX obrigatória:** linguagem visual minimalista, futurista e iOS-like; tarefas e decisões antes de dashboards densos, cardificação restrita, navegação simples com help contextual; light/dark e WCAG 2.2 AA. Diretrizes completas em `docs/ux/DESIGN_SYSTEM_IOS_LIKE.md`.
+
+**Help-by-construction:** toda tela concluída inclui screenshot real desktop/mobile capturado da implementação integrada, manual How-to atualizado, rota de ajuda contextual, validação Codex e rastreabilidade por versão/commit. Sem captura REAL, a funcionalidade visual permanece `draft`, não `done`.

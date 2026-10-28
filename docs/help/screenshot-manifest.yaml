@@ -1,0 +1,18 @@
+version: 1
+# Estes documentos são draft e NÃO representam telas já implementadas.
+articles:
+  - slug: rede/consultar-onu
+    ui_route: /rede/onus
+    status: draft
+    images: []
+    e2e_test: null
+  - slug: noc/acompanhar-incidente
+    ui_route: /noc
+    status: draft
+    images: []
+    e2e_test: null
+  - slug: administracao/saude-modulos
+    ui_route: /administracao/modulos
+    status: draft
+    images: []
+    e2e_test: null

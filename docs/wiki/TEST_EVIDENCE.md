@@ -60,3 +60,8 @@ Ambiente: Linux, Python 3.12.3, Docker 29.2.1, PostgreSQL 17-alpine (container d
 
 ## 2026-10-28 — Sprint 3 PR 10 (job gate)
 - `scripts/test-env.sh run`: **PASS — 97 passed**. `go test -race ./...`: **PASS**. Escrita bloqueada (3 ops × preview/submit/dispatch), 2-person rule R3, replay/forja/expiração rejeitados no Edge.
+
+## 2026-10-28 — Adendo v2.1 (PR 11)
+- `scripts/test-proxy.sh`: **PASS 10/10** (mapeamento /api/v1→/v1, rotas internas 404, sem porta pública). `validate_kit.py` e `validate_help.py` PASS.
+- Bug achado pelo E2E: `requirements.lock` sem `cryptography` quebrava a imagem; corrigido + `pip-audit` limpo (cryptography 50.0.2) + smoke `import app.main` na imagem (CI).
+- pytest 101 passed; ruff PASS.

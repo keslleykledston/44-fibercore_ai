@@ -39,3 +39,11 @@ PYTHONPATH=. pytest -q
 - Não publicar PostgreSQL, NATS ou GenieACS NBI externamente.
 - Para produção, substituir NATS sem autenticação dev por NATS autenticado/TLS/ACL, pin de imagens por digest e observabilidade/hardening reais.
 - Todo esquema, backlog e catálogo são pontos de partida revisáveis e exigem homologação técnica.
+
+## Validação do adendo v2.1
+
+```bash
+python tests/validate_help.py
+```
+
+**Domínio final previsto:** `https://fibercore.devops.k3gsolutions.com.br` — ainda requer DNS, TLS e frontend real. O quickstart do scaffold é SOMENTE local e **não** deve ser publicado via Caddy até autenticação e RLS estarem implementadas.

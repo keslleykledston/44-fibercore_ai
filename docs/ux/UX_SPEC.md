@@ -38,3 +38,11 @@ Interface minimalista, alto contraste e **contexto primeiro**. Evitar 20 widgets
 - Componentes com props tipadas e acessibilidade; sem backend próprio de produção, sem usuários fictícios persistidos e sem manipulação de rede.
 - Handoff: rotas Next.js, mapa de componentes, estados, eventos, actions e OpenAPI operationId; testes visuais/keyboard.
 - Preferir entregar código exportável para `apps/web/` e PR separado de lógica/segurança.
+
+## Diretriz visual oficial v2.1
+
+**Domínio frontend:** `https://fibercore.devops.k3gsolutions.com.br`. Central de Ajuda integrada em `/ajuda`.
+
+**Identidade visual:** minimalista, futurista, produto premium K3G inspirado na fluidez e clareza do iOS/macOS. Aplicar `docs/ux/DESIGN_SYSTEM_IOS_LIKE.md` e tokens de `configs/ui/design-tokens.json`. Evitar telas poluídas: uma ação primária por contexto, máximo 4 KPIs acima da dobra, no máximo 1 gráfico inicial, navegação principal com até 6 áreas, detalhes sob demanda e uso moderado de transparências.
+
+**Documentação de cada tela:** UI entregue -> teste Playwright -> screenshots desktop/mobile reais -> `docs/help/how-to/` -> Central de Ajuda contextual. Regra de merge em `docs/engineering/SCREENSHOT_AND_HOWTO_PIPELINE.md`.
