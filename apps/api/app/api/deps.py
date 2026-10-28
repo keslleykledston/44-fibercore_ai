@@ -19,6 +19,7 @@ class Principal:
     kind: str
     tenant_id: UUID
     role: str
+    edge_id: UUID | None = None
 
     def can(self, perm: str) -> bool:
         return perm in ROLE_PERMISSIONS.get(self.role, frozenset())
@@ -47,12 +48,12 @@ def get_principal(
     if claims.kind == "service":
         with scoped_connection(engine, user_id=claims.sub, tenant_id=claims.tenant_id) as conn:
             row = conn.execute(
-                text("SELECT role, is_active FROM service_accounts WHERE id = :i AND tenant_id = :t"),
+                text("SELECT role, is_active, edge_id FROM service_accounts WHERE id = :i AND tenant_id = :t"),
                 {"i": claims.sub, "t": claims.tenant_id},
             ).first()
         if not row or not row.is_active:
             raise _unauth()
-        return Principal(claims.sub, "service", claims.tenant_id, row.role)
+        return Principal(claims.sub, "service", claims.tenant_id, row.role, row.edge_id)
 
     with scoped_connection(engine, user_id=claims.sub) as conn:
         active = conn.execute(

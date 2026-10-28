@@ -30,9 +30,13 @@ def edge_env(seed, migrated):
         c.execute(text("INSERT INTO edges(tenant_id,name) VALUES (:t,'edge-b1')"), {"t": seed["B"]})
         sec = "edge-agent-secret-xyz"
         sa = c.execute(
-            text("INSERT INTO service_accounts(tenant_id,name,role,secret_hash) VALUES (:t,'edge-a1-agent','edge_agent',:h) RETURNING id"),
-            {"t": seed["A"], "h": hash_secret(sec)}).scalar()
-    return {"edge": eid, "sa": sa, "secret": sec}
+            text("INSERT INTO service_accounts(tenant_id,name,role,secret_hash,edge_id) VALUES (:t,'edge-a1-agent','edge_agent',:h,:e) RETURNING id"),
+            {"t": seed["A"], "h": hash_secret(sec), "e": eid}).scalar()
+        eid2 = c.execute(text("INSERT INTO edges(tenant_id,name) VALUES (:t,'edge-a2') RETURNING id"), {"t": seed["A"]}).scalar()
+        sa2 = c.execute(
+            text("INSERT INTO service_accounts(tenant_id,name,role,secret_hash,edge_id) VALUES (:t,'edge-a2-agent','edge_agent',:h,:e) RETURNING id"),
+            {"t": seed["A"], "h": hash_secret(sec), "e": eid2}).scalar()
+    return {"edge": eid, "sa": sa, "secret": sec, "edge2": eid2, "sa2": sa2}
 
 
 def token(client, edge_env):
@@ -52,7 +56,7 @@ def test_heartbeat_marks_online_and_listing_is_tenant_scoped(client, seed, edge_
     assert edge.heartbeat() == 204
     h = {**login(client, "alice"), "X-Workspace-ID": str(seed["A"])}
     rows = client.get("/v1/edges", headers=h).json()
-    assert [r["name"] for r in rows] == ["edge-a1"] and rows[0]["status"] == "online" and rows[0]["version"] == "0.0.1-mock"
+    assert [r["name"] for r in rows] == ["edge-a1", "edge-a2"] and rows[0]["status"] == "online" and rows[1]["status"] == "unknown" and rows[0]["version"] == "0.0.1-mock"
     hb = {**login(client, "bob"), "X-Workspace-ID": str(seed["B"])}
     assert [r["name"] for r in client.get("/v1/edges", headers=hb).json()] == ["edge-b1"]
 
@@ -70,7 +74,7 @@ def test_heartbeat_rejections(client, seed, edge_env, migrated):
     body = {"edge_id": str(edge_env["edge"]), "tenant_id": str(seed["A"]), "version": "x", "sent_at": "2026-10-27T00:00:00Z"}
     assert client.post("/v1/edge/heartbeat", json=body).status_code == 401
     assert client.post("/v1/edge/heartbeat", headers=tok, json={**body, "tenant_id": str(seed["B"])}).status_code == 403
-    assert client.post("/v1/edge/heartbeat", headers=tok, json={**body, "edge_id": str(uuid4())}).status_code == 404
+    assert client.post("/v1/edge/heartbeat", headers=tok, json={**body, "edge_id": str(uuid4())}).status_code == 403
     # a human user without edge:heartbeat cannot post heartbeats
     assert client.post("/v1/edge/heartbeat", headers=login(client, "alice"), json=body).status_code == 403
     # edge_agent token cannot read anything else
@@ -119,3 +123,22 @@ def test_edge_frame_schema_validates_samples():
     assert list(v.iter_errors({**ok, "type": "shell_exec"}))  # no free-form command frame
     assert list(v.iter_errors({**ok, "type": "job"}))  # job requires body
     assert list(v.iter_errors({**ok, "extra": 1}))
+
+
+def test_agent_credential_is_bound_to_its_own_edge(client, seed, edge_env, migrated):
+    """Two edge_agent accounts in one tenant: each may only heartbeat its own edge."""
+    tok2 = client.post("/v1/auth/service-token", json={"client_id": str(edge_env["sa2"]), "client_secret": edge_env["secret"]})
+    h2 = {"Authorization": f"Bearer {tok2.json()['access_token']}"}
+    body = {"edge_id": str(edge_env["edge"]), "tenant_id": str(seed["A"]), "version": "evil", "sent_at": "2026-10-27T00:00:00Z"}
+    assert client.post("/v1/edge/heartbeat", headers=h2, json=body).status_code == 403  # edge-a2 token vs edge-a1
+    with migrated.connect() as c:
+        assert c.execute(text("SELECT version FROM edges WHERE id=:i"), {"i": edge_env["edge"]}).scalar() != "evil"
+    assert client.post("/v1/edge/heartbeat", headers=h2, json={**body, "edge_id": str(edge_env["edge2"]), "version": "ok"}).status_code == 204
+
+
+def test_db_constraint_edge_agent_requires_edge(seed, migrated):
+    with pytest.raises(DBAPIError), migrated.begin() as c:
+        c.execute(text("INSERT INTO service_accounts(tenant_id,name,role,secret_hash) VALUES (:t,'orphan','edge_agent','x')"), {"t": seed["A"]})
+    with pytest.raises(DBAPIError), migrated.begin() as c:
+        c.execute(text("INSERT INTO service_accounts(tenant_id,name,role,secret_hash,edge_id) VALUES (:t,'bad','engineer','x',:e)"),
+                  {"t": seed["A"], "e": seed["A"]})

@@ -39,6 +39,12 @@ def upgrade() -> None:
         ALTER TABLE edges FORCE ROW LEVEL SECURITY;
         CREATE POLICY tenant_isolation ON edges USING (tenant_id = {cur_t}) WITH CHECK (tenant_id = {cur_t});
         -- Registration/revocation is an owner (CLI) operation. Runtime may only record heartbeats.
+        -- An edge_agent service account is bound to exactly ONE edge; other roles never carry an edge.
+        ALTER TABLE service_accounts ADD COLUMN edge_id uuid;
+        ALTER TABLE service_accounts ADD CONSTRAINT service_accounts_edge_fk
+          FOREIGN KEY (tenant_id, edge_id) REFERENCES edges(tenant_id, id);
+        ALTER TABLE service_accounts ADD CONSTRAINT service_accounts_edge_role_ck
+          CHECK ((role = 'edge_agent') = (edge_id IS NOT NULL));
         GRANT SELECT ON edges TO fibercore_app;
         GRANT UPDATE (version, last_heartbeat_at, status) ON edges TO fibercore_app;
         """
@@ -46,4 +52,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("ALTER TABLE service_accounts DROP COLUMN IF EXISTS edge_id CASCADE")
     op.execute("DROP TABLE IF EXISTS edges")

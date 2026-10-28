@@ -168,8 +168,8 @@ def edge_heartbeat(
     conn: Connection = Depends(tenant_conn),
 ) -> None:
     """Interim auth: Edge service-account bearer (role edge_agent). Target: mTLS identity (ADR-0011)."""
-    if body.tenant_id != p.tenant_id:
-        raise HTTPException(403, "tenant mismatch")
+    if body.tenant_id != p.tenant_id or p.edge_id is None or body.edge_id != p.edge_id:
+        raise HTTPException(403, "token is not bound to this edge")  # one credential <-> one edge
     res = conn.execute(
         text(
             "UPDATE edges SET version = :v, last_heartbeat_at = now(), status = 'online' "

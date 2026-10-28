@@ -41,7 +41,7 @@ def main(argv: list[str] | None = None) -> None:
     m = sub.add_parser("add-member")
     m.add_argument("tenant_id"); m.add_argument("email"); m.add_argument("role", choices=ROLES)
     s = sub.add_parser("create-service-account")
-    s.add_argument("tenant_id"); s.add_argument("name"); s.add_argument("role", choices=ROLES)
+    s.add_argument("tenant_id"); s.add_argument("name"); s.add_argument("role", choices=ROLES); s.add_argument("--edge-id")
     e = sub.add_parser("register-edge"); e.add_argument("tenant_id"); e.add_argument("name"); e.add_argument("--site")
     a = ap.parse_args(argv)
     eng = _engine()
@@ -64,8 +64,8 @@ def main(argv: list[str] | None = None) -> None:
         elif a.cmd == "create-service-account":
             secret = secrets.token_urlsafe(32)
             sid = c.execute(
-                text("INSERT INTO service_accounts(tenant_id,name,role,secret_hash) VALUES (:t,:n,:r,:h) RETURNING id"),
-                {"t": a.tenant_id, "n": a.name, "r": a.role, "h": hash_secret(secret)}).scalar()
+                text("INSERT INTO service_accounts(tenant_id,name,role,secret_hash,edge_id) VALUES (:t,:n,:r,:h,:e) RETURNING id"),
+                {"t": a.tenant_id, "n": a.name, "r": a.role, "h": hash_secret(secret), "e": a.edge_id}).scalar()
             print(f"client_id={sid}\nclient_secret={secret}  # shown once; store in secret manager")
 
 
