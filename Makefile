@@ -4,7 +4,7 @@ PY := $(VENV)/bin/python
 COMPOSE := docker compose --env-file .env.dev -f infra/compose/compose.yaml
 TEST_PG_PORT ?= 55432
 
-.PHONY: venv env-dev validate validate-help lint test-api compose-config up down logs
+.PHONY: env-prod up-prod down-prod venv env-dev validate validate-help lint test-api compose-config up down logs
 venv:
 	test -d $(VENV) || python3 -m venv $(VENV)
 	$(VENV)/bin/pip install -q -e 'apps/api[dev]'
@@ -48,3 +48,24 @@ down:
 
 logs:
 	$(COMPOSE) logs -f --tail=100
+
+COMPOSE_PROD := docker compose -p fibercore-prod --env-file .env.prod -f infra/compose/compose.yaml --profile public
+
+env-prod:  ## gera .env.prod (0600) com segredos aleatórios; Caddy atrás do nginx do host (ADR-0016)
+	@test -f .env.prod || { umask 077; { \
+	  echo "FIBERCORE_DB_PASSWORD=$$(openssl rand -hex 24)"; \
+	  echo "FIBERCORE_APP_DB_PASSWORD=$$(openssl rand -hex 24)"; \
+	  echo "FIBERCORE_WORKER_DB_PASSWORD=$$(openssl rand -hex 24)"; \
+	  echo "FIBERCORE_JWT_SECRET=$$(openssl rand -hex 32)"; \
+	  echo "FIBERCORE_PII_HMAC_KEY=$$(openssl rand -hex 32)"; \
+	  echo "FIBERCORE_CADDYFILE=Caddyfile.upstream"; \
+	  echo "FIBERCORE_INSECURE_COOKIES=0"; \
+	  echo "FIBERCORE_TRUSTED_PROXY=true"; \
+	  echo "FIBERCORE_PROXY_HTTP_PORT=18480"; \
+	  echo "FIBERCORE_API_PORT=18420"; } > .env.prod; echo ".env.prod criado (0600)"; }
+
+up-prod: env-prod
+	$(COMPOSE_PROD) up -d --build
+
+down-prod:
+	$(COMPOSE_PROD) down

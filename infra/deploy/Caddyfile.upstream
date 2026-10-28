@@ -1,0 +1,38 @@
+# PRODUÇÃO atrás do nginx do host (ADR-0016). O nginx termina TLS e escuta 80/443; este Caddy só roteia
+# e fica em 127.0.0.1:${FIBERCORE_PROXY_HTTP_PORT}. Nunca publicar esta porta diretamente.
+{
+    auto_https off
+    admin off
+    servers {
+        # nginx do host chega pelo gateway da bridge Docker (faixa privada): confiar no X-Forwarded-* dele
+        trusted_proxies static private_ranges
+    }
+}
+
+:80 {
+    encode zstd gzip
+
+    # /api/v1/* -> api-core:8000/v1/*  (remove SOMENTE o prefixo /api)
+    @api path /api /api/*
+    handle @api {
+        uri strip_prefix /api
+        reverse_proxy api-core:8000
+    }
+
+    # Rotas internas NUNCA públicas
+    @internal path /internal /internal/* /metrics /metrics/* /docs /docs/* /openapi.json /livez /readyz
+    handle @internal {
+        respond "not found" 404
+    }
+
+    handle {
+        reverse_proxy web:3000
+    }
+
+    header {
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        X-Frame-Options "DENY"
+        -Server
+    }
+}

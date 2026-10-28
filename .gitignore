@@ -8,3 +8,4 @@ __pycache__/
 .env.dev
 *.egg-info/
 build/
+.env.prod

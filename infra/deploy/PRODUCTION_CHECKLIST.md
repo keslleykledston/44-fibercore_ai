@@ -1,6 +1,6 @@
 # Publicação do frontend — checklist de aceite
 
-**Hostname único:** `fibercore.devops.k3gsolutions.com.br`. **Status:** NÃO publicado por este kit.
+**Hostname único:** `fibercore.devops.k3gsolutions.com.br`. **Status:** publicado em `LAB` com TLS em 2026-10-28 atrás do nginx do host (ADR-0016). Itens abaixo ainda abertos bloqueiam `INTERNAL_PILOT`.
 
 - [ ] Infra definida e DNS confirmado em A/AAAA; nenhum IP inventado.
 - [ ] Next.js real pronto com `/`, `/ajuda` e fluxo de autenticação funcionando.
