@@ -16,7 +16,10 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 # Modules with code in this build. Extend as each module lands (and add a probe/test).
-IMPLEMENTED = {"identity-access", "platform-manager", "edge-fleet", "olt-inventory", "cpe-unified", "service-association", "erp-hub"}
+IMPLEMENTED = {
+    "identity-access", "platform-manager", "edge-fleet", "olt-inventory", "cpe-unified",
+    "service-association", "erp-hub", "noc-events",
+}
 
 
 @dataclass(frozen=True)

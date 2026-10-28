@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: FiberCore AI Public/Operator API
-  version: 0.4.0-draft
+  version: 0.5.0-draft
   description: >-
     Contrato evolutivo orientado a multi-tenancy; implementação segura é obrigatória
     antes de tráfego real. Tenant é derivado de claims autenticadas e validação de memberships.
@@ -15,6 +15,7 @@ tags:
   - name: Jobs
   - name: Copilot
   - name: Edge
+  - name: NOC
 security:
   - bearerAuth: []
 paths:
@@ -150,6 +151,31 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {description: Não encontrada neste tenant}
         '409': {description: Já revisada}
+  /incidents:
+    get:
+      tags: [NOC]
+      operationId: listIncidents
+      description: >-
+        Incidentes de queda em massa por PON (>=5 ONUs observadas no snapshot e >=80% fora; resolve <50%, com histerese) e alertas
+        computados. Silêncio de Edge não abre nem fecha incidentes: marca `edge_silent` e lista o alerta; estados são "último conhecido".
+      parameters:
+        - {$ref: '#/components/parameters/WorkspaceOptional'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {name: status, in: query, required: false, schema: {type: string, enum: [open, resolved]}}
+      responses:
+        '200': {description: "Objeto com incidents e alerts", content: {application/json: {schema: {type: object}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /incidents/{incidentId}/ack:
+    post:
+      tags: [NOC]
+      operationId: ackIncident
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: incidentId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Reconhecido e auditado}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Não encontrado neste tenant}
+        '409': {description: Já reconhecido}
   /olts:
     get:
       tags: [Network]

@@ -1,6 +1,6 @@
 # Implementation status (evidência, não promessa)
 
-Atualizado: 2026-10-27 | Branch: `sprint2/08-customers-csv-associations` | Estado: **Sprint 0 concluída (PR 1–4 mergeados); Sprint 1 em andamento (PR 5)**
+Atualizado: 2026-10-27 | Branch: `sprint2/09-noc-incidents` | Estado: **Sprint 0 concluída (PR 1–4 mergeados); Sprint 1 em andamento (PR 5)**
 
 | Item Sprint 0 | Status | Prova | Pendência |
 |---|---|---|---|
@@ -29,5 +29,5 @@ Edge-fleet: registro via CLI, `POST /v1/edge/heartbeat` (bearer edge_agent, inte
 | Item | Status | Prova |
 |---|---|---|
 | CSV ERP + clientes + associação ONU/cliente com revisão humana | Feito (PR 8) | 71 testes PASS (LGPD hash, limites, conflito, ambiguidade, idempotência, RBAC, tenant) |
-| Incidentes/correlação PON | Não iniciado | PR 9 |
+| Incidentes/correlação PON (dedupe, histerese, silêncio≠queda) | Feito (PR 9) | 79 testes PASS |
 | UX operacional (Lovable) | Não iniciado | PR 10 |

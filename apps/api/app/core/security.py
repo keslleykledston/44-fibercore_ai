@@ -16,12 +16,14 @@ _DUMMY_HASH = _hasher.hash("fibercore-dummy-password")
 
 ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "isp_admin": frozenset({
-        "customers:read", "customers:import", "associations:review", "inventory:read", "tenant:read", "audit:read",
-        "members:read", "edge:read",
+        "customers:read", "customers:import", "associations:review", "incidents:read", "incidents:ack",
+        "inventory:read", "tenant:read", "audit:read", "members:read", "edge:read",
     }),
-    "engineer": frozenset({"customers:read", "associations:review", "inventory:read", "tenant:read", "edge:read"}),
-    "noc_n2": frozenset({"customers:read", "inventory:read", "tenant:read", "edge:read"}),
-    "noc_n1": frozenset({"tenant:read", "inventory:read"}),
+    "engineer": frozenset({
+        "customers:read", "associations:review", "incidents:read", "incidents:ack", "inventory:read", "tenant:read", "edge:read",
+    }),
+    "noc_n2": frozenset({"customers:read", "incidents:read", "incidents:ack", "inventory:read", "tenant:read", "edge:read"}),
+    "noc_n1": frozenset({"tenant:read", "inventory:read", "incidents:read"}),
     "support": frozenset({"tenant:read", "inventory:read", "customers:read"}),
     "auditor": frozenset({"tenant:read", "audit:read"}),
     "platform_support": frozenset({"tenant:read"}),  # only via delegated membership

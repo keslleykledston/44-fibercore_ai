@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import Connection, text
 
 from app.api.deps import Principal, require, tenant_conn
+from app.api.noc import evaluate_pons
 from app.events import outbox
 
 router = APIRouter()
@@ -139,6 +140,7 @@ def ingest_olt_snapshot(
             [{"t": p.tenant_id, "o": olt_id, "pi": pon_ids.get(x.pon_path) if x.pon_path else None, "s": x.serial,
               "st": x.status, "rx": x.rx_dbm, "ts": body.observed_at} for x in body.onus],
         )
+    evaluate_pons(conn, p.tenant_id, olt_id, body.observed_at)
     outbox.enqueue(
         conn, tenant_id=p.tenant_id, aggregate_type="olt", aggregate_id=olt_id, event_type="olt.snapshot_ingested",
         payload={"edge_id": str(body.edge_id), "pons": len(body.pons), "onus": len(body.onus),

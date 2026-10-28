@@ -20,3 +20,6 @@
 ## Unreleased — Sprint 2 PR 8
 - Migration 0006: customers (documento só como HMAC+last4), associations (1 aprovada por ONU), import_batches.
 - `POST /v1/erp/import-csv`, `/v1/customers`, `/v1/associations` (+approve/reject, auditados, evento no outbox). OpenAPI 0.4.0-draft.
+
+## Unreleased — Sprint 2 PR 9
+- Migration 0007 `incidents`; correlação de queda em massa por PON na ingestão (histerese, dedupe, evidência só com contagens); `/v1/incidents`, `/v1/incidents/{id}/ack`; eventos `incident.opened/resolved`. OpenAPI 0.5.0-draft.

@@ -99,7 +99,7 @@ modules:
     optional_dependencies: [edge-fleet, nats]
     capabilities: [alarm, incident, dedupe]
     failure_mode: buffer_and_degrade
-    feature_flag: false
+    feature_flag: true
   - id: automation-jobs
     kind: optional
     version: 0.1.0
