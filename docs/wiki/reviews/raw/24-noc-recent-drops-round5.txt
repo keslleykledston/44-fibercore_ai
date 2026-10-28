@@ -1,0 +1,18 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a183c4-c245-75f1-8ee7-8222c1275770).
+[codex] Turn started (01a183c4-c2a5-7940-b640-aa74b9de8622).
+[codex] Assistant message captured: Vou comparar a branch com `main` e rastrear os fluxos de ingestão, correlação e expiração dos...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/api/a...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/api/a... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --unified=35 main...HEAD -- apps/api/tests/test_noc.py docs/wiki/adr/...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=35 main...HEAD -- apps/api/tests/test_noc.py docs/wiki/adr/... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"Não encontrei risco material remanescente no diff contra main...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+Não encontrei risco material remanescente no diff contra main. Os ajustes de fuso e renovação da evidência parcial tratam os caminhos revisados; sem achados HIGH defensáveis.
+
+No material findings.
