@@ -1,0 +1,28 @@
+[nota: caminhos de arquivos de credencial/backup redigidos manualmente depois da revisão; o restante é a saída original do Codex]
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18240-f3ce-73b3-8cbf-6792caaa652b).
+[codex] Turn started (01a18240-f405-7bb0-a736-3fb8b5c44d04).
+[codex] Assistant message captured: Vou conferir o diff completo contra `main`, com atenção especial a referências residuais a cr...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- .agent-context/WORK_SESSION...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- .agent-context/WORK_SESSION... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n -i 'fibercore-genieacs|credentials|credential|backup|restore|scroll|term...
+[codex] Command completed: /bin/bash -lc "rg -n -i 'fibercore-genieacs|credentials|credential|backup|restore|scroll|term... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/reviews/raw/18-docs-round1.txt | sed -n '20,27p'; nl -ba docs...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/wiki/reviews/raw/18-docs-round1.txt | sed -n '20,27p'; nl -ba docs... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: os arquivos de revisão adicionados...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: os arquivos de revisão adicionados ao diff preservam caminhos de credenciais e backup que a rodada atual afirma ter removido. A documentação atual da coleta está alinhada à allowlist do Edge.
+
+Findings:
+- [medium] Os arquivos de revisão ainda publicam caminhos de segredo e backup (docs/wiki/reviews/raw/18-docs-round1.txt:23-24)
+  Embora o relatório atual diga que nenhum caminho ou procedimento de restauração foi registrado, os novos arquivos de revisão contêm `[caminho redigido]` e descrevem a restauração via PUT; outro registra o caminho exato `[caminho redigido]`. Como esses textos entram no diff e ficam versionados, leitores ainda recebem pistas para localizar o backup e a credencial no host, contrariando o objetivo desta rodada. Remova ou generalize esses detalhes nos registros arquivados antes de aprovar.
+  Recommendation: Remova dos dois arquivos raw os caminhos e a mecânica de restauração, preservando apenas que a revisão anterior identificou essa exposição e que ela foi corrigida.
+
+Next steps:
+- Sanitizar também docs/wiki/reviews/raw/18-docs-round2.txt, que contém o caminho exato da credencial.
+- Revisar novamente todo o diff por caminhos de credencial/backup após a sanitização.

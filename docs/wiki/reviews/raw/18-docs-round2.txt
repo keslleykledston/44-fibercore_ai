@@ -1,3 +1,4 @@
+[nota: caminhos de arquivos de credencial/backup redigidos manualmente depois da revisão; o restante é a saída original do Codex]
 [codex] Starting Codex task thread.
 [codex] Thread ready (01a18240-b05e-7e43-94b7-902db195ffb1).
 [codex] Turn started (01a18240-b099-76f0-8c7e-e1e43283280d).
@@ -17,7 +18,7 @@ Não aprovar ainda: os achados sobre paginação, sanitização e escopo das evi
 
 Findings:
 - [medium] O relatório ainda revela o caminho da credencial CWMP (docs/integrations/GENIEACS_4WNET_SURVEY.md:53)
-  A tabela documenta `~/.fibercore-genieacs-cwmp-credentials` como local da credencial, apesar de a linha 47 afirmar que nenhum caminho de segredo é registrado. O arquivo não expõe o valor da senha, mas informa aos leitores do repositório onde procurar o segredo no host. Remova o caminho e registre apenas que a credencial foi armazenada com permissões restritas fora do repositório.
+  A tabela documenta `[caminho redigido]` como local da credencial, apesar de a linha 47 afirmar que nenhum caminho de segredo é registrado. O arquivo não expõe o valor da senha, mas informa aos leitores do repositório onde procurar o segredo no host. Remova o caminho e registre apenas que a credencial foi armazenada com permissões restritas fora do repositório.
   Recommendation: Substitua a referência ao caminho por uma descrição sem localização, por exemplo: credencial armazenada fora do repositório com permissões restritas.
 
 Next steps:
