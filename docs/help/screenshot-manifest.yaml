@@ -44,3 +44,21 @@ articles:
   - assets/ajuda/central-de-ajuda/mobile.png
   e2e_test: help-screenshots.spec.ts › ajuda/central-de-ajuda
   last_verified: '2026-10-28'
+- slug: assinantes/importar-e-revisar-vinculos
+  ui_route: /assinantes
+  status: published
+  images:
+  - assets/assinantes/importar-e-revisar-vinculos/desktop.png
+  - assets/assinantes/importar-e-revisar-vinculos/mobile.png
+  e2e_test: help-screenshots.spec.ts › assinantes/importar-e-revisar-vinculos; app.spec.ts
+    › assinantes
+  last_verified: '2026-10-28'
+- slug: operacoes/acompanhar-operacoes
+  ui_route: /operacoes
+  status: published
+  images:
+  - assets/operacoes/acompanhar-operacoes/desktop.png
+  - assets/operacoes/acompanhar-operacoes/mobile.png
+  e2e_test: help-screenshots.spec.ts › operacoes/acompanhar-operacoes; app.spec.ts
+    › operações
+  last_verified: '2026-10-28'

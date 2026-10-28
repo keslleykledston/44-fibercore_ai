@@ -5,3 +5,5 @@ export type IncidentList = { incidents: Incident[]; alerts: { kind: string; edge
 export type Edge = { id: string; name: string; status: string; last_heartbeat_at: string | null; version: string | null };
 export type Mod = { id: string; version: string; status: string; reason: string | null; capabilities: string[]; checked_at: string };
 export type Workspace = { tenant_id: string; name: string; role: string };
+export type Association = { id: string; status: string; score: number; evidence: { ambiguous_serial?: boolean; conflicts_with_approved?: string | null; match?: string }; onu_serial: string; customer_name: string };
+export type Job = { id: string; operation: string; target_type: string; risk: string; status: string; required_approvals: number; blocked_reason: string | null; expires_at: string | null; created_at: string };

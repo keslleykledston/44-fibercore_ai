@@ -11,6 +11,8 @@ const screens = [
   { slug: "visao-geral/visao-geral", route: "/", ready: "kpis" },
   { slug: "rede/consultar-onu", route: "/rede", ready: "onu-inventory-ready" },
   { slug: "noc/acompanhar-incidente", route: "/noc", ready: "incident-queue" },
+  { slug: "assinantes/importar-e-revisar-vinculos", route: "/assinantes", ready: "association-list" },
+  { slug: "operacoes/acompanhar-operacoes", route: "/operacoes", ready: "jobs-table" },
   { slug: "administracao/saude-modulos", route: "/administracao/modulos", ready: "modules-table" },
   { slug: "ajuda/central-de-ajuda", route: "/ajuda", ready: "help-list" },
 ];

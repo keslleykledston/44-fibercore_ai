@@ -48,9 +48,10 @@ def main() -> None:
 
     olt_a = onus("DEMOA", 12, "online", "0/1/0", -21.5) + onus("DEMOB", 2, "offline", "0/1/0", None)
     olt_a += onus("DEMOC", 10, "los", "0/1/1", None)  # queda em massa na PON 0/1/1
+    olt_a += [{"serial": "DEMODUP001", "pon_path": "0/1/0", "status": "online", "rx_dbm": -20.5}]  # mesmo serial em 2 OLTs (ambíguo)
     snaps = [
         ("OLT-DEMO-01", "huawei", "MA5800-X7", "R018", olt_a),
-        ("OLT-DEMO-02", "zte", "C300", "V2.1.0P3", onus("DEMOD", 8, "online", "1/2/1", -19.25)),
+        ("OLT-DEMO-02", "zte", "C300", "V2.1.0P3", onus("DEMOD", 8, "online", "1/2/1", -19.25) + [{"serial": "DEMODUP001", "pon_path": "1/2/1", "status": "online", "rx_dbm": -20.0}]),
     ]
     for name, vendor, model, fw, items in snaps:
         pons = sorted({o["pon_path"] for o in items})
@@ -63,6 +64,22 @@ def main() -> None:
         {"canonical_serial": f"DEMOCPE{i:03d}", "vendor": "Huawei", "model": "HG8245H",
          "binding": {"protocol": "tr069", "external_id": f"DEMO-OUI-HG8245H-DEMOCPE{i:03d}", "connector_id": "genieacs-demo"}} for i in range(5)]})
     assert r.status_code == 202, r.text
+    # --- como administrador do provedor: importa clientes fictícios e cria operações ---
+    u = httpx.Client(base_url=API, timeout=15)
+    ut = u.post("/v1/auth/token", json={"email": EMAIL, "password": PW}).json()["access_token"]
+    uh = {"Authorization": f"Bearer {ut}"}
+    csv_body = ("erp_customer_id,display_name,document,contract_status,onu_serial\n"
+                "D001,Cliente Demo Um,,active,DEMOA0000\nD002,Cliente Demo Dois,,active,DEMOA0001\n"
+                "D003,Cliente Demo Três,,suspended,DEMOD0000\nD004,Cliente Demo Ambíguo,,active,DEMODUP001\n")
+    r = u.post("/v1/erp/import-csv?source=csv-demo", headers={**uh, "content-type": "text/csv"}, content=csv_body.encode())
+    assert r.status_code == 200, r.text
+    olt_id = next(o["id"] for o in u.get("/v1/olts", headers=uh).json() if o["name"] == "OLT-DEMO-01")
+    cpe_id = u.get("/v1/cpes", headers=uh).json()[0]["id"]
+    for i, (op, tgt) in enumerate([("collect", olt_id), ("reboot_cpe", cpe_id), ("set_wifi_ssid", cpe_id)]):
+        j = u.post("/v1/jobs/preview", headers={**uh, "Idempotency-Key": f"demo-seed-job-{i:04d}"}, json={"operation": op, "target_id": tgt})
+        assert j.status_code == 201, j.text
+        if op == "collect":
+            assert u.post(f"/v1/jobs/{j.json()['id']}/submit", headers=uh).status_code == 200
     print(f"tenant={tenant}\nemail={EMAIL}\npassword={PW}")
 
 

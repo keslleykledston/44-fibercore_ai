@@ -83,6 +83,6 @@ Inventário em 2026-10-28: backend/Edge/jobs/ERP/NOC prontos e testados; **nenhu
 - [x] W5 Tela Rede: OLT/PON/ONU (frescor, `support_level`) + How-to `rede/consultar-onu`.
 - [x] W6 Tela NOC: fila de incidentes (silêncio de Edge ≠ offline) + How-to `noc/acompanhar-incidente`.
 - [x] W7 Tela Administração/Módulos + How-to `administracao/saude-modulos`.
-- [ ] W8 Telas ERP (pendente; API pronta) (importar CSV, revisar associações) e Jobs (preview/aprovação; escrita bloqueada visível) com How-to.
+- [x] W8 Telas Assinantes (importar CSV, revisar vínculos) e Operações (jobs; escrita bloqueada visível) com How-to (importar CSV, revisar associações) e Jobs (preview/aprovação; escrita bloqueada visível) com How-to.
 - [ ] W9 Hardening de publicação: MFA/refresh/rate-limit, CSP, HSTS (só após TLS real), DNS/TLS/ACME reais, Codex PASS.
 

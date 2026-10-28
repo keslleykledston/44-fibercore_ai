@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { login } from "./helpers";
 
-const routes = ["/", "/rede", "/noc", "/administracao/modulos", "/ajuda", "/ajuda/rede/consultar-onu"];
+const routes = ["/", "/rede", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/ajuda", "/ajuda/rede/consultar-onu"];
 
 test("login inválido mostra erro e não cria sessão", async ({ page, context }) => {
   await page.goto("/login");
@@ -14,7 +14,7 @@ test("login inválido mostra erro e não cria sessão", async ({ page, context }
 });
 
 test("telas protegidas redirecionam para login sem sessão", async ({ page }) => {
-  for (const r of ["/", "/rede", "/noc", "/administracao/modulos", "/ajuda"]) {
+  for (const r of ["/", "/rede", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/ajuda"]) {
     await page.goto(r);
     await expect(page).toHaveURL(/\/login/);
   }
@@ -77,4 +77,44 @@ test("navegação por teclado alcança o conteúdo e a busca", async ({ page }) 
   await login(page);
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: "Ir para o conteúdo" })).toBeFocused();
+});
+
+test("assinantes: serial ambíguo não pode ser aprovado; aprovação exige confirmação e é refletida", async ({ page }) => {
+  await login(page);
+  await page.goto("/assinantes");
+  const items = page.getByTestId("association-list").locator("li");
+  const ambiguous = items.filter({ hasText: "DEMODUP001" }).first();
+  await expect(ambiguous).toContainText("ambíguo");
+  await expect(ambiguous.locator("summary", { hasText: "Aprovar" })).toHaveAttribute("aria-disabled", "true");
+  // aprovar um vínculo normal: abre a confirmação e só então efetiva
+  const before = await items.count();
+  const normal = items.filter({ hasText: "Cliente Demo Um" });
+  await expect(normal).toHaveCount(1);
+  await normal.locator("summary", { hasText: "Aprovar" }).click();
+  await normal.getByRole("button", { name: "Confirmar aprovação" }).click();
+  await expect(page.getByText("Vínculo aprovado.")).toBeVisible();
+  await expect(items.filter({ hasText: "Cliente Demo Um" })).toHaveCount(0);
+  await expect(items).toHaveCount(before - 1);
+});
+
+test("assinantes: importação mostra só contagens, nunca valores do CSV", async ({ page }) => {
+  await login(page);
+  await page.goto("/assinantes");
+  const csv = "erp_customer_id,display_name,document,contract_status,onu_serial\nE2E1,Pessoa Secreta,123,active,\nE2E2,Outra Pessoa,,active,\n";
+  await page.setInputFiles('input[name="file"]', { name: "clientes.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await page.getByRole("button", { name: "Importar" }).click();
+  const report = page.getByTestId("import-report");
+  await expect(report).toContainText("1 aceitas, 1 rejeitadas");
+  expect(page.url()).not.toContain("Secreta");
+  await expect(page.locator("body")).not.toContainText("Pessoa Secreta");
+});
+
+test("operações: escrita aparece bloqueada com o motivo e nenhum botão de escrita habilitado", async ({ page }) => {
+  await login(page);
+  await page.goto("/operacoes");
+  await expect(page.getByTestId("write-blocked")).toContainText("Operação não homologada");
+  const blocked = page.getByRole("button", { name: /Bloqueada: operação não homologada/ });
+  await expect(blocked).toHaveCount(2);
+  for (const b of await blocked.all()) await expect(b).toBeDisabled();
+  await expect(page.getByTestId("jobs-table")).toContainText("Reiniciar CPE");
 });

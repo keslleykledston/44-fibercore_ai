@@ -17,7 +17,7 @@ ui_route: "/ajuda"
 
 ## Passo a passo
 
-1. Acesse **Ajuda** no menu lateral ou clique em **Ajuda desta tela** em qualquer tela.
+1. Acesse **Ajuda** na barra superior ou clique em **Ajuda desta tela** em qualquer tela.
 2. Use **Buscar na ajuda** para filtrar por palavra.
 3. Abra o artigo; o rodapé mostra a versão do produto e a data da última validação.
 

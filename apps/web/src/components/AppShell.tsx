@@ -5,10 +5,11 @@ import type { ReactNode } from "react";
 export const NAV = [
   { href: "/", label: "Visão Geral" },
   { href: "/rede", label: "Rede" },
+  { href: "/assinantes", label: "Assinantes" },
   { href: "/noc", label: "NOC" },
+  { href: "/operacoes", label: "Operações" },
   { href: "/administracao/modulos", label: "Administração" },
-  { href: "/ajuda", label: "Ajuda" },
-] as const;
+] as const; // 6 áreas (limite do design system); a Ajuda fica na barra superior
 
 export function AppShell({ active, children, user }: { active: string; children: ReactNode; user?: string }) {
   return (
@@ -34,11 +35,14 @@ export function AppShell({ active, children, user }: { active: string; children:
             <input id="q" name="serial" placeholder="Buscar ONU por serial" autoComplete="off"
               className="min-h-touch w-full rounded-btn border border-line bg-bg px-3 text-sm" />
           </form>
-          {user && (
-            <form action="/bff/logout" method="post">
-              <button className="min-h-touch rounded-btn px-3 text-sm text-muted hover:bg-bg" type="submit">Sair</button>
-            </form>
-          )}
+          <div className="flex items-center">
+            <Link href="/ajuda" aria-current={active === "/ajuda" ? "page" : undefined} className="flex min-h-touch items-center rounded-btn px-3 text-sm text-muted hover:bg-bg">Ajuda</Link>
+            {user && (
+              <form action="/bff/logout" method="post">
+                <button className="min-h-touch rounded-btn px-3 text-sm text-muted hover:bg-bg" type="submit">Sair</button>
+              </form>
+            )}
+          </div>
         </header>
         <main id="main" className="mx-auto max-w-page px-4 py-6 md:px-8">{children}</main>
       </div>

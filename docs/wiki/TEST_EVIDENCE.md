@@ -73,3 +73,6 @@ Ambiente: Linux, Python 3.12.3, Docker 29.2.1, PostgreSQL 17-alpine (container d
 
 ## 2026-10-28 — Hardening 13 (lockout de login)
 - pytest **109 passed** (lockout com senha correta, reset após sucesso, janela, serviço, ledger imutável pelo runtime).
+
+## 2026-10-28 — Web PR 14 (Assinantes/Operações)
+- `scripts/e2e.sh`: **27 passed** (14 capturas + 13 funcionais/a11y/segurança). `validate_help.py`: 7 artigos published, 14 imagens. `validate_kit.py` PASS. Achado de processo: `npx next start` deixava servidor órfão após cleanup (resultados contra build antigo) → e2e.sh agora usa binário direto e recusa porta ocupada.

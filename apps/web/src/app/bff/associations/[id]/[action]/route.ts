@@ -1,0 +1,14 @@
+import { NextResponse } from "next/server";
+import { apiPost } from "@/lib/api";
+import { back } from "@/lib/bff";
+import { sameOrigin } from "@/lib/csrf";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function POST(req: Request, { params }: { params: Promise<{ id: string; action: string }> }) {
+  if (!sameOrigin(req)) return NextResponse.json({ detail: "forbidden" }, { status: 403 });
+  const { id, action } = await params;
+  if (!UUID.test(id) || !["approve", "reject"].includes(action)) return NextResponse.json({ detail: "not found" }, { status: 404 });
+  const r = await apiPost(`/v1/associations/${id}/${action}`);
+  return back(req, `/assinantes?${r.status === 200 ? `ok=${action}` : `erro=${r.status}`}`);
+}

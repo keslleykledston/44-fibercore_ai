@@ -35,3 +35,16 @@ export async function apiLogin(email: string, password: string, clientIp?: strin
   if (!res.ok) return { token: null, status: res.status };
   return { token: ((await res.json()) as { access_token: string }).access_token, status: 200 };
 }
+
+/** POST server-side com o token da sessão. Devolve status e corpo JSON (se houver). */
+export async function apiPost(path: string, body?: BodyInit, headers: Record<string, string> = {}): Promise<{ status: number; json: unknown }> {
+  const { token, workspace } = await getSession();
+  if (!token) return { status: 401, json: null };
+  const res = await fetch(`${API}${path}`, {
+    method: "POST", body, cache: "no-store",
+    headers: { ...headers, Authorization: `Bearer ${token}`, ...(workspace ? { "X-Workspace-ID": workspace } : {}) },
+  });
+  let json: unknown = null;
+  try { json = await res.json(); } catch { /* sem corpo */ }
+  return { status: res.status, json };
+}

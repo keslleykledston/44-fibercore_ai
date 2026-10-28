@@ -13,5 +13,9 @@ export default defineConfig({
     colorScheme: "light",
     trace: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: { browserName: "chromium" } }],
+  // Capturas primeiro (estado do seed intacto), depois os testes funcionais que mutam dados.
+  projects: [
+    { name: "capturas", testMatch: /help-screenshots\.spec\.ts/, use: { browserName: "chromium" } },
+    { name: "funcional", testMatch: /app\.spec\.ts/, dependencies: ["capturas"], use: { browserName: "chromium" } },
+  ],
 });

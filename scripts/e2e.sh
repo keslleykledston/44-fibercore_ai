@@ -17,8 +17,9 @@ for _ in $(seq 60); do curl -fs "http://127.0.0.1:${FIBERCORE_API_PORT:-18420}/l
 cd apps/web
 npm ci --no-audit --no-fund >/dev/null
 npx next build >/dev/null
-API_INTERNAL_URL="http://127.0.0.1:${FIBERCORE_API_PORT:-18420}" FIBERCORE_INSECURE_COOKIES=1 npx next start -p "$WEB_PORT" >/dev/null 2>&1 &
+if ss -ltn | grep -q ":$WEB_PORT "; then echo "porta $WEB_PORT já em uso" >&2; exit 1; fi
+API_INTERNAL_URL="http://127.0.0.1:${FIBERCORE_API_PORT:-18420}" FIBERCORE_INSECURE_COOKIES=1 ./node_modules/.bin/next start -p "$WEB_PORT" >/dev/null 2>&1 &
 WEB_PID=$!
 for _ in $(seq 40); do curl -fs "http://127.0.0.1:$WEB_PORT/login" >/dev/null 2>&1 && break; sleep 1; done
 export WEB_URL="http://127.0.0.1:$WEB_PORT"
-if [[ "${1:-}" == "--no-screenshots" ]]; then npx playwright test e2e/app.spec.ts; else npx playwright test; fi
+if [[ "${1:-}" == "--no-screenshots" ]]; then npx playwright test --project=funcional --no-deps; else npx playwright test; fi
