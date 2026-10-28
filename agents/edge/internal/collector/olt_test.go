@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -104,5 +105,33 @@ func TestOneOLTFailureKeepsOthers(t *testing.T) {
 	items, err := (&OLT{EdgeID: "e", Sources: []OLTSource{broken, src("OLT-A", "huawei_ma5800/R018", false)}}).Collect(context.Background())
 	if err == nil || len(items) != 1 {
 		t.Fatalf("items=%d err=%v", len(items), err)
+	}
+}
+
+type bulkSession struct{ n int }
+
+func (b *bulkSession) Run(_ context.Context, cmd string) (string, error) {
+	b.n++
+	switch cmd {
+	case "display version":
+		return "  VERSION : R018\n  PRODUCT : MA5800-X7\n", nil
+	case "show version":
+		return "Model : C300\nSoftware Version : V2.1.0P3\n", nil
+	}
+	return "", nil
+}
+
+func TestMaxPortsFitsCommandBudgetForBothVendors(t *testing.T) {
+	var ports []string
+	for i := 0; i < 256; i++ {
+		ports = append(ports, fmt.Sprintf("0/1/%d", i))
+	}
+	for name, drv := range map[string]olt.Driver{"huawei": olt.Huawei{}, "zte": olt.ZTE{}} {
+		bs := &bulkSession{}
+		s := OLTSource{Name: name, Driver: drv, Ports: ports,
+			Open: func(context.Context) (olt.Session, func(), error) { return bs, func() {}, nil }}
+		if _, err := (&OLT{EdgeID: "e", Sources: []OLTSource{s}}).Collect(context.Background()); err != nil {
+			t.Fatalf("%s with 256 ports: %v (commands issued=%d, budget=%d)", name, err, bs.n, commandBudget(256))
+		}
 	}
 }

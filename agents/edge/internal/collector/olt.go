@@ -20,10 +20,12 @@ type OLTSource struct {
 }
 
 const (
-	oltTimeout        = 5 * time.Minute
-	maxCommandsPerOLT = 3*256 + 1
-	maxBytesPerOLT    = 32 << 20
+	oltTimeout     = 5 * time.Minute
+	maxBytesPerOLT = 32 << 20
 )
+
+// commandBudget: worst case is 3 commands per PON (ZTE) plus Identify twice (collector + driver Snapshot) and slack.
+func commandBudget(ports int) int { return 3*ports + 8 }
 
 type OLT struct {
 	EdgeID  string
@@ -83,7 +85,7 @@ func (o *OLT) collectOne(ctx context.Context, src OLTSource, observed string) ([
 	// Per-OLT limits: wall-clock, commands and total bytes (worst case stays bounded regardless of port count).
 	ctx, cancel := context.WithTimeout(ctx, oltTimeout)
 	defer cancel()
-	sess := olt.NewBudget(olt.ReadOnlySession{Inner: raw, Allowed: src.Driver.Allowed}, maxCommandsPerOLT, maxBytesPerOLT)
+	sess := olt.NewBudget(olt.ReadOnlySession{Inner: raw, Allowed: src.Driver.Allowed}, commandBudget(len(src.Ports)), maxBytesPerOLT)
 	id, err := src.Driver.Identify(ctx, sess)
 	if err != nil {
 		return nil, err
