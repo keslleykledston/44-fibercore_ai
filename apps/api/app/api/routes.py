@@ -113,6 +113,8 @@ def my_workspaces(
     if claims.kind != "user":
         raise HTTPException(403, "users only")
     with scoped_connection(get_engine(), user_id=claims.sub) as conn:
+        if not conn.execute(text("SELECT is_active FROM users_global WHERE id = :u"), {"u": claims.sub}).scalar():
+            raise HTTPException(401, "invalid or missing credentials", headers={"WWW-Authenticate": "Bearer"})  # revoked accounts
         rows = conn.execute(
             text("SELECT t.id, t.name, m.role FROM tenant_memberships m JOIN tenants t ON t.id = m.tenant_id "
                  "WHERE m.user_id = :u AND t.status = 'active' ORDER BY t.name"),

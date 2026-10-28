@@ -127,3 +127,15 @@ def test_tenant_names_not_visible_without_membership(seed, app_url):
         assert {r.name for r in c.execute(t("SELECT name FROM tenants"))} == {"Tenant A"}
     with scoped_connection(eng) as c:
         assert c.execute(t("SELECT count(*) FROM tenants")).scalar() == 0
+
+
+def test_deactivated_user_loses_workspaces_with_a_still_valid_token(client, seed, migrated):
+    h = login(client, "dave")
+    assert client.get("/v1/auth/workspaces", headers=h).status_code == 200
+    with migrated.begin() as c:
+        c.execute(text("UPDATE users_global SET is_active = false WHERE id = :u"), {"u": seed["dave"]})
+    try:
+        assert client.get("/v1/auth/workspaces", headers=h).status_code == 401
+    finally:
+        with migrated.begin() as c:
+            c.execute(text("UPDATE users_global SET is_active = true WHERE id = :u"), {"u": seed["dave"]})
