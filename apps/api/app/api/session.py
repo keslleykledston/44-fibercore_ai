@@ -244,13 +244,20 @@ def mfa_activate(
         if _gate(conn, key, ip):
             outcome = "locked"
         else:
-            row = conn.execute(text("SELECT secret_enc, last_step, enabled FROM user_mfa WHERE user_id = :u"), {"u": uid}).first()
+            # FOR UPDATE serialises concurrent activations: the loser re-reads the committed row, sees "enabled" and gets a 409
+            # instead of returning recovery codes that the winner's DELETE/INSERT has already invalidated.
+            row = conn.execute(
+                text("SELECT secret_enc, last_step, enabled FROM user_mfa WHERE user_id = :u FOR UPDATE"), {"u": uid}
+            ).first()
             secret = mfa.decrypt_secret(settings, row.secret_enc) if row and not row.enabled else None
             step = mfa.verify_totp(secret, body.code, last_step=row.last_step) if secret else None
-            _record(conn, key, ip, step is not None)
-            if step is None:
+            if row and row.enabled:
+                outcome = "enabled"  # not a failed attempt: nothing is recorded against the throttle
+            elif step is None:
+                _record(conn, key, ip, False)
                 outcome = "bad"
             else:
+                _record(conn, key, ip, True)
                 codes = mfa.new_recovery_codes()
                 conn.execute(
                     text("UPDATE user_mfa SET enabled = true, enabled_at = now(), last_step = :s WHERE user_id = :u"), {"s": step, "u": uid}
@@ -263,6 +270,8 @@ def mfa_activate(
                 outcome = "ok"
     if outcome == "locked":
         raise _throttled()
+    if outcome == "enabled":
+        raise HTTPException(409, "MFA already enabled")
     if outcome == "bad":
         raise HTTPException(401, "invalid code")
     return {"enabled": True, "recovery_codes": codes}  # shown once; only hashes are stored

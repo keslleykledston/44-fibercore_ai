@@ -130,3 +130,30 @@ def test_the_api_refuses_to_boot_with_a_misspelt_role(policy):
     policy("isp_admin")
     with TestClient(app):   # a valid policy boots normally
         pass
+
+
+def test_concurrent_activation_is_serialised_and_the_loser_gets_a_conflict(client, seed, member, migrated):
+    """Two activations must not both succeed: the loser would hand out recovery codes the winner already replaced.
+    Deterministic: a second connection holds the user_mfa row lock while the request runs; the request has to WAIT for it."""
+    import threading
+    import time
+
+    who = member("isp_admin")
+    tok = _token(client, who)
+    e = client.post("/v1/auth/mfa/enroll", json={"password": PW}, headers=_bearer(tok))
+    secret = e.json()["secret"]
+    result: dict = {}
+
+    def activate():
+        result["r"] = client.post("/v1/auth/mfa/activate", json={"code": mfa._hotp(secret, mfa.current_step())}, headers=_bearer(tok))
+
+    with migrated.begin() as holder:
+        holder.execute(text("SELECT 1 FROM user_mfa WHERE user_id = :u FOR UPDATE"), {"u": who["id"]})
+        t = threading.Thread(target=activate)
+        t.start()
+        time.sleep(1.0)
+        assert t.is_alive() and "r" not in result, "activation did not wait for the row lock (concurrent activations are not serialised)"
+        holder.execute(text("UPDATE user_mfa SET enabled = true WHERE user_id = :u"), {"u": who["id"]})  # the "winner" commits
+    t.join(10)
+    assert result["r"].status_code == 409, result["r"].text
+    assert "recovery_codes" not in result["r"].json()

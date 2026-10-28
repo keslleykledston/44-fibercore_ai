@@ -120,6 +120,7 @@ paths:
       responses:
         '200': {description: "{enabled, recovery_codes[]}"}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '409': {description: MFA já ativo (ativações concorrentes são serializadas; só a primeira recebe os códigos)}
         '429': {description: Bloqueio temporário por tentativas falhas}
   /auth/mfa/disable:
     post:

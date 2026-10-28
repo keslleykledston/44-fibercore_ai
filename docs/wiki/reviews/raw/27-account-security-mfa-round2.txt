@@ -1,0 +1,29 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a183fe-f2d0-72a3-95be-d1f860f75587).
+[codex] Turn started (01a183fe-f308-7832-abc5-849303fe66ff).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os fluxos de concorrência, transação, BFF/UI, seed...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/app/api/deps.py ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/app/api/deps.py ap... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=5 main...HEAD -- apps/api/app/api/erp.py apps...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=5 main...HEAD -- apps/api/app/api/erp.py apps... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/lib/api.ts; nl -ba apps/web/src/app/conta/seguranca/page.t...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/lib/api.ts; nl -ba apps/web/src/app/conta/seguranca/page.t... (exit 0)
+[codex] Assistant message captured: A intercalação descrita para `disable` não parece permitir acesso após a desativação: vou fec...
+[codex] Running command: /bin/bash -lc "rg -n \"MFA_REQUIRED|mfa_required|tenant_conn|Depends\\(tenant_conn|TENANT_CON...
+[codex] Command completed: /bin/bash -lc "rg -n \"MFA_REQUIRED|mfa_required|tenant_conn|Depends\\(tenant_conn|TENANT_CON... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não encontrei intercalação que permita a um usuário c...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não encontrei intercalação que permita a um usuário com papel obrigatório acessar uma rota tenant após o MFA ser desativado: se o papel já está efetivo antes da requisição, `get_principal` observa a ausência de MFA e responde 403. Há, porém, uma corrida na ativação que pode exibir códigos de recuperação já invalidados.
+
+Findings:
+- [medium] Ativações concorrentes podem invalidar os códigos de recuperação retornados (apps/api/app/api/session.py:247-263)
+  Duas requisições de ativação podem ler a mesma linha ainda desativada e validar o mesmo código TOTP antes de qualquer atualização. Ambas então geram códigos diferentes; as gravações e exclusões concorrentes podem deixar válidos apenas os códigos de uma delas, embora ambas as respostas retornem sucesso. Se a interface mostrar os códigos da resposta que perdeu a corrida, o usuário acredita ter cópias de recuperação utilizáveis quando elas já foram descartadas. Use bloqueio de linha (`SELECT ... FOR UPDATE`) antes de verificar o estado/código e gerar os códigos, ou rejeite a segunda ativação após reler o estado bloqueado.
+  Recommendation: Serializar ativações por usuário bloqueando a linha `user_mfa` antes da validação e retornar conflito se outra ativação já concluiu.
+
+Next steps:
+- Adicionar bloqueio/serialização na ativação MFA e cobrir a concorrência com um teste de integração.
