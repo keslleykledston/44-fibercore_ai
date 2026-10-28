@@ -118,3 +118,16 @@ test("operações: escrita aparece bloqueada com o motivo e nenhum botão de esc
   for (const b of await blocked.all()) await expect(b).toBeDisabled();
   await expect(page.getByTestId("jobs-table")).toContainText("Reiniciar CPE");
 });
+
+test("importação: corpo acima do limite é recusado antes de ser processado; sem Content-Length => 411", async ({ page, request, baseURL }) => {
+  await login(page);
+  const big = Buffer.alloc(3 * 1024 * 1024, "a");
+  const cookies = (await page.context().cookies()).map((c) => `${c.name}=${c.value}`).join("; ");
+  const r = await request.post(`${baseURL}/bff/erp/import`, {
+    headers: { origin: baseURL!, cookie: cookies },
+    multipart: { source: "csv-manual", file: { name: "grande.csv", mimeType: "text/csv", buffer: big } },
+    maxRedirects: 0,
+  });
+  expect(r.status()).toBe(303);
+  expect(r.headers()["location"]).toContain("erro=arquivo");
+});

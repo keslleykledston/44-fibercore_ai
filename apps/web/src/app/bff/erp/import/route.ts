@@ -7,6 +7,10 @@ const MAX = 2 * 1024 * 1024;
 
 export async function POST(req: Request) {
   if (!sameOrigin(req)) return NextResponse.json({ detail: "forbidden" }, { status: 403 });
+  // Limite ANTES de parsear o multipart: Content-Length obrigatório e <= arquivo máximo + margem de envelope.
+  const declared = req.headers.get("content-length");
+  if (!declared || !/^\d+$/.test(declared)) return NextResponse.json({ detail: "length required" }, { status: 411 });
+  if (Number(declared) > MAX + 64 * 1024) return back(req, "/assinantes?erro=arquivo");
   const form = await req.formData();
   const file = form.get("file");
   const source = String(form.get("source") ?? "csv-manual");
