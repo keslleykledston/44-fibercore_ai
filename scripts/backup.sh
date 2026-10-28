@@ -8,10 +8,14 @@ umask 077
 cd "$(dirname "$0")/.."
 OUT="${1:-build/backups/fibercore-$(date -u +%Y%m%dT%H%M%SZ).dump}"
 mkdir -p -m 700 "$(dirname "$OUT")"
+[[ ! -e "$OUT" ]] || { echo "destino já existe, recusando sobrescrever: $OUT" >&2; exit 1; }
+TMP="$(mktemp "$(dirname "$OUT")/.backup.XXXXXX")"   # 0600; mesmo diretório => mv atômico
+trap 'rm -f "$TMP"' EXIT
 COMPOSE=(docker compose --env-file "${ENV_FILE:-.env.dev}" -f infra/compose/compose.yaml)
-"${COMPOSE[@]}" exec -T postgres pg_dump -U fibercore -d fibercore -Fc --no-owner > "$OUT"
-test -s "$OUT" || { echo "backup vazio" >&2; rm -f "$OUT"; exit 1; }
-chmod 600 "$OUT"
+"${COMPOSE[@]}" exec -T postgres pg_dump -U fibercore -d fibercore -Fc --no-owner > "$TMP"
+test -s "$TMP" || { echo "backup vazio" >&2; exit 1; }
+chmod 600 "$TMP"
+mv -n "$TMP" "$OUT"
 sha256sum "$OUT" > "$OUT.sha256"
 if [[ -n "${BACKUP_GPG_RECIPIENT:-}" ]]; then
   gpg --batch --yes --encrypt --recipient "$BACKUP_GPG_RECIPIENT" --output "$OUT.gpg" "$OUT"
