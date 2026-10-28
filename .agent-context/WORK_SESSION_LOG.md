@@ -24,3 +24,11 @@ Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetido
 - Aberto: tela de cadastro MFA, MFA obrigatório p/ admin, eventos de segurança globais, CSP com nonce.
 - Deploy LAB: 0011 aplicada no prod (backup pré-migração fora do repo), MFA_ENCRYPTION_KEY gerada no .env.prod; verificado no site público: login, cookies HttpOnly/Secure, renovação por refresh rotativo (fc_token apagado -> /rede 200, refresh rotacionado), zero issues de console/CSP.
 - Edge: saída paginada (--More--) agora falha fechado (ErrPaginated) em vez de gerar inventário parcial marcado complete=true; relógio da fila de nonces injetável (teste do agent quebrava após 10:15Z do dia por relógio real vs. fixture).
+
+## 2026-10-28 — OLT Huawei MA5608T R015, SNMP, correlação, tela MFA
+- Edge: shell interativo (pty) + paginador, perfil R015 (CLI), driver SNMP v2c (`transport: snmp`, trava/resfriamento por agente, 1 req/s). Nível do driver segue `identified` (complete=false até promoção).
+- API: ADR-0018 (incidente por quedas recentes, migration 0012) em produção LAB.
+- MFA (PR 27, main `ddb8f70`): tela `/conta/seguranca`, `MFA_REQUIRED_ROLES` (OFF no LAB), ativação serializada, enroll condicional. `tenant_conn` com `scope="function"` (commit antes da resposta). Codex 4 rodadas, approve.
+- LAB redeployado (backup pré-deploy fora do repo); prodcheck: nenhum issue; `/conta/seguranca` redireciona para /login sem sessão.
+- Testes: pytest 162 passed; E2E 18 passed (funcional); ruff ok; tsc ok; validate_kit PASS.
+- Pendências: ver `NEXT_ACTIONS.md`.
