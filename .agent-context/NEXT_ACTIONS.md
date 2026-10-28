@@ -35,3 +35,8 @@
 ## Atualização 2026-10-28 (cobertura ampla + SNMP)
 - (resolvido, ADR-0018) a regra de `pon_mass_outage` passou a usar quedas recentes; a promoção da R015 a `observed` ainda depende do checklist (PON vazia, causas de queda via register-info/SNMP).
 - Próximos: ler `register-info` só das ONTs que mudaram de estado (causa da queda), driver SNMP (OIDs em DRIVER_SDK_INTERFACE.md, SNMPv3), restringir SSH do host do GenieACS.
+
+## Atualização 2026-10-28 (correlação + LAB + causas)
+- ADR-0018 mergeada e publicada no LAB (migration 0012; backup pg_dump antes; login/telas/renovação verificados). pytest 151, Codex approve na rodada 5.
+- Causas de queda mapeadas (SNMP 46.1.24: 13=dying-gasp, 2=LOSi/LOBi, 1=link-down). Próximo: driver SNMP no Edge (SNMPCOMMUNITY já no .env; preferir v3), com UDP pela allowlist e prova de fim de tabela.
+- Pendente do dono: restringir SSH do host do GenieACS; migrar SNMP para v3.

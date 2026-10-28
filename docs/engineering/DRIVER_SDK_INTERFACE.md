@@ -77,7 +77,9 @@ Alcance: UDP/161 da OLT (a OLT só é alcançável a partir da rede do host do G
 | `43.1.3` | SN (OCTET STRING 8 bytes) | 12/12 iguais |
 | `43.1.9` | descrição (texto livre; dado de assinante) | confere nas amostras |
 | `46.1.15` | estado de execução: 1 online, 2 offline | 12/12 iguais |
-| `46.1.24` | código da última queda (offline): 13 = dying-gasp (confirmado por `register-info`); 1 e 2 sem confirmação | parcial |
+| `46.1.24` | código da última queda (offline): **13 = dying-gasp, 2 = LOSi/LOBi (perda óptica), 1 = link-down** reportado pela ONT | 10 ONTs offline cruzadas com `display ont register-info` (a causa mais recente): 10/10 |
 | `45.1.2` | vendor-id da ONT (inteiro = 4 letras ASCII) | confere com `register-info` |
 | `51.1.1..5` | temperatura °C, corrente mA, Tx ×0,01 dBm, Rx ×0,01 dBm, tensão mV (`2147483647` = sem leitura) | Rx igual ao CLI (−13,28) |
 Não confirmados: `51.1.6` (valor ≈ distância em m, hipótese) e a origem do `OLT Rx ONT power`. SNMP dá fim de tabela inequívoco (o walk termina), o que dispensa pager e prompt, mas só vira driver depois de nova validação e revisão.
+
+Mapeamento de causa para o status da ONU (proposto, ainda sem driver): `13 → dying_gasp` (energia do cliente), `2 → los` (perda óptica; suspeita de fibra/CTO), `1 → offline` (link-down informado pela ONT, causa não determinada). Outros códigos → `offline` sem causa. Só vale para a última queda de uma ONU que está offline agora; ONU online não tem causa. `register-info` mostra o histórico (várias quedas por ONU, com horários) e não é necessário para o estado atual quando o SNMP está disponível.

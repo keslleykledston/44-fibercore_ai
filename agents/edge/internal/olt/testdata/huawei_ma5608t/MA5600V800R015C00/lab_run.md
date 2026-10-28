@@ -21,3 +21,6 @@
 - Autorizado pelo dono: ler todas as PONs (`display ont info <0..15> all`) das placas 0 e 1 e `display ont register-info 14 <0|7>`; Espaço como única tecla no pager (até 5 páginas).
 - Novas fixtures sanitizadas: `ont_info_5_all_paged.txt` (60 ONTs, 5 páginas), `ont_info_12_all.txt` (6 ONTs, sem pager), `ont_info_s1_4_all_paged.txt` (2ª placa, 53 ONTs, 4 páginas), `register_info_14_0_offline_dying_gasp.txt`, `register_info_14_7_online.txt`.
 - Sanitização: SNs trocados (mapa consistente, 119), prompt → `OLT-TEST-1`, **coluna Description neutralizada** (texto livre que identifica assinantes), datas do `register-info` trocadas por datas fictícias, vendor-id do SN trocado.
+
+## Mapa da causa de queda (SNMP × CLI), 2026-10-28
+`display ont register-info 14 <ont>` lido em 10 ONTs offline da PON 0/0/14 e cruzado com `46.1.24` por SNMP: 13 = `ONT dying-gasp`, 2 = `ONT LOSi/LOBi alarm`, 1 = `ONT link-down` (10/10 coerentes). O histórico por ONU traz várias quedas com causas diferentes; o código SNMP corresponde à mais recente. Dados brutos ficam fora do Git.
