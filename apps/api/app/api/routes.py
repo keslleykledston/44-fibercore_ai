@@ -78,7 +78,8 @@ def _failures(conn: Connection, key: str, *, reset_on_success: bool) -> int:
 def _gate(conn: Connection, key: str, ip: str) -> bool:
     """Serialised per key (advisory xact lock): check, verify and record happen atomically, so concurrent attempts cannot
     overshoot the limit. Returns True when the attempt must be refused (locked)."""
-    conn.execute(text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": key})
+    for k in sorted([key, f"ip:{ip}"]):  # consistent order => no deadlocks between account and source locks
+        conn.execute(text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": k})
     account = _failures(conn, key, reset_on_success=True) >= MAX_FAILURES
     source = _failures(conn, f"ip:{ip}", reset_on_success=False) >= MAX_IP_FAILURES
     return account or source

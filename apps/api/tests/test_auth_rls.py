@@ -241,3 +241,29 @@ def test_retention_trims_old_attempts_and_unlock_cli(client, seed, migrated):
     with migrated.begin() as c:  # what `cli unlock-login` does
         c.execute(text("DELETE FROM login_attempts WHERE key = 'dave@example.com'"))
     assert client.post("/v1/auth/token", json={"email": "dave@example.com", "password": "correct horse battery"}).status_code == 200
+
+
+def test_concurrent_multi_account_attempts_from_one_ip_cannot_overshoot_ip_limit(client, seed, migrated, monkeypatch):
+    import threading
+
+    from app.core import settings
+    monkeypatch.setenv("TRUSTED_PROXY", "true")
+    settings.get_settings.cache_clear()
+    try:
+        with migrated.begin() as c:
+            c.execute(text("DELETE FROM login_attempts"))
+        codes = []
+
+        def go(i):
+            codes.append(client.post("/v1/auth/token", json={"email": f"mu{i}@example.com", "password": "x" * 12},
+                                     headers={"X-Forwarded-For": "198.51.100.5"}).status_code)
+
+        ts = [threading.Thread(target=go, args=(i,)) for i in range(45)]
+        [t.start() for t in ts]
+        [t.join() for t in ts]
+        assert codes.count(401) == 30 and codes.count(429) == 15, (codes.count(401), codes.count(429))
+    finally:
+        monkeypatch.undo()
+        settings.get_settings.cache_clear()
+        with migrated.begin() as c:
+            c.execute(text("DELETE FROM login_attempts"))
