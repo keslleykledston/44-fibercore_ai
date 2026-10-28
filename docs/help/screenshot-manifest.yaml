@@ -36,6 +36,15 @@ articles:
   - assets/administracao/saude-modulos/mobile.png
   e2e_test: help-screenshots.spec.ts › administracao/saude-modulos
   last_verified: '2026-10-28'
+- slug: conta/ativar-verificacao-em-duas-etapas
+  ui_route: /conta/seguranca
+  status: published
+  images:
+  - assets/conta/ativar-verificacao-em-duas-etapas/desktop.png
+  - assets/conta/ativar-verificacao-em-duas-etapas/mobile.png
+  e2e_test: help-screenshots.spec.ts › conta/ativar-verificacao-em-duas-etapas; app.spec.ts
+    › Segurança da conta
+  last_verified: '2026-10-28'
 - slug: ajuda/central-de-ajuda
   ui_route: /ajuda
   status: published

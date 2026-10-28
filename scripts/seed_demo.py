@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
 
@@ -55,11 +55,15 @@ def main() -> None:
     ]
     for name, vendor, model, fw, items in snaps:
         pons = sorted({o["pon_path"] for o in items})
-        r = c.post("/v1/edge/olt-snapshots", headers=h, json={
-            "edge_id": edge, "observed_at": datetime.now(UTC).isoformat(), "name": name, "vendor": vendor, "model": model,
-            "firmware": fw, "driver_level": "identified", "pons": [{"pon_path": p, "status": "up", "complete": True} for p in pons],
-            "onus": items})
-        assert r.status_code == 202, r.text
+        # Incident correlation looks at ONUs that DROPPED (ADR-0018), so the demo first reports a healthy network 10 minutes ago and
+        # then the outage on PON 0/1/1; the two offline ONUs on PON 0/1/0 stay chronic (never seen online) and never open anything.
+        healthy = [{**o, "status": "online", "rx_dbm": o["rx_dbm"] if o["rx_dbm"] is not None else -22.0} if o["status"] == "los" else o for o in items]
+        for when, payload in ((datetime.now(UTC) - timedelta(minutes=10), healthy), (datetime.now(UTC), items)):
+            r = c.post("/v1/edge/olt-snapshots", headers=h, json={
+                "edge_id": edge, "observed_at": when.isoformat(), "name": name, "vendor": vendor, "model": model,
+                "firmware": fw, "driver_level": "identified", "pons": [{"pon_path": p, "status": "up", "complete": True} for p in pons],
+                "onus": payload})
+            assert r.status_code == 202, r.text
     r = c.post("/v1/edge/cpe-snapshots", headers=h, json={"edge_id": edge, "observed_at": datetime.now(UTC).isoformat(), "cpes": [
         {"canonical_serial": f"DEMOCPE{i:03d}", "vendor": "Huawei", "model": "HG8245H",
          "binding": {"protocol": "tr069", "external_id": f"DEMO-OUI-HG8245H-DEMOCPE{i:03d}", "connector_id": "genieacs-demo"}} for i in range(5)]})
@@ -79,7 +83,8 @@ def main() -> None:
         j = u.post("/v1/jobs/preview", headers={**uh, "Idempotency-Key": f"demo-seed-job-{i:04d}"}, json={"operation": op, "target_id": tgt})
         assert j.status_code == 201, j.text
         if op == "collect":
-            assert u.post(f"/v1/jobs/{j.json()['id']}/submit", headers=uh).status_code == 200
+            sub = u.post(f"/v1/jobs/{j.json()['id']}/submit", headers=uh)
+            assert sub.status_code == 200, sub.text
     print(f"tenant={tenant}\nemail={EMAIL}\npassword={PW}")
 
 

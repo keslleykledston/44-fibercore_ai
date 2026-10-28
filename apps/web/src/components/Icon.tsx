@@ -12,6 +12,7 @@ const P: Record<string, string> = {
   moon: "M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z",
   menu: "M3 6h18M3 12h18M3 18h18",
   close: "M6 6l12 12M18 6L6 18",
+  shield: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3zM9 12l2 2 4-4",
   logout: "M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9",
 };
 export function Icon({ name, className = "size-4" }: { name: keyof typeof P | string; className?: string }) {

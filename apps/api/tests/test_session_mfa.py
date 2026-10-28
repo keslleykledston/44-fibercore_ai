@@ -193,7 +193,7 @@ def test_mfa_enrol_login_flow_replay_and_recovery(client, user, migrated):
     assert rc.status_code == 200
     assert client.post("/v1/auth/mfa/verify", json={"mfa_token": j2["mfa_token"], "code": recovery[0]}).status_code == 401
     st = client.get("/v1/auth/mfa/status", headers=_bearer(rc.json()["access_token"])).json()
-    assert st == {"enabled": True, "recovery_codes_left": 7, "enrolment_available": True}
+    assert st == {"enabled": True, "recovery_codes_left": 7, "enrolment_available": True, "required": False}
 
 
 def test_mfa_verify_is_throttled(client, user):

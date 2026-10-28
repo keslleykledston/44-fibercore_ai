@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     refresh_reuse_grace_seconds: int = 10
     mfa_encryption_key: str = Field(default="", repr=False)  # Fernet key (urlsafe base64, 32 bytes); empty => MFA enrolment disabled
     mfa_issuer: str = "FiberCore"
+    # Comma-separated tenant roles that MUST have MFA enabled (e.g. "isp_admin"). A user with such a role in ANY tenant gets
+    # 403 mfa_enrolment_required on every tenant-scoped route until MFA is on, and cannot switch it off. Empty = policy off.
+    mfa_required_roles: str = ""
     trusted_proxy: bool = False  # trust X-Forwarded-For (set only behind our own reverse proxy)
     job_signing_key: str = Field(default="", repr=False)  # base64 Ed25519 seed; empty => dispatch disabled (fail closed)
     pii_hmac_key: str = Field(default="", repr=False)  # HMAC key for customer documents; import fails closed without it
@@ -47,3 +50,14 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def required_mfa_roles(settings: Settings) -> frozenset[str]:
+    """Parsed MFA_REQUIRED_ROLES. An unknown role name is a configuration error (a typo must not silently weaken the policy)."""
+    from app.core.security import ROLE_PERMISSIONS  # lazy: security imports settings
+
+    roles = frozenset(r.strip() for r in settings.mfa_required_roles.split(",") if r.strip())
+    unknown = roles - set(ROLE_PERMISSIONS)
+    if unknown:
+        raise RuntimeError(f"MFA_REQUIRED_ROLES has unknown roles: {sorted(unknown)}")
+    return roles

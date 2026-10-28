@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -12,10 +13,20 @@ from app.api.jobs import router as jobs_router
 from app.api.noc import router as noc_router
 from app.api.routes import router
 from app.api.session import router as session_router
+from app.core.settings import get_settings, required_mfa_roles
 
 logging.basicConfig(level=logging.INFO, format='{"ts":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","msg":"%(message)s"}')
 
-app = FastAPI(title="FiberCore AI API", version=__version__, docs_url=None, redoc_url=None)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # fail closed: a typo in MFA_REQUIRED_ROLES stops the API from booting instead of silently weakening the policy
+    required_mfa_roles(get_settings())
+    yield
+
+
+app = FastAPI(title="FiberCore AI API", version=__version__, docs_url=None, redoc_url=None, lifespan=lifespan)
 MAX_BODY_BYTES = 8 * 1024 * 1024
 
 

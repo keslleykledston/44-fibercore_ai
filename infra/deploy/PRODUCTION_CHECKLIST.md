@@ -15,3 +15,5 @@
 - [ ] Plano de canary/rollback testado, e registro de versão, data, SHA e aprovador.
 
 - [ ] `web` com uma única réplica (renovação de sessão coalescida em memória, ADR-0017); escalar só depois de coordenação compartilhada do refresh.
+
+- [ ] MFA obrigatório: cada `isp_admin` cadastra o MFA em **Conta › Segurança da conta**; só então definir `FIBERCORE_MFA_REQUIRED_ROLES=isp_admin` no `.env.prod` e reiniciar a API. Guardar os códigos de recuperação fora do sistema. (Sem fluxo de redefinição ainda: perda de celular + códigos exige intervenção no banco.)

@@ -44,3 +44,7 @@
 ## Atualização 2026-10-28 (driver SNMP)
 - Feito: `transport:"snmp"` (v2c, GET/GETBULK, varredura com prova de fim de tabela, duas varreduras cruzadas). Validado ao vivo em 1 PON (12 ONTs = CLI). O agente SNMP da OLT limita a taxa (~17 pedidos/20 s e fica mudo >1 min): ritmo padrão 1 req/s e orçamento por ciclo.
 - Pendente do dono: avisar o NOC que testes SNMP de hoje podem ter silenciado o agente por alguns minutos; confirmar se há limite de taxa configurado na OLT (CPCAR/anti-ataque) e migrar para SNMPv3.
+
+## Atualização 2026-10-28 (tela MFA)
+- Feito: `/conta/seguranca` (ativar/desativar MFA, QR, códigos de recuperação uma vez), política `MFA_REQUIRED_ROLES` (403 mfa_enrolment_required, sem auto-downgrade, boot falha com papel inexistente), how-to publicado com capturas reais, E2E.
+- Pendente: redefinição de MFA por administrador (auditada); regeneração de códigos; ligar `FIBERCORE_MFA_REQUIRED_ROLES=isp_admin` no LAB depois que o admin cadastrar; eventos de segurança globais.

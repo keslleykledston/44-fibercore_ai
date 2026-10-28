@@ -13,7 +13,7 @@ from app.core import mfa
 from app.core.db import get_engine, scoped_connection
 from app.core.security import decode_mfa_challenge, decode_token, verify_secret
 from app.core.sessions import hash_refresh, issue_session
-from app.core.settings import Settings, get_settings
+from app.core.settings import Settings, get_settings, required_mfa_roles
 
 router = APIRouter()
 
@@ -173,6 +173,14 @@ def _reauth(conn, request: Request, settings: Settings, user_id: UUID, password:
     return row.email
 
 
+def _mfa_required(conn, settings: Settings, user_id: UUID) -> bool:
+    roles = required_mfa_roles(settings)
+    if not roles:
+        return False
+    mine = {r.role for r in conn.execute(text("SELECT role FROM tenant_memberships WHERE user_id = :u"), {"u": user_id})}
+    return bool(roles & mine)
+
+
 class PasswordIn(BaseModel):
     password: str = Field(min_length=1, max_length=256)
 
@@ -192,7 +200,9 @@ def mfa_status(authorization: str | None = Header(default=None), settings: Setti
     with scoped_connection(get_engine(), user_id=uid) as conn:
         enabled = bool(conn.execute(text("SELECT enabled FROM user_mfa WHERE user_id = :u"), {"u": uid}).scalar())
         left = conn.execute(text("SELECT count(*) FROM mfa_recovery_codes WHERE user_id = :u AND used_at IS NULL"), {"u": uid}).scalar_one()
-    return {"enabled": enabled, "recovery_codes_left": left, "enrolment_available": bool(settings.mfa_encryption_key)}
+        required = _mfa_required(conn, settings, uid)
+    return {"enabled": enabled, "recovery_codes_left": left, "enrolment_available": bool(settings.mfa_encryption_key),
+            "required": required}
 
 
 @router.post("/v1/auth/mfa/enroll")
@@ -265,6 +275,8 @@ def mfa_disable(
     uid = _user_id(authorization, settings)
     key, ip = f"mfa:{uid}", _client_ip(request, settings)
     with scoped_connection(get_engine(), user_id=uid) as conn:
+        if _mfa_required(conn, settings, uid):  # required by policy: switching it off would lock the account out of every route
+            raise HTTPException(409, "MFA is required for your role and cannot be disabled")
         if _gate(conn, key, ip):
             outcome = "locked"
         elif _reauth(conn, request, settings, uid, body.password) is None:

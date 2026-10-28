@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { API_URL, EMAIL, PASSWORD, login, totp } from "./helpers";
 
-const routes = ["/", "/rede", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/ajuda", "/ajuda/rede/consultar-onu"];
+const routes = ["/", "/rede", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/conta/seguranca", "/ajuda", "/ajuda/rede/consultar-onu"];
 
 test("login inválido mostra erro e não cria sessão", async ({ page, context }) => {
   await page.goto("/login");
@@ -14,7 +14,7 @@ test("login inválido mostra erro e não cria sessão", async ({ page, context }
 });
 
 test("telas protegidas redirecionam para login sem sessão", async ({ page }) => {
-  for (const r of ["/", "/rede", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/ajuda"]) {
+  for (const r of ["/", "/rede", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/conta/seguranca", "/ajuda"]) {
     await page.goto(r);
     await expect(page).toHaveURL(/\/login/);
   }
@@ -179,5 +179,68 @@ test("MFA: login em duas etapas com TOTP e código de recuperação; desativaç�
     disabled = true;
   } finally {
     if (!disabled) await request.post(`${API_URL}/v1/auth/mfa/disable`, { headers: h, data: { password: PASSWORD, code: recovery[1] } });
+  }
+});
+
+test("Segurança da conta: ativa o MFA pela tela, mostra os códigos uma única vez e desativa", async ({ page, request }) => {
+  let secret = "";
+  let recovery: string[] = [];
+  try {
+    await login(page);
+    await page.getByRole("link", { name: "Segurança da conta" }).click();
+    await expect(page.getByRole("heading", { name: "Segurança da conta" })).toBeVisible();
+    await expect(page.getByTestId("mfa-status")).toHaveText(/Desativada/);
+    // senha errada não gera segredo
+    await page.getByTestId("mfa-enrol-password").fill("senha-errada");
+    await page.getByTestId("mfa-enrol").click();
+    await expect(page.getByTestId("mfa-error")).toContainText("incorretos");
+    await expect(page.getByTestId("mfa-qr")).toHaveCount(0);
+    // senha certa: QR + chave manual
+    await page.getByTestId("mfa-enrol-password").fill(PASSWORD);
+    await page.getByTestId("mfa-enrol").click();
+    await expect(page.getByTestId("mfa-qr")).toBeVisible();
+    expect(await page.getByTestId("mfa-qr").getAttribute("src")).toMatch(/^data:image\/png;base64,/);
+    secret = (await page.getByTestId("mfa-secret").innerText()).replace(/\s/g, "");
+    expect(secret).toMatch(/^[A-Z2-7]{32}$/);
+    // código errado não ativa
+    await page.getByTestId("mfa-code").fill("000000");
+    await page.getByTestId("mfa-activate").click();
+    await expect(page.getByTestId("mfa-error")).toContainText("incorretos");
+    // código certo ativa e mostra os 8 códigos de recuperação
+    await page.getByTestId("mfa-code").fill(totp(secret));
+    await page.getByTestId("mfa-activate").click();
+    await expect(page.getByTestId("mfa-recovery-codes")).toBeVisible();
+    recovery = await page.getByTestId("mfa-recovery-codes").locator("li").allInnerTexts();
+    expect(recovery).toHaveLength(8);
+    for (const c of recovery) expect(c).toMatch(/^[0-9a-f]{10}-[0-9a-f]{10}$/);
+    await expect(page.getByTestId("mfa-done")).toBeDisabled(); // só conclui depois de confirmar que guardou
+    await page.getByTestId("mfa-saved").check();
+    await page.getByTestId("mfa-done").click();
+    await expect(page.getByTestId("mfa-status")).toHaveText(/Ativa/);
+    await expect(page.getByTestId("mfa-left")).toContainText("8");
+    await expect(page.getByTestId("mfa-recovery-codes")).toHaveCount(0); // nunca mais exibidos
+    // o login agora exige o segundo fator
+    const t = await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json();
+    expect(t.mfa_required).toBe(true);
+    // desativar: senha errada falha; senha + código de recuperação funciona
+    await page.getByText("Desativar verificação em duas etapas").click();
+    await page.getByTestId("mfa-disable-password").fill("senha-errada");
+    await page.getByTestId("mfa-disable-code").fill(recovery[0]);
+    await page.getByTestId("mfa-disable").click();
+    await expect(page.getByTestId("mfa-error")).toContainText("incorretos");
+    await page.getByTestId("mfa-disable-password").fill(PASSWORD);
+    await page.getByTestId("mfa-disable").click();
+    await expect(page.getByTestId("mfa-status")).toHaveText(/Desativada/);
+    expect((await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json()).mfa_required).toBeFalsy();
+  } finally {
+    // nunca deixa a conta de demonstração com MFA ligado (os outros testes entram só com senha)
+    const t = await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json();
+    if (t.mfa_required && (recovery[1] || secret)) {
+      const v = await request.post(`${API_URL}/v1/auth/mfa/verify`, { data: { mfa_token: t.mfa_token, code: recovery[1] ?? totp(secret, 2) } });
+      if (v.ok()) {
+        const tok = (await v.json()).access_token as string;
+        await request.post(`${API_URL}/v1/auth/mfa/disable`, { headers: { Authorization: `Bearer ${tok}` }, data: { password: PASSWORD, code: recovery[2] ?? totp(secret, 3) } });
+      }
+    }
   }
 });

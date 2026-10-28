@@ -23,3 +23,10 @@ O site está publicado em estado LAB (ADR-0016) com access token de 15 min e sem
 - Eventos de autenticação (login, MFA, refresh, reuso) ainda não vão para `audit_log` (que é por tenant); falta um registro global de eventos de segurança.
 - A chave MFA em `.env` não é um cofre; trocá-la invalida os cadastros existentes (exige recadastro). Cofre/KMS segue como pendência do W9.
 - HS256 simétrico mantido; migração para RS256/JWKS continua ligada à adoção de OIDC (ADR-0004).
+
+
+## Adendo (2026-10-28): MFA obrigatório por papel e tela de cadastro
+- **Política** `MFA_REQUIRED_ROLES` (lista de papéis, vazia = desligada; `FIBERCORE_MFA_REQUIRED_ROLES` no Compose). Quem tem um desses papéis em **qualquer** tenant e ainda não ativou o MFA recebe `403 mfa_enrolment_required` em toda rota com tenant (aplicada em `get_principal`, o ponto único de autenticação); as rotas `/v1/auth/*` seguem abertas para a pessoa cumprir a política. Papel desconhecido na lista **impede a API de subir** (typo não enfraquece a política em silêncio).
+- **Sem auto-downgrade**: `/v1/auth/mfa/disable` responde 409 para papel obrigatório; `/v1/auth/mfa/status` informa `required`.
+- **Tela** `/conta/seguranca` (BFF `/bff/security/mfa/{enroll,activate,disable}`, same-origin, `no-store`): senha → QR (gerado no servidor, PNG `data:`) + chave manual → código → 8 códigos de recuperação **mostrados uma única vez** (copiar/baixar, confirmação de que foram guardados) → estado "Ativa". Se qualquer tela receber `mfa_enrolment_required`, o BFF leva o usuário para essa tela com um aviso.
+- **Implantação**: ligar a política só depois de cada `isp_admin` cadastrar o MFA (ou haverá bloqueio até cadastrar). Não há redefinição de MFA pelo próprio usuário nem por administrador via API ainda: quem perder celular e códigos depende de intervenção no banco (limitação conhecida).

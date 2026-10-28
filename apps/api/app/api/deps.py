@@ -10,7 +10,7 @@ from sqlalchemy import Connection, text
 
 from app.core.db import get_engine, scoped_connection
 from app.core.security import ROLE_PERMISSIONS, decode_token
-from app.core.settings import Settings, get_settings
+from app.core.settings import Settings, get_settings, required_mfa_roles
 
 
 @dataclass(frozen=True)
@@ -65,6 +65,11 @@ def get_principal(
             r.tenant_id: r.role
             for r in conn.execute(text("SELECT tenant_id, role FROM tenant_memberships WHERE user_id = :u"), {"u": claims.sub})
         }
+        required = required_mfa_roles(settings)
+        if required and required & set(memberships.values()):
+            has_mfa = conn.execute(text("SELECT enabled FROM user_mfa WHERE user_id = :u"), {"u": claims.sub}).scalar()
+            if not has_mfa:  # policy: finish MFA enrolment first (the /v1/auth/* routes stay open so the user can)
+                raise HTTPException(403, "mfa_enrolment_required")
     if x_workspace_id:
         try:
             tid = UUID(x_workspace_id)

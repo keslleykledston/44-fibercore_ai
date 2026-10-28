@@ -94,7 +94,7 @@ paths:
       operationId: mfaStatus
       summary: Estado do MFA do usuário autenticado
       responses:
-        '200': {description: "{enabled, recovery_codes_left, enrolment_available}"}
+        '200': {description: "{enabled, recovery_codes_left, enrolment_available, required} - required=true quando um papel do usuário consta em MFA_REQUIRED_ROLES"}
         '401': {$ref: '#/components/responses/Unauthorized'}
   /auth/mfa/enroll:
     post:
@@ -125,13 +125,14 @@ paths:
     post:
       tags: [Platform]
       operationId: disableMfa
-      summary: Desativa o MFA (exige senha atual e um segundo fator válido)
+      summary: Desativa o MFA (exige senha atual e um segundo fator válido). 409 se o MFA é obrigatório para algum papel do usuário (MFA_REQUIRED_ROLES).
       requestBody:
         required: true
         content: {application/json: {schema: {type: object, required: [password, code], properties: {password: {type: string}, code: {type: string}}}}}
       responses:
         '204': {description: Desativado}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '409': {$ref: '#/components/responses/Conflict'}
         '429': {description: Bloqueio temporário por tentativas falhas}
   /auth/service-token:
     post:
@@ -482,7 +483,7 @@ components:
     Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000, default: 100}}
   responses:
     Unauthorized: {description: Autenticação exigida}
-    Forbidden: {description: Usuário sem permissão sobre tenant ou capacidade}
+    Forbidden: {description: "Usuário sem permissão sobre tenant ou capacidade; detail=mfa_enrolment_required quando o papel exige MFA e o usuário ainda não o ativou (MFA_REQUIRED_ROLES)"}
     Conflict: {description: Operação concorrente ou estado incompatível}
   schemas:
     LoginRequest:

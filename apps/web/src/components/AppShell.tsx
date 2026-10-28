@@ -43,8 +43,11 @@ export function AppShell({ active, children, user }: { active: string; children:
           </form>
           <div className="flex items-center gap-1">
             <CommandPalette />
-            <Link href="/ajuda" aria-current={active === "/ajuda" ? "page" : undefined} className="flex min-h-touch items-center gap-2 rounded-btn px-3 text-sm text-muted hover:bg-surface-2"><Icon name="help" /><span className="hidden sm:inline">Ajuda</span></Link>
+            <Link href="/ajuda" aria-label="Ajuda" aria-current={active === "/ajuda" ? "page" : undefined} className="flex min-h-touch items-center gap-2 rounded-btn px-3 text-sm text-muted hover:bg-surface-2"><Icon name="help" /><span className="hidden sm:inline">Ajuda</span></Link>
             <ThemeToggle />
+            {user && (
+              <Link href="/conta/seguranca" aria-label="Segurança da conta" aria-current={active === "/conta/seguranca" ? "page" : undefined} className="flex min-h-touch items-center gap-2 rounded-btn px-3 text-sm text-muted hover:bg-surface-2"><Icon name="shield" /><span className="hidden sm:inline">Conta</span></Link>
+            )}
             {user && (
               <form action="/bff/logout" method="post">
                 <button className="flex min-h-touch items-center gap-2 rounded-btn px-3 text-sm text-muted hover:bg-surface-2" type="submit" aria-label="Sair"><Icon name="logout" /><span className="hidden sm:inline">Sair</span></button>

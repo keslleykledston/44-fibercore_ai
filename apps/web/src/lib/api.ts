@@ -18,6 +18,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers: { ...(init.headers ?? {}), Authorization: `Bearer ${token}`, ...(workspace ? { "X-Workspace-ID": workspace } : {}) },
   });
   if (res.status === 401) redirect("/login");
+  if (res.status === 403 && (await res.clone().json().catch(() => null))?.detail === "mfa_enrolment_required") redirect("/conta/seguranca?obrigatorio=1");
   if (!res.ok) throw new ApiError(res.status, `API ${res.status}`);
   return (await res.json()) as T;
 }
@@ -65,4 +66,15 @@ export async function apiPost(path: string, body?: BodyInit, headers: Record<str
   let json: unknown = null;
   try { json = await res.json(); } catch { /* sem corpo */ }
   return { status: res.status, json };
+}
+
+export type MfaStatus = { enabled: boolean; recovery_codes_left: number; enrolment_available: boolean; required: boolean };
+
+/** Estado do MFA da conta logada (a rota da API não depende de workspace e nunca devolve segredo). */
+export async function apiMfaStatus(): Promise<MfaStatus | null> {
+  const { token } = await getSession();
+  if (!token) redirect("/login");
+  const res = await fetch(`${API}/v1/auth/mfa/status`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
+  if (res.status === 401) redirect("/login");
+  return res.ok ? ((await res.json()) as MfaStatus) : null;
 }
