@@ -52,5 +52,16 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("ALTER TABLE service_accounts DROP COLUMN IF EXISTS edge_id CASCADE")
-    op.execute("DROP TABLE IF EXISTS edges")
+    old = "('isp_admin','engineer','noc_n2','noc_n1','support','auditor','platform_support')"
+    op.execute(
+        f"""
+        DELETE FROM tenant_memberships WHERE role = 'edge_agent';
+        DELETE FROM service_accounts WHERE role = 'edge_agent';  -- such accounts cannot exist pre-0004
+        ALTER TABLE service_accounts DROP COLUMN IF EXISTS edge_id CASCADE;
+        DROP TABLE IF EXISTS edges;
+        ALTER TABLE tenant_memberships DROP CONSTRAINT tenant_memberships_role_check;
+        ALTER TABLE tenant_memberships ADD CONSTRAINT tenant_memberships_role_check CHECK (role IN {old});
+        ALTER TABLE service_accounts DROP CONSTRAINT service_accounts_role_check;
+        ALTER TABLE service_accounts ADD CONSTRAINT service_accounts_role_check CHECK (role IN {old});
+        """
+    )
