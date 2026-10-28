@@ -1,0 +1,157 @@
+from datetime import UTC, datetime, timedelta
+
+import pytest
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
+
+from app.core.db import make_engine, scoped_connection
+from app.core.security import hash_secret
+from tests.conftest import login
+
+SECRET = "inv-agent-secret"
+
+
+def _now(delta_s: int = 0) -> str:
+    return (datetime.now(UTC) + timedelta(seconds=delta_s)).isoformat()
+
+
+@pytest.fixture(scope="module")
+def inv(seed, migrated):
+    out = {}
+    with migrated.begin() as c:
+        for key, tenant in (("a1", "A"), ("a2", "A"), ("b1", "B")):
+            eid = c.execute(text("INSERT INTO edges(tenant_id,name) VALUES (:t,:n) RETURNING id"),
+                            {"t": seed[tenant], "n": f"inv-{key}"}).scalar()
+            sa = c.execute(
+                text("INSERT INTO service_accounts(tenant_id,name,role,secret_hash,edge_id) VALUES (:t,:n,'edge_agent',:h,:e) RETURNING id"),
+                {"t": seed[tenant], "n": f"inv-agent-{key}", "h": hash_secret(SECRET), "e": eid}).scalar()
+            out[key] = {"edge": eid, "sa": sa}
+    return out
+
+
+def agent(client, inv, key):
+    r = client.post("/v1/auth/service-token", json={"client_id": str(inv[key]["sa"]), "client_secret": SECRET})
+    return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
+def snap(inv, key="a1", name="OLT-1", observed=None, **kw):
+    body = {"edge_id": str(inv[key]["edge"]), "observed_at": observed or _now(), "name": name, "vendor": "huawei",
+            "model": "MA5800-X7", "firmware": "R018", "driver_level": "observed",
+            "pons": [{"pon_path": "0/1/0", "status": "up"}],
+            "onus": [{"serial": "HWTC00000001", "pon_path": "0/1/0", "status": "online", "rx_dbm": -21.5},
+                     {"serial": "HWTC00000002", "pon_path": "0/1/0", "status": "los", "rx_dbm": None}]}
+    body.update(kw)
+    return body
+
+
+def hdr(client, who, seed, tenant):
+    return {**login(client, who), "X-Workspace-ID": str(seed[tenant])}
+
+
+def test_ingest_then_read_with_freshness(client, seed, inv):
+    r = client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a1"), json=snap(inv))
+    assert r.status_code == 202 and r.json()["onus"] == 2
+    h = hdr(client, "alice", seed, "A")
+    olts = client.get("/v1/olts", headers=h).json()
+    assert [o["name"] for o in olts] == ["OLT-1"] and olts[0]["onu_count"] == 2
+    assert olts[0]["freshness"] == "fresh" and olts[0]["support_level"] == "observed"
+    onus = {o["serial"]: o for o in client.get("/v1/onus", headers=h).json()}
+    assert onus["HWTC00000001"]["rx_dbm"] == -21.5 and onus["HWTC00000001"]["pon_path"] == "0/1/0"
+    assert client.get("/v1/onus?serial=HWTC00000002", headers=h).json()[0]["status"] == "los"
+
+
+def test_tenant_isolation_on_reads(client, seed, inv):
+    client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a1"), json=snap(inv))
+    hb = hdr(client, "bob", seed, "B")
+    assert client.get("/v1/olts", headers=hb).json() == []
+    assert client.get("/v1/onus", headers=hb).json() == []
+    r = client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "b1"), json=snap(inv, "b1", name="OLT-1"))
+    assert r.status_code == 202  # same OLT name in another tenant is independent
+    assert len(client.get("/v1/olts", headers=hb).json()) == 1
+    assert client.get("/v1/olts", headers=hdr(client, "alice", seed, "A")).json()[0]["onu_count"] == 2
+
+
+def test_write_authorization(client, seed, inv):
+    # token of edge a2 cannot push for edge a1; humans cannot push; agents cannot read
+    assert client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a2"), json=snap(inv, "a1")).status_code == 403
+    assert client.post("/v1/edge/olt-snapshots", headers=hdr(client, "alice", seed, "A"), json=snap(inv)).status_code == 403
+    assert client.post("/v1/edge/olt-snapshots", json=snap(inv)).status_code == 401
+    assert client.get("/v1/olts", headers=agent(client, inv, "a1")).status_code == 403
+
+
+def test_read_permissions(client, seed):
+    assert client.get("/v1/olts", headers=hdr(client, "dave", seed, "A")).status_code == 200  # noc_n1
+    assert client.get("/v1/olts", headers={**login(client, "carol"), "X-Workspace-ID": str(seed["A"])}).status_code == 403  # auditor
+
+
+def test_out_of_order_snapshot_never_overwrites_newer(client, seed, inv):
+    a = agent(client, inv, "a1")
+    new = snap(inv, name="OLT-OOO", observed=_now(-10), onus=[{"serial": "OOO1", "status": "online"}])
+    old = snap(inv, name="OLT-OOO", observed=_now(-600), onus=[{"serial": "OOO1", "status": "offline"}])
+    assert client.post("/v1/edge/olt-snapshots", headers=a, json=new).status_code == 202
+    r = client.post("/v1/edge/olt-snapshots", headers=a, json=old)
+    assert r.json()["status"] == "ignored_stale"
+    h = hdr(client, "alice", seed, "A")
+    assert client.get("/v1/onus?serial=OOO1", headers=h).json()[0]["status"] == "online"
+
+
+def test_silence_means_stale_not_offline(client, seed, inv):
+    old = snap(inv, name="OLT-OLD", observed=_now(-3600), onus=[{"serial": "OLD1", "status": "online"}])
+    assert client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a1"), json=old).status_code == 202
+    h = hdr(client, "alice", seed, "A")
+    onu = client.get("/v1/onus?serial=OLD1", headers=h).json()[0]
+    assert onu["status"] == "online" and onu["freshness"] == "stale"  # last known state + explicit staleness
+
+
+def test_validation_rejects_bad_input(client, inv):
+    a = agent(client, inv, "a1")
+    assert client.post("/v1/edge/olt-snapshots", headers=a, json=snap(inv, observed=_now(3600))).status_code == 422
+    assert client.post("/v1/edge/olt-snapshots", headers=a, json=snap(inv, driver_level="certified")).status_code == 422
+    bad = snap(inv, onus=[{"serial": "X", "status": "online", "rx_dbm": -200}])
+    assert client.post("/v1/edge/olt-snapshots", headers=a, json=bad).status_code == 422
+    assert client.post("/v1/edge/olt-snapshots", headers=a, json=snap(inv, observed="2026-10-27T00:00:00")).status_code == 422
+
+
+def test_olt_name_cannot_be_hijacked_by_other_edge_of_same_tenant(client, inv):
+    assert client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a1"), json=snap(inv, name="OLT-OWN")).status_code == 202
+    r = client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a2"), json=snap(inv, "a2", name="OLT-OWN"))
+    assert r.status_code == 409
+
+
+def test_certified_cannot_be_downgraded_or_self_declared(client, seed, inv, migrated):
+    a = agent(client, inv, "a1")
+    client.post("/v1/edge/olt-snapshots", headers=a, json=snap(inv, name="OLT-CERT"))
+    with migrated.begin() as c:  # homologation is an owner-side action
+        c.execute(text("UPDATE olts SET support_level='certified' WHERE name='OLT-CERT'"))
+    client.post("/v1/edge/olt-snapshots", headers=a, json=snap(inv, name="OLT-CERT", driver_level="identified"))
+    olts = {o["name"]: o for o in client.get("/v1/olts", headers=hdr(client, "alice", seed, "A")).json()}
+    assert olts["OLT-CERT"]["support_level"] == "certified"
+
+
+def test_runtime_role_cannot_delete_inventory(seed, app_url):
+    eng = make_engine(app_url)
+    for t in ("onus", "olts", "pon_ports", "cpes"):
+        with pytest.raises(DBAPIError), scoped_connection(eng, tenant_id=seed["A"]) as c:
+            c.execute(text(f"DELETE FROM {t}"))  # noqa: S608
+
+
+def test_cpe_snapshot_and_binding_conflict(client, seed, inv):
+    a = agent(client, inv, "a1")
+    body = {"edge_id": str(inv["a1"]["edge"]), "observed_at": _now(), "cpes": [
+        {"canonical_serial": "HWTC00000001", "vendor": "Huawei", "model": "HG8245H",
+         "binding": {"protocol": "tr069", "external_id": "00259E-HG8245H-ZTEG00000001", "connector_id": "genieacs-lab"}}]}
+    assert client.post("/v1/edge/cpe-snapshots", headers=a, json=body).status_code == 202
+    assert client.post("/v1/edge/cpe-snapshots", headers=a, json=body).status_code == 202  # idempotent
+    rows = client.get("/v1/cpes", headers=hdr(client, "alice", seed, "A")).json()
+    assert len(rows) == 1 and rows[0]["bindings"][0]["protocol"] == "tr069" and rows[0]["freshness"] == "fresh"
+    clash = {**body, "cpes": [{**body["cpes"][0], "canonical_serial": "OTHER-SERIAL"}]}
+    assert client.post("/v1/edge/cpe-snapshots", headers=a, json=clash).status_code == 409
+    assert client.get("/v1/cpes", headers=hdr(client, "bob", seed, "B")).json() == []
+
+
+def test_snapshot_emits_outbox_event(client, seed, inv, migrated):
+    client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a1"), json=snap(inv, name="OLT-EVT"))
+    with migrated.connect() as c:
+        n = c.execute(text("SELECT count(*) FROM events_outbox WHERE event_type='olt.snapshot_ingested' AND tenant_id=:t"),
+                      {"t": seed["A"]}).scalar()
+    assert n >= 1

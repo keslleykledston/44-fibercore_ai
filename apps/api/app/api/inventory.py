@@ -1,0 +1,264 @@
+"""Inventory ingestion (Edge -> Cloud) and read APIs. READ-ONLY toward the network: nothing here
+sends anything to a device. Freshness is computed at read time so Edge/OLT silence shows as `stale`,
+never as a fabricated ONU `offline`."""
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, Literal
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import Connection, text
+
+from app.api.deps import Principal, require, tenant_conn
+from app.events import outbox
+
+router = APIRouter()
+
+FRESH_FOR = timedelta(minutes=15)
+MAX_FUTURE_SKEW = timedelta(minutes=5)
+LEVEL_ORDER = {"identified": 0, "observed": 1, "certified": 2}
+Short = Annotated[str, Field(min_length=1, max_length=128)]
+
+
+def _check_observed(v: datetime) -> datetime:
+    if v.tzinfo is None:
+        raise ValueError("observed_at must be timezone-aware")
+    if v > datetime.now(UTC) + MAX_FUTURE_SKEW:
+        raise ValueError("observed_at is in the future")
+    return v
+
+
+class PonIn(BaseModel):
+    pon_path: Short
+    status: Literal["up", "down", "unknown"] = "unknown"
+
+
+class OnuIn(BaseModel):
+    serial: Short
+    pon_path: Short | None = None
+    status: Literal["online", "offline", "los", "dying_gasp", "unknown"] = "unknown"
+    rx_dbm: float | None = Field(default=None, ge=-50, le=10)
+
+
+class OltSnapshot(BaseModel):
+    edge_id: UUID
+    observed_at: datetime
+    name: Short
+    vendor: Short
+    model: Short | None = None
+    firmware: Short | None = None
+    driver_level: Literal["identified", "observed"] = "identified"  # 'certified' is never self-declared
+    pons: list[PonIn] = Field(default_factory=list, max_length=512)
+    onus: list[OnuIn] = Field(default_factory=list, max_length=20000)
+
+    _obs = field_validator("observed_at")(_check_observed)
+
+
+class CpeBinding(BaseModel):
+    protocol: Literal["tr069", "tr369"]
+    external_id: Short
+    connector_id: Short
+
+
+class CpeIn(BaseModel):
+    canonical_serial: Short
+    vendor: Short | None = None
+    model: Short | None = None
+    firmware: Short | None = None
+    binding: CpeBinding
+
+
+class CpeSnapshot(BaseModel):
+    edge_id: UUID
+    observed_at: datetime
+    cpes: list[CpeIn] = Field(max_length=20000)
+
+    _obs = field_validator("observed_at")(_check_observed)
+
+
+def _bound_edge(p: Principal, edge_id: UUID) -> None:
+    if p.edge_id is None or p.edge_id != edge_id:
+        raise HTTPException(403, "token is not bound to this edge")
+
+
+@router.post("/v1/edge/olt-snapshots", status_code=202)
+def ingest_olt_snapshot(
+    body: OltSnapshot, p: Principal = Depends(require("inventory:write")), conn: Connection = Depends(tenant_conn)
+) -> dict:
+    _bound_edge(p, body.edge_id)
+    row = conn.execute(
+        text("SELECT id, edge_id, observed_at, support_level FROM olts WHERE name = :n FOR UPDATE"), {"n": body.name}
+    ).first()
+    if row and row.edge_id != body.edge_id:
+        raise HTTPException(409, "olt name owned by another edge")  # an edge cannot hijack another's OLT
+    if row and row.observed_at and body.observed_at < row.observed_at:
+        return {"status": "ignored_stale", "olt_id": str(row.id)}  # out-of-order replay never overwrites newer data
+    # Server-side cap: cloud never trusts a self-declared level above 'observed'; 'certified' needs homologation record.
+    level = body.driver_level
+    if row and row.support_level == "certified":
+        level = "certified"
+    if row:
+        olt_id = row.id
+        conn.execute(
+            text("UPDATE olts SET vendor=:v, model=:m, firmware=:f, support_level=:l, observed_at=:o WHERE id=:i"),
+            {"v": body.vendor, "m": body.model, "f": body.firmware, "l": level, "o": body.observed_at, "i": olt_id},
+        )
+    else:
+        olt_id = conn.execute(
+            text(
+                "INSERT INTO olts (tenant_id, edge_id, name, vendor, model, firmware, support_level, observed_at) "
+                "VALUES (:t,:e,:n,:v,:m,:f,:l,:o) RETURNING id"
+            ),
+            {"t": p.tenant_id, "e": body.edge_id, "n": body.name, "v": body.vendor, "m": body.model,
+             "f": body.firmware, "l": level, "o": body.observed_at},
+        ).scalar_one()
+    pon_ids: dict[str, UUID] = {}
+    for pon in body.pons:
+        pon_ids[pon.pon_path] = conn.execute(
+            text(
+                "INSERT INTO pon_ports (tenant_id, olt_id, pon_path, status, observed_at) VALUES (:t,:o,:p,:s,:ts) "
+                "ON CONFLICT (tenant_id, olt_id, pon_path) DO UPDATE SET status=EXCLUDED.status, observed_at=EXCLUDED.observed_at "
+                "WHERE pon_ports.observed_at IS NULL OR pon_ports.observed_at <= EXCLUDED.observed_at RETURNING id"
+            ),
+            {"t": p.tenant_id, "o": olt_id, "p": pon.pon_path, "s": pon.status, "ts": body.observed_at},
+        ).scalar_one_or_none() or conn.execute(
+            text("SELECT id FROM pon_ports WHERE olt_id=:o AND pon_path=:p"), {"o": olt_id, "p": pon.pon_path}
+        ).scalar_one()
+    for onu in body.onus:
+        pon_id = pon_ids.get(onu.pon_path) if onu.pon_path else None
+        if onu.pon_path and pon_id is None:
+            pon_id = conn.execute(
+                text("SELECT id FROM pon_ports WHERE olt_id=:o AND pon_path=:p"), {"o": olt_id, "p": onu.pon_path}
+            ).scalar_one_or_none()
+        conn.execute(
+            text(
+                "INSERT INTO onus (tenant_id, olt_id, pon_id, serial, status, rx_dbm, observed_at) "
+                "VALUES (:t,:o,:pi,:s,:st,:rx,:ts) "
+                "ON CONFLICT (tenant_id, olt_id, serial) DO UPDATE SET pon_id=EXCLUDED.pon_id, status=EXCLUDED.status, "
+                "rx_dbm=EXCLUDED.rx_dbm, observed_at=EXCLUDED.observed_at "
+                "WHERE onus.observed_at IS NULL OR onus.observed_at <= EXCLUDED.observed_at"
+            ),
+            {"t": p.tenant_id, "o": olt_id, "pi": pon_id, "s": onu.serial, "st": onu.status, "rx": onu.rx_dbm, "ts": body.observed_at},
+        )
+    outbox.enqueue(
+        conn, tenant_id=p.tenant_id, aggregate_type="olt", aggregate_id=olt_id, event_type="olt.snapshot_ingested",
+        payload={"edge_id": str(body.edge_id), "pons": len(body.pons), "onus": len(body.onus),
+                 "observed_at": body.observed_at.isoformat()},
+    )
+    return {"status": "accepted", "olt_id": str(olt_id), "pons": len(body.pons), "onus": len(body.onus)}
+
+
+@router.post("/v1/edge/cpe-snapshots", status_code=202)
+def ingest_cpe_snapshot(
+    body: CpeSnapshot, p: Principal = Depends(require("inventory:write")), conn: Connection = Depends(tenant_conn)
+) -> dict:
+    _bound_edge(p, body.edge_id)
+    for c in body.cpes:
+        cpe_id = conn.execute(
+            text(
+                "INSERT INTO cpes (tenant_id, canonical_serial, vendor, model, firmware, observed_at) VALUES (:t,:s,:v,:m,:f,:o) "
+                "ON CONFLICT (tenant_id, canonical_serial) DO UPDATE SET vendor=EXCLUDED.vendor, model=EXCLUDED.model, "
+                "firmware=EXCLUDED.firmware, observed_at=EXCLUDED.observed_at "
+                "WHERE cpes.observed_at IS NULL OR cpes.observed_at <= EXCLUDED.observed_at RETURNING id"
+            ),
+            {"t": p.tenant_id, "s": c.canonical_serial, "v": c.vendor, "m": c.model, "f": c.firmware, "o": body.observed_at},
+        ).scalar_one_or_none() or conn.execute(
+            text("SELECT id FROM cpes WHERE canonical_serial=:s"), {"s": c.canonical_serial}
+        ).scalar_one()
+        # A binding (connector, protocol, external_id) identifies ONE cpe; re-pointing it to another serial is refused.
+        existing = conn.execute(
+            text("SELECT cpe_id FROM cpe_protocol_bindings WHERE connector_id=:c AND protocol=:p AND external_id=:x"),
+            {"c": c.binding.connector_id, "p": c.binding.protocol, "x": c.binding.external_id},
+        ).scalar_one_or_none()
+        if existing and existing != cpe_id:
+            raise HTTPException(409, f"binding {c.binding.external_id} already linked to another cpe")
+        conn.execute(
+            text(
+                "INSERT INTO cpe_protocol_bindings (tenant_id, cpe_id, protocol, external_id, connector_id, observed_at) "
+                "VALUES (:t,:ci,:p,:x,:c,:o) ON CONFLICT (tenant_id, connector_id, protocol, external_id) "
+                "DO UPDATE SET observed_at = GREATEST(cpe_protocol_bindings.observed_at, EXCLUDED.observed_at)"
+            ),
+            {"t": p.tenant_id, "ci": cpe_id, "p": c.binding.protocol, "x": c.binding.external_id,
+             "c": c.binding.connector_id, "o": body.observed_at},
+        )
+    return {"status": "accepted", "cpes": len(body.cpes)}
+
+
+# ---- reads ------------------------------------------------------------------------------------
+def _fresh(ts: datetime | None) -> str:
+    if ts is None:
+        return "unknown"
+    return "fresh" if datetime.now(UTC) - ts <= FRESH_FOR else "stale"
+
+
+@router.get("/v1/olts")
+def list_olts(
+    limit: int = Query(100, ge=1, le=1000),
+    p: Principal = Depends(require("inventory:read")),
+    conn: Connection = Depends(tenant_conn),
+) -> list[dict]:
+    rows = conn.execute(
+        text(
+            "SELECT o.id, o.name, o.vendor, o.model, o.firmware, o.support_level, o.observed_at, o.edge_id, "
+            "(SELECT count(*) FROM onus u WHERE u.olt_id = o.id) AS onu_count "
+            "FROM olts o ORDER BY o.name LIMIT :l"
+        ),
+        {"l": limit},
+    )
+    return [
+        {"id": str(r.id), "name": r.name, "vendor": r.vendor, "model": r.model, "firmware": r.firmware,
+         "support_level": r.support_level, "edge_id": str(r.edge_id), "onu_count": r.onu_count,
+         "observed_at": r.observed_at.isoformat() if r.observed_at else None, "freshness": _fresh(r.observed_at)}
+        for r in rows
+    ]
+
+
+@router.get("/v1/onus")
+def list_onus(
+    serial: str | None = Query(None, max_length=128),
+    olt_id: UUID | None = None,
+    limit: int = Query(100, ge=1, le=1000),
+    p: Principal = Depends(require("inventory:read")),
+    conn: Connection = Depends(tenant_conn),
+) -> list[dict]:
+    rows = conn.execute(
+        text(
+            "SELECT u.id, u.olt_id, u.serial, u.status, u.rx_dbm, u.observed_at, pp.pon_path FROM onus u "
+            "LEFT JOIN pon_ports pp ON pp.id = u.pon_id AND pp.tenant_id = u.tenant_id "
+            "WHERE (CAST(:s AS text) IS NULL OR u.serial = :s) AND (CAST(:o AS uuid) IS NULL OR u.olt_id = :o) "
+            "ORDER BY u.serial LIMIT :l"
+        ),
+        {"s": serial, "o": olt_id, "l": limit},
+    )
+    return [
+        {"id": str(r.id), "olt_id": str(r.olt_id), "serial": r.serial, "pon_path": r.pon_path,
+         "status": r.status, "rx_dbm": float(r.rx_dbm) if r.rx_dbm is not None else None,
+         "observed_at": r.observed_at.isoformat() if r.observed_at else None, "freshness": _fresh(r.observed_at)}
+        for r in rows
+    ]
+
+
+@router.get("/v1/cpes")
+def list_cpes(
+    limit: int = Query(100, ge=1, le=1000),
+    p: Principal = Depends(require("inventory:read")),
+    conn: Connection = Depends(tenant_conn),
+) -> list[dict]:
+    rows = conn.execute(
+        text(
+            "SELECT c.id, c.canonical_serial, c.vendor, c.model, c.firmware, c.observed_at, "
+            "COALESCE(json_agg(json_build_object('protocol', b.protocol, 'connector_id', b.connector_id, "
+            "'external_id', b.external_id)) FILTER (WHERE b.id IS NOT NULL), '[]') AS bindings "
+            "FROM cpes c LEFT JOIN cpe_protocol_bindings b ON b.cpe_id = c.id AND b.tenant_id = c.tenant_id "
+            "GROUP BY c.tenant_id, c.id ORDER BY c.canonical_serial LIMIT :l"
+        ),
+        {"l": limit},
+    )
+    return [
+        {"id": str(r.id), "canonical_serial": r.canonical_serial, "vendor": r.vendor, "model": r.model,
+         "firmware": r.firmware, "bindings": r.bindings,
+         "observed_at": r.observed_at.isoformat() if r.observed_at else None, "freshness": _fresh(r.observed_at)}
+        for r in rows
+    ]

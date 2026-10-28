@@ -9,7 +9,7 @@ def _by_id(infra):
 def test_status_honest_when_all_up():
     m = _by_id(Infra(postgres=True, nats=True))
     assert m["identity-access"]["status"] == "healthy"
-    assert m["olt-inventory"]["status"] == "unknown"  # never faked healthy
+    assert m["template-catalog"]["status"] == "unknown"  # never faked healthy
     assert m["acs-cwmp"]["status"] == "disabled"  # feature flag off
 
 

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: FiberCore AI Public/Operator API
-  version: 0.2.0-draft
+  version: 0.3.0-draft
   description: >-
     Contrato evolutivo orientado a multi-tenancy; implementação segura é obrigatória
     antes de tráfego real. Tenant é derivado de claims autenticadas e validação de memberships.
@@ -93,7 +93,7 @@ paths:
     get:
       tags: [Network]
       operationId: listOlts
-      parameters: [{$ref: '#/components/parameters/TenantId'}, {$ref: '#/components/parameters/Limit'}]
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {$ref: '#/components/parameters/Limit'}]
       responses:
         '200':
           description: Inventário OLT
@@ -102,7 +102,7 @@ paths:
     get:
       tags: [Network]
       operationId: listOnus
-      parameters: [{$ref: '#/components/parameters/TenantId'}, {$ref: '#/components/parameters/Limit'}, {name: serial, in: query, required: false, schema: {type: string}}]
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {$ref: '#/components/parameters/Limit'}, {name: serial, in: query, required: false, schema: {type: string}}, {name: olt_id, in: query, required: false, schema: {type: string, format: uuid}}]
       responses:
         '200':
           description: Inventário ONU
@@ -111,7 +111,7 @@ paths:
     get:
       tags: [CPE]
       operationId: listCpes
-      parameters: [{$ref: '#/components/parameters/TenantId'}, {$ref: '#/components/parameters/Limit'}]
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {$ref: '#/components/parameters/Limit'}]
       responses:
         '200':
           description: Inventário CPE com fontes CWMP/USP
@@ -228,6 +228,29 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {description: Edge não registrado ou revogado}
+  /edge/olt-snapshots:
+    post:
+      tags: [Edge]
+      operationId: ingestOltSnapshot
+      description: Edge->Cloud, token de service account `edge_agent` ligado a UM edge. Snapshots mais antigos que o dado atual são ignorados. Só leitura da rede.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/OltSnapshot'}}}}
+      responses:
+        '202': {description: Aceito (status accepted ou ignored_stale)}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {description: Validação}
+  /edge/cpe-snapshots:
+    post:
+      tags: [Edge]
+      operationId: ingestCpeSnapshot
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CpeSnapshot'}}}}
+      responses:
+        '202': {description: Aceito}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {description: Validação}
   /edges:
     get:
       tags: [Edge]
@@ -306,39 +329,73 @@ components:
       type: object
       required: [module, version]
       properties: {module: {type: string}, version: {type: string}, changelog_url: {type: string}, approved_for_tenant: {type: boolean}}
+    Freshness: {type: string, enum: [fresh, stale, unknown], description: "Calculado na leitura (limite 15 min). Silêncio do Edge/OLT => stale, nunca offline fabricado."}
     Olt:
       type: object
-      required: [id, tenant_id, hostname, vendor, status, source]
+      required: [id, name, vendor, edge_id, support_level, onu_count, freshness]
       properties:
         id: {type: string, format: uuid}
-        tenant_id: {type: string, format: uuid}
-        hostname: {type: string}
+        name: {type: string}
         vendor: {type: string}
         model: {type: [string, 'null']}
         firmware: {type: [string, 'null']}
-        status: {type: string, enum: [online, offline, stale, unknown]}
-        source: {$ref: '#/components/schemas/SourceMetadata'}
+        edge_id: {type: string, format: uuid}
+        support_level: {type: string, enum: [identified, observed, certified], description: "certified só por homologação no servidor"}
+        onu_count: {type: integer}
+        observed_at: {type: [string, 'null'], format: date-time}
+        freshness: {$ref: '#/components/schemas/Freshness'}
     Onu:
       type: object
-      required: [id, tenant_id, serial, olt_id, status, source]
+      required: [id, olt_id, serial, status, freshness]
       properties:
         id: {type: string, format: uuid}
-        tenant_id: {type: string, format: uuid}
         olt_id: {type: string, format: uuid}
         serial: {type: string}
         pon_path: {type: [string, 'null']}
-        rx_dbm: {type: [number, 'null']}
-        status: {type: string, enum: [online, offline, stale, unknown]}
-        source: {$ref: '#/components/schemas/SourceMetadata'}
+        rx_dbm: {type: [number, 'null'], minimum: -50, maximum: 10}
+        status: {type: string, enum: [online, offline, los, dying_gasp, unknown]}
+        observed_at: {type: [string, 'null'], format: date-time}
+        freshness: {$ref: '#/components/schemas/Freshness'}
     Cpe:
       type: object
-      required: [id, tenant_id, identifiers, protocol_bindings, source]
+      required: [id, canonical_serial, bindings, freshness]
       properties:
         id: {type: string, format: uuid}
-        tenant_id: {type: string, format: uuid}
-        identifiers: {type: object, additionalProperties: {type: string}}
-        protocol_bindings: {type: array, items: {type: string, enum: [tr069, tr369]}}
-        source: {$ref: '#/components/schemas/SourceMetadata'}
+        canonical_serial: {type: string}
+        vendor: {type: [string, 'null']}
+        model: {type: [string, 'null']}
+        firmware: {type: [string, 'null']}
+        bindings:
+          type: array
+          items:
+            type: object
+            required: [protocol, connector_id, external_id]
+            properties:
+              protocol: {type: string, enum: [tr069, tr369]}
+              connector_id: {type: string}
+              external_id: {type: string}
+        observed_at: {type: [string, 'null'], format: date-time}
+        freshness: {$ref: '#/components/schemas/Freshness'}
+    OltSnapshot:
+      type: object
+      required: [edge_id, observed_at, name, vendor]
+      properties:
+        edge_id: {type: string, format: uuid}
+        observed_at: {type: string, format: date-time, description: "Com timezone; no máximo 5 min no futuro"}
+        name: {type: string, maxLength: 128}
+        vendor: {type: string}
+        model: {type: [string, 'null']}
+        firmware: {type: [string, 'null']}
+        driver_level: {type: string, enum: [identified, observed], default: identified}
+        pons: {type: array, maxItems: 512, items: {type: object, required: [pon_path], properties: {pon_path: {type: string}, status: {type: string, enum: [up, down, unknown]}}}}
+        onus: {type: array, maxItems: 20000, items: {type: object, required: [serial], properties: {serial: {type: string}, pon_path: {type: string}, status: {type: string, enum: [online, offline, los, dying_gasp, unknown]}, rx_dbm: {type: [number, 'null'], minimum: -50, maximum: 10}}}}
+    CpeSnapshot:
+      type: object
+      required: [edge_id, observed_at, cpes]
+      properties:
+        edge_id: {type: string, format: uuid}
+        observed_at: {type: string, format: date-time}
+        cpes: {type: array, maxItems: 20000, items: {type: object, required: [canonical_serial, binding], properties: {canonical_serial: {type: string}, vendor: {type: string}, model: {type: string}, firmware: {type: string}, binding: {type: object, required: [protocol, external_id, connector_id], properties: {protocol: {type: string, enum: [tr069, tr369]}, external_id: {type: string}, connector_id: {type: string}}}}}}
     Capability:
       type: object
       required: [name, status, protocol, certification]
