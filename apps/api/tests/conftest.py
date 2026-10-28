@@ -17,6 +17,7 @@ from sqlalchemy import create_engine, text
 APP_PW = "app_role_test_pw_0123456789"
 WORKER_PW = "worker_role_test_pw_0123456789"
 JWT_SECRET = "test-secret-with-more-than-32-characters!!"
+PII_KEY = "pii-hmac-key-with-more-than-32-characters!!"
 API_DIR = Path(__file__).resolve().parents[1]
 MANIFEST = API_DIR.parents[1] / "configs" / "modules.yaml"
 
@@ -53,7 +54,7 @@ def migrated(admin_url: str, app_url: str):
     env = {**os.environ, "ADMIN_DATABASE_URL": admin_url, "APP_DB_PASSWORD": APP_PW, "WORKER_DB_PASSWORD": WORKER_PW}
     subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], cwd=API_DIR, env=env, check=True)
     os.environ.update(
-        DATABASE_URL=app_url, JWT_SECRET=JWT_SECRET, MODULE_MANIFEST=str(MANIFEST), NATS_MONITOR_URL=""
+        DATABASE_URL=app_url, JWT_SECRET=JWT_SECRET, PII_HMAC_KEY=PII_KEY, MODULE_MANIFEST=str(MANIFEST), NATS_MONITOR_URL=""
     )
     from app.core import db, settings
     settings.get_settings.cache_clear(); db.get_engine.cache_clear()
@@ -95,3 +96,50 @@ def login(client, who: str) -> dict:
     r = client.post("/v1/auth/token", json={"email": f"{who}@example.com", "password": "correct horse battery"})
     assert r.status_code == 200, r.text
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
+# ---- shared inventory helpers (session scoped: edges/agents are created once) --------------------
+from datetime import UTC, datetime, timedelta  # noqa: E402
+
+from app.core.security import hash_secret  # noqa: E402
+
+SECRET = "inv-agent-secret"
+
+
+def _now(delta_s: int = 0) -> str:
+    return (datetime.now(UTC) + timedelta(seconds=delta_s)).isoformat()
+
+
+@pytest.fixture(scope="session")
+def inv(seed, migrated):
+    out = {}
+    with migrated.begin() as c:
+        for key, tenant in (("a1", "A"), ("a2", "A"), ("b1", "B")):
+            eid = c.execute(text("INSERT INTO edges(tenant_id,name) VALUES (:t,:n) RETURNING id"),
+                            {"t": seed[tenant], "n": f"inv-{key}"}).scalar()
+            sa = c.execute(
+                text("INSERT INTO service_accounts(tenant_id,name,role,secret_hash,edge_id) VALUES (:t,:n,'edge_agent',:h,:e) RETURNING id"),
+                {"t": seed[tenant], "n": f"inv-agent-{key}", "h": hash_secret(SECRET), "e": eid}).scalar()
+            out[key] = {"edge": eid, "sa": sa}
+    return out
+
+
+def agent(client, inv, key):
+    r = client.post("/v1/auth/service-token", json={"client_id": str(inv[key]["sa"]), "client_secret": SECRET})
+    return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
+def snap(inv, key="a1", name="OLT-1", observed=None, **kw):
+    body = {"edge_id": str(inv[key]["edge"]), "observed_at": observed or _now(), "name": name, "vendor": "huawei",
+            "model": "MA5800-X7", "firmware": "R018", "driver_level": "observed",
+            "pons": [{"pon_path": "0/1/0", "status": "up"}],
+            "onus": [{"serial": "HWTC00000001", "pon_path": "0/1/0", "status": "online", "rx_dbm": -21.5},
+                     {"serial": "HWTC00000002", "pon_path": "0/1/0", "status": "los", "rx_dbm": None}]}
+    body.update(kw)
+    return body
+
+
+def hdr(client, who, seed, tenant):
+    return {**login(client, who), "X-Workspace-ID": str(seed[tenant])}
+
+

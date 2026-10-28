@@ -14,7 +14,8 @@ env-dev:  ## gera .env.dev com segredos aleatórios (nunca toca .env)
 	  echo "FIBERCORE_DB_PASSWORD=$$(openssl rand -hex 16)" > .env.dev; \
 	  echo "FIBERCORE_APP_DB_PASSWORD=$$(openssl rand -hex 16)" >> .env.dev; \
 	  echo "FIBERCORE_WORKER_DB_PASSWORD=$$(openssl rand -hex 16)" >> .env.dev; \
-	  echo "FIBERCORE_JWT_SECRET=$$(openssl rand -hex 32)" >> .env.dev; echo ".env.dev criado"; }
+	  echo "FIBERCORE_JWT_SECRET=$$(openssl rand -hex 32)" >> .env.dev; \
+	  echo "FIBERCORE_PII_HMAC_KEY=$$(openssl rand -hex 32)" >> .env.dev; echo ".env.dev criado"; }
 
 validate: venv
 	$(PY) tests/validate_kit.py

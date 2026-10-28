@@ -21,12 +21,13 @@ class Settings(BaseSettings):
     jwt_issuer: str = "fibercore-api"
     jwt_audience: str = "fibercore"
     jwt_ttl_seconds: int = 900
+    pii_hmac_key: str = Field(default="", repr=False)  # HMAC key for customer documents; import fails closed without it
 
-    @field_validator("jwt_secret")
+    @field_validator("jwt_secret", "pii_hmac_key")
     @classmethod
     def _strong_secret(cls, v: str) -> str:
         if v and len(v) < 32:
-            raise ValueError("JWT_SECRET must have at least 32 characters")
+            raise ValueError("secret must have at least 32 characters")
         return v
 
 

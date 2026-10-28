@@ -1,6 +1,6 @@
 # Implementation status (evidência, não promessa)
 
-Atualizado: 2026-10-27 | Branch: `sprint1/07-olt-drivers` | Estado: **Sprint 0 concluída (PR 1–4 mergeados); Sprint 1 em andamento (PR 5)**
+Atualizado: 2026-10-27 | Branch: `sprint2/08-customers-csv-associations` | Estado: **Sprint 0 concluída (PR 1–4 mergeados); Sprint 1 em andamento (PR 5)**
 
 | Item Sprint 0 | Status | Prova | Pendência |
 |---|---|---|---|
@@ -24,3 +24,10 @@ Edge-fleet: registro via CLI, `POST /v1/edge/heartbeat` (bearer edge_agent, inte
 | Schema inventário + ingestão snapshots + leituras com frescor | Feito (PR 5) | 54 testes PASS (RLS, anti-hijack, out-of-order, stale≠offline, binding conflict, outbox) |
 | Edge Go (allowlist, NBI read-only, heartbeat/snapshot, fila SQLite) | Feito (PR 6) | `go test ./...` PASS; E2E real: Edge Go → API Compose → /v1/edges online + /v1/cpes (NBI **mock**) |
 | Drivers OLT Huawei MA5800 / ZTE C300 (read-only, SSH pin de host key, allowlist de comandos) | Feito (PR 7) como **`identified`**: parsers validados só com fixtures SINTÉTICAS | go test -race PASS; golden Go→API PASS. **Nunca testado em equipamento real** |
+
+## Sprint 2
+| Item | Status | Prova |
+|---|---|---|
+| CSV ERP + clientes + associação ONU/cliente com revisão humana | Feito (PR 8) | 71 testes PASS (LGPD hash, limites, conflito, ambiguidade, idempotência, RBAC, tenant) |
+| Incidentes/correlação PON | Não iniciado | PR 9 |
+| UX operacional (Lovable) | Não iniciado | PR 10 |

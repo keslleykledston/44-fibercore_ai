@@ -1,51 +1,10 @@
-from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from app.core.db import make_engine, scoped_connection
-from app.core.security import hash_secret
-from tests.conftest import login
-
-SECRET = "inv-agent-secret"
-
-
-def _now(delta_s: int = 0) -> str:
-    return (datetime.now(UTC) + timedelta(seconds=delta_s)).isoformat()
-
-
-@pytest.fixture(scope="module")
-def inv(seed, migrated):
-    out = {}
-    with migrated.begin() as c:
-        for key, tenant in (("a1", "A"), ("a2", "A"), ("b1", "B")):
-            eid = c.execute(text("INSERT INTO edges(tenant_id,name) VALUES (:t,:n) RETURNING id"),
-                            {"t": seed[tenant], "n": f"inv-{key}"}).scalar()
-            sa = c.execute(
-                text("INSERT INTO service_accounts(tenant_id,name,role,secret_hash,edge_id) VALUES (:t,:n,'edge_agent',:h,:e) RETURNING id"),
-                {"t": seed[tenant], "n": f"inv-agent-{key}", "h": hash_secret(SECRET), "e": eid}).scalar()
-            out[key] = {"edge": eid, "sa": sa}
-    return out
-
-
-def agent(client, inv, key):
-    r = client.post("/v1/auth/service-token", json={"client_id": str(inv[key]["sa"]), "client_secret": SECRET})
-    return {"Authorization": f"Bearer {r.json()['access_token']}"}
-
-
-def snap(inv, key="a1", name="OLT-1", observed=None, **kw):
-    body = {"edge_id": str(inv[key]["edge"]), "observed_at": observed or _now(), "name": name, "vendor": "huawei",
-            "model": "MA5800-X7", "firmware": "R018", "driver_level": "observed",
-            "pons": [{"pon_path": "0/1/0", "status": "up"}],
-            "onus": [{"serial": "HWTC00000001", "pon_path": "0/1/0", "status": "online", "rx_dbm": -21.5},
-                     {"serial": "HWTC00000002", "pon_path": "0/1/0", "status": "los", "rx_dbm": None}]}
-    body.update(kw)
-    return body
-
-
-def hdr(client, who, seed, tenant):
-    return {**login(client, who), "X-Workspace-ID": str(seed[tenant])}
+from tests.conftest import _now, agent, hdr, login, snap
 
 
 def test_ingest_then_read_with_freshness(client, seed, inv):
@@ -53,8 +12,8 @@ def test_ingest_then_read_with_freshness(client, seed, inv):
     assert r.status_code == 202 and r.json()["onus"] == 2
     h = hdr(client, "alice", seed, "A")
     olts = client.get("/v1/olts", headers=h).json()
-    assert [o["name"] for o in olts] == ["OLT-1"] and olts[0]["onu_count"] == 2
-    assert olts[0]["freshness"] == "fresh" and olts[0]["support_level"] == "observed"
+    olt1 = next(o for o in olts if o["name"] == "OLT-1")
+    assert olt1["onu_count"] == 2 and olt1["freshness"] == "fresh" and olt1["support_level"] == "observed"
     onus = {o["serial"]: o for o in client.get("/v1/onus", headers=h).json()}
     assert onus["HWTC00000001"]["rx_dbm"] == -21.5 and onus["HWTC00000001"]["pon_path"] == "0/1/0"
     assert client.get("/v1/onus?serial=HWTC00000002", headers=h).json()[0]["status"] == "los"

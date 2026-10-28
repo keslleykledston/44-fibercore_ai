@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: FiberCore AI Public/Operator API
-  version: 0.3.0-draft
+  version: 0.4.0-draft
   description: >-
     Contrato evolutivo orientado a multi-tenancy; implementação segura é obrigatória
     antes de tráfego real. Tenant é derivado de claims autenticadas e validação de memberships.
@@ -89,6 +89,67 @@ paths:
         '200': {description: Auditoria do tenant, content: {application/json: {schema: {type: array, items: {type: object}}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /erp/import-csv:
+    post:
+      tags: [ERP]
+      operationId: importCustomersCsv
+      description: >-
+        CSV UTF-8 (<=2 MiB, <=5000 linhas). Colunas obrigatórias erp_customer_id,display_name; opcionais document,contract_status,
+        onu_serial,source_updated_at. Documento nunca é armazenado em claro (HMAC por tenant + last4). Erros por linha não ecoam valores.
+        Serial exato de ONU gera SUGESTÃO de associação (score 95; 50 se ambígua/conflitante); nada é aprovado automaticamente.
+      parameters:
+        - {$ref: '#/components/parameters/WorkspaceOptional'}
+        - {name: source, in: query, required: true, schema: {type: string, pattern: '^[a-z0-9][a-z0-9_.-]{1,39}$'}}
+      requestBody: {required: true, content: {text/csv: {schema: {type: string}}}}
+      responses:
+        '200': {description: "Relatório da importação: accepted, rejected, suggestions, conflicts, unmatched_rows"}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '413': {description: Arquivo ou nº de linhas acima do limite}
+        '422': {description: Colunas/encoding/source inválidos}
+        '503': {description: Chave de proteção de PII não configurada (fail closed)}
+  /customers:
+    get:
+      tags: [ERP]
+      operationId: listCustomers
+      description: Acesso a dados pessoais é registrado em auditoria.
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200': {description: Clientes (sem documento completo), content: {application/json: {schema: {type: array, items: {type: object}}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /associations:
+    get:
+      tags: [ERP]
+      operationId: listAssociations
+      parameters:
+        - {$ref: '#/components/parameters/WorkspaceOptional'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {name: status, in: query, required: false, schema: {type: string, enum: [suggested, approved, rejected]}}
+      responses:
+        '200': {description: Associações ONU<->cliente com evidência, content: {application/json: {schema: {type: array, items: {type: object}}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /associations/{assocId}/approve:
+    post:
+      tags: [ERP]
+      operationId: approveAssociation
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: assocId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: "Aprovada: auditada e evento association.approved"}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Não encontrada neste tenant}
+        '409': {description: "Já revisada, serial ambíguo ou ONU já com associação aprovada"}
+  /associations/{assocId}/reject:
+    post:
+      tags: [ERP]
+      operationId: rejectAssociation
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: assocId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Rejeitada}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Não encontrada neste tenant}
+        '409': {description: Já revisada}
   /olts:
     get:
       tags: [Network]

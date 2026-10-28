@@ -57,6 +57,7 @@ services:
       JWT_SECRET: ${FIBERCORE_JWT_SECRET:?Set FIBERCORE_JWT_SECRET (>=32 chars)}
       MODULE_MANIFEST: /app/configs/modules.yaml
       NATS_MONITOR_URL: http://nats:8222
+      PII_HMAC_KEY: ${FIBERCORE_PII_HMAC_KEY:?Set FIBERCORE_PII_HMAC_KEY (>=32 chars)}
     ports:
       - "127.0.0.1:${FIBERCORE_API_PORT:-18420}:8000"
     depends_on:

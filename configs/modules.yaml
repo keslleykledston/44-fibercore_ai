@@ -63,7 +63,7 @@ modules:
     optional_dependencies: [cpe-unified, olt-inventory, erp-hub]
     capabilities: [suggest, conflict, approve_association]
     failure_mode: read_only
-    feature_flag: false
+    feature_flag: true
   - id: template-catalog
     kind: core
     version: 0.1.0
@@ -90,7 +90,7 @@ modules:
     optional_dependencies: [nats]
     capabilities: [import_csv, generic_rest, list_contracts]
     failure_mode: stale_snapshot
-    feature_flag: false
+    feature_flag: true
   - id: noc-events
     kind: optional
     version: 0.1.0

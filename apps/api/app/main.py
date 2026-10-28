@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from app import __version__
+from app.api.erp import router as erp_router
 from app.api.inventory import router as inventory_router
 from app.api.routes import router
 
@@ -29,3 +30,4 @@ async def limit_body(request, call_next):
 
 app.include_router(router)
 app.include_router(inventory_router)
+app.include_router(erp_router)
