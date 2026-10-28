@@ -209,3 +209,16 @@ def test_replay_does_not_double_apply_when_message_still_on_bus(engines, seed):
 
     run(go())
     assert len(calls) == 1
+
+
+def test_ensure_streams_idempotent_and_concurrent():
+    async def go():
+        nc, js = await fresh_js()
+        await bus.ensure_streams(js)  # second call, same config
+        await asyncio.gather(*(bus.ensure_streams(js) for _ in range(4)))  # concurrent starts
+        await bus.ensure_streams(js, duplicate_window_s=120.0)  # changed config => update, not crash
+        info = await js.stream_info(bus.STREAM)
+        await nc.close()
+        return info.config.duplicate_window
+
+    assert run(go()) == 120.0
