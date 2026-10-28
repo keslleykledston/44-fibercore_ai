@@ -152,16 +152,24 @@ def ingest_cpe_snapshot(
     body: CpeSnapshot, p: Principal = Depends(require("inventory:write")), conn: Connection = Depends(tenant_conn)
 ) -> dict:
     _bound_edge(p, body.edge_id)
-    serials = [c.canonical_serial for c in body.cpes]
-    owners = {
-        r.canonical_serial: (r.id, r.edge_id)
+    all_serials = [c.canonical_serial for c in body.cpes]
+    owners = {  # row locks serialise concurrent snapshots touching the same CPEs
+        r.canonical_serial: (r.edge_id, r.observed_at)
         for r in conn.execute(
-            text("SELECT id, edge_id, canonical_serial FROM cpes WHERE tenant_id=:t AND canonical_serial = ANY(:s)"),
-            {"t": p.tenant_id, "s": serials},
+            text("SELECT edge_id, observed_at, canonical_serial FROM cpes WHERE tenant_id=:t AND canonical_serial = ANY(:s) FOR UPDATE"),
+            {"t": p.tenant_id, "s": all_serials},
         )
     }
-    if any(edge != body.edge_id for _, edge in owners.values()):
+    if any(edge != body.edge_id for edge, _ in owners.values()):
         raise HTTPException(409, "cpe owned by another edge")  # an edge cannot overwrite another edge's CPEs
+    # Out-of-order protection covers the WHOLE record: a CPE newer than this snapshot is skipped entirely,
+    # bindings included, so a late replay cannot resurrect obsolete associations.
+    fresh = [c for c in body.cpes if not (c.canonical_serial in owners and owners[c.canonical_serial][1]
+                                          and owners[c.canonical_serial][1] > body.observed_at)]
+    skipped = len(body.cpes) - len(fresh)
+    if not fresh:
+        return {"status": "ignored_stale", "cpes": 0, "skipped": skipped}
+    serials = [c.canonical_serial for c in fresh]
     conn.execute(
         text(
             "INSERT INTO cpes (tenant_id, edge_id, canonical_serial, vendor, model, firmware, observed_at) "
@@ -170,7 +178,7 @@ def ingest_cpe_snapshot(
             "WHERE cpes.edge_id = EXCLUDED.edge_id AND (cpes.observed_at IS NULL OR cpes.observed_at <= EXCLUDED.observed_at)"
         ),
         [{"t": p.tenant_id, "e": body.edge_id, "s": c.canonical_serial, "v": c.vendor, "m": c.model, "f": c.firmware,
-          "o": body.observed_at} for c in body.cpes],
+          "o": body.observed_at} for c in fresh],
     )
     ids = {
         r.canonical_serial: r.id
@@ -180,7 +188,7 @@ def ingest_cpe_snapshot(
         )
     }
     # A binding (connector, protocol, external_id) identifies ONE cpe; re-pointing it to another serial is refused.
-    keys = [(c.binding.connector_id, c.binding.protocol, c.binding.external_id) for c in body.cpes]
+    keys = [(c.binding.connector_id, c.binding.protocol, c.binding.external_id) for c in fresh]
     existing = {
         (r.connector_id, r.protocol, r.external_id): r.cpe_id
         for r in conn.execute(
@@ -189,7 +197,7 @@ def ingest_cpe_snapshot(
             {"t": p.tenant_id, "x": [k[2] for k in keys]},
         )
     }
-    for c, k in zip(body.cpes, keys, strict=True):
+    for c, k in zip(fresh, keys, strict=True):
         if k in existing and existing[k] != ids[c.canonical_serial]:
             raise HTTPException(409, f"binding {k[2]} already linked to another cpe")
     conn.execute(
@@ -199,9 +207,9 @@ def ingest_cpe_snapshot(
             "DO UPDATE SET observed_at = GREATEST(cpe_protocol_bindings.observed_at, EXCLUDED.observed_at)"
         ),
         [{"t": p.tenant_id, "ci": ids[c.canonical_serial], "p": c.binding.protocol, "x": c.binding.external_id,
-          "c": c.binding.connector_id, "o": body.observed_at} for c in body.cpes],
+          "c": c.binding.connector_id, "o": body.observed_at} for c in fresh],
     )
-    return {"status": "accepted", "cpes": len(body.cpes)}
+    return {"status": "accepted", "cpes": len(fresh), "skipped": skipped}
 
 
 # ---- reads ------------------------------------------------------------------------------------

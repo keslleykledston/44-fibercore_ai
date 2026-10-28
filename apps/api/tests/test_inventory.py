@@ -195,3 +195,16 @@ def test_large_batch_ingests_in_one_request_and_limits_hold(client, seed, inv):
     assert client.post("/v1/edge/olt-snapshots", headers=a, json=snap(inv, name="OLT-BULK", onus=too_many)).status_code == 422
     big = {"padding": "x" * (9 * 1024 * 1024)}
     assert client.post("/v1/edge/olt-snapshots", headers=a, json=big).status_code == 413
+
+
+def test_stale_cpe_snapshot_does_not_touch_bindings(client, seed, inv):
+    a = agent(client, inv, "a1")
+    def cpe(ext, observed):
+        return {"edge_id": str(inv["a1"]["edge"]), "observed_at": observed, "cpes": [
+            {"canonical_serial": "OOO-CPE", "vendor": "V",
+             "binding": {"protocol": "tr069", "external_id": ext, "connector_id": "genieacs-ooo"}}]}
+    assert client.post("/v1/edge/cpe-snapshots", headers=a, json=cpe("ext-new", _now(-10))).status_code == 202
+    r = client.post("/v1/edge/cpe-snapshots", headers=a, json=cpe("ext-old", _now(-900)))
+    assert r.json()["status"] == "ignored_stale"
+    row = next(c for c in client.get("/v1/cpes", headers=hdr(client, "alice", seed, "A")).json() if c["canonical_serial"] == "OOO-CPE")
+    assert [b["external_id"] for b in row["bindings"]] == ["ext-new"]
