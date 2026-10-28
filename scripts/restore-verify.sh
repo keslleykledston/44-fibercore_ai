@@ -6,7 +6,20 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 DUMP="${1:?uso: restore-verify.sh arquivo.dump}"
 [[ -f "$DUMP" ]] || { echo "dump não encontrado: $DUMP" >&2; exit 1; }
-sha256sum -c "$DUMP.sha256"
+umask 077
+CLEAR=""
+if [[ "$DUMP" == *.gpg ]]; then   # backup cifrado: decifra para temporário 0600 e valida o checksum do claro
+  BASE="${DUMP%.gpg}"
+  [[ -f "$BASE.sha256" ]] || { echo "checksum $BASE.sha256 ausente" >&2; exit 1; }
+  CLEAR="$(mktemp)"
+  trap 'rm -f "$CLEAR"' EXIT
+  gpg --batch --yes --decrypt --output "$CLEAR" "$DUMP"
+  [[ "$(sha256sum "$CLEAR" | cut -d' ' -f1)" == "$(cut -d' ' -f1 "$BASE.sha256")" ]] || { echo "checksum do dump decifrado NÃO confere" >&2; exit 1; }
+  echo "$BASE: OK (decifrado)"
+  DUMP="$CLEAR"
+else
+  sha256sum -c "$DUMP.sha256"
+fi
 COMPOSE=(docker compose --env-file "${ENV_FILE:-.env.dev}" -f infra/compose/compose.yaml)
 PSQL=("${COMPOSE[@]}" exec -T postgres psql -U fibercore -v ON_ERROR_STOP=1 -At)
 DB="fc_restore_check_$(openssl rand -hex 6)"
@@ -15,7 +28,7 @@ EXISTS=$("${PSQL[@]}" -d postgres -c "SELECT 1 FROM pg_database WHERE datname='$
 [[ -z "$EXISTS" ]] || { echo "banco $DB já existe; abortando sem tocar nele" >&2; exit 1; }
 "${PSQL[@]}" -d postgres -c "CREATE DATABASE $DB"
 cleanup() { "${PSQL[@]}" -d postgres -c "DROP DATABASE IF EXISTS $DB" >/dev/null && echo "banco de verificação $DB removido"; }
-trap cleanup EXIT
+trap 'cleanup; [[ -z "$CLEAR" ]] || rm -f "$CLEAR"' EXIT
 "${COMPOSE[@]}" exec -T postgres pg_restore -U fibercore -d "$DB" --no-owner --exit-on-error < "$DUMP"
 echo "--- verificação ($DB)"
 "${PSQL[@]}" -d "$DB" -c "SELECT 'alembic_version=' || version_num FROM alembic_version"
