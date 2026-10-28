@@ -20,7 +20,7 @@ Não aprovar ainda: os arquivos de revisão adicionados ao diff preservam caminh
 
 Findings:
 - [medium] Os arquivos de revisão ainda publicam caminhos de segredo e backup (docs/wiki/reviews/raw/18-docs-round1.txt:23-24)
-  Embora o relatório atual diga que nenhum caminho ou procedimento de restauração foi registrado, os novos arquivos de revisão contêm `[caminho redigido]` e descrevem a restauração via PUT; outro registra o caminho exato `[caminho redigido]`. Como esses textos entram no diff e ficam versionados, leitores ainda recebem pistas para localizar o backup e a credencial no host, contrariando o objetivo desta rodada. Remova ou generalize esses detalhes nos registros arquivados antes de aprovar.
+  Embora o relatório atual diga que nenhum caminho ou procedimento de restauração foi registrado, os novos arquivos de revisão contêm `[caminho redigido]` e descrevem a detalhes de recuperação [redigido]; outro registra o caminho exato `[caminho redigido]`. Como esses textos entram no diff e ficam versionados, leitores ainda recebem pistas para localizar o backup e a credencial no host, contrariando o objetivo desta rodada. Remova ou generalize esses detalhes nos registros arquivados antes de aprovar.
   Recommendation: Remova dos dois arquivos raw os caminhos e a mecânica de restauração, preservando apenas que a revisão anterior identificou essa exposição e que ela foi corrigida.
 
 Next steps:
