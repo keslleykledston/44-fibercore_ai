@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18349-6ea7-7963-b936-38ef67a46dbd).
+[codex] Turn started (01a18349-7010-7632-926d-57440d562ea0).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os fluxos de shell/SSH, com foco nos bytes envi...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/sh...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/sh... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"ReadOnlySession|func .*Run|Paginated|CommandTimout|shell\" agents/edge...
+[codex] Command completed: /bin/bash -lc "rg -n \"ReadOnlySession|func .*Run|Paginated|CommandTimout|shell\" agents/edge... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,180p' agents/edge/internal/olt/driver.go; rg -n \"Snapshot\\(|Identi...
+[codex] Command completed: /bin/bash -lc "sed -n '1,180p' agents/edge/internal/olt/driver.go; rg -n \"Snapshot\\(|Identi... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: a conclusão do comando confia em te...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: a conclusão do comando confia em texto não autenticado da própria saída e pode aceitar um prompt falso antes do prompt real, retornando uma captura truncada como completa.
+
+Findings:
+- [high] Saída do equipamento pode simular o prompt final e truncar a coleta (agents/edge/internal/olt/shell.go:190-191)
+  A condição aceita o comando quando a saída acumulada contém `cmd` em qualquer posição e termina com o texto `s.prompt`. Como ambos vêm do canal de saída do equipamento, uma resposta que inclua o comando e uma linha terminada no prompt aprendido pode satisfazer essa condição antes de o comando realmente terminar. `Run` então retorna `tidy` sem esperar o prompt real; uma saída parcial pode seguir para os parsers e ser tratada como completa, inclusive para inventário de PON. A inferência depende de o CLI poder emitir conteúdo que imite esse formato, mas o código não distingue esse conteúdo de um prompt de controle.
+  Recommendation: Use um critério de conclusão que não possa ser satisfeito por conteúdo arbitrário da saída; por exemplo, validar a sequência de eco e prompt em fronteiras de linha e rejeitar respostas ambíguas. Acrescente um caso em que o payload contenha o comando e uma linha com o prompt antes da conclusão real.
+
+Next steps:
+- Revisar o protocolo de conclusão do shell antes do merge; confirmar que payloads com texto parecido com comando/prompt não encerram `Run` prematuramente.

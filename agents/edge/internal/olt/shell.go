@@ -13,8 +13,13 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// ErrAmbiguousOutput: a line equal to the prompt appeared inside the output, so the end of the command cannot be trusted.
+var ErrAmbiguousOutput = errors.New("cli output contains a line identical to the prompt (fail closed)")
+
 // ErrInteractive: the CLI asked a question the Edge never answers (confirmation, password, ...). Fail closed.
 var ErrInteractive = errors.New("cli asked an interactive question (fail closed)")
+
+const quietAfterPrompt = 150 * time.Millisecond
 
 var (
 	ansiRe     = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
@@ -138,8 +143,18 @@ func (s *shell) wait(ctx context.Context, cond func(text string) (bool, error)) 
 		s.mu.Lock()
 		text, rerr := s.buf.String(), s.rerr
 		s.mu.Unlock()
-		if done, err := cond(text); err != nil || done {
+		if done, err := cond(text); err != nil {
 			return text, err
+		} else if done {
+			// The prompt is device-controlled text: only trust it once the line has been quiet for a moment.
+			select {
+			case <-s.notify:
+				continue
+			case <-time.After(quietAfterPrompt):
+				return text, nil
+			case <-ctx.Done():
+				return text, ctx.Err()
+			}
 		}
 		if rerr != nil {
 			return text, rerr
@@ -190,10 +205,7 @@ func (s *shell) Run(ctx context.Context, cmd string) (string, error) {
 		if questionRe.MatchString(lastLine(c)) {
 			return false, ErrInteractive
 		}
-		if strings.HasSuffix(tail, s.prompt) && len(tail) > len(s.prompt) && strings.Contains(c, cmd) {
-			return true, nil
-		}
-		return false, nil
+		return finished(c, cmd, s.prompt)
 	})
 	if err != nil {
 		s.broken = true // never reuse a shell in an unknown state
@@ -201,6 +213,29 @@ func (s *shell) Run(ctx context.Context, cmd string) (string, error) {
 		return "", err
 	}
 	return tidy(text, cmd, s.prompt), nil
+}
+
+// finished reports whether the command output is complete. The prompt is text the device controls, so the end is only
+// accepted when the first non-empty line is exactly the echoed command, the LAST line is exactly the learned prompt, and no
+// other line equals the prompt; anything else that looks like a prompt inside the output is ambiguous and fails closed.
+func finished(c, cmd, prompt string) (bool, error) {
+	lines := strings.Split(strings.TrimRight(c, " \t\n"), "\n")
+	first := 0
+	for first < len(lines) && strings.TrimSpace(lines[first]) == "" {
+		first++
+	}
+	if first >= len(lines)-1 || strings.TrimSpace(lines[first]) != cmd {
+		return false, nil
+	}
+	if strings.TrimSpace(lines[len(lines)-1]) != prompt {
+		return false, nil
+	}
+	for _, l := range lines[first : len(lines)-1] {
+		if strings.TrimSpace(l) == prompt {
+			return false, ErrAmbiguousOutput
+		}
+	}
+	return true, nil
 }
 
 // tidy drops the command echo, the optional-parameter prompt and the trailing prompt, keeping the device output.

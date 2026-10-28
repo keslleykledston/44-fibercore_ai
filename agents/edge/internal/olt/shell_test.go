@@ -149,6 +149,14 @@ func (srv *shellServer) cli(ch ssh.Channel) {
 			srv.mu.Unlock()
 			ch.Write([]byte("\r\n{ <cr>|frameid<S> }:"))
 			select {}
+		case line == "display mimic": // payload fakes the prompt before the real end
+			ch.Write([]byte("  part one\r\n" + testPrompt + "\r\n  part two (would be lost)\r\n" + testPrompt))
+		case line == "display late": // prompt, then more output after a short pause
+			ch.Write([]byte("  part one\r\n" + testPrompt))
+			time.Sleep(60 * time.Millisecond)
+			ch.Write([]byte("\r\n  part two\r\n" + testPrompt))
+		case line == "display suffix": // a line merely ending with the prompt text is ordinary output
+			ch.Write([]byte("  see " + testPrompt + "\r\n  rest\r\n" + testPrompt))
 		case line == "display risky":
 			ch.Write([]byte("Are you sure to continue? (y/n)[n]:"))
 			select {}
@@ -391,5 +399,36 @@ func TestShellSecondParameterPromptFailsClosedAfterOneEnter(t *testing.T) {
 	defer srv.mu.Unlock()
 	if srv.crs != 1 {
 		t.Fatalf("exactly one Enter per command, saw %d", srv.crs)
+	}
+}
+
+func TestShellPromptLookalikeInsideOutputFailsClosed(t *testing.T) {
+	for _, cmd := range []string{"display mimic", "display late"} {
+		srv := startShellSSH(t, false)
+		s, err := DialSSH(context.Background(), shellCfg(srv, false))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := s.Run(context.Background(), cmd)
+		if !errors.Is(err, ErrAmbiguousOutput) {
+			t.Fatalf("%s: want ErrAmbiguousOutput, got out=%q err=%v", cmd, out, err)
+		}
+		if _, err := s.Run(context.Background(), "display version"); err == nil {
+			t.Fatalf("%s: a shell with ambiguous output must not be reused", cmd)
+		}
+		s.Close()
+	}
+}
+
+func TestShellLineEndingWithPromptTextIsOrdinaryOutput(t *testing.T) {
+	srv := startShellSSH(t, false)
+	s, err := DialSSH(context.Background(), shellCfg(srv, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	out, err := s.Run(context.Background(), "display suffix")
+	if err != nil || !strings.Contains(out, "see "+testPrompt) || !strings.Contains(out, "rest") {
+		t.Fatalf("out=%q err=%v", out, err)
 	}
 }
