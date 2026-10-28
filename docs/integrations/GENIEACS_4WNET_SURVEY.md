@@ -50,7 +50,7 @@ Backup prévio completo (presets, provisions, chaves `cwmp.*`) mantido **fora do
 
 | Alteração | Verificação |
 |---|---|
-| `cwmp.auth = AUTH(<usuário>, <senha forte>)` (chave correta). A chave morta `cwmp.Auth` foi removida. Credencial em arquivo 0600 (`~/.fibercore-genieacs-cwmp-credentials`). | Inform sem credencial → 401; com `admin:admin` → 401; com a credencial nova → 200 (teste pontual) |
+| `cwmp.auth = AUTH(<usuário>, <senha forte>)` (chave correta). A chave morta `cwmp.Auth` foi removida. Credencial armazenada fora do repositório, com permissões restritas. | Inform sem credencial → 401; com `admin:admin` → 401; com a credencial nova → 200 (teste pontual) |
 | Preset `Disparar_Homologacao`: precondição `DeviceID.ID = "__preset_desativado__"` (nunca casa) — preset desativado, não apagado | Precondição relida pela API (leitura pontual) |
 | Provision `homologacao_ont_universal`: sem senha/SSID no script; usa `args[0]`=SSID, `args[1]`=senha; sem args não escreve; guardas contra parâmetro ausente | Script relido |
 | Provision `auditoria_ont_leitura`: guardas (`declare(...).value[0]` quebrava em CPEs `Device:2` → causa do fault `script.TypeError`) | O fault antigo some no próximo inform do dispositivo |
