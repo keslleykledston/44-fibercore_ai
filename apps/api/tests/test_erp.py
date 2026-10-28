@@ -23,7 +23,8 @@ def onus_ready(seed, inv, migrated):
     c = TestClient(app)
     a = agent(c, inv, "a1")
     one = snap(inv, name="OLT-E1", onus=[{"serial": "ERP00000001", "status": "online"}, {"serial": "ERP00000002", "status": "online"},
-                                         {"serial": "DUP00000001", "status": "online"}])
+                                         {"serial": "DUP00000001", "status": "online"},
+                                         {"serial": "RACE0000001", "status": "online"}])
     two = snap(inv, name="OLT-E2", onus=[{"serial": "DUP00000001", "status": "online"}])
     assert c.post("/v1/edge/olt-snapshots", headers=a, json=one).status_code == 202
     assert c.post("/v1/edge/olt-snapshots", headers=a, json=two).status_code == 202
@@ -61,6 +62,9 @@ def test_csv_structure_limits(client, seed, onus_ready):
     assert post_csv(client, h, "foo,bar\n1,2\n").status_code == 422  # unknown columns
     assert post_csv(client, h, CSV_HDR, source="Bad Source!").status_code == 422
     assert post_csv(client, h, "x" * (2 * 1024 * 1024 + 1)).status_code == 413
+    r = client.post("/v1/erp/import-csv?source=csv-test", headers={**h, "content-type": "text/csv"},
+                    content=iter([b"a,b\n"] * 3))  # chunked upload (no Content-Length)
+    assert r.status_code in (411, 413)
     rows = "".join(f"R{i},N{i},,active,\n" for i in range(5001))
     assert post_csv(client, h, CSV_HDR + rows).status_code == 413
     assert post_csv(client, h, CSV_HDR + 'A,"unterminated\n').status_code in (200, 422)  # never 500
@@ -138,3 +142,21 @@ def test_non_reviewer_cannot_approve_and_runtime_cannot_delete(client, seed, onu
 
 def test_login_helper_import_kept():
     assert callable(login)
+
+
+def test_concurrent_approvals_of_same_onu_yield_one_winner_no_500(client, seed, onus_ready, migrated):
+    import threading
+    ha = hdr(client, "alice", seed, "A")
+    post_csv(client, ha, CSV_HDR + "RC1,Race Um,,active,RACE0000001\nRC2,Race Dois,,active,RACE0000001\n")
+    sug = [a for a in client.get("/v1/associations?status=suggested", headers=ha).json()
+           if a["customer_name"] in ("Race Um", "Race Dois")]
+    assert len(sug) == 2
+    codes = []
+
+    def go(a):
+        codes.append(client.post(f"/v1/associations/{a['id']}/approve", headers=ha).status_code)
+
+    ts = [threading.Thread(target=go, args=(a,)) for a in sug]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert sorted(codes) == [200, 409], codes  # exactly one winner, the loser gets a controlled conflict

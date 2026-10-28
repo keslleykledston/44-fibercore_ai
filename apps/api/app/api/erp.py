@@ -17,6 +17,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import Connection, text
+from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import Principal, require, tenant_conn
 from app.api.routes import audit
@@ -66,9 +67,16 @@ async def import_csv(
         raise HTTPException(503, "PII protection key not configured")  # fail closed
     if not SOURCE_RE.match(source):
         raise HTTPException(422, "invalid source id")
-    raw = await request.body()
-    if len(raw) > MAX_CSV_BYTES:
-        raise HTTPException(413, "csv too large")
+    declared = request.headers.get("content-length", "")
+    if not declared.isdigit() or int(declared) > MAX_CSV_BYTES:
+        raise HTTPException(413, "csv too large or missing Content-Length")
+    chunks, size = [], 0
+    async for chunk in request.stream():  # count while reading: never buffer past the limit
+        size += len(chunk)
+        if size > MAX_CSV_BYTES:
+            raise HTTPException(413, "csv too large")
+        chunks.append(chunk)
+    raw = b"".join(chunks)
     try:
         text_in = raw.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
@@ -227,6 +235,8 @@ def _review(conn: Connection, p: Principal, assoc_id: UUID, new_status: str) -> 
     if row.status != "suggested":
         raise HTTPException(409, f"association already {row.status}")
     if new_status == "approved":
+        # Serialise decisions per ONU: concurrent approvals of different candidates queue up here.
+        conn.execute(text("SELECT 1 FROM onus WHERE id = :o FOR UPDATE"), {"o": row.onu_id})
         if (row.evidence or {}).get("ambiguous_serial"):
             raise HTTPException(409, "ambiguous serial across OLTs: reject duplicates or fix inventory first")
         existing = conn.execute(
@@ -234,10 +244,14 @@ def _review(conn: Connection, p: Principal, assoc_id: UUID, new_status: str) -> 
         ).first()
         if existing:
             raise HTTPException(409, "onu already has an approved association; reject it first")
-    conn.execute(
-        text("UPDATE associations SET status=:s, reviewed_by=:u, reviewed_at=now() WHERE id=:i"),
-        {"s": new_status, "u": p.id, "i": assoc_id},
-    )
+    try:
+        with conn.begin_nested():  # savepoint: a unique violation must not poison the outer transaction
+            conn.execute(
+                text("UPDATE associations SET status=:s, reviewed_by=:u, reviewed_at=now() WHERE id=:i"),
+                {"s": new_status, "u": p.id, "i": assoc_id},
+            )
+    except IntegrityError as exc:  # the unique index is the last line of defence against double approval
+        raise HTTPException(409, "onu already has an approved association") from exc
     audit(conn, p, f"association.{new_status}", "association", str(assoc_id), {"onu_id": str(row.onu_id)})
     outbox.enqueue(conn, tenant_id=p.tenant_id, aggregate_type="association", aggregate_id=assoc_id,
                    event_type=f"association.{new_status}", payload={"onu_id": str(row.onu_id), "customer_id": str(row.customer_id)})
