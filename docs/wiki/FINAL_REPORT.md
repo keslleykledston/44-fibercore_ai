@@ -1,6 +1,6 @@
 # Relatório de entrega — FiberCore AI (2026-10-28)
 
-Estado: **LAB / pré-produção**. Nada publicado; nenhum equipamento real nem GenieACS real acessado; nenhuma escrita em rede. Repositório: github.com/keslleykledston/44-fibercore_ai (`main`). As branches PR 1–14 receberam `approve` do Codex (adversarial-review) após corrigir os achados de cada rodada; o registro resumido está em `docs/wiki/reviews/CODEX_REVIEW_LOG.md` (saídas brutas não foram persistidas) e os commits `fix(...)` correspondem às rodadas. A branch final de documentação (`final/15-handoff`) está em revisão.
+Estado: **LAB / pré-produção**. Nada publicado; nenhum equipamento real nem GenieACS real acessado; nenhuma escrita em rede. Repositório: github.com/keslleykledston/44-fibercore_ai (`main`). **Gate Codex — nível de evidência:** durante a sessão, cada branch PR 1–14 foi submetida ao `adversarial-review` do Codex, os achados foram corrigidos e a última rodada de cada uma retornou `approve`. **Esse histórico é um relato do implementador, NÃO verificável por artefatos** (as saídas brutas não foram persistidas; ver `docs/wiki/reviews/CODEX_REVIEW_LOG.md`). A partir da branch `final/15-handoff` as saídas brutas ficam em `docs/wiki/reviews/raw/`. Quem precisar de prova independente deve reexecutar o gate sobre as branches no GitHub.
 
 ## O que existe (com prova)
 | Área | Entrega | Prova |

@@ -1,6 +1,6 @@
 # Registro das revisões Codex (adversarial-review, escopo `--base main --scope branch`)
 
-**Limitação de evidência:** as saídas brutas do Codex não foram persistidas em arquivos; este registro é um resumo do que foi retornado em cada rodada durante a sessão de 2026-10-27/28 e foi escrito por quem implementou. O gate real é reproduzível: `node <plugin>/scripts/codex-companion.mjs adversarial-review --wait --base main --scope branch "<foco>"` sobre cada branch (a branch fica no GitHub).
+**Limitação de evidência (relato NÃO verificável por artefatos):** as saídas brutas do Codex não foram persistidas em arquivos; este registro é um resumo do que foi retornado em cada rodada durante a sessão de 2026-10-27/28 e foi escrito por quem implementou. O gate real é reproduzível: `node <plugin>/scripts/codex-companion.mjs adversarial-review --wait --base main --scope branch "<foco>"` sobre cada branch (a branch fica no GitHub).
 
 | Branch / PR | Rodadas | Resultado final | Achados relevantes corrigidos |
 |---|---|---|---|
