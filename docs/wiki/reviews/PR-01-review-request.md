@@ -9,3 +9,6 @@ Status do gate: **CODEX_PLUGIN_NOT_EXECUTED** — nenhuma revisão feita até aq
 
 ## Resultado Codex (adversarial-review, 2026-10-27)
 Rodada 1: needs-attention — [critical] role preexistente não endurecido; [medium] OpenAPI sem X-Workspace-ID em /platform/modules e /platform/versions sem rota. Ambos corrigidos (ALTER ROLE explícito + checagem de membership/ownership; rota /v1/platform/versions; teste `test_zz_migration.py`).
+
+## PR 2 (outbox/JetStream) — Codex
+R1 [high] retenção 7d → corrigido (max_age=0 + replay). R2 [high] replay dentro da janela de dedupe → `replay_gen`/novo Nats-Msg-Id. R3 [high] ensure_streams não idempotente → create-or-update. R4 [high] restart zerava max_bytes → limites preservados. R5 [high] "STREAM_MAX_AGE_S em ns" → **falso positivo**, refutado por teste que lê o JSON bruto do servidor (`"max_age":3600000000000` para 3600 s).

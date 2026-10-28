@@ -234,3 +234,20 @@ def test_ensure_streams_preserves_admin_limits():
         return cfg.max_bytes, cfg.max_age
 
     assert run(go()) == (5_000_000, 86400)
+
+
+def test_env_stream_limits_units_are_seconds(monkeypatch):
+    monkeypatch.setenv("STREAM_MAX_AGE_S", "3600")
+    monkeypatch.setenv("STREAM_MAX_BYTES", "1000000")
+
+    async def go():
+        nc, js = await fresh_js()
+        cfg = (await js.stream_info(bus.STREAM)).config
+        # raw server view (nanoseconds) to prove the effective unit, not just the client round-trip
+        raw = await nc.request("$JS.API.STREAM.INFO." + bus.STREAM, b"")
+        await nc.close()
+        return cfg.max_age, cfg.max_bytes, raw.data
+
+    age, size, raw = run(go())
+    assert (age, size) == (3600, 1_000_000)
+    assert b'"max_age":3600000000000' in raw
