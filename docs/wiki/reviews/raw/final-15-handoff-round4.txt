@@ -1,0 +1,11 @@
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Ainda há uma afirmação categórica de aprovação no histórico de testes sem ressalva local. Corrigir antes de tratar o conjunto documental como consistente.
+
+Findings:
+- [medium] Aprovação do PR 1 continua afirmada sem ressalva (docs/wiki/TEST_EVIDENCE.md:29)
+  A linha registra que a rodada 2 do gate retornou `approve`, mas não diz que isso é relato do implementador e não pode ser verificado por artefatos. Essa afirmação isolada pode ser citada como evidência auditável, contrariando a ressalva explícita no relatório final e no registro de revisões. Qualifique a frase e aponte para `CODEX_REVIEW_LOG.md`, ou remova a alegação.
+  Recommendation: Adicionar a ressalva de relato não verificável por artefatos e referência ao CODEX_REVIEW_LOG.md.
