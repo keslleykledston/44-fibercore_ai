@@ -177,11 +177,10 @@ def test_replay_republishes_after_bus_loss(engines, seed):
     new_event(app_e, seed["A"])
 
     async def go():
-        nc, js = await fresh_js(dup=1.0)
+        nc, js = await fresh_js()
         await relay_once(worker_e, js)
         await js.purge_stream(bus.STREAM)  # simulate expired/lost messages
         assert await stream_count(js) == 0
-        await asyncio.sleep(1.5)  # replay inside the dedupe window would be (correctly) dropped by the bus
         assert replay(worker_e, "2000-01-01T00:00:00Z") == 1
         assert replay(worker_e, "2000-01-01T00:00:00Z", str(seed["B"])) == 0  # tenant filter
         await relay_once(worker_e, js)
@@ -190,3 +189,23 @@ def test_replay_republishes_after_bus_loss(engines, seed):
         return n
 
     assert run(go()) == 1
+
+
+def test_replay_does_not_double_apply_when_message_still_on_bus(engines, seed):
+    from app.workers.relay import replay
+    app_e, worker_e = engines
+    new_event(app_e, seed["A"])
+    calls = []
+
+    async def go():
+        nc, js = await fresh_js()
+        await relay_once(worker_e, js)
+        replay(worker_e, "2000-01-01T00:00:00Z")
+        await relay_once(worker_e, js)  # now 2 bus messages, same envelope id
+        assert await stream_count(js) == 2
+        sub = await consumer.ensure_consumer(js, "t-replay")
+        await consumer.consume_batch(sub, js, app_e, "t-replay", lambda c, e: calls.append(e["id"]))
+        await nc.close()
+
+    run(go())
+    assert len(calls) == 1
