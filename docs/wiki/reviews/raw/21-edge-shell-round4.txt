@@ -1,0 +1,20 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1834e-da58-77d0-adac-05d86a1b6699).
+[codex] Turn started (01a1834e-da90-7d03-add9-77071b561c21).
+[codex] Assistant message captured: Vou seguir o diff contra `main` e rastrear todos os caminhos que constroem `EndProver` e marc...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- agents/edge/internal/olt ag...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- agents/edge/internal/olt ag... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"EndProven|EndProver|complete|ReadOnlySession|NewBudget|type Budget|fun...
+[codex] Command completed: /bin/bash -lc "rg -n \"EndProven|EndProver|complete|ReadOnlySession|NewBudget|type Budget|fun... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,190p' agents/edge/internal/olt/driver.go && sed -n '175,275p' agents...
+[codex] Command completed: /bin/bash -lc "sed -n '1,190p' agents/edge/internal/olt/driver.go && sed -n '175,275p' agents... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"Não encontrei caminho no código atual em que PON via shell sa...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+Não encontrei caminho no código atual em que PON via shell saia `complete=true`. O coletor consulta `EndProven` na sessão bruta, e `SSHSession` retorna falso quando configurada em modo shell. A ordem atual dos wrappers não contorna essa verificação; os drivers recebem `Budget` → `ReadOnlySession` → sessão SSH. Além disso, nenhum firmware está atualmente registrado como `observed`.
+
+No material findings.
