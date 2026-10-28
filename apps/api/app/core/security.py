@@ -15,13 +15,14 @@ _hasher = PasswordHasher()
 _DUMMY_HASH = _hasher.hash("fibercore-dummy-password")
 
 ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
-    "isp_admin": frozenset({"tenant:read", "audit:read", "members:read"}),
-    "engineer": frozenset({"tenant:read"}),
-    "noc_n2": frozenset({"tenant:read"}),
+    "isp_admin": frozenset({"tenant:read", "audit:read", "members:read", "edge:read"}),
+    "engineer": frozenset({"tenant:read", "edge:read"}),
+    "noc_n2": frozenset({"tenant:read", "edge:read"}),
     "noc_n1": frozenset({"tenant:read"}),
     "support": frozenset({"tenant:read"}),
     "auditor": frozenset({"tenant:read", "audit:read"}),
     "platform_support": frozenset({"tenant:read"}),  # only via delegated membership
+    "edge_agent": frozenset({"edge:heartbeat"}),  # service accounts of Edge agents: nothing else
 }
 
 

@@ -1,0 +1,8 @@
+[
+  {"_id": "00259E-HG8245H-ZTEG00000001", "_lastInform": "2026-10-27T20:00:00.000Z",
+   "_deviceId": {"_Manufacturer": "Huawei", "_OUI": "00259E", "_ProductClass": "HG8245H", "_SerialNumber": "ZTEG00000001"},
+   "InternetGatewayDevice": {"DeviceInfo": {"SoftwareVersion": {"_value": "V3R017C10S100"}}}},
+  {"_id": "A0B1C2-F670L-ZTEG00000002", "_lastInform": "2026-10-27T19:58:00.000Z",
+   "_deviceId": {"_Manufacturer": "ZTE", "_OUI": "A0B1C2", "_ProductClass": "F670L", "_SerialNumber": "ZTEG00000002"},
+   "Device": {"DeviceInfo": {"SoftwareVersion": {"_value": "V9.0.10P1N2"}}}}
+]

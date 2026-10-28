@@ -219,12 +219,24 @@ paths:
       tags: [Edge]
       operationId: sendEdgeHeartbeat
       description: >-
-        Contrato lógico: implementação transport deve exigir identidade mTLS de agente, não bearer de usuário.
-      security: []
+        Alvo: identidade mTLS de agente (ADR-0011). Interino implementado: bearer de service account com papel
+        `edge_agent` (token curto), tenant_id do corpo deve coincidir com o do token.
+      security: [{bearerAuth: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/EdgeHeartbeat'}}}}
       responses:
         '204': {description: Heartbeat recebido com identidade de Edge validada}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Edge não registrado ou revogado}
+  /edges:
+    get:
+      tags: [Edge]
+      operationId: listEdges
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}]
+      responses:
+        '200': {description: Edges do tenant com status calculado (online/offline/unknown/revoked), content: {application/json: {schema: {type: array, items: {type: object}}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}

@@ -1,6 +1,6 @@
 # Implementation status (evidência, não promessa)
 
-Atualizado: 2026-10-27 | Branch: `sprint0/02-outbox-jetstream` | Estado: **Sprint 0 em andamento (PR 1 de N)**
+Atualizado: 2026-10-27 | Branch: `sprint0/03-edge-fleet-mocks` | Estado: **Sprint 0 em andamento (PR 1 de N)**
 
 | Item Sprint 0 | Status | Prova | Pendência |
 |---|---|---|---|
@@ -9,9 +9,11 @@ Atualizado: 2026-10-27 | Branch: `sprint0/02-outbox-jetstream` | Estado: **Sprin
 | C. Auth, tenants, users, roles, service accounts, RLS | Feito (base) | 18 testes PASS contra PostgreSQL 17 real | MFA, refresh, rate-limit, OIDC, CRUD HTTP de admin |
 | D. Registry/feature flags, OpenAPI | Parcial | OpenAPI válido (`openapi-spec-validator`); registry com probes reais | flags dinâmicas por tenant; lint Spectral; geração de tipos TS/Py |
 | E. Outbox + JetStream producer/consumer | Feito (PR 2) | 26 testes PASS incl. crash/restart, dedupe por Msg-Id, ledger idempotente, DLQ; E2E em Compose | TLS/ACL do NATS (produção); DLQ replay tool |
-| F. Mock Edge / Mock NBI | **Não iniciado** | — | PR seguinte |
+| F. Mock Edge / Mock NBI / contrato de stream / segredos | Feito (PR 3) | `tools/mocks`, `contracts/edge-frame.schema.json`, `EDGE_GATEWAY_CONTRACT.md`, ADR-0011; 38 testes PASS | mTLS real e Gateway = Sprint 1 |
 | G. SBOM/scan, backup/restore staging | **Não iniciado** (CI com gitleaks definido, **não executado**) | — | PR dedicado |
 | H. Wiki/ADRs/contexto | Feito (ADR 0001–0010 Proposed) | `docs/wiki/adr/` | aprovação Codex |
 | I. Este arquivo | Feito | — | atualizar a cada PR |
 
 Hardware real, GenieACS real, USP controller: **NOT_CONNECTED / NOT_TESTED**. Codex gate: ver `docs/wiki/reviews/PR-01-review-request.md` (**não executado**).
+
+Edge-fleet: registro via CLI, `POST /v1/edge/heartbeat` (bearer edge_agent, interino), `GET /v1/edges` com status calculado (stale => offline).

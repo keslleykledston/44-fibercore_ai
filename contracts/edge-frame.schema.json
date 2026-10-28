@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.fibercore.local/edge-frame.v1.json",
+  "title": "Edge <-> Gateway stream frame",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "type", "edge_id", "tenant_id", "seq", "sent_at"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "type": {"enum": ["hello", "heartbeat", "job", "job_ack", "job_result", "snapshot"]},
+    "edge_id": {"type": "string", "format": "uuid"},
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "seq": {"type": "integer", "minimum": 0, "description": "Monotonic per session; gaps/duplicates are logged, duplicates dropped."},
+    "sent_at": {"type": "string", "format": "date-time"},
+    "body": {"type": "object", "description": "Type-specific. type=job carries a job-envelope.schema.json document; no plaintext secrets in any frame."}
+  },
+  "allOf": [
+    {"if": {"properties": {"type": {"const": "job"}}}, "then": {"required": ["body"]}}
+  ]
+}

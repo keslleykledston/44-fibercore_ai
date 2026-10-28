@@ -15,7 +15,7 @@ from sqlalchemy import text
 from app.core.db import make_engine
 from app.core.security import hash_secret
 
-ROLES = ["isp_admin", "engineer", "noc_n2", "noc_n1", "support", "auditor", "platform_support"]
+ROLES = ["isp_admin", "engineer", "noc_n2", "noc_n1", "support", "auditor", "platform_support", "edge_agent"]
 
 
 def _engine():
@@ -42,6 +42,7 @@ def main(argv: list[str] | None = None) -> None:
     m.add_argument("tenant_id"); m.add_argument("email"); m.add_argument("role", choices=ROLES)
     s = sub.add_parser("create-service-account")
     s.add_argument("tenant_id"); s.add_argument("name"); s.add_argument("role", choices=ROLES)
+    e = sub.add_parser("register-edge"); e.add_argument("tenant_id"); e.add_argument("name"); e.add_argument("--site")
     a = ap.parse_args(argv)
     eng = _engine()
     with eng.begin() as c:
@@ -57,6 +58,9 @@ def main(argv: list[str] | None = None) -> None:
                 text("INSERT INTO tenant_memberships(tenant_id,user_id,role) "
                      "SELECT :t, id, :r FROM users_global WHERE lower(email)=lower(:e)"),
                 {"t": a.tenant_id, "r": a.role, "e": a.email})
+        elif a.cmd == "register-edge":
+            print(c.execute(text("INSERT INTO edges(tenant_id,name,site_name) VALUES (:t,:n,:s) RETURNING id"),
+                            {"t": a.tenant_id, "n": a.name, "s": a.site}).scalar())
         elif a.cmd == "create-service-account":
             secret = secrets.token_urlsafe(32)
             sid = c.execute(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -147,3 +148,47 @@ def versions(_: Principal = Depends(get_principal), settings: Settings = Depends
     items = [{"module": "api-core", "version": __version__}]
     items += [{"module": m["id"], "version": m["version"]} for m in load_manifest(settings.module_manifest)]
     return items
+
+
+# ---- edge fleet -------------------------------------------------------------------------------
+EDGE_OFFLINE_AFTER = timedelta(seconds=90)
+
+
+class EdgeHeartbeat(BaseModel):
+    edge_id: UUID
+    tenant_id: UUID
+    version: str = Field(min_length=1, max_length=64)
+    sent_at: datetime
+
+
+@router.post("/v1/edge/heartbeat", status_code=204)
+def edge_heartbeat(
+    body: EdgeHeartbeat,
+    p: Principal = Depends(require("edge:heartbeat")),
+    conn: Connection = Depends(tenant_conn),
+) -> None:
+    """Interim auth: Edge service-account bearer (role edge_agent). Target: mTLS identity (ADR-0011)."""
+    if body.tenant_id != p.tenant_id:
+        raise HTTPException(403, "tenant mismatch")
+    res = conn.execute(
+        text(
+            "UPDATE edges SET version = :v, last_heartbeat_at = now(), status = 'online' "
+            "WHERE id = :e AND tenant_id = :t AND status <> 'revoked'"
+        ),
+        {"v": body.version, "e": body.edge_id, "t": p.tenant_id},
+    )
+    if res.rowcount == 0:
+        raise HTTPException(404, "edge not found")
+
+
+@router.get("/v1/edges")
+def list_edges(p: Principal = Depends(require("edge:read")), conn: Connection = Depends(tenant_conn)) -> list[dict]:
+    now = datetime.now(UTC)
+    out = []
+    for r in conn.execute(text("SELECT id, name, site_name, version, last_heartbeat_at, status FROM edges ORDER BY name")):
+        status = r.status
+        if status == "online" and (r.last_heartbeat_at is None or now - r.last_heartbeat_at > EDGE_OFFLINE_AFTER):
+            status = "offline"  # computed at read time: stale heartbeat never reads as online
+        out.append({"id": str(r.id), "name": r.name, "site_name": r.site_name, "version": r.version,
+                    "last_heartbeat_at": r.last_heartbeat_at.isoformat() if r.last_heartbeat_at else None, "status": status})
+    return out
