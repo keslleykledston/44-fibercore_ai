@@ -198,12 +198,14 @@ def test_chronic_offline_do_not_dilute_a_real_drop_and_are_reported(client, seed
     assert inc[0]["evidence"]["chronic_offline"] == 30 and inc[0]["suspected_cause"] == "unknown"
 
 
-def test_incident_survives_the_drop_window_and_resolves_when_its_onus_return(client, seed, inv):
+def test_incident_survives_the_drop_window_and_resolves_when_its_onus_return(client, seed, inv, monkeypatch):
+    from app.api import noc
+    monkeypatch.setattr(noc, "DROP_WINDOW", timedelta(minutes=2))          # the real lookback is hours; shrink it to cross it
     h = hdr(client, "alice", seed, "A")
-    push(client, inv, "OLT-C5", up("C5A", 10), observed=_now(-4000))
-    push(client, inv, "OLT-C5", onus(10, "los", "C5A"), observed=_now(-3800))
+    push(client, inv, "OLT-C5", up("C5A", 10), observed=_now(-840))
+    push(client, inv, "OLT-C5", onus(10, "los", "C5A"), observed=_now(-780))
     assert mine(client, h, "OLT-C5")[0]["status"] == "open"
-    push(client, inv, "OLT-C5", onus(10, "los", "C5A"), observed=_now(-100))   # >30 min later, all still down
+    push(client, inv, "OLT-C5", onus(10, "los", "C5A"), observed=_now(-300))   # 8 min later: past the (shrunk) window, all still down
     assert mine(client, h, "OLT-C5")[0]["status"] == "open"                    # the window expiring must NOT resolve it
     push(client, inv, "OLT-C5", up("C5A", 10), observed=_now(-50))
     assert mine(client, h, "OLT-C5")[0]["status"] == "resolved"
@@ -251,3 +253,31 @@ def test_snapshot_ties_cannot_fabricate_or_erase_a_drop(client, seed, inv):
     assert mine(client, h, "OLT-T2")[0]["status"] == "open"
     onu = client.get("/v1/onus?serial=T2A000", headers=h).json()[0]
     assert onu["status"] == "los"
+
+
+# ---- store-and-forward: old snapshots are history, not the present -----------------------------------------------------------
+
+def test_backlogged_old_snapshots_never_open_an_incident(client, seed, inv):
+    h = hdr(client, "alice", seed, "A")
+    push(client, inv, "OLT-R1", up("R1A", 10), observed=_now(-20000))
+    push(client, inv, "OLT-R1", onus(10, "los", "R1A"), observed=_now(-19000))   # a drop that happened hours ago
+    assert mine(client, h, "OLT-R1") == []                                        # state recorded, but not presented as current
+
+
+def test_a_drop_that_already_ended_in_the_backlog_does_not_open_either(client, seed, inv):
+    h = hdr(client, "alice", seed, "A")
+    push(client, inv, "OLT-R2", up("R2A", 10), observed=_now(-20000))
+    push(client, inv, "OLT-R2", onus(10, "los", "R2A"), observed=_now(-19000))
+    push(client, inv, "OLT-R2", up("R2A", 10), observed=_now(-18000))
+    push(client, inv, "OLT-R2", up("R2A", 10), observed=_now(-10))                # fresh snapshot: everything is fine
+    assert mine(client, h, "OLT-R2") == []
+
+
+def test_ongoing_outage_discovered_after_a_backlog_opens_on_the_fresh_snapshot(client, seed, inv):
+    h = hdr(client, "alice", seed, "A")
+    push(client, inv, "OLT-R3", up("R3A", 10), observed=_now(-20000))
+    push(client, inv, "OLT-R3", onus(10, "los", "R3A"), observed=_now(-3600))     # backlog: dropped an hour ago (no evaluation)
+    assert mine(client, h, "OLT-R3") == []
+    push(client, inv, "OLT-R3", onus(10, "los", "R3A"), observed=_now(-10))       # the Edge is back: still down NOW
+    inc = mine(client, h, "OLT-R3")
+    assert len(inc) == 1 and inc[0]["evidence"]["onus_down"] == 10

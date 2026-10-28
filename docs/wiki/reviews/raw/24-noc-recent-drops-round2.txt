@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a183b9-7ac3-7843-b0b2-7ff3abc8051b).
+[codex] Turn started (01a183b9-7afb-7470-8212-3cb51f35231a).
+[codex] Assistant message captured: Vou comparar a branch inteira com `main` e rastrear os caminhos de ingestão, correlação, reso...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/api/a...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/api/a... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/noc.py | sed -n '25,160p'; nl -ba apps/api/app/api/inv...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/noc.py | sed -n '25,160p'; nl -ba apps/api/app/api/inv... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '1,40p'; cat apps/api/alembic/ve...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '1,40p'; cat apps/api/alembic/ve... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: snapshots arbitrariamente antigos ainda pod...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: snapshots arbitrariamente antigos ainda podem abrir incidentes como se a queda fosse recente, pois a janela usa o relógio do próprio snapshot.
+
+Findings:
+- [high] Replay histórico pode abrir incidente falso (apps/api/app/api/noc.py:55-61)
+  `DROP_WINDOW` é calculada a partir do `observed_at` recebido, e `down_since` também vem desse timestamp. A validação de ingestão só rejeita horários futuros além de cinco minutos; não limita a idade. Assim, um Edge pode enviar snapshots antigos em ordem crescente — por exemplo, um baseline online seguido de estados down — e passar pela proteção de ordenação e pela janela de 30 minutos, abrindo agora um incidente para uma queda histórica. Isso torna possível exibir alertas obsoletos como atuais e contaminar a resposta operacional. Use um limite de idade ou compare a janela com tempo confiável do servidor, preservando o tratamento explícito para Edge silencioso.
+  Recommendation: Rejeitar ou marcar snapshots além de uma idade máxima antes da correlação, ou validar a recência com tempo de ingestão confiável do servidor e separar esse caso de quedas recentes.
+
+Next steps:
+- Adicionar cobertura para snapshot antigo aceito em uma OLT sem estado prévio e impedir que ele abra um incidente atual.

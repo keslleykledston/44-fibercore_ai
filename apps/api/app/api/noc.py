@@ -24,7 +24,13 @@ router = APIRouter()
 MIN_DROPPED = 5        # fewer than this many simultaneous drops is not a PON event (one customer down is not a PON event)
 OPEN_RATIO = 0.8       # share of the PON's ACTIVE population (online + recently dropped) that dropped
 RESOLVE_RATIO = 0.5    # hysteresis: prevents flapping around the threshold
-DROP_WINDOW = timedelta(minutes=30)  # an ONU counts as "recently dropped" if it went online->down within this window
+# An ONU counts as "recently dropped" if it went online->down within this lookback. It is long enough for an Edge that
+# reconnects after a silence/backlog to still show an outage that began while it was away; older drops are chronic.
+DROP_WINDOW = timedelta(hours=6)
+JOIN_WINDOW = timedelta(minutes=30)   # ONUs dropping this close to an incident opening belong to the same event
+# Correlation only runs on snapshots that are fresh by the SERVER clock. Store-and-forward can deliver old snapshots; they
+# still update ONU state (history) but must not open or close incidents as if the event were happening now.
+EVAL_FRESH_FOR = timedelta(minutes=15)
 DOWN = ("offline", "los", "dying_gasp")
 
 
@@ -36,11 +42,13 @@ def evaluate_pons(
 
     A mass outage is MANY ONUs DROPPING TOGETHER, not many ONUs being offline: real fleets carry chronically offline ONUs
     (a measured OLT had 37% of its ONTs offline for months). So the rule only looks at ONUs seen going online->down inside
-    DROP_WINDOW (`down_since`). Chronic ones (never seen dropping, or dropped long ago) are in neither the numerator nor the
-    denominator. An incident remembers the ONUs it covers (`incident_onus`): it resolves when THOSE come back, not merely
+    DROP_WINDOW (`down_since`), and only on snapshots fresh by the server clock. Chronic ones (never seen dropping, or
+    dropped long ago) are in neither the numerator nor the denominator. An incident remembers the ONUs it covers (`incident_onus`): it resolves when THOSE come back, not merely
     because the drop window expired."""
     if not serials or not complete_pons:
         return  # only PONs declared complete (full port read) are evaluated
+    if observed_at < datetime.now(UTC) - EVAL_FRESH_FOR:
+        return  # a replayed/backlogged snapshot is history, not the present state of the network
     rows = conn.execute(
         text(
             "SELECT p.id AS pon_id, p.pon_path, u.id AS onu_id, u.status, u.down_since "
@@ -74,7 +82,7 @@ def evaluate_pons(
         legacy = not members
         if legacy:  # opened before membership existed: judge the ONUs reported for the PON (the old rule) rather than orphan it
             members = {r.onu_id for r in onus}
-        join_from = open_row.opened_at - DROP_WINDOW
+        join_from = open_row.opened_at - JOIN_WINDOW
         joiners = [] if legacy else [r for r in fresh if r.onu_id not in members and r.down_since >= join_from]
         if joiners:
             _add_members(conn, tenant_id, open_row.id, [r.onu_id for r in joiners])
