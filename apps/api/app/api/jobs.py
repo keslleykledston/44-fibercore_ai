@@ -106,7 +106,7 @@ COLS = ("id, operation, target_type, target_id, risk, status, required_approvals
 @router.post("/v1/jobs/preview", status_code=201)
 def preview(
     body: PreviewIn,
-    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=8, max_length=128),
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=8, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$"),
     p: Principal = Depends(require("jobs:request")),
     conn: Connection = Depends(tenant_conn),
 ) -> dict:

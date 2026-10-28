@@ -226,3 +226,12 @@ def test_dispatched_but_unreported_job_is_swept_to_expired(client, seed, inv, ta
         c.execute(text("UPDATE jobs SET expires_at = now() - interval '10 minutes' WHERE id=:i"), {"i": jid})
     client.get("/v1/edge/jobs/next", headers=a)
     assert client.get(f"/v1/jobs/{jid}", headers=h).json()["status"] == "EXPIRED"
+
+
+@pytest.mark.parametrize("key", ["has space 12345", "<script>alert1", "a\x7fbcdefgh"])
+def test_idempotency_key_charset_is_ascii_safe_for_cross_language_signing(client, seed, targets, key):
+    # HTTP header values are latin-1 on the wire, so U+2028/U+2029 cannot arrive; the strict ASCII pattern still guarantees
+    # identical canonical JSON in Python and Go for every key that can be signed.
+    h = hdr(client, "alice", seed, "A")
+    r = client.post("/v1/jobs/preview", headers={**h, "Idempotency-Key": key}, json={"operation": "collect", "target_id": targets["olt"]})
+    assert r.status_code == 422
