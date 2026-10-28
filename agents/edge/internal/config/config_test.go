@@ -90,3 +90,26 @@ func TestOLTConfigValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestOLTSSHModeAndLegacyOptIn(t *testing.T) {
+	olt := func(extra string) string {
+		return `,"allowlist":["10.0.0.9:22"],"olts":[{"name":"A","vendor":"huawei","address":"10.0.0.9:22","username":"ro","secret_file":"/s","host_key_sha256":"SHA256:abc","pon_ports":["0/1/0"]` + extra + `}]`
+	}
+	for _, extra := range []string{``, `,"ssh_mode":"exec"`, `,"ssh_mode":"shell","legacy_ssh":true`} {
+		cfg, err := Load(write(t, 0o600, good(olt(extra))), "v")
+		if err != nil {
+			t.Fatalf("%q rejected: %v", extra, err)
+		}
+		if extra == `,"ssh_mode":"shell","legacy_ssh":true` && (cfg.OLTs[0].SSHMode != "shell" || !cfg.OLTs[0].LegacySSH) {
+			t.Fatalf("fields not loaded: %+v", cfg.OLTs[0])
+		}
+	}
+	if cfg, _ := Load(write(t, 0o600, good(olt(``))), "v"); cfg.OLTs[0].LegacySSH {
+		t.Fatal("legacy SSH must be off unless explicitly enabled")
+	}
+	for _, extra := range []string{`,"ssh_mode":"telnet"`, `,"ssh_mode":"SHELL"`} {
+		if _, err := Load(write(t, 0o600, good(olt(extra))), "v"); err == nil {
+			t.Errorf("%q must be rejected", extra)
+		}
+	}
+}

@@ -92,7 +92,8 @@ func main() {
 						return nil, nil, err
 					}
 					s, err := olt.DialSSH(ctx, olt.SSHConfig{Addr: o.Address, User: o.Username, Password: pw,
-						HostKeySHA256: o.HostKeySHA256, Dial: al.DialContext})
+						HostKeySHA256: o.HostKeySHA256, Dial: al.DialContext,
+						Shell: o.SSHMode == "shell", Legacy: o.LegacySSH})
 					if err != nil {
 						return nil, nil, err
 					}

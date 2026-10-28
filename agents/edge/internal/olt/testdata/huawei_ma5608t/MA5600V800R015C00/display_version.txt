@@ -1,0 +1,25 @@
+display version
+{ <cr>|backplane<K>|frameid/slotid<S><Length 1-15> }:
+
+  Command:
+          display version 
+
+  VERSION : MA5600V800R015C00
+  PATCH   : SPC100 HP1013
+  PRODUCT : MA5608T
+
+  Active Mainboard Running Area Information: 
+  --------------------------------------------------
+  Current Program Area : Area A 
+  Current Data Area : Area B 
+
+  Program Area A Version : MA5600V800R015C00 
+  Program Area B Version : MA5600V800R015C00 
+
+  Data Area A Version : MA5600V800R015C00 
+  Data Area B Version : MA5600V800R015C00 
+  --------------------------------------------------
+
+  Uptime is 1028 day(s), 9 hour(s), 5 minute(s), 45 second(s)
+
+OLT-TEST-1>

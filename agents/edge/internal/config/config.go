@@ -45,6 +45,8 @@ type OLTConfig struct {
 	HostKeySHA256           string   `json:"host_key_sha256"` // mandatory pinned SSH host key
 	PonPorts                []string `json:"pon_ports"`
 	AllowUnverifiedFirmware bool     `json:"allow_unverified_firmware"`
+	SSHMode                 string   `json:"ssh_mode"`   // "" | "exec" (default) | "shell" (interactive pty; firmwares that ignore exec)
+	LegacySSH               bool     `json:"legacy_ssh"` // explicit per-OLT opt-in to old SSH algorithms (SHA1 DH, ssh-rsa, AES-CBC)
 }
 
 var ponRe = regexp.MustCompile(`^\d+/\d+/\d+$`)
@@ -126,6 +128,9 @@ func (c *Config) Validate() error {
 		}
 		if _, _, err := net.SplitHostPort(o.Address); err != nil || !allowed[strings.ToLower(o.Address)] {
 			errs = append(errs, fmt.Errorf("%s: address must be host:port AND listed in allowlist", p))
+		}
+		if o.SSHMode != "" && o.SSHMode != "exec" && o.SSHMode != "shell" {
+			errs = append(errs, fmt.Errorf("%s: ssh_mode must be exec or shell", p))
 		}
 		if o.Username == "" || o.SecretFile == "" {
 			errs = append(errs, fmt.Errorf("%s: username and secret_file required", p))
