@@ -172,7 +172,7 @@ def edge_heartbeat(
         raise HTTPException(403, "token is not bound to this edge")  # one credential <-> one edge
     res = conn.execute(
         text(
-            "UPDATE edges SET version = :v, last_heartbeat_at = now(), status = 'online' "
+            "UPDATE edges SET version = :v, last_heartbeat_at = now() "
             "WHERE id = :e AND tenant_id = :t AND status <> 'revoked'"
         ),
         {"v": body.version, "e": body.edge_id, "t": p.tenant_id},
@@ -186,9 +186,13 @@ def list_edges(p: Principal = Depends(require("edge:read")), conn: Connection = 
     now = datetime.now(UTC)
     out = []
     for r in conn.execute(text("SELECT id, name, site_name, version, last_heartbeat_at, status FROM edges ORDER BY name")):
-        status = r.status
-        if status == "online" and (r.last_heartbeat_at is None or now - r.last_heartbeat_at > EDGE_OFFLINE_AFTER):
-            status = "offline"  # computed at read time: stale heartbeat never reads as online
+        # Derived at read time from heartbeat age; only 'revoked' is stored (owner-set).
+        if r.status == "revoked":
+            status = "revoked"
+        elif r.last_heartbeat_at is None:
+            status = "unknown"
+        else:
+            status = "online" if now - r.last_heartbeat_at <= EDGE_OFFLINE_AFTER else "offline"
         out.append({"id": str(r.id), "name": r.name, "site_name": r.site_name, "version": r.version,
                     "last_heartbeat_at": r.last_heartbeat_at.isoformat() if r.last_heartbeat_at else None, "status": status})
     return out

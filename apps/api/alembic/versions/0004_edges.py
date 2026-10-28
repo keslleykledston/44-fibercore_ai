@@ -46,7 +46,9 @@ def upgrade() -> None:
         ALTER TABLE service_accounts ADD CONSTRAINT service_accounts_edge_role_ck
           CHECK ((role = 'edge_agent') = (edge_id IS NOT NULL));
         GRANT SELECT ON edges TO fibercore_app;
-        GRANT UPDATE (version, last_heartbeat_at, status) ON edges TO fibercore_app;
+        GRANT UPDATE (version, last_heartbeat_at) ON edges TO fibercore_app;
+        -- status (incl. 'revoked') is owner-only; and a revoked row can never be updated by runtime, even via raw SQL.
+        CREATE POLICY no_update_revoked ON edges AS RESTRICTIVE FOR UPDATE USING (status <> 'revoked');
         """
     )
 

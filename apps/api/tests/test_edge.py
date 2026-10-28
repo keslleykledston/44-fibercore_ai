@@ -142,3 +142,18 @@ def test_db_constraint_edge_agent_requires_edge(seed, migrated):
     with pytest.raises(DBAPIError), migrated.begin() as c:
         c.execute(text("INSERT INTO service_accounts(tenant_id,name,role,secret_hash,edge_id) VALUES (:t,'bad','engineer','x',:e)"),
                   {"t": seed["A"], "e": seed["A"]})
+
+
+def test_runtime_cannot_change_status_or_touch_revoked_edge(seed, app_url, edge_env, migrated):
+    eng = make_engine(app_url)
+    with pytest.raises(DBAPIError), scoped_connection(eng, tenant_id=seed["A"]) as c:
+        c.execute(text("UPDATE edges SET status='online'"))  # column not granted
+    with migrated.begin() as c:
+        c.execute(text("UPDATE edges SET status='revoked' WHERE id=:i"), {"i": edge_env["edge"]})
+    try:
+        with scoped_connection(eng, tenant_id=seed["A"]) as c:
+            n = c.execute(text("UPDATE edges SET version='hijack' WHERE id=:i"), {"i": edge_env["edge"]}).rowcount
+        assert n == 0  # RESTRICTIVE policy hides revoked rows from UPDATE
+    finally:
+        with migrated.begin() as c:
+            c.execute(text("UPDATE edges SET status='unknown' WHERE id=:i"), {"i": edge_env["edge"]})
