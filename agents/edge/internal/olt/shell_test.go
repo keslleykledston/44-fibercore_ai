@@ -115,16 +115,21 @@ func (srv *shellServer) cli(ch ssh.Channel) {
 		t := string(b)
 		return t[strings.Index(t, "\n")+1:] // the device echoes the command itself; drop the captured echo line
 	}
-	pageKey := func() {
+	// pageKey waits for the key at the pager. Like the real device, only Space shows the next page; any other key (e.g. Q)
+	// breaks the listing, so a client that sends something else gets a truncated answer instead of the full one.
+	pageKey := func() bool {
 		c, err := rd.ReadByte()
 		srv.mu.Lock()
 		defer srv.mu.Unlock()
 		switch {
 		case err != nil: // connection closed: not a key
+			return false
 		case c == ' ':
 			srv.spaces++
+			return true
 		default:
 			srv.stray++
+			return false
 		}
 	}
 	for {
@@ -200,20 +205,29 @@ func (srv *shellServer) cli(ch ssh.Channel) {
 					break
 				}
 				ch.Write([]byte(b[:i]))
-				pageKey()
+				if !pageKey() { // pager broken: the rest of the listing (and its footer) never arrives
+					ch.Write([]byte("\r\n" + pr()))
+					break
+				}
 				ch.Write([]byte(b[i : i+47]))
 				b = b[i+47:]
 			}
 		case line == "display endless":
 			for {
 				ch.Write([]byte("  row\r\n---- More ( Press 'Q' to break ) ----"))
-				pageKey()
+				if !pageKey() {
+					ch.Write([]byte("\r\n" + pr()))
+					break
+				}
 				ch.Write([]byte("\x1b[37D" + strings.Repeat(" ", 37) + "\x1b[37D"))
 			}
 		case line == "display noerase": // pager that the device does not erase: its text would pollute the payload
 			ch.Write([]byte("  row1\r\n---- More ( Press 'Q' to break ) ----"))
-			pageKey()
-			ch.Write([]byte("\r\n  row2\r\n" + pr()))
+			if pageKey() {
+				ch.Write([]byte("\r\n  row2\r\n" + pr()))
+			} else {
+				ch.Write([]byte("\r\n" + pr()))
+			}
 		case line == "display mimic": // payload fakes the prompt before the real end
 			ch.Write([]byte("  part one\r\n" + testPrompt + "\r\n  part two (would be lost)\r\n" + testPrompt))
 		case line == "display late": // prompt, then more output after a short pause

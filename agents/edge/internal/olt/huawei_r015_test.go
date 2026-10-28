@@ -3,11 +3,17 @@ package olt
 import (
 	"context"
 	"errors"
+	"io"
+	"net"
 	"os"
 	"reflect"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
+	"time"
+
+	"golang.org/x/crypto/ssh"
 )
 
 const r015Dir = "testdata/huawei_ma5608t/MA5600V800R015C00/"
@@ -284,5 +290,65 @@ func TestR015MultiPageRealPonsThroughRealShell(t *testing.T) {
 	defer srv.mu.Unlock()
 	if want != 5 || srv.spaces != want || srv.stray != 0 {
 		t.Fatalf("pager pages in capture=%d, Spaces sent=%d, stray keys=%d", want, srv.spaces, srv.stray)
+	}
+}
+
+// The simulated device must behave like the real one at the pager, otherwise "no stray key" assertions prove nothing:
+// only Space advances; Q breaks the listing and the footer never arrives.
+func TestSimulatedPagerOnlyAdvancesOnSpaceAndQBreaksTheListing(t *testing.T) {
+	read := func(key string) string {
+		srv := startShellSSH(t, false)
+		conn, err := ssh.Dial("tcp", srv.addr, &ssh.ClientConfig{User: "u", Auth: []ssh.AuthMethod{ssh.Password("pw")},
+			HostKeyCallback: func(_ string, _ net.Addr, k ssh.PublicKey) error {
+				if ssh.FingerprintSHA256(k) != srv.fp {
+					return errors.New("host key")
+				}
+				return nil
+			}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		sess, _ := conn.NewSession()
+		_ = sess.RequestPty("vt100", 512, 200, ssh.TerminalModes{})
+		in, _ := sess.StdinPipe()
+		out, _ := sess.StdoutPipe()
+		_ = sess.Shell()
+		var mu sync.Mutex
+		var got strings.Builder
+		go func() {
+			b := make([]byte, 4096)
+			for {
+				n, err := out.Read(b)
+				mu.Lock()
+				got.Write(b[:n])
+				mu.Unlock()
+				if err != nil {
+					return
+				}
+			}
+		}()
+		snap := func() string { mu.Lock(); defer mu.Unlock(); return got.String() }
+		wait := func(sub string) {
+			for i := 0; i < 100 && !strings.Contains(snap(), sub); i++ {
+				time.Sleep(50 * time.Millisecond)
+			}
+		}
+		wait("OLT-TEST-1>")
+		for _, c := range []string{"enable", "config", "interface gpon 0/0"} {
+			io.WriteString(in, c+"\r")
+			time.Sleep(200 * time.Millisecond)
+		}
+		io.WriteString(in, "display ont info 5 all\r")
+		wait("More (")
+		io.WriteString(in, key)
+		time.Sleep(800 * time.Millisecond)
+		return snap()
+	}
+	if got := read("q"); strings.Contains(got, "In port") {
+		t.Fatal("a Q at the pager must break the listing: the footer must not arrive")
+	}
+	if got := read(" "); strings.Count(got, "More (") < 2 {
+		t.Fatal("Space must advance to the next page")
 	}
 }
