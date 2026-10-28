@@ -1,6 +1,6 @@
 # Implementation status (evidência, não promessa)
 
-Atualizado: 2026-10-27 | Branch: `web/14-assinantes-operacoes` | Estado: **Sprint 0 concluída (PR 1–4 mergeados); Sprint 1 em andamento (PR 5)**
+Atualizado: 2026-10-27 | Branch: `final/15-handoff` | Estado: **Sprint 0 concluída (PR 1–4 mergeados); Sprint 1 em andamento (PR 5)**
 
 | Item Sprint 0 | Status | Prova | Pendência |
 |---|---|---|---|
@@ -37,7 +37,7 @@ Edge-fleet: registro via CLI, `POST /v1/edge/heartbeat` (bearer edge_agent, inte
 |---|---|---|
 | Job gate (máquina de estados CAS, aprovações, TTL, envelope Ed25519, verificação no Edge, nonce persistido) | Feito (PR 10) | pytest 97 + go test -race PASS; golden Python→Go de assinatura |
 | Escrita real em rede | **BLOQUEADA** (`HOMOLOGATED_WRITES` vazio no Cloud; `ReadOnlyOps` compilado no Edge) | testes de bloqueio |
-| USP adapter / release center | Não iniciado | — |
+| USP adapter / release center / copiloto | **Adiados** (ADR-0015) | — |
 
 ## Adendo v2.1 (domínio, design system, ajuda)
 | Item | Status | Prova |

@@ -1,6 +1,7 @@
 # Next Actions
 
-1. W1–W4: `apps/web` (Next.js) + tokens + AppShell + BFF + Playwright + Central de Ajuda (Lovable propõe UX; screenshots reais).
-2. W5–W8: telas Rede/NOC/Módulos/ERP/Jobs com How-to publicado só com screenshots reais.
-3. W9 + Sprint 3 restante: MFA/refresh/rate-limit, USP adapter+simulador, release center.
-4. Campo (não bloqueia): host/versão NBI GenieACS, firmware OLT + capturas reais p/ promover drivers a `observed`, ERP, retenção, DNS/TLS.
+1. Campo: capturas reais OLT (firmware exato) + NBI GenieACS lab → fixtures reais → promover drivers.
+2. W9: MFA, refresh de token, CSP/HSTS, rate-limit na borda, DNS/TLS reais; executar CI no GitHub (criar PRs via UI/`gh`).
+3. Observabilidade (Prometheus/Grafana) + ensaio de restore/falha; piloto INTERNAL_PILOT só após gate.
+4. USP/Release Center/Copiloto (ADR-0015) quando houver pré-requisitos.
+5. Revisão visual Lovable (docs/ux/lovable/README.md) e ONU 360 / ⌘K.
