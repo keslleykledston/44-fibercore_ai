@@ -33,5 +33,5 @@
 - Pendente do dono: restringir SSH do host do GenieACS; credencial SNMP de leitura.
 
 ## Atualização 2026-10-28 (cobertura ampla + SNMP)
-- BLOQUEIO p/ promover R015 a `observed`: a regra de `pon_mass_outage` (noc.py) abriria incidente falso permanente em 2/32 PONs (37% das ONTs são offline crônicas). Redesenhar a correlação (transições recentes + causa + linha de base por ONT) antes de qualquer `complete=true`.
+- (resolvido, ADR-0018) a regra de `pon_mass_outage` passou a usar quedas recentes; a promoção da R015 a `observed` ainda depende do checklist (PON vazia, causas de queda via register-info/SNMP).
 - Próximos: ler `register-info` só das ONTs que mudaram de estado (causa da queda), driver SNMP (OIDs em DRIVER_SDK_INTERFACE.md, SNMPv3), restringir SSH do host do GenieACS.

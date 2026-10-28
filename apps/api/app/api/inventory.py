@@ -149,16 +149,23 @@ def ingest_olt_snapshot(
     if body.onus:
         conn.execute(
             text(
-                "INSERT INTO onus (tenant_id, olt_id, pon_id, serial, status, rx_dbm, observed_at) "
-                "VALUES (:t,:o,:pi,:s,:st,:rx,:ts) "
+                "INSERT INTO onus (tenant_id, olt_id, pon_id, serial, status, rx_dbm, observed_at, last_online_at) "
+                "VALUES (:t,:o,:pi,:s,:st,:rx,:ts, CASE WHEN CAST(:st AS text) = 'online' THEN CAST(:ts AS timestamptz) END) "
                 "ON CONFLICT (tenant_id, olt_id, serial) DO UPDATE SET pon_id=EXCLUDED.pon_id, status=EXCLUDED.status, "
-                "rx_dbm=EXCLUDED.rx_dbm, observed_at=EXCLUDED.observed_at "
+                "rx_dbm=EXCLUDED.rx_dbm, observed_at=EXCLUDED.observed_at, "
+                "last_online_at = CASE WHEN EXCLUDED.status = 'online' THEN EXCLUDED.observed_at ELSE onus.last_online_at END, "
+                # down_since only records a REAL transition (seen online, now seen down). An ONU first seen down, or coming from
+                # 'unknown', has no known drop time and stays NULL: it is chronic as far as correlation can tell.
+                "down_since = CASE WHEN EXCLUDED.status = 'online' THEN NULL "
+                "WHEN onus.status = 'online' AND EXCLUDED.status IN ('offline','los','dying_gasp') THEN EXCLUDED.observed_at "
+                "ELSE onus.down_since END "
                 "WHERE onus.observed_at IS NULL OR onus.observed_at <= EXCLUDED.observed_at"
             ),
             [{"t": p.tenant_id, "o": olt_id, "pi": pon_ids.get(x.pon_path) if x.pon_path else None, "s": x.serial,
               "st": x.status, "rx": x.rx_dbm, "ts": body.observed_at} for x in body.onus],
         )
-    evaluate_pons(conn, p.tenant_id, olt_id, [x.pon_path for x in body.pons if x.complete], [o.serial for o in body.onus])
+    evaluate_pons(conn, p.tenant_id, olt_id, [x.pon_path for x in body.pons if x.complete], [o.serial for o in body.onus],
+                  body.observed_at)
     outbox.enqueue(
         conn, tenant_id=p.tenant_id, aggregate_type="olt", aggregate_id=olt_id, event_type="olt.snapshot_ingested",
         payload={"edge_id": str(body.edge_id), "pons": len(body.pons), "onus": len(body.onus),

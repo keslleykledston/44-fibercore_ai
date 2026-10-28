@@ -8,7 +8,7 @@ Principles
 - Deduplicated: one open incident per PON (unique partial index)."""
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 from uuid import UUID
 
@@ -21,56 +21,109 @@ from app.events import outbox
 
 router = APIRouter()
 
-MIN_ONUS = 5        # smaller PONs never raise a mass-outage incident (one customer down is not a PON event)
-OPEN_RATIO = 0.8
-RESOLVE_RATIO = 0.5  # hysteresis: prevents flapping around the threshold
+MIN_DROPPED = 5        # fewer than this many simultaneous drops is not a PON event (one customer down is not a PON event)
+OPEN_RATIO = 0.8       # share of the PON's ACTIVE population (online + recently dropped) that dropped
+RESOLVE_RATIO = 0.5    # hysteresis: prevents flapping around the threshold
+DROP_WINDOW = timedelta(minutes=30)  # an ONU counts as "recently dropped" if it went online->down within this window
+DOWN = ("offline", "los", "dying_gasp")
 
 
-def evaluate_pons(conn: Connection, tenant_id: UUID, olt_id: UUID, complete_pons: list[str], serials: list[str]) -> None:
+def evaluate_pons(
+    conn: Connection, tenant_id: UUID, olt_id: UUID, complete_pons: list[str], serials: list[str], observed_at: datetime
+) -> None:
     """Called inside the ingestion transaction, which already holds the OLT row lock (so evaluations of one OLT are
-    serialised). Only the ONUs REPORTED IN THIS REQUEST (by serial) count — never inferred from timestamps."""
+    serialised). Only the ONUs REPORTED IN THIS REQUEST (by serial) count — never inferred from timestamps.
+
+    A mass outage is MANY ONUs DROPPING TOGETHER, not many ONUs being offline: real fleets carry chronically offline ONUs
+    (a measured OLT had 37% of its ONTs offline for months). So the rule only looks at ONUs seen going online->down inside
+    DROP_WINDOW (`down_since`). Chronic ones (never seen dropping, or dropped long ago) are in neither the numerator nor the
+    denominator. An incident remembers the ONUs it covers (`incident_onus`): it resolves when THOSE come back, not merely
+    because the drop window expired."""
     if not serials or not complete_pons:
         return  # only PONs declared complete (full port read) are evaluated
     rows = conn.execute(
         text(
-            "SELECT p.id AS pon_id, p.pon_path, count(*) AS total, "
-            "count(*) FILTER (WHERE u.status IN ('los','offline','dying_gasp')) AS down, "
-            "count(*) FILTER (WHERE u.status = 'los') AS los, "
-            "count(*) FILTER (WHERE u.status = 'dying_gasp') AS dg "
+            "SELECT p.id AS pon_id, p.pon_path, u.id AS onu_id, u.status, u.down_since "
             "FROM onus u JOIN pon_ports p ON p.id = u.pon_id AND p.tenant_id = u.tenant_id "
-            "WHERE u.olt_id = :o AND u.serial = ANY(:serials) AND p.pon_path = ANY(:paths) GROUP BY p.id, p.pon_path"
+            "WHERE u.olt_id = :o AND u.serial = ANY(:serials) AND p.pon_path = ANY(:paths)"
         ),
         {"o": olt_id, "serials": serials, "paths": complete_pons},
     ).all()
+    by_pon: dict[UUID, list] = {}
     for r in rows:
-        key = f"pon_mass:{r.pon_id}"
-        ratio = r.down / r.total if r.total else 0.0
+        by_pon.setdefault(r.pon_id, []).append(r)
+    since = observed_at - DROP_WINDOW
+    for pon_id, onus in by_pon.items():
+        key = f"pon_mass:{pon_id}"
+        path = onus[0].pon_path
+        online = [r for r in onus if r.status == "online"]
+        down = [r for r in onus if r.status in DOWN]
+        fresh = [r for r in down if r.down_since is not None and r.down_since >= since]
         open_row = conn.execute(
-            text("SELECT id, evidence FROM incidents WHERE dedupe_key = :k AND status = 'open' FOR UPDATE"), {"k": key}
+            text("SELECT id, opened_at, evidence FROM incidents WHERE dedupe_key = :k AND status = 'open' FOR UPDATE"), {"k": key}
         ).first()
-        open_inc = open_row.id if open_row else None
-        # A partial snapshot (few ONUs reported) is not enough evidence to CLOSE an incident that was opened on more.
-        prior = (open_row.evidence or {}).get("onus_observed", 0) if open_row else 0
-        enough_to_resolve = r.total >= max(MIN_ONUS, prior // 2)
-        evidence = {"pon_path": r.pon_path, "onus_observed": r.total, "onus_down": r.down, "los": r.los,
-                    "dying_gasp": r.dg, "ratio": round(ratio, 3)}
-        if open_inc is None and r.total >= MIN_ONUS and ratio >= OPEN_RATIO:
-            cause = "fiber_or_los" if r.los >= r.down / 2 else ("power" if r.dg >= r.down / 2 else "unknown")
-            iid = conn.execute(
-                text("INSERT INTO incidents (tenant_id, kind, olt_id, pon_id, dedupe_key, suspected_cause, evidence) "
-                     "VALUES (:t,'pon_mass_outage',:o,:p,:k,:c,CAST(:e AS jsonb)) ON CONFLICT DO NOTHING RETURNING id"),
-                {"t": tenant_id, "o": olt_id, "p": r.pon_id, "k": key, "c": cause, "e": _j(evidence)},
-            ).scalar_one_or_none()
-            if iid:
-                outbox.enqueue(conn, tenant_id=tenant_id, aggregate_type="incident", aggregate_id=iid,
-                               event_type="incident.opened", payload={"kind": "pon_mass_outage", **evidence, "suspected_cause": cause})
-        elif open_inc is not None and ratio < RESOLVE_RATIO and enough_to_resolve:
+        if open_row is None:
+            population = len(online) + len(fresh)
+            ratio = len(fresh) / population if population else 0.0
+            if len(fresh) >= MIN_DROPPED and ratio >= OPEN_RATIO:
+                _open_incident(conn, tenant_id, olt_id, pon_id, key, path, len(onus), fresh, len(down) - len(fresh), ratio)
+            continue
+        # open incident: judge the ONUs it covers (plus ONUs that dropped with it afterwards)
+        members = {r.onu_id for r in conn.execute(
+            text("SELECT onu_id FROM incident_onus WHERE tenant_id=:t AND incident_id=:i"), {"t": tenant_id, "i": open_row.id})}
+        legacy = not members
+        if legacy:  # opened before membership existed: judge the ONUs reported for the PON (the old rule) rather than orphan it
+            members = {r.onu_id for r in onus}
+        join_from = open_row.opened_at - DROP_WINDOW
+        joiners = [] if legacy else [r for r in fresh if r.onu_id not in members and r.down_since >= join_from]
+        if joiners:
+            _add_members(conn, tenant_id, open_row.id, [r.onu_id for r in joiners])
+            members |= {r.onu_id for r in joiners}
+        reported = [r for r in onus if r.onu_id in members]
+        still_down = [r for r in reported if r.status in DOWN]
+        ratio = len(still_down) / len(reported) if reported else 0.0
+        ev = open_row.evidence or {}
+        prior = ev.get("members", ev.get("onus_observed", 0))
+        # A partial snapshot (few covered ONUs reported) is not enough evidence to CLOSE an incident opened on more.
+        enough_to_resolve = len(reported) >= max(MIN_DROPPED, prior // 2)
+        evidence = {"pon_path": path, "onus_observed": len(onus), "onus_down": len(still_down),
+                    "los": sum(1 for r in still_down if r.status == "los"),
+                    "dying_gasp": sum(1 for r in still_down if r.status == "dying_gasp"),
+                    "ratio": round(ratio, 3), "members": max(prior, len(members)),
+                    "chronic_offline": len(down) - len(fresh)}
+        if ratio < RESOLVE_RATIO and enough_to_resolve:
             conn.execute(text("UPDATE incidents SET status='resolved', resolved_at=now(), evidence=CAST(:e AS jsonb) WHERE id=:i"),
-                         {"i": open_inc, "e": _j(evidence)})
-            outbox.enqueue(conn, tenant_id=tenant_id, aggregate_type="incident", aggregate_id=open_inc,
+                         {"i": open_row.id, "e": _j(evidence)})
+            outbox.enqueue(conn, tenant_id=tenant_id, aggregate_type="incident", aggregate_id=open_row.id,
                            event_type="incident.resolved", payload={"kind": "pon_mass_outage", **evidence})
-        elif open_inc is not None and enough_to_resolve:  # still open: refresh counters (never from thin evidence)
-            conn.execute(text("UPDATE incidents SET evidence=CAST(:e AS jsonb) WHERE id=:i"), {"i": open_inc, "e": _j(evidence)})
+        elif enough_to_resolve:  # still open: refresh counters (never from thin evidence)
+            conn.execute(text("UPDATE incidents SET evidence=CAST(:e AS jsonb) WHERE id=:i"), {"i": open_row.id, "e": _j(evidence)})
+
+
+def _add_members(conn: Connection, tenant_id: UUID, incident_id: UUID, onu_ids: list[UUID]) -> None:
+    if onu_ids:
+        conn.execute(
+            text("INSERT INTO incident_onus (tenant_id, incident_id, onu_id) VALUES (:t,:i,:u) ON CONFLICT DO NOTHING"),
+            [{"t": tenant_id, "i": incident_id, "u": u} for u in onu_ids],
+        )
+
+
+def _open_incident(conn: Connection, tenant_id: UUID, olt_id: UUID, pon_id: UUID, key: str, path: str, observed: int,
+                   fresh: list, chronic: int, ratio: float) -> None:
+    los = sum(1 for r in fresh if r.status == "los")
+    dg = sum(1 for r in fresh if r.status == "dying_gasp")
+    cause = "fiber_or_los" if los >= len(fresh) / 2 else ("power" if dg >= len(fresh) / 2 else "unknown")
+    evidence = {"pon_path": path, "onus_observed": observed, "onus_down": len(fresh), "los": los, "dying_gasp": dg,
+                "ratio": round(ratio, 3), "members": len(fresh), "chronic_offline": chronic}
+    iid = conn.execute(
+        text("INSERT INTO incidents (tenant_id, kind, olt_id, pon_id, dedupe_key, suspected_cause, evidence) "
+             "VALUES (:t,'pon_mass_outage',:o,:p,:k,:c,CAST(:e AS jsonb)) ON CONFLICT DO NOTHING RETURNING id"),
+        {"t": tenant_id, "o": olt_id, "p": pon_id, "k": key, "c": cause, "e": _j(evidence)},
+    ).scalar_one_or_none()
+    if iid:
+        _add_members(conn, tenant_id, iid, [r.onu_id for r in fresh])
+        outbox.enqueue(conn, tenant_id=tenant_id, aggregate_type="incident", aggregate_id=iid,
+                       event_type="incident.opened", payload={"kind": "pon_mass_outage", **evidence, "suspected_cause": cause})
 
 
 def _j(d: dict) -> str:
