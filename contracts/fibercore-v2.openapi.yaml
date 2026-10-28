@@ -474,7 +474,7 @@ components:
         model: {type: [string, 'null']}
         firmware: {type: [string, 'null']}
         driver_level: {type: string, enum: [identified, observed], default: identified}
-        pons: {type: array, maxItems: 512, items: {type: object, required: [pon_path], properties: {pon_path: {type: string}, status: {type: string, enum: [up, down, unknown]}}}}
+        pons: {type: array, maxItems: 512, items: {type: object, required: [pon_path], properties: {pon_path: {type: string}, status: {type: string, enum: [up, down, unknown]}, complete: {type: boolean, default: false, description: "true só se o snapshot lista TODAS as ONUs da PON; apenas PONs completas entram na correlação de incidentes"}}}}
         onus: {type: array, maxItems: 20000, items: {type: object, required: [serial], properties: {serial: {type: string}, pon_path: {type: string}, status: {type: string, enum: [online, offline, los, dying_gasp, unknown]}, rx_dbm: {type: [number, 'null'], minimum: -50, maximum: 10}}}}
     CpeSnapshot:
       type: object

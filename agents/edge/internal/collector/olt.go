@@ -42,8 +42,9 @@ type onuJSON struct {
 	Rx     *float64 `json:"rx_dbm"`
 }
 type ponJSON struct {
-	Path   string `json:"pon_path"`
-	Status string `json:"status"`
+	Path     string `json:"pon_path"`
+	Status   string `json:"status"`
+	Complete bool   `json:"complete"` // the driver reads the whole PON port summary => every ONU of the port is listed
 }
 type oltSnapshotJSON struct {
 	EdgeID      string    `json:"edge_id"`
@@ -103,7 +104,7 @@ func (o *OLT) collectOne(ctx context.Context, src OLTSource, observed string) ([
 		DriverLevel: string(level), PONs: []ponJSON{}, ONUs: []onuJSON{},
 	}
 	for _, p := range snap.PONs {
-		head.PONs = append(head.PONs, ponJSON{Path: p.Path, Status: p.Status})
+		head.PONs = append(head.PONs, ponJSON{Path: p.Path, Status: p.Status, Complete: true})
 	}
 	var items []Item
 	cur := head

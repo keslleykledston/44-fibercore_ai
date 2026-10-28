@@ -18,10 +18,10 @@ def incidents(client, headers, status=None):
     return client.get(f"/v1/incidents{q}", headers=headers).json()
 
 
-def push(client, inv, name, items, observed=None):
+def push(client, inv, name, items, observed=None, complete=True):
     return client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a1"),
                        json=snap(inv, name=name, observed=observed or _now(), onus=items,
-                                 pons=[{"pon_path": "0/1/0", "status": "up"}, {"pon_path": "0/1/1", "status": "up"}]))
+                                 pons=[{"pon_path": "0/1/0", "status": "up", "complete": complete}, {"pon_path": "0/1/1", "status": "up", "complete": complete}]))
 
 
 def mine(client, h, olt):
@@ -133,3 +133,12 @@ def test_concurrent_first_ingest_of_new_olt_has_no_500_and_single_incident(clien
     [t.join() for t in ts]
     assert 500 not in codes and codes.count(202) >= 1, codes
     assert len(mine(client, hdr(client, "alice", seed, "A"), "OLT-N9")) == 1
+
+
+def test_partial_sample_never_opens_incident(client, seed, inv):
+    h = hdr(client, "alice", seed, "A")
+    push(client, inv, "OLT-N10", onus(20, "online", "N10A"))                                  # known: 20 healthy ONUs
+    push(client, inv, "OLT-N10", onus(6, "los", "N10B"), observed=_now(5), complete=False)    # 6 reported down, PON not fully read
+    assert mine(client, h, "OLT-N10") == []
+    push(client, inv, "OLT-N10", onus(6, "los", "N10B"), observed=_now(10), complete=True)    # same data but declared complete
+    assert len(mine(client, h, "OLT-N10")) == 1

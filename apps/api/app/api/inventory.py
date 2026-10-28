@@ -34,6 +34,9 @@ def _check_observed(v: datetime) -> datetime:
 class PonIn(BaseModel):
     pon_path: Short
     status: Literal["up", "down", "unknown"] = "unknown"
+    # True only when this snapshot lists EVERY ONU of the PON (full port read). Incident correlation uses complete PONs
+    # exclusively: a partial sample can neither open nor close a mass-outage incident.
+    complete: bool = False
 
 
 class OnuIn(BaseModel):
@@ -155,7 +158,7 @@ def ingest_olt_snapshot(
             [{"t": p.tenant_id, "o": olt_id, "pi": pon_ids.get(x.pon_path) if x.pon_path else None, "s": x.serial,
               "st": x.status, "rx": x.rx_dbm, "ts": body.observed_at} for x in body.onus],
         )
-    evaluate_pons(conn, p.tenant_id, olt_id, [o.serial for o in body.onus])
+    evaluate_pons(conn, p.tenant_id, olt_id, [x.pon_path for x in body.pons if x.complete], [o.serial for o in body.onus])
     outbox.enqueue(
         conn, tenant_id=p.tenant_id, aggregate_type="olt", aggregate_id=olt_id, event_type="olt.snapshot_ingested",
         payload={"edge_id": str(body.edge_id), "pons": len(body.pons), "onus": len(body.onus),

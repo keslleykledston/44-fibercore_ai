@@ -26,11 +26,11 @@ OPEN_RATIO = 0.8
 RESOLVE_RATIO = 0.5  # hysteresis: prevents flapping around the threshold
 
 
-def evaluate_pons(conn: Connection, tenant_id: UUID, olt_id: UUID, serials: list[str]) -> None:
+def evaluate_pons(conn: Connection, tenant_id: UUID, olt_id: UUID, complete_pons: list[str], serials: list[str]) -> None:
     """Called inside the ingestion transaction, which already holds the OLT row lock (so evaluations of one OLT are
     serialised). Only the ONUs REPORTED IN THIS REQUEST (by serial) count — never inferred from timestamps."""
-    if not serials:
-        return
+    if not serials or not complete_pons:
+        return  # only PONs declared complete (full port read) are evaluated
     rows = conn.execute(
         text(
             "SELECT p.id AS pon_id, p.pon_path, count(*) AS total, "
@@ -38,9 +38,9 @@ def evaluate_pons(conn: Connection, tenant_id: UUID, olt_id: UUID, serials: list
             "count(*) FILTER (WHERE u.status = 'los') AS los, "
             "count(*) FILTER (WHERE u.status = 'dying_gasp') AS dg "
             "FROM onus u JOIN pon_ports p ON p.id = u.pon_id AND p.tenant_id = u.tenant_id "
-            "WHERE u.olt_id = :o AND u.serial = ANY(:serials) GROUP BY p.id, p.pon_path"
+            "WHERE u.olt_id = :o AND u.serial = ANY(:serials) AND p.pon_path = ANY(:paths) GROUP BY p.id, p.pon_path"
         ),
-        {"o": olt_id, "serials": serials},
+        {"o": olt_id, "serials": serials, "paths": complete_pons},
     ).all()
     for r in rows:
         key = f"pon_mass:{r.pon_id}"

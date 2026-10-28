@@ -27,6 +27,7 @@
   ],
   "pons": [
     {
+      "complete": true,
       "pon_path": "0/1/0",
       "status": "up"
     }
