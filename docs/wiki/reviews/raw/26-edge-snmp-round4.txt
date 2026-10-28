@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a183e4-e135-77e2-ac7f-788d7462173d).
+[codex] Turn started (01a183e4-e16f-7692-ab26-0ec6c5134aa1).
+[codex] Assistant message captured: Vou conferir o diff completo contra `main` e seguir os caminhos de falha e concorrência do dr...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt ag...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt ag... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"Collect\\(|collectors|collectSNMPCooled|SNMP\" agents/edge/internal/ag...
+[codex] Command completed: /bin/bash -lc "rg -n \"Collect\\(|collectors|collectSNMPCooled|SNMP\" agents/edge/internal/ag... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/agent/agent.go | sed -n '1,190p'; nl -ba agents/ed...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/agent/agent.go | sed -n '1,190p'; nl -ba agents/ed... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: o resfriamento não serializa nem reserva a ...
+[codex] Turn completion inferred after the main thread finished and subagent work drained.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: o resfriamento não serializa nem reserva a OLT antes da coleta; chamadas concorrentes podem ultrapassá-lo e enviar pacotes durante uma falha/resfriamento.
+
+Findings:
+- [high] Coletas SNMP concorrentes contornam o resfriamento por OLT (agents/edge/internal/collector/olt.go:133-147)
+  A checagem do prazo e a chamada a `collectSNMP` não são atômicas: ambas ocorrem fora do mutex, e o prazo só é gravado depois que a coleta falha. O agente pode executar `CollectOnce` no worker periódico e também durante `PollJob`; se as duas chamadas chegarem aqui antes de qualquer falha ser registrada, ambas abrem sessões e enviam SNMP. Uma chamada que falha também não impede uma coleta já em andamento de continuar enviando durante o resfriamento recém-iniciado. Isso contradiz a garantia de nenhum pacote durante cinco minutos e pode prolongar o silêncio do agente. Reserve/serialize cada OLT sob lock antes de iniciar I/O, e revalide o estado entre operações ou cancele a sessão concorrente quando ocorrer falha.
+  Recommendation: Use estado por OLT que impeça mais de uma coleta SNMP simultânea; ao falhar, bloqueie novas coletas e interrompa/cancele a sessão em andamento antes de iniciar o prazo de cinco minutos.

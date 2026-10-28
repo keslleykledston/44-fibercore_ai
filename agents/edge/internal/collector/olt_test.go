@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -403,5 +404,42 @@ func TestAFailedSNMPCollectionLeavesTheDeviceAloneForTheCooldown(t *testing.T) {
 		if _, err := o2.Collect(context.Background()); err != nil {
 			t.Fatalf("cycle %d: %v", i, err)
 		}
+	}
+}
+
+type gatedSNMP struct {
+	snmpFake
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (g gatedSNMP) Get(ctx context.Context, oids []string) (map[string]olt.SNMPValue, error) {
+	select {
+	case g.entered <- struct{}{}:
+	default:
+	}
+	<-g.release
+	return g.snmpFake.Get(ctx, oids)
+}
+
+func TestOnlyOneSNMPCollectionPerOLTRunsAtATime(t *testing.T) {
+	g := gatedSNMP{entered: make(chan struct{}, 1), release: make(chan struct{})}
+	var opens atomic.Int32
+	src := OLTSource{Name: "OLT-ONE", Ports: []string{"0/0/14"}, SNMPDriver: olt.HuaweiSNMP{},
+		OpenSNMP: func(context.Context) (olt.SNMPReader, func(), error) { opens.Add(1); return g, func() {}, nil }}
+	o := &OLT{EdgeID: "e", Sources: []OLTSource{src}}
+	done := make(chan error, 1)
+	go func() { _, err := o.Collect(context.Background()); done <- err }()
+	<-g.entered // the first collection is now talking to the device
+	// a second one (the periodic worker AND a job can overlap) must be refused without opening anything
+	if _, err := o.Collect(context.Background()); err == nil || !strings.Contains(err.Error(), "already running") || opens.Load() != 1 {
+		t.Fatalf("overlap must be refused before any I/O: err=%v opens=%d", err, opens.Load())
+	}
+	close(g.release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := o.Collect(context.Background()); err != nil { // reservation released: the next cycle runs normally
+		t.Fatalf("after the first one finished: %v", err)
 	}
 }
