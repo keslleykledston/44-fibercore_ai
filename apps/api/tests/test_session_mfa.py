@@ -82,6 +82,16 @@ def test_concurrent_refresh_inside_grace_gets_sibling_not_revocation(client, use
     assert client.post("/v1/auth/refresh", json={"refresh_token": b.json()["refresh_token"]}).status_code == 200
 
 
+def test_second_replay_inside_grace_is_theft_and_revokes_family(client, user):
+    j = _login(client, user).json()
+    a = client.post("/v1/auth/refresh", json={"refresh_token": j["refresh_token"]})
+    b = client.post("/v1/auth/refresh", json={"refresh_token": j["refresh_token"]})  # the one allowed sibling
+    c = client.post("/v1/auth/refresh", json={"refresh_token": j["refresh_token"]})  # a third presentation: not a tab race
+    assert (a.status_code, b.status_code, c.status_code) == (200, 200, 401)
+    for r in (a, b):  # every token of the family is dead, including the ones minted before the detection
+        assert client.post("/v1/auth/refresh", json={"refresh_token": r.json()["refresh_token"]}).status_code == 401
+
+
 def test_logout_revokes_successor_created_by_refresh(client, user):
     j = _login(client, user).json()
     r = client.post("/v1/auth/refresh", json={"refresh_token": j["refresh_token"]}).json()

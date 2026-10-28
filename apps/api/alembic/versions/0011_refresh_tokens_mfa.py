@@ -24,6 +24,7 @@ def upgrade() -> None:
           expires_at timestamptz NOT NULL,
           family_expires_at timestamptz NOT NULL,
           used_at timestamptz,
+          grace_used_at timestamptz,  -- a consumed token may yield ONE sibling inside the grace window; a second replay is reuse
           revoked_at timestamptz
         );
         CREATE INDEX refresh_tokens_family_idx ON refresh_tokens(family_id);

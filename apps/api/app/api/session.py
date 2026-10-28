@@ -55,7 +55,7 @@ def refresh(body: RefreshIn, settings: Settings = Depends(get_settings)) -> Sess
     with scoped_connection(get_engine()) as conn:
         _lock_family(conn, body.refresh_token)
         row = conn.execute(
-            text("SELECT id, family_id, user_id, expires_at, family_expires_at, used_at, revoked_at FROM refresh_tokens "
+            text("SELECT id, family_id, user_id, expires_at, family_expires_at, used_at, grace_used_at, revoked_at FROM refresh_tokens "
                  "WHERE token_hash = :h FOR UPDATE"),
             {"h": hash_refresh(body.refresh_token)},
         ).first()
@@ -64,15 +64,19 @@ def refresh(body: RefreshIn, settings: Settings = Depends(get_settings)) -> Sess
             pass  # unknown or revoked
         elif row.expires_at <= now or row.family_expires_at <= now:
             pass  # expired
-        elif row.used_at is not None and (now - row.used_at).total_seconds() > settings.refresh_reuse_grace_seconds:
-            # reuse outside the grace window: treated as a leak. Revoked here; the 401 is raised after the transaction ends.
+        elif row.used_at is not None and (
+            row.grace_used_at is not None or (now - row.used_at).total_seconds() > settings.refresh_reuse_grace_seconds
+        ):
+            # reuse: outside the grace window, or a second replay inside it (the one allowed sibling was already issued).
+            # Treated as a leak. Revoked here; the 401 is raised after the transaction ends.
             _revoke_family(conn, row.family_id)
         elif not conn.execute(text("SELECT is_active FROM users_global WHERE id = :u"), {"u": row.user_id}).scalar():
             _revoke_family(conn, row.family_id)
         else:
             if row.used_at is None:
                 conn.execute(text("UPDATE refresh_tokens SET used_at = now() WHERE id = :i"), {"i": row.id})
-            # else: a legitimate concurrent request (two tabs) within the grace window gets a sibling token; nothing is revoked
+            else:  # a legitimate concurrent request (two tabs) within the grace window gets exactly one sibling; nothing is revoked
+                conn.execute(text("UPDATE refresh_tokens SET grace_used_at = now() WHERE id = :i"), {"i": row.id})
             sess = issue_session(conn, settings, row.user_id, family_id=row.family_id, family_expires_at=row.family_expires_at)
     if sess is None:
         raise _unauth()
