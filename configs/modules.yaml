@@ -108,7 +108,7 @@ modules:
     optional_dependencies: [nats, edge-fleet]
     capabilities: [preview, approve, dispatch, postcheck]
     failure_mode: deny_writes
-    feature_flag: false
+    feature_flag: true
   - id: platform-manager
     kind: core
     version: 0.1.0

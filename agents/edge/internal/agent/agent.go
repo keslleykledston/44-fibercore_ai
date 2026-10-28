@@ -10,6 +10,7 @@ import (
 
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/collector"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/gateway"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/jobs"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/queue"
 )
 
@@ -18,6 +19,8 @@ type Agent struct {
 	GW                        *gateway.Client
 	Q                         *queue.Queue
 	Collectors                []collector.Collector
+	Jobs                      *jobs.Verifier // nil => job polling disabled
+	JobPollEvery              time.Duration
 	HeartbeatEvery            time.Duration
 	CollectEvery              time.Duration
 	Log                       *slog.Logger
@@ -97,6 +100,50 @@ func (a *Agent) Flush(ctx context.Context) {
 	}
 }
 
+// PollJob fetches at most one job, verifies it and executes it. Unverifiable envelopes are dropped and logged: nothing
+// unauthenticated is ever acted upon, nor trusted enough to report on.
+func (a *Agent) PollJob(ctx context.Context) {
+	if a.Jobs == nil {
+		return
+	}
+	raw, err := a.GW.NextJob(ctx)
+	if err != nil {
+		a.Log.Warn("job poll failed", "err", err)
+		return
+	}
+	if raw == nil {
+		return
+	}
+	env, err := a.Jobs.Verify(ctx, raw)
+	if err != nil {
+		a.Log.Error("job envelope rejected", "err", err)
+		return
+	}
+	a.Log.Info("job accepted", "job_id", env.JobID, "operation", env.Operation)
+	if err := a.GW.JobResult(ctx, env.JobID, "accepted", "", false); err != nil {
+		a.Log.Warn("accept report failed", "err", err)
+	}
+	// collect/refresh are the only operations that pass Verify: a fresh read-only round, then delivery.
+	cerr := a.CollectOnce(ctx)
+	a.Flush(ctx)
+	pending, _, qerr := a.Q.Counts(ctx)
+	ok := cerr == nil && qerr == nil && pending == 0 // post-check: round complete AND everything delivered
+	state, detail := "succeeded", "collection round delivered"
+	if !ok {
+		state, detail = "failed", "collection incomplete or delivery pending"
+	}
+	if err := a.GW.JobResult(ctx, env.JobID, state, detail, ok); err != nil {
+		a.Log.Warn("result report failed", "err", err)
+	}
+}
+
+func (a *Agent) pollEvery() time.Duration {
+	if a.Jobs == nil || a.JobPollEvery <= 0 {
+		return time.Hour * 24 * 365 // effectively never
+	}
+	return a.JobPollEvery
+}
+
 func errString(err error) string {
 	if err == nil {
 		return ""
@@ -105,6 +152,8 @@ func errString(err error) string {
 }
 
 func (a *Agent) Run(ctx context.Context) {
+	poll := time.NewTicker(a.pollEvery())
+	defer poll.Stop()
 	hb := time.NewTicker(a.HeartbeatEvery)
 	col := time.NewTicker(a.CollectEvery)
 	defer hb.Stop()
@@ -143,6 +192,8 @@ func (a *Agent) Run(ctx context.Context) {
 			}
 		case <-col.C:
 			collect()
+		case <-poll.C:
+			a.PollJob(ctx)
 		case <-retryCh:
 			retry.Reset(30 * time.Second)
 		case <-retry.C:

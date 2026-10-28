@@ -29,6 +29,9 @@ type Config struct {
 	CollectSeconds   int         `json:"collect_seconds"`
 	AllowInsecureDev bool        `json:"allow_insecure_dev"` // permits http:// gateway ONLY on loopback
 	OLTs             []OLTConfig `json:"olts"`
+	JobsEnabled      bool        `json:"jobs_enabled"`       // poll the Cloud for signed read-only jobs
+	JobPublicKey     string      `json:"job_public_key"`     // base64 Ed25519 public key of the Cloud, pinned locally
+	AllowedOps       []string    `json:"allowed_operations"` // narrows the compile-time read-only set (collect, refresh)
 	Version          string      `json:"-"`
 }
 
@@ -100,6 +103,9 @@ func (c *Config) Validate() error {
 		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
 			errs = append(errs, errors.New("nbi_url invalid"))
 		}
+	}
+	if c.JobsEnabled && c.JobPublicKey == "" {
+		errs = append(errs, errors.New("jobs_enabled requires job_public_key (pinned locally, never fetched from the Cloud)"))
 	}
 	seen := map[string]bool{}
 	allowed := map[string]bool{}

@@ -51,6 +51,7 @@ func Open(path string) (*Queue, error) {
 	db.SetMaxOpenConns(1)
 	for _, ddl := range []string{
 		`CREATE TABLE IF NOT EXISTS pending (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, key TEXT NOT NULL DEFAULT '', round INTEGER NOT NULL DEFAULT 0, payload BLOB NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS seen_nonces (nonce TEXT PRIMARY KEY, until TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS dead (id INTEGER PRIMARY KEY, kind TEXT NOT NULL, payload BLOB NOT NULL, reason TEXT NOT NULL, dead_at TEXT NOT NULL)`,
 	} {
 		if _, err := db.Exec(ddl); err != nil {
@@ -179,4 +180,18 @@ func (q *Queue) Counts(ctx context.Context) (pending, dead int, err error) {
 	}
 	err = q.db.QueryRowContext(ctx, `SELECT count(*) FROM dead`).Scan(&dead)
 	return
+}
+
+// Remember implements jobs.NonceStore: true if the nonce is new. Expired nonces are pruned opportunistically.
+func (q *Queue) Remember(ctx context.Context, nonce string, until time.Time) (bool, error) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := q.db.ExecContext(ctx, `DELETE FROM seen_nonces WHERE until < ?`, now); err != nil {
+		return false, err
+	}
+	res, err := q.db.ExecContext(ctx, `INSERT OR IGNORE INTO seen_nonces (nonce, until) VALUES (?,?)`, nonce, until.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n == 1, nil
 }

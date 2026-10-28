@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestPersistsAcrossRestartInOrderWith0600(t *testing.T) {
@@ -151,5 +152,24 @@ func TestPruneSupersededOnlyOlderRoundsOfSameKey(t *testing.T) {
 	}
 	if got != "r2a,o1," {
 		t.Fatalf("got %s", got)
+	}
+}
+
+func TestNonceStorePersistsAcrossRestartAndExpires(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "q.db")
+	q, _ := Open(path)
+	if ok, _ := q.Remember(ctx, "n1", time.Now().Add(time.Hour)); !ok {
+		t.Fatal("first use must be fresh")
+	}
+	q.Close()
+	q2, _ := Open(path)
+	defer q2.Close()
+	if ok, _ := q2.Remember(ctx, "n1", time.Now().Add(time.Hour)); ok {
+		t.Fatal("replay after restart must be detected")
+	}
+	_, _ = q2.Remember(ctx, "old", time.Now().Add(-time.Hour))
+	if ok, _ := q2.Remember(ctx, "old", time.Now().Add(time.Hour)); !ok {
+		t.Fatal("expired nonce is pruned and may be reused")
 	}
 }

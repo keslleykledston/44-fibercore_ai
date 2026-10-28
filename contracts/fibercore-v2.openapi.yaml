@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: FiberCore AI Public/Operator API
-  version: 0.5.0-draft
+  version: 0.6.0-draft
   description: >-
     Contrato evolutivo orientado a multi-tenancy; implementação segura é obrigatória
     antes de tráfego real. Tenant é derivado de claims autenticadas e validação de memberships.
@@ -244,50 +244,81 @@ paths:
     post:
       tags: [Jobs]
       operationId: previewJob
-      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      description: >-
+        Cria o job em PREVIEWED (idempotente por Idempotency-Key; mesma chave com intenção diferente => 409). Operações de escrita
+        (reboot_cpe, set_wifi_ssid, provision_onu) retornam `blocked_reason=operation_not_homologated` e NÃO podem ser submetidas
+        enquanto não houver homologação por firmware/modelo. `params` deve ser vazio nesta versão.
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {$ref: '#/components/parameters/IdempotencyKey'}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/JobIntent'}}}}
       responses:
-        '200':
-          description: Preview de risco e diff sem executar
-          content: {application/json: {schema: {$ref: '#/components/schemas/JobPreview'}}}
+        '201': {description: Job em PREVIEWED, content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Alvo inexistente neste tenant}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {description: Operação desconhecida ou params não vazios}
   /jobs:
-    post:
-      tags: [Jobs]
-      operationId: createJob
-      parameters: [{$ref: '#/components/parameters/TenantId'}, {$ref: '#/components/parameters/IdempotencyKey'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/JobIntent'}}}}
-      responses:
-        '202':
-          description: Job criado; pode exigir aprovação
-          content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}
     get:
       tags: [Jobs]
       operationId: listJobs
-      parameters: [{$ref: '#/components/parameters/TenantId'}, {$ref: '#/components/parameters/Limit'}]
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {$ref: '#/components/parameters/Limit'}]
       responses:
-        '200':
-          description: Lista jobs
-          content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Job'}}}}
+        '200': {description: Lista jobs, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Job'}}}}}
   /jobs/{jobId}:
     get:
       tags: [Jobs]
       operationId: getJob
-      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: jobId, in: path, required: true, schema: {type: string, format: uuid}}]
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: jobId, in: path, required: true, schema: {type: string, format: uuid}}]
       responses:
-        '200':
-          description: Estado de job com verificação externa
-          content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}
+        '200': {description: Estado do job, content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}}
+        '404': {description: Não encontrado neste tenant}
+  /jobs/{jobId}/submit:
+    post:
+      tags: [Jobs]
+      operationId: submitJob
+      description: Somente o solicitante. R0 vai direto a APPROVED; R2/R3 vão a PENDING_APPROVAL. TTL de 15 min.
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: jobId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Job submetido, content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /jobs/{jobId}/approve:
     post:
       tags: [Jobs]
       operationId: approveJob
-      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: jobId, in: path, required: true, schema: {type: string, format: uuid}}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Approval'}}}}
+      description: Aprovador distinto do solicitante; R3 exige dois aprovadores distintos. Aprovação não executa nada.
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: jobId, in: path, required: true, schema: {type: string, format: uuid}}]
       responses:
-        '200':
-          description: Autorização registrada, não implica execução
-          content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}
+        '200': {description: Aprovação registrada, content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /jobs/{jobId}/cancel:
+    post:
+      tags: [Jobs]
+      operationId: cancelJob
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: jobId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Cancelado, content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /edge/jobs/next:
+    get:
+      tags: [Edge]
+      operationId: pullJob
+      description: Edge (token ligado ao edge) puxa o próximo job APROVADO; resposta é o envelope assinado (Ed25519) de job-envelope.schema.json.
+      responses:
+        '200': {description: Envelope assinado}
+        '204': {description: Nenhum job}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {description: Chave de assinatura não configurada (fail closed)}
+  /edge/jobs/{jobId}/result:
+    post:
+      tags: [Edge]
+      operationId: reportJobResult
+      description: SUCCEEDED só com postcheck_ok=true; sem pós-check o estado é UNKNOWN.
+      parameters: [{name: jobId, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [state], properties: {state: {type: string, enum: [accepted, succeeded, failed]}, detail: {type: string, maxLength: 500}, postcheck_ok: {type: boolean}}}}}}
+      responses:
+        '204': {description: Registrado}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
   /copilot/suggestions:
@@ -506,13 +537,12 @@ components:
         - {type: object, required: [id, status], properties: {id: {type: string, format: uuid}, status: {type: string, enum: [healthy, degraded, disabled, unknown]}}}
     JobIntent:
       type: object
-      required: [target_id, operation, parameters, expires_at]
+      required: [target_id, operation]
+      additionalProperties: false
       properties:
         target_id: {type: string, format: uuid}
-        operation: {type: string, enum: [collect, refresh, reboot_cpe, set_wifi_ssid, provision_onu, change_plan, firmware_rollout]}
-        parameters: {type: object, description: Typed and validated against operation-specific JSON schema; no arbitrary shell command}
-        expires_at: {type: string, format: date-time}
-        justification: {type: string}
+        operation: {type: string, enum: [collect, refresh, reboot_cpe, set_wifi_ssid, provision_onu]}
+        params: {type: object, maxProperties: 0, description: "Vazio nesta versão: nada livre chega a um Edge"}
     JobPreview:
       type: object
       required: [risk, requires_approval, certified, redacted_diff]
@@ -524,15 +554,19 @@ components:
         warnings: {type: array, items: {type: string}}
     Job:
       type: object
-      required: [id, state, operation, target_id, created_at]
+      required: [id, operation, target_type, target_id, risk, status, required_approvals, created_at]
       properties:
         id: {type: string, format: uuid}
         operation: {type: string}
+        target_type: {type: string, enum: [olt, cpe]}
         target_id: {type: string, format: uuid}
-        state: {type: string, enum: [draft, previewed, pending_approval, approved, dispatched, accepted, device_pending, verifying, succeeded, failed, expired, unknown, cancelled]}
-        external_task_id: {type: [string, 'null']}
+        risk: {type: string, enum: [R0, R1, R2, R3]}
+        status: {type: string, enum: [PREVIEWED, PENDING_APPROVAL, APPROVED, DISPATCHED, ACCEPTED, DEVICE_PENDING, VERIFYING, SUCCEEDED, FAILED, EXPIRED, UNKNOWN, CANCELLED]}
+        required_approvals: {type: integer, minimum: 0, maximum: 2}
+        blocked_reason: {type: [string, 'null'], description: "operation_not_homologated para escrita sem homologação"}
+        expires_at: {type: [string, 'null'], format: date-time}
+        result: {type: [object, 'null']}
         created_at: {type: string, format: date-time}
-        verified_at: {type: [string, 'null'], format: date-time}
     Approval:
       type: object
       required: [reason]

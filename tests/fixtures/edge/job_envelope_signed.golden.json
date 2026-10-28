@@ -1,0 +1,21 @@
+{
+  "public_key_b64": "A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=",
+  "envelope": {
+    "schema_version": "1.0",
+    "job_id": "11111111-1111-4111-8111-111111111111",
+    "tenant_id": "22222222-2222-4222-8222-222222222222",
+    "edge_id": "33333333-3333-4333-8333-333333333333",
+    "target_id": "44444444-4444-4444-8444-444444444444",
+    "operation": "collect",
+    "idempotency_key": "golden-key-0001",
+    "issued_at": "2026-10-28T10:00:00+00:00",
+    "expires_at": "2026-10-28T10:15:00+00:00",
+    "nonce": "abcdef0123456789abcdef0123456789",
+    "intent_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "policy_version": "2026-10-28.1",
+    "approval_ids": [
+      "55555555-5555-4555-8555-555555555555"
+    ],
+    "signature": "VGdmqX8ee9JJ1oqjC0xvj7uJpBytmpf12rsNqQqOd1f/7VbQeWZ4QGnHZbJQsHN4LDOjPHtRsIzdsV3RcQjhBA=="
+  }
+}

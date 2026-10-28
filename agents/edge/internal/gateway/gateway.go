@@ -125,3 +125,51 @@ func (c *Client) Deliver(ctx context.Context, kind string, payload []byte) (Outc
 	o, _, err := c.post(ctx, path, payload)
 	return o, err
 }
+
+// NextJob polls for one approved job. Returns (nil, nil) when none is available.
+func (c *Client) NextJob(ctx context.Context) ([]byte, error) {
+	for attempt := 0; attempt < 2; attempt++ {
+		c.mu.Lock()
+		tok := c.token
+		c.mu.Unlock()
+		if tok == "" {
+			if err := c.login(ctx); err != nil {
+				return nil, err
+			}
+			c.mu.Lock()
+			tok = c.token
+			c.mu.Unlock()
+		}
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/v1/edge/jobs/next", nil)
+		req.Header.Set("Authorization", "Bearer "+tok)
+		resp, err := c.http.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+		resp.Body.Close()
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return body, nil
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			c.mu.Lock()
+			c.token = ""
+			c.mu.Unlock()
+		default:
+			return nil, fmt.Errorf("next job: status %d", resp.StatusCode)
+		}
+	}
+	return nil, errors.New("next job: auth retry exhausted")
+}
+
+// JobResult reports progress/outcome. state: accepted | succeeded | failed.
+func (c *Client) JobResult(ctx context.Context, jobID, state, detail string, postcheckOK bool) error {
+	b, _ := json.Marshal(map[string]any{"state": state, "detail": detail, "postcheck_ok": postcheckOK})
+	o, _, err := c.post(ctx, "/v1/edge/jobs/"+jobID+"/result", b)
+	if o != Delivered {
+		return fmt.Errorf("job result not delivered: %v", err)
+	}
+	return nil
+}

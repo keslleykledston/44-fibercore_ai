@@ -58,6 +58,7 @@ services:
       MODULE_MANIFEST: /app/configs/modules.yaml
       NATS_MONITOR_URL: http://nats:8222
       PII_HMAC_KEY: ${FIBERCORE_PII_HMAC_KEY:?Set FIBERCORE_PII_HMAC_KEY (>=32 chars)}
+      JOB_SIGNING_KEY: ${FIBERCORE_JOB_SIGNING_KEY:-}  # empty => job dispatch disabled (fail closed)
     ports:
       - "127.0.0.1:${FIBERCORE_API_PORT:-18420}:8000"
     depends_on:

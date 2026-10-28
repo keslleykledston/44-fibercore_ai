@@ -7,13 +7,16 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/collector"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/gateway"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/jobs"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/queue"
 )
 
@@ -170,5 +173,70 @@ func TestHeartbeatContinuesWhileCollectorIsSlow(t *testing.T) {
 	<-done
 	if got < 3 {
 		t.Fatalf("heartbeats while collector blocked = %d, want >= 3", got)
+	}
+}
+
+func goldenJobServer(t *testing.T, env []byte) (*httptest.Server, *[]string) {
+	var mu sync.Mutex
+	var results []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/auth/service-token":
+			json.NewEncoder(w).Encode(map[string]string{"access_token": "t"})
+		case r.URL.Path == "/v1/edge/jobs/next":
+			w.Write(env)
+		case len(r.URL.Path) > 20 && r.URL.Path[len(r.URL.Path)-7:] == "/result":
+			b, _ := io.ReadAll(r.Body)
+			mu.Lock()
+			results = append(results, string(b))
+			mu.Unlock()
+			w.WriteHeader(204)
+		default:
+			w.WriteHeader(202)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &results
+}
+
+func TestPollJobExecutesVerifiedReadOnlyJobOnceAndRejectsReplayAndForgery(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "tests", "fixtures", "edge", "job_envelope_signed.golden.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var g struct {
+		PublicKey string         `json:"public_key_b64"`
+		Envelope  map[string]any `json:"envelope"`
+	}
+	_ = json.Unmarshal(b, &g)
+	pub, _ := jobs.ParsePublicKey(g.PublicKey)
+	envBytes, _ := json.Marshal(g.Envelope)
+	srv, results := goldenJobServer(t, envBytes)
+	q, _ := queue.Open(filepath.Join(t.TempDir(), "q.db"))
+	defer q.Close()
+	a := &Agent{EdgeID: "33333333-3333-4333-8333-333333333333", TenantID: "22222222-2222-4222-8222-222222222222", Version: "v",
+		GW: gateway.New(srv.URL, "c", "s", srv.Client()), Q: q,
+		Collectors: []collector.Collector{fixedCollector{[]string{`{"n":1}`}}},
+		Jobs: &jobs.Verifier{Pub: pub, EdgeID: "33333333-3333-4333-8333-333333333333", TenantID: "22222222-2222-4222-8222-222222222222",
+			Allowed: map[string]bool{"collect": true}, Nonces: q, Now: func() time.Time { return time.Date(2026, 10, 28, 10, 5, 0, 0, time.UTC) }},
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	ctx := context.Background()
+	a.PollJob(ctx)
+	if len(*results) != 2 || !strings.Contains((*results)[0], `"accepted"`) || !strings.Contains((*results)[1], `"succeeded"`) || !strings.Contains((*results)[1], `"postcheck_ok":true`) {
+		t.Fatalf("results=%v", *results)
+	}
+	a.PollJob(ctx) // same envelope again => replay => no execution, no report
+	if len(*results) != 2 {
+		t.Fatalf("replay executed: %v", *results)
+	}
+	// forged operation: signature no longer matches => dropped silently (no report, no collection)
+	g.Envelope["operation"] = "reboot_cpe"
+	g.Envelope["nonce"] = "ffffffffffffffffffffffffffffffff"
+	forged, _ := json.Marshal(g.Envelope)
+	srv2, results2 := goldenJobServer(t, forged)
+	a.GW = gateway.New(srv2.URL, "c", "s", srv2.Client())
+	a.PollJob(ctx)
+	if len(*results2) != 0 {
+		t.Fatalf("forged job produced reports: %v", *results2)
 	}
 }
