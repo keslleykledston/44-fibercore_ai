@@ -18,3 +18,4 @@
 - Web: `npm audit` reporta postcss (dependência interna do Next 15.5.28, só em build; CSS é nosso). Corrigir ao migrar para Next >=16.4 (breaking) — pendente. Sem CSP ainda (Next exige nonces); HSTS só após TLS real.
 - Web: `/v1/auth/workspaces` + seletor de workspace implementados; MFA/refresh/rate-limit ainda ausentes (bloqueiam publicação).
 - Capturas: tempos relativos são mascarados (cinza) nas imagens; seed recria dados a cada execução.
+- Login: o lockout por conta permite DoS direcionado (quem conhece o e-mail bloqueia por 15 min); mitigações: throttle por IP (30 falhas/15 min; `TRUSTED_PROXY=true` atrás do Caddy), recuperação `python -m app.cli unlock-login <chave>`; desafio/atraso progressivo e MFA permanecem pendentes.

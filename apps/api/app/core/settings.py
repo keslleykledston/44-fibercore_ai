@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     jwt_issuer: str = "fibercore-api"
     jwt_audience: str = "fibercore"
     jwt_ttl_seconds: int = 900
+    trusted_proxy: bool = False  # trust X-Forwarded-For (set only behind our own reverse proxy)
     job_signing_key: str = Field(default="", repr=False)  # base64 Ed25519 seed; empty => dispatch disabled (fail closed)
     pii_hmac_key: str = Field(default="", repr=False)  # HMAC key for customer documents; import fails closed without it
 

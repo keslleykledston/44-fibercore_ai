@@ -22,7 +22,7 @@ def upgrade() -> None:
           created_at timestamptz NOT NULL DEFAULT now()
         );
         CREATE INDEX login_attempts_key_idx ON login_attempts(key, created_at DESC);
-        GRANT SELECT, INSERT ON login_attempts TO fibercore_app;
+        GRANT SELECT, INSERT, DELETE ON login_attempts TO fibercore_app;  -- DELETE only for retention trimming; no UPDATE
         GRANT USAGE ON SEQUENCE login_attempts_id_seq TO fibercore_app;
         """
     )

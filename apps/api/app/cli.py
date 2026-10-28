@@ -43,6 +43,7 @@ def main(argv: list[str] | None = None) -> None:
     s = sub.add_parser("create-service-account")
     s.add_argument("tenant_id"); s.add_argument("name"); s.add_argument("role", choices=ROLES); s.add_argument("--edge-id")
     e = sub.add_parser("register-edge"); e.add_argument("tenant_id"); e.add_argument("name"); e.add_argument("--site")
+    ul = sub.add_parser("unlock-login"); ul.add_argument("key", help="e-mail, or svc:<client_id>, or ip:<addr>")
     a = ap.parse_args(argv)
     eng = _engine()
     with eng.begin() as c:
@@ -58,6 +59,9 @@ def main(argv: list[str] | None = None) -> None:
                 text("INSERT INTO tenant_memberships(tenant_id,user_id,role) "
                      "SELECT :t, id, :r FROM users_global WHERE lower(email)=lower(:e)"),
                 {"t": a.tenant_id, "r": a.role, "e": a.email})
+        elif a.cmd == "unlock-login":  # recovery path for a locked account (owner-only)
+            n = c.execute(text("DELETE FROM login_attempts WHERE key = :k"), {"k": a.key.lower() if "@" in a.key else a.key}).rowcount
+            print(f"cleared {n} attempt(s) for {a.key}")
         elif a.cmd == "register-edge":
             print(c.execute(text("INSERT INTO edges(tenant_id,name,site_name) VALUES (:t,:n,:s) RETURNING id"),
                             {"t": a.tenant_id, "n": a.name, "s": a.site}).scalar())

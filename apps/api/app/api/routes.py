@@ -54,29 +54,50 @@ def version(settings: Settings = Depends(get_settings)) -> dict:
 
 
 # ---- auth ------------------------------------------------------------------------------------
-MAX_FAILURES = 5
+MAX_FAILURES = 5          # per account
+MAX_IP_FAILURES = 30      # per source address, across accounts
 LOCK_WINDOW = "15 minutes"
+RETENTION_BATCH = 500
 
 
-def _locked(conn: Connection, key: str) -> bool:
-    """Lock after MAX_FAILURES failures since the last success within LOCK_WINDOW (applies even if the next password is right)."""
-    n = conn.execute(
-        text(
-            "SELECT count(*) FROM login_attempts WHERE key = :k AND NOT success AND created_at > now() - CAST(:w AS interval) "
-            "AND created_at > COALESCE((SELECT max(created_at) FROM login_attempts WHERE key = :k AND success), '-infinity')"
-        ),
-        {"k": key, "w": LOCK_WINDOW},
-    ).scalar_one()
-    return n >= MAX_FAILURES
+def _client_ip(request: Request, settings: Settings) -> str:
+    if settings.trusted_proxy:  # only behind our own reverse proxy, which sets X-Forwarded-For
+        xff = request.headers.get("x-forwarded-for", "")
+        if xff:
+            return xff.split(",")[0].strip()[:64]
+    return (request.client.host if request.client else "unknown")[:64]
 
 
-def _record(key: str, success: bool) -> None:
-    with scoped_connection(get_engine()) as conn:  # own transaction: failures must persist even when the request errors out
-        conn.execute(text("INSERT INTO login_attempts (key, success) VALUES (:k, :s)"), {"k": key, "s": success})
+def _failures(conn: Connection, key: str, *, reset_on_success: bool) -> int:
+    sql = "SELECT count(*) FROM login_attempts WHERE key = :k AND NOT success AND created_at > now() - CAST(:w AS interval)"
+    if reset_on_success:
+        sql += " AND created_at > COALESCE((SELECT max(created_at) FROM login_attempts WHERE key = :k AND success), '-infinity')"
+    return conn.execute(text(sql), {"k": key, "w": LOCK_WINDOW}).scalar_one()
+
+
+def _gate(conn: Connection, key: str, ip: str) -> bool:
+    """Serialised per key (advisory xact lock): check, verify and record happen atomically, so concurrent attempts cannot
+    overshoot the limit. Returns True when the attempt must be refused (locked)."""
+    conn.execute(text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": key})
+    account = _failures(conn, key, reset_on_success=True) >= MAX_FAILURES
+    source = _failures(conn, f"ip:{ip}", reset_on_success=False) >= MAX_IP_FAILURES
+    return account or source
+
+
+def _record(conn: Connection, key: str, ip: str, success: bool) -> None:
+    conn.execute(text("INSERT INTO login_attempts (key, success) VALUES (:k, :s)"), {"k": key, "s": success})
+    if not success:
+        conn.execute(text("INSERT INTO login_attempts (key, success) VALUES (:k, false)"), {"k": f"ip:{ip}"})
+    # bounded retention: expired rows are trimmed opportunistically (the window only needs 15 minutes of history)
+    conn.execute(
+        text("DELETE FROM login_attempts WHERE id IN (SELECT id FROM login_attempts WHERE created_at < now() - interval '1 day' LIMIT :n)"),
+        {"n": RETENTION_BATCH},
+    )
 
 
 def _throttled() -> HTTPException:
     return HTTPException(429, "too many failed attempts; try again later", headers={"Retry-After": "900"})
+
 
 class LoginIn(BaseModel):
     email: EmailStr
@@ -95,41 +116,44 @@ class TokenOut(BaseModel):
 
 
 @router.post("/v1/auth/token", response_model=TokenOut)
-def login(body: LoginIn, settings: Settings = Depends(get_settings)) -> TokenOut:
-    key = body.email.lower()
+def login(body: LoginIn, request: Request, settings: Settings = Depends(get_settings)) -> TokenOut:
+    key, ip = body.email.lower(), _client_ip(request, settings)
     with scoped_connection(get_engine()) as conn:
-        if _locked(conn, key):
-            raise _throttled()
-        row = conn.execute(
-            text("SELECT id, password_hash, is_active FROM users_global WHERE lower(email) = lower(:e)"),
-            {"e": body.email},
-        ).first()
-    ok = verify_secret(row.password_hash if row else None, body.password)
-    if not (row and row.is_active and ok):
-        _record(key, False)  # unknown accounts are recorded too: no user enumeration through lockout behaviour
+        if _gate(conn, key, ip):
+            outcome, row = "locked", None
+        else:
+            row = conn.execute(
+                text("SELECT id, password_hash, is_active FROM users_global WHERE lower(email) = lower(:e)"), {"e": body.email}
+            ).first()
+            ok = verify_secret(row.password_hash if row else None, body.password)
+            outcome = "ok" if (row and row.is_active and ok) else "bad"
+            _record(conn, key, ip, outcome == "ok")  # unknown accounts are recorded too: no enumeration via lockout behaviour
+    if outcome == "locked":
+        raise _throttled()
+    if outcome == "bad":
         raise HTTPException(401, "invalid credentials")
-    _record(key, True)
     return TokenOut(access_token=issue_token(settings, sub=row.id, kind="user"), expires_in=settings.jwt_ttl_seconds)
 
 
 @router.post("/v1/auth/service-token", response_model=TokenOut)
-def service_login(body: ServiceLoginIn, settings: Settings = Depends(get_settings)) -> TokenOut:
-    key = f"svc:{body.client_id}"
+def service_login(body: ServiceLoginIn, request: Request, settings: Settings = Depends(get_settings)) -> TokenOut:
+    key, ip = f"svc:{body.client_id}", _client_ip(request, settings)
     with scoped_connection(get_engine(), user_id=body.client_id) as conn:
-        if _locked(conn, key):
-            raise _throttled()
-        row = conn.execute(
-            text("SELECT id, tenant_id, secret_hash, is_active FROM service_accounts WHERE id = :i"),
-            {"i": body.client_id},
-        ).first()
-    ok = verify_secret(row.secret_hash if row else None, body.client_secret)
-    if not (row and row.is_active and ok):
-        _record(key, False)
+        if _gate(conn, key, ip):
+            outcome, row = "locked", None
+        else:
+            row = conn.execute(
+                text("SELECT id, tenant_id, secret_hash, is_active FROM service_accounts WHERE id = :i"), {"i": body.client_id}
+            ).first()
+            ok = verify_secret(row.secret_hash if row else None, body.client_secret)
+            outcome = "ok" if (row and row.is_active and ok) else "bad"
+            _record(conn, key, ip, outcome == "ok")
+    if outcome == "locked":
+        raise _throttled()
+    if outcome == "bad":
         raise HTTPException(401, "invalid credentials")
-    _record(key, True)
     return TokenOut(
-        access_token=issue_token(settings, sub=row.id, kind="service", tenant_id=row.tenant_id),
-        expires_in=settings.jwt_ttl_seconds,
+        access_token=issue_token(settings, sub=row.id, kind="service", tenant_id=row.tenant_id), expires_in=settings.jwt_ttl_seconds
     )
 
 

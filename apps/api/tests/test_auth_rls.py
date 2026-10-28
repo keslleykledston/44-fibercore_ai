@@ -182,12 +182,62 @@ def test_service_account_lockout(client, seed, migrated):
         c.execute(text("DELETE FROM login_attempts"))
 
 
-def test_login_attempt_ledger_cannot_be_rewritten_by_runtime(app_url):
+def test_login_attempt_ledger_cannot_be_updated_by_runtime(app_url):
     import pytest
     from sqlalchemy.exc import DBAPIError
 
     from app.core.db import make_engine, scoped_connection
-    eng = make_engine(app_url)
-    for stmt in ("DELETE FROM login_attempts", "UPDATE login_attempts SET success = true"):
-        with pytest.raises(DBAPIError), scoped_connection(eng) as c:
-            c.execute(text(stmt))
+    with pytest.raises(DBAPIError), scoped_connection(make_engine(app_url)) as c:
+        c.execute(text("UPDATE login_attempts SET success = true"))
+
+
+def test_concurrent_wrong_passwords_cannot_overshoot_lockout(client, seed, migrated):
+    import threading
+    with migrated.begin() as c:
+        c.execute(text("DELETE FROM login_attempts"))
+    codes = []
+
+    def go():
+        codes.append(client.post("/v1/auth/token", json={"email": "alice@example.com", "password": "wrong-password-xx"}).status_code)
+
+    ts = [threading.Thread(target=go) for _ in range(12)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert codes.count(401) == 5 and codes.count(429) == 7, codes  # exactly MAX_FAILURES attempts reach verification
+    with migrated.begin() as c:
+        c.execute(text("DELETE FROM login_attempts"))
+
+
+def test_ip_throttle_across_accounts_and_trusted_proxy_header(client, seed, migrated, monkeypatch):
+    from app.core import settings
+    monkeypatch.setenv("TRUSTED_PROXY", "true")
+    settings.get_settings.cache_clear()
+    try:
+        with migrated.begin() as c:
+            c.execute(text("DELETE FROM login_attempts"))
+        hdr_ip = {"X-Forwarded-For": "203.0.113.9"}
+        for i in range(30):  # 30 different accounts from one address
+            client.post("/v1/auth/token", json={"email": f"user{i}@example.com", "password": "x" * 12}, headers=hdr_ip)
+        assert client.post("/v1/auth/token", json={"email": "alice@example.com", "password": "correct horse battery"}, headers=hdr_ip).status_code == 429
+        other = {"X-Forwarded-For": "203.0.113.77"}
+        assert client.post("/v1/auth/token", json={"email": "alice@example.com", "password": "correct horse battery"}, headers=other).status_code == 200
+    finally:
+        monkeypatch.undo()
+        settings.get_settings.cache_clear()
+        with migrated.begin() as c:
+            c.execute(text("DELETE FROM login_attempts"))
+
+
+def test_retention_trims_old_attempts_and_unlock_cli(client, seed, migrated):
+    with migrated.begin() as c:
+        c.execute(text("DELETE FROM login_attempts"))
+        c.execute(text("INSERT INTO login_attempts(key, success, created_at) SELECT 'old@example.com', false, now() - interval '3 days' FROM generate_series(1, 20)"))
+    client.post("/v1/auth/token", json={"email": "alice@example.com", "password": "correct horse battery"})
+    with migrated.connect() as c:
+        assert c.execute(text("SELECT count(*) FROM login_attempts WHERE key = 'old@example.com'")).scalar() == 0
+    for _ in range(5):
+        client.post("/v1/auth/token", json={"email": "dave@example.com", "password": "wrong-password-xx"})
+    assert client.post("/v1/auth/token", json={"email": "dave@example.com", "password": "correct horse battery"}).status_code == 429
+    with migrated.begin() as c:  # what `cli unlock-login` does
+        c.execute(text("DELETE FROM login_attempts WHERE key = 'dave@example.com'"))
+    assert client.post("/v1/auth/token", json={"email": "dave@example.com", "password": "correct horse battery"}).status_code == 200
