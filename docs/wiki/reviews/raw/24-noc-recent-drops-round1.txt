@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a183b8-5521-7f11-b503-aeda1c2e61ed).
+[codex] Turn started (01a183b8-55cc-70c0-bc07-5e84121dab6e).
+[codex] Assistant message captured: Vou comparar a branch com `main` e seguir os fluxos de ingestão, correlação, migração e isola...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/noc.py app...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/noc.py app... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/tests/test_noc.py ...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/tests/test_noc.py ... (exit 0)
+[codex] Running command: /bin/bash -lc "rg \"def _check_observed|DROP_WINDOW|observed_at\" apps/api/app/api/inventory....
+[codex] Command completed: /bin/bash -lc "rg \"def _check_observed|DROP_WINDOW|observed_at\" apps/api/app/api/inventory.... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: reenvios com o mesmo `observed_at` ainda po...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: reenvios com o mesmo `observed_at` ainda podem reordenar o estado de uma ONU e criar ou apagar uma queda correlacionável, apesar da proteção contra snapshots mais antigos.
+
+Findings:
+- [high] Snapshots empatados podem fabricar ou apagar uma queda (apps/api/app/api/inventory.py:154-162)
+  O upsert aceita `onus.observed_at <= EXCLUDED.observed_at` e deriva `down_since` do status atual da linha. Assim, dois snapshots com o mesmo timestamp não têm ordenação estável: após baseline online, um snapshot down nesse timestamp grava `down_since`; ao reenviarem o snapshot online empatado, ele limpa `down_since`, e no sentido inverso um down reordenado pode voltar a marcá-lo. Como a avaliação ocorre com os seriais do payload, um Edge que reenvie/reordene snapshots empatados pode abrir um incidente falso ou remover evidência de uma queda real. `observed_at` aceita timestamps passados sem limite; a validação só restringe o futuro, então replay pode escolher um empate com timestamp recente. Faça igualdade idempotente (não altere transição quando o timestamp é igual, ou guarde uma chave/versão monotônica do snapshot) e avalie somente estado cuja atualização foi efetivamente aceita.
+  Recommendation: Impedir que snapshots com timestamp igual alterem status e campos de transição, ou adicionar sequência monotônica/idempotency key do Edge; retornar/propagar quais registros foram atualizados antes de chamar `evaluate_pons`.

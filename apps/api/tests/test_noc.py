@@ -234,3 +234,20 @@ def test_incident_without_membership_rows_is_adopted_not_orphaned(client, seed, 
         c.execute(text("DELETE FROM incident_onus"))
     push(client, inv, "OLT-C8", up("C8A", 10), observed=_now(-480))
     assert mine(client, h, "OLT-C8")[0]["status"] == "resolved"
+
+
+def test_snapshot_ties_cannot_fabricate_or_erase_a_drop(client, seed, inv):
+    """Same observed_at = a retry of the snapshot already applied. Reordering ties must not create or remove a drop."""
+    h = hdr(client, "alice", seed, "A")
+    tie = _now(-540)
+    push(client, inv, "OLT-T1", up("T1A", 10), observed=_now(-600))
+    push(client, inv, "OLT-T1", up("T1A", 10), observed=tie)                 # healthy at the tie timestamp
+    push(client, inv, "OLT-T1", onus(10, "los", "T1A"), observed=tie)        # a different payload replayed at the SAME instant
+    assert mine(client, h, "OLT-T1") == []                                   # must not fabricate a drop
+    push(client, inv, "OLT-T2", up("T2A", 10), observed=_now(-600))
+    push(client, inv, "OLT-T2", onus(10, "los", "T2A"), observed=tie)        # real drop applied
+    assert len(mine(client, h, "OLT-T2")) == 1
+    push(client, inv, "OLT-T2", up("T2A", 10), observed=tie)                 # a tied "healthy" replay must not erase it
+    assert mine(client, h, "OLT-T2")[0]["status"] == "open"
+    onu = client.get("/v1/onus?serial=T2A000", headers=h).json()[0]
+    assert onu["status"] == "los"

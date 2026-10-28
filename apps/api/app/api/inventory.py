@@ -159,7 +159,9 @@ def ingest_olt_snapshot(
                 "down_since = CASE WHEN EXCLUDED.status = 'online' THEN NULL "
                 "WHEN onus.status = 'online' AND EXCLUDED.status IN ('offline','los','dying_gasp') THEN EXCLUDED.observed_at "
                 "ELSE onus.down_since END "
-                "WHERE onus.observed_at IS NULL OR onus.observed_at <= EXCLUDED.observed_at"
+                # STRICTLY newer: a snapshot with the same observed_at is a retry/replay of the one already applied and must not
+                # re-apply states, or a reordered tie could fabricate or erase a drop (down_since is derived from the old row).
+                "WHERE onus.observed_at IS NULL OR onus.observed_at < EXCLUDED.observed_at"
             ),
             [{"t": p.tenant_id, "o": olt_id, "pi": pon_ids.get(x.pon_path) if x.pon_path else None, "s": x.serial,
               "st": x.status, "rx": x.rx_dbm, "ts": body.observed_at} for x in body.onus],
