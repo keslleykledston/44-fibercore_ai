@@ -1,0 +1,6 @@
+OnuIndex            Admin State  OMCC State  Phase State  Channel
+1/2/1:1             enable       enable      working      1(GPON)
+1/2/1:2             enable       disable     LOS          1(GPON)
+1/2/1:3             enable       disable     DyingGasp    1(GPON)
+1/2/1:4             enable       disable     OffLine      1(GPON)
+1/2/1:5             enable       enable      working      1(GPON)

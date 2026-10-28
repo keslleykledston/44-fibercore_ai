@@ -13,3 +13,4 @@
 - Tabelas de domínio (edges, olts, onus, cpes, jobs…) do `postgres_baseline_draft.sql` ainda não migradas.
 - JetStream: `FIBERCORE_EVENTS` sem expiração por idade (max_age=0); definir `max_bytes` + alerta de uso antes de piloto. `published_at` ≠ consumido. Recuperação: `python -m app.workers.relay replay <ISO-ts> [tenant]` (replay incrementa `replay_gen` => novo Nats-Msg-Id, ignora a janela de dedupe; consumidores idempotentes pelo ledger).
 - Ingestão: limite 5000 ONU/CPE por snapshot e 8 MiB por corpo; ainda sem rate-limit por agente (a implementar no Gateway/proxy ou middleware com Redis/NATS KV). Chunked upload recusado (411).
+- Drivers OLT: fixtures sintéticas; comandos/colunas reais por firmware NÃO validados. Transporte SSH usa canal `exec`; CLIs que exigem shell interativo precisam de adapter com prompt (homologar em lab). SNMP ainda não implementado. Senha de OLT em arquivo 0600 no Edge (sem cofre).

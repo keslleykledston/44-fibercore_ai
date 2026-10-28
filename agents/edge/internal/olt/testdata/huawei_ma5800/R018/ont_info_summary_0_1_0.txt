@@ -1,0 +1,9 @@
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side
+  -----------------------------------------------------------------------------
+  0/1/0   1    48575443A1B2C3D4  active      online   normal   match    no
+  0/1/0   2    48575443A1B2C3D5  active      offline  initial  initial  no
+  0/1/0   3    48575443a1b2c3d6  active      online   normal   match    no
+  -----------------------------------------------------------------------------
+  In port 0/1/0, the total of ONTs are: 3, online: 2

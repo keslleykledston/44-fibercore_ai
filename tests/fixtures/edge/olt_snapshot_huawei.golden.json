@@ -1,0 +1,35 @@
+{
+  "driver_level": "identified",
+  "edge_id": "e1",
+  "firmware": "R018",
+  "model": "MA5800-X7",
+  "name": "OLT-A",
+  "observed_at": "2026-10-28T01:00:00Z",
+  "onus": [
+    {
+      "pon_path": "0/1/0",
+      "rx_dbm": -21.5,
+      "serial": "48575443A1B2C3D4",
+      "status": "online"
+    },
+    {
+      "pon_path": "0/1/0",
+      "rx_dbm": null,
+      "serial": "48575443A1B2C3D5",
+      "status": "offline"
+    },
+    {
+      "pon_path": "0/1/0",
+      "rx_dbm": -27.8,
+      "serial": "48575443A1B2C3D6",
+      "status": "online"
+    }
+  ],
+  "pons": [
+    {
+      "pon_path": "0/1/0",
+      "status": "up"
+    }
+  ],
+  "vendor": "huawei"
+}

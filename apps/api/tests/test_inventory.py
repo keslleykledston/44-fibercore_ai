@@ -235,3 +235,19 @@ def test_concurrent_new_cpe_from_two_edges_has_single_owner(client, seed, inv, m
         assert len(owners) == 1, rows                      # single owner
         assert all(r.external_id in (None, f"race-{'a1' if r.edge_id == inv['a1']['edge'] else 'a2'}") for r in rows), rows
         assert 202 in results.values()
+
+
+def test_go_edge_olt_payload_is_accepted_by_the_api(client, seed, inv):
+    """Cross-language contract: the exact JSON emitted by the Go Edge collector (golden) must be ingestible."""
+    import json
+    from pathlib import Path
+    golden = json.loads((Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "edge" / "olt_snapshot_huawei.golden.json").read_text())
+    golden.update(edge_id=str(inv["a1"]["edge"]), observed_at=_now(), name="OLT-GO-GOLDEN")
+    r = client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a1"), json=golden)
+    assert r.status_code == 202, r.text
+    h = hdr(client, "alice", seed, "A")
+    onus = {o["serial"]: o for o in client.get("/v1/onus?limit=1000", headers=h).json() if o["serial"].startswith("48575443")}
+    assert onus["48575443A1B2C3D4"]["status"] == "online" and onus["48575443A1B2C3D4"]["rx_dbm"] == -21.5
+    assert onus["48575443A1B2C3D5"]["status"] == "offline" and onus["48575443A1B2C3D5"]["rx_dbm"] is None
+    olt = next(o for o in client.get("/v1/olts", headers=h).json() if o["name"] == "OLT-GO-GOLDEN")
+    assert olt["support_level"] == "identified" and olt["firmware"] == "R018"

@@ -17,6 +17,7 @@ import (
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/config"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/gateway"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/nbi"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/olt"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/queue"
 )
 
@@ -72,6 +73,33 @@ func main() {
 			os.Exit(2)
 		}
 		collectors = append(collectors, &collector.GenieACS{EdgeID: cfg.EdgeID, ConnectorID: cfg.ConnectorID, Client: nbiClient})
+	}
+
+	if len(cfg.OLTs) > 0 {
+		oc := &collector.OLT{EdgeID: cfg.EdgeID}
+		for _, o := range cfg.OLTs {
+			o := o
+			var drv olt.Driver = olt.Huawei{}
+			if o.Vendor == "zte" {
+				drv = olt.ZTE{}
+			}
+			oc.Sources = append(oc.Sources, collector.OLTSource{
+				Name: o.Name, Driver: drv, Ports: o.PonPorts, AllowUnverified: o.AllowUnverifiedFirmware,
+				Open: func(ctx context.Context) (olt.Session, func(), error) {
+					pw, err := config.ReadSecret(o.SecretFile)
+					if err != nil {
+						return nil, nil, err
+					}
+					s, err := olt.DialSSH(ctx, olt.SSHConfig{Addr: o.Address, User: o.Username, Password: pw,
+						HostKeySHA256: o.HostKeySHA256, Dial: al.DialContext})
+					if err != nil {
+						return nil, nil, err
+					}
+					return s, func() { s.Close() }, nil
+				},
+			})
+		}
+		collectors = append(collectors, oc)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

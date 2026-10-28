@@ -71,3 +71,22 @@ func TestReadSecretEnforcesMode(t *testing.T) {
 		t.Fatalf("s=%q err=%v", s, err)
 	}
 }
+
+func TestOLTConfigValidation(t *testing.T) {
+	olt := func(addr, pin, port, vendor string) string {
+		return `,"allowlist":["10.0.0.9:22"],"olts":[{"name":"A","vendor":"` + vendor + `","address":"` + addr + `","username":"ro","secret_file":"/s","host_key_sha256":"` + pin + `","pon_ports":["` + port + `"]}]`
+	}
+	if _, err := Load(write(t, 0o600, good(olt("10.0.0.9:22", "SHA256:abc", "0/1/0", "huawei"))), "v"); err != nil {
+		t.Fatalf("valid olt rejected: %v", err)
+	}
+	for name, body := range map[string]string{
+		"not-in-allowlist": olt("10.0.0.10:22", "SHA256:abc", "0/1/0", "huawei"),
+		"no-pin":           olt("10.0.0.9:22", "", "0/1/0", "huawei"),
+		"bad-port":         olt("10.0.0.9:22", "SHA256:abc", "0/1/0; reboot", "huawei"),
+		"bad-vendor":       olt("10.0.0.9:22", "SHA256:abc", "0/1/0", "cisco"),
+	} {
+		if _, err := Load(write(t, 0o600, good(body)), "v"); err == nil {
+			t.Errorf("%s: expected error", name)
+		}
+	}
+}

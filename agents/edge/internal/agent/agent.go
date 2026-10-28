@@ -29,13 +29,12 @@ func (a *Agent) CollectOnce(ctx context.Context) error {
 	var errs []error
 	for _, c := range a.Collectors {
 		items, err := c.Collect(ctx)
+		complete := err == nil // a partial result is still persisted, but never supersedes the previous complete round
 		if err != nil {
-			a.Log.Warn("collector failed", "collector", c.Name(), "err", err)
+			a.Log.Warn("collector failed (partial results are kept)", "collector", c.Name(), "items", len(items), "err", err)
 			errs = append(errs, err)
-			continue
 		}
 		round := time.Now().UnixNano()
-		complete := true
 		keys := map[string]struct{}{}
 		for i, it := range items {
 			if err := a.Q.Enqueue(ctx, it.Kind, it.Key, round, it.Payload); err != nil {
