@@ -1,0 +1,6 @@
+{
+  "env": {
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "70",
+    "AI_MEMORY_HOOK_URL": "http://127.0.0.1:49374"
+  }
+}
