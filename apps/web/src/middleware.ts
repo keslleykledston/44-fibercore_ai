@@ -19,7 +19,8 @@ type Rotated = { access_token?: string; refresh_token?: string; expires_in?: num
 
 // Requisições simultâneas com o mesmo cookie (documento + fetches RSC de uma mesma navegação) compartilham UMA chamada de
 // refresh: sem isso a segunda cairia na janela de tolerância da API e a terceira seria lida como roubo (revogando a sessão).
-// O resultado fica 5 s no mapa para cobrir requisições já em voo com o cookie antigo.
+// O resultado fica 5 s no mapa após a conclusão, para cobrir requisições já em voo com o cookie antigo.
+// Restrição de implantação: vale por processo; o web deve rodar com UMA réplica até haver coordenação compartilhada (ADR-0017).
 const inflight = new Map<string, Promise<Rotated>>();
 
 function rotate(refresh: string): Promise<Rotated> {
@@ -33,7 +34,7 @@ function rotate(refresh: string): Promise<Rotated> {
       } catch { return "unavailable"; }
     })();
     inflight.set(refresh, p);
-    setTimeout(() => inflight.delete(refresh), 5000);
+    p.finally(() => setTimeout(() => inflight.delete(refresh), 5000)); // a janela de 5 s conta a partir do FIM da chamada
   }
   return p;
 }

@@ -13,3 +13,5 @@
 - [ ] A11y WCAG 2.2 AA, performance e revisão de telas Lovable/Codex.
 - [ ] Screenshots **reais** em desktop/mobile e how-to de cada fluxo publicado.
 - [ ] Plano de canary/rollback testado, e registro de versão, data, SHA e aprovador.
+
+- [ ] `web` com uma única réplica (renovação de sessão coalescida em memória, ADR-0017); escalar só depois de coordenação compartilhada do refresh.

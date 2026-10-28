@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18298-9951-7ae0-877d-655208103dc7).
+[codex] Turn started (01a18298-9991-7301-ae5b-d5ee258b9144).
+[codex] Assistant message captured: Vou inspecionar o diff completo contra `main`, concentrando a leitura no fluxo de refresh, mi...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=25 main...HEAD -- apps/api/app/api/routes.py ...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=25 main...HEAD -- apps/api/app/api/routes.py ... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=8 52fbdd7..HEAD -- apps/api/app/api/session.p...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=8 52fbdd7..HEAD -- apps/api/app/api/session.p... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: o refresh tolera apenas um replay, ma...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: o refresh tolera apenas um replay, mas a coalescência que deveria impedir os seguintes é local à réplica e expira por tempo, permitindo revogar sessões em tráfego concorrente normal.
+
+Findings:
+- [high] Coalescência local pode transformar requisições legítimas em revogação da sessão (apps/web/src/middleware.ts:23-36)
+  O mapa existe apenas no processo da réplica e sua entrada é removida 5 s após iniciar a chamada, mesmo se o refresh ainda estiver pendente. Requisições com o mesmo cookie que cheguem a outra réplica, ou após esse prazo, fazem novos refreshes: a API concede no máximo um sibling e revoga a família no replay seguinte. Com três chamadas concorrentes distribuídas entre réplicas, ou uma chamada lenta seguida de novas requisições com o cookie antigo, o usuário pode ser desconectado e precisar autenticar de novo. A janela de grace não substitui coalescência distribuída; o mesmo risco existe quando há mais requisições simultâneas que os dois usos permitidos.
+  Recommendation: Coordene a rotação em armazenamento compartilhado ou altere o protocolo para que refreshes concorrentes não revoguem a família por uma corrida legítima. No mínimo, mantenha a promessa até sua conclusão e valide o comportamento com chamadas concorrentes roteadas a réplicas distintas.
