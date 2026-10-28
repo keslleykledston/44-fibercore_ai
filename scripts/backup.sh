@@ -11,21 +11,25 @@ OUT="${1:-build/backups/fibercore-$(date -u +%Y%m%dT%H%M%SZ).dump}"
 DIR="$(dirname "$OUT")"
 mkdir -p -m 700 "$DIR"
 [[ ! -e "$OUT" && ! -e "$OUT.gpg" && ! -e "$OUT.sha256" ]] || { echo "destino já existe, recusando sobrescrever: $OUT" >&2; exit 1; }
-TMP="$(mktemp "$DIR/.backup.XXXXXX")"; GTMP=""; STMP=""
-trap 'rm -f "$TMP" "$GTMP" "$STMP"' EXIT   # remove o claro e temporários em qualquer saída
+TMP="$(mktemp "$DIR/.backup.XXXXXX")"; GTMP=""; STMP=""; PUBLISHED=(); OK=0
+# Em qualquer saída: remove temporários e, se a execução NÃO concluiu, também o que já foi publicado.
+trap 'rm -f "$TMP" "$GTMP" "$STMP"; [[ $OK -eq 1 || ${#PUBLISHED[@]} -eq 0 ]] || rm -f "${PUBLISHED[@]}"' EXIT
 COMPOSE=(docker compose --env-file "${ENV_FILE:-.env.dev}" -f infra/compose/compose.yaml)
 "${COMPOSE[@]}" exec -T postgres pg_dump -U fibercore -d fibercore -Fc --no-owner > "$TMP"
 test -s "$TMP" || { echo "backup vazio" >&2; exit 1; }
 STMP="$(mktemp "$DIR/.backup.sha.XXXXXX")"
 echo "$(sha256sum "$TMP" | cut -d' ' -f1)  $(basename "$OUT")" > "$STMP"
-publish() { ln "$1" "$2" || { echo "colisão no destino: $2" >&2; exit 1; }; }   # ln falha se existir (atômico)
+publish() { ln "$1" "$2" || { echo "colisão no destino: $2" >&2; exit 1; }; PUBLISHED+=("$2"); }   # ln falha se existir (atômico)
 if [[ -n "${BACKUP_GPG_RECIPIENT:-}" ]]; then
   GTMP="$(mktemp "$DIR/.backup.gpg.XXXXXX")"
   gpg --batch --yes --encrypt --recipient "$BACKUP_GPG_RECIPIENT" --output "$GTMP" "$TMP"
   test -s "$GTMP" || { echo "cifra falhou" >&2; exit 1; }
-  publish "$GTMP" "$OUT.gpg"; publish "$STMP" "$OUT.sha256"
+  publish "$STMP" "$OUT.sha256"; publish "$GTMP" "$OUT.gpg"
+  OK=1
   echo "backup cifrado: $OUT.gpg (checksum do claro em $OUT.sha256)"
 else
-  publish "$TMP" "$OUT"; publish "$STMP" "$OUT.sha256"
+  publish "$STMP" "$OUT.sha256"; publish "$TMP" "$OUT"   # dump por último: nunca visível sem checksum
+  OK=1
   echo "backup: $OUT ($(stat -c %s "$OUT") bytes) — ATENÇÃO: sem cifra; manter só em disco controlado"
 fi
+
