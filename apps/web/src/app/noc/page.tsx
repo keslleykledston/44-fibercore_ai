@@ -8,7 +8,12 @@ const cause: Record<string, string> = { fiber_or_los: "Suspeita: perda de sinal 
 export default async function Noc() {
   const r = await apiSafe<IncidentList>("/v1/incidents?limit=50");
   if (r.status === 403) return <AppShell active="/noc" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver incidentes." /></AppShell>;
-  const list = r.data?.incidents ?? [];
+  // Fila: abertos primeiro; não reconhecidos antes; queda confirmada antes de 'edge silencioso'; depois maior impacto (proposta UX).
+  const list = [...(r.data?.incidents ?? [])].sort((a, b) =>
+    Number(b.status === "open") - Number(a.status === "open") ||
+    Number(a.acknowledged) - Number(b.acknowledged) ||
+    Number(a.edge_silent) - Number(b.edge_silent) ||
+    (b.evidence.onus_down ?? 0) - (a.evidence.onus_down ?? 0));
   return (
     <AppShell active="/noc" user="1">
       <PageHeader title="NOC" subtitle="Quedas em massa por PON, com evidências" helpSlug="noc/acompanhar-incidente" />
