@@ -111,6 +111,27 @@ func TestProfilesRefuseTheWrongFamily(t *testing.T) {
 	}
 }
 
+type recSession struct {
+	out  string
+	sent *[]string
+}
+
+func (r recSession) Run(_ context.Context, cmd string) (string, error) {
+	*r.sent = append(*r.sent, cmd)
+	return r.out, nil
+}
+
+func TestR015ProfileRefusesOtherMA56ReleasesBeforeAnyModeCommand(t *testing.T) {
+	var sent []string
+	other := recSession{"  VERSION : MA5600V800R018C00\n  PRODUCT : MA5608T\n", &sent} // same model, different release
+	if _, err := (HuaweiR015{}).Snapshot(context.Background(), other, []string{"0/0/14"}); err == nil || !strings.Contains(err.Error(), "R015") {
+		t.Fatalf("another MA56 release must be refused: %v", err)
+	}
+	if !reflect.DeepEqual(sent, []string{"display version"}) {
+		t.Fatalf("only display version may be sent to an unvalidated release, sent %v", sent)
+	}
+}
+
 func TestR015FlowThroughRealShellWithPagerSpace(t *testing.T) {
 	srv := startShellSSH(t, false)
 	cfg := shellCfg(srv, false)

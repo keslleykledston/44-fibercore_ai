@@ -26,6 +26,11 @@ var (
 
 func isMA56(id Identity) bool { return strings.HasPrefix(strings.ToUpper(id.Model), "MA56") }
 
+// r015Firmware is the only release this profile was validated on; the CLI-mode commands are never sent to another one.
+const r015Firmware = "MA5600V800R015"
+
+func isR015(id Identity) bool { return isMA56(id) && strings.HasPrefix(id.Firmware, r015Firmware) }
+
 // HuaweiR015 is selected by the OLT config (profile "huawei_ma56_r015"). Its allowlist includes the CLI mode commands
 // (enable, config, interface gpon F/S, quit) that the generic Huawei driver must never be able to send.
 type HuaweiR015 struct{ Huawei }
@@ -39,8 +44,8 @@ func (h HuaweiR015) Snapshot(ctx context.Context, s Session, ports []string) (Sn
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if !isMA56(id) {
-		return Snapshot{}, fmt.Errorf("huawei_ma56_r015 profile on %s %s", id.Model, id.Firmware)
+	if !isR015(id) { // only display version has been sent so far
+		return Snapshot{}, fmt.Errorf("huawei_ma56_r015 profile on %s %s (validated only on %s*)", id.Model, id.Firmware, r015Firmware)
 	}
 	return h.snapshotR015(ctx, s, id, ports)
 }

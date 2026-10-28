@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1838a-15e0-76d3-9908-ae3230632a03).
+[codex] Turn started (01a1838a-1636-7161-844c-36fbb74021a7).
+[codex] Assistant message captured: Vou comparar a branch inteira com `main` e seguir com atenção os limites entre identificação,...
+[codex] Running command: /bin/bash -lc 'git status --short && git diff --stat main...HEAD && git diff --find-renames -...
+[codex] Command completed: /bin/bash -lc 'git status --short && git diff --stat main...HEAD && git diff --find-renames -... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff main...HEAD -- agents/edge/cmd/fibercore-edge/main.go agents/edge/int...
+[codex] Command completed: /bin/bash -lc 'git diff main...HEAD -- agents/edge/cmd/fibercore-edge/main.go agents/edge/int... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --check main...HEAD && nl -ba agents/edge/internal/olt/huawei_r015.go...
+[codex] Command failed: /bin/bash -lc "git diff --check main...HEAD && nl -ba agents/edge/internal/olt/huawei_r015.go... (exit 2)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/huawei_r015.go | sed -n '35,68p'; nl -ba agent...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/huawei_r015.go | sed -n '35,68p'; nl -ba agent... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: o perfil R015 aceita qualquer firmwar...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: o perfil R015 aceita qualquer firmware MA56 e pode enviar comandos de modo CLI a uma release não validada.
+
+Findings:
+- [medium] Perfil R015 não confere a versão do firmware antes de enviar comandos (agents/edge/internal/olt/huawei_r015.go:37-45)
+  `Snapshot` só verifica `isMA56(id)`, que aceita qualquer modelo com prefixo `MA56`; a checagem não exige firmware `MA5600V800R015`. Assim, uma OLT MA56 em outra release configurada com esse perfil recebe `enable`, `config`, `interface gpon` e os comandos de coleta, embora a allowlist e os parsers tenham sido validados para R015. O Registry manter a release como `identified` impede `complete`, mas não impede o envio dos comandos à release incompatível; isso pode causar erros ou coleta incorreta e não atende ao limite declarado pelo perfil.
+  Recommendation: Antes de `snapshotR015`, exigir também que `id.Firmware` corresponda ao prefixo `MA5600V800R015` (e rejeitar outras versões antes de qualquer comando além de `display version`). Acrescentar um teste com modelo MA56 e firmware diferente.
