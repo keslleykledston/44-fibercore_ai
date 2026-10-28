@@ -281,3 +281,46 @@ def test_ongoing_outage_discovered_after_a_backlog_opens_on_the_fresh_snapshot(c
     push(client, inv, "OLT-R3", onus(10, "los", "R3A"), observed=_now(-10))       # the Edge is back: still down NOW
     inc = mine(client, h, "OLT-R3")
     assert len(inc) == 1 and inc[0]["evidence"]["onus_down"] == 10
+
+
+# ---- review findings: server-clock clamp, bilateral join window, expiry of unjudgeable incidents ------------------------------
+
+def test_an_edge_clock_ahead_within_tolerance_never_persists_a_future_transition(client, seed, inv, migrated):
+    h = hdr(client, "alice", seed, "A")
+    push(client, inv, "OLT-F1", up("F1A", 10), observed=_now(-600))
+    push(client, inv, "OLT-F1", onus(10, "los", "F1A"), observed=_now(120))      # Edge clock 2 min ahead (tolerated up to 5)
+    assert len(mine(client, h, "OLT-F1")) == 1                                   # still evaluated: it is not stale
+    with migrated.connect() as c:
+        future = c.execute(text("SELECT count(*) FROM onus WHERE serial LIKE 'F1A%' AND (down_since > now() OR last_online_at > now())")).scalar()
+    assert future == 0
+
+
+def test_late_droppers_outside_the_join_window_do_not_join_the_incident(client, seed, inv, monkeypatch):
+    from app.api import noc
+    monkeypatch.setattr(noc, "JOIN_WINDOW", timedelta(minutes=1))
+    h = hdr(client, "alice", seed, "A")
+    push(client, inv, "OLT-J1", up("J1A", 12), observed=_now(-600))
+    push(client, inv, "OLT-J1", onus(10, "los", "J1A") + [{"serial": f"J1A{i:03d}", "pon_path": "0/1/0", "status": "online"} for i in (10, 11)],
+         observed=_now(-540))
+    push(client, inv, "OLT-J1", onus(12, "los", "J1A"), observed=_now(-300))     # 4 min later: a different event
+    assert mine(client, h, "OLT-J1")[0]["evidence"]["members"] == 10
+
+
+def test_incident_whose_members_are_no_longer_reported_expires_instead_of_staying_open_forever(client, seed, inv, migrated):
+    h = hdr(client, "alice", seed, "A")
+    drop_pair(client, inv, "OLT-X1", "X1A")
+    push(client, inv, "OLT-X1", up("X1A", 2), observed=_now(-480))              # thin evidence: 2 of 10 covered ONUs reported
+    assert mine(client, h, "OLT-X1")[0]["status"] == "open"                     # ...not enough to judge, and not stale yet
+    with migrated.begin() as c:                                                 # pretend the last good evidence is 25 h old
+        c.execute(text("UPDATE incidents SET evidence = jsonb_set(evidence, '{evidence_at}', to_jsonb((now() - interval '25 hours')::text))"))
+    push(client, inv, "OLT-X1", up("X1A", 2), observed=_now(-420))
+    inc = mine(client, h, "OLT-X1")[0]
+    assert inc["status"] == "resolved" and inc["evidence"]["resolution"] == "expired_no_evidence"
+
+
+def test_silence_never_expires_an_incident(client, seed, inv, migrated):
+    h = hdr(client, "alice", seed, "A")
+    drop_pair(client, inv, "OLT-X2", "X2A")
+    with migrated.begin() as c:
+        c.execute(text("UPDATE incidents SET evidence = jsonb_set(evidence, '{evidence_at}', to_jsonb((now() - interval '48 hours')::text))"))
+    assert mine(client, h, "OLT-X2")[0]["status"] == "open"                     # no snapshot arrives: nothing is evaluated, nothing expires

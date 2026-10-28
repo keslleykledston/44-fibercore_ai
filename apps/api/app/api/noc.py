@@ -31,6 +31,9 @@ JOIN_WINDOW = timedelta(minutes=30)   # ONUs dropping this close to an incident 
 # Correlation only runs on snapshots that are fresh by the SERVER clock. Store-and-forward can deliver old snapshots; they
 # still update ONU state (history) but must not open or close incidents as if the event were happening now.
 EVAL_FRESH_FOR = timedelta(minutes=15)
+# An open incident whose covered ONUs have not been reported in enough numbers for this long (e.g. they left the OLT) cannot be
+# judged any more; it expires with an explicit reason instead of staying open forever. Edge SILENCE never resolves anything.
+INCIDENT_STALE_AFTER = timedelta(hours=24)
 DOWN = ("offline", "los", "dying_gasp")
 
 
@@ -40,11 +43,11 @@ def evaluate_pons(
     """Called inside the ingestion transaction, which already holds the OLT row lock (so evaluations of one OLT are
     serialised). Only the ONUs REPORTED IN THIS REQUEST (by serial) count — never inferred from timestamps.
 
-    A mass outage is MANY ONUs DROPPING TOGETHER, not many ONUs being offline: real fleets carry chronically offline ONUs
-    (a measured OLT had 37% of its ONTs offline for months). So the rule only looks at ONUs seen going online->down inside
-    DROP_WINDOW (`down_since`), and only on snapshots fresh by the server clock. Chronic ones (never seen dropping, or
-    dropped long ago) are in neither the numerator nor the denominator. An incident remembers the ONUs it covers (`incident_onus`): it resolves when THOSE come back, not merely
-    because the drop window expired."""
+    A mass outage is MANY ONUs DROPPING TOGETHER, not many ONUs being offline: real fleets carry chronically offline
+    ONUs (a measured OLT had 37% of its ONTs offline for months). So the rule only looks at ONUs seen going
+    online->down inside DROP_WINDOW (`down_since`), and only on snapshots fresh by the server clock. Chronic ones (never
+    seen dropping, or dropped long ago) are in neither the numerator nor the denominator. An incident remembers the ONUs
+    it covers (`incident_onus`): it resolves when THOSE come back, not merely because the drop window expired."""
     if not serials or not complete_pons:
         return  # only PONs declared complete (full port read) are evaluated
     if observed_at < datetime.now(UTC) - EVAL_FRESH_FOR:
@@ -74,7 +77,7 @@ def evaluate_pons(
             population = len(online) + len(fresh)
             ratio = len(fresh) / population if population else 0.0
             if len(fresh) >= MIN_DROPPED and ratio >= OPEN_RATIO:
-                _open_incident(conn, tenant_id, olt_id, pon_id, key, path, len(onus), fresh, len(down) - len(fresh), ratio)
+                _open_incident(conn, tenant_id, olt_id, pon_id, key, path, len(onus), fresh, len(down) - len(fresh), ratio, observed_at)
             continue
         # open incident: judge the ONUs it covers (plus ONUs that dropped with it afterwards)
         members = {r.onu_id for r in conn.execute(
@@ -82,15 +85,16 @@ def evaluate_pons(
         legacy = not members
         if legacy:  # opened before membership existed: judge the ONUs reported for the PON (the old rule) rather than orphan it
             members = {r.onu_id for r in onus}
-        join_from = open_row.opened_at - JOIN_WINDOW
-        joiners = [] if legacy else [r for r in fresh if r.onu_id not in members and r.down_since >= join_from]
+        ev = open_row.evidence or {}
+        opened_obs = _parse_dt(ev.get("opened_observed_at")) or open_row.opened_at
+        joiners = [] if legacy else [r for r in fresh if r.onu_id not in members
+                                     and opened_obs - JOIN_WINDOW <= r.down_since <= opened_obs + JOIN_WINDOW]
         if joiners:
             _add_members(conn, tenant_id, open_row.id, [r.onu_id for r in joiners])
             members |= {r.onu_id for r in joiners}
         reported = [r for r in onus if r.onu_id in members]
         still_down = [r for r in reported if r.status in DOWN]
         ratio = len(still_down) / len(reported) if reported else 0.0
-        ev = open_row.evidence or {}
         prior = ev.get("members", ev.get("onus_observed", 0))
         # A partial snapshot (few covered ONUs reported) is not enough evidence to CLOSE an incident opened on more.
         enough_to_resolve = len(reported) >= max(MIN_DROPPED, prior // 2)
@@ -98,14 +102,30 @@ def evaluate_pons(
                     "los": sum(1 for r in still_down if r.status == "los"),
                     "dying_gasp": sum(1 for r in still_down if r.status == "dying_gasp"),
                     "ratio": round(ratio, 3), "members": max(prior, len(members)),
-                    "chronic_offline": len(down) - len(fresh)}
+                    "chronic_offline": len(down) - len(fresh), "opened_observed_at": ev.get("opened_observed_at"),
+                    "evidence_at": datetime.now(UTC).isoformat()}
         if ratio < RESOLVE_RATIO and enough_to_resolve:
-            conn.execute(text("UPDATE incidents SET status='resolved', resolved_at=now(), evidence=CAST(:e AS jsonb) WHERE id=:i"),
-                         {"i": open_row.id, "e": _j(evidence)})
-            outbox.enqueue(conn, tenant_id=tenant_id, aggregate_type="incident", aggregate_id=open_row.id,
-                           event_type="incident.resolved", payload={"kind": "pon_mass_outage", **evidence})
+            _resolve(conn, tenant_id, open_row.id, evidence)
         elif enough_to_resolve:  # still open: refresh counters (never from thin evidence)
             conn.execute(text("UPDATE incidents SET evidence=CAST(:e AS jsonb) WHERE id=:i"), {"i": open_row.id, "e": _j(evidence)})
+        else:
+            last = _parse_dt(ev.get("evidence_at")) or open_row.opened_at
+            if datetime.now(UTC) - last > INCIDENT_STALE_AFTER:  # members no longer reported: expire, say so, keep the last evidence
+                _resolve(conn, tenant_id, open_row.id, {**ev, "resolution": "expired_no_evidence"})
+
+
+def _resolve(conn: Connection, tenant_id: UUID, incident_id: UUID, evidence: dict) -> None:
+    conn.execute(text("UPDATE incidents SET status='resolved', resolved_at=now(), evidence=CAST(:e AS jsonb) WHERE id=:i"),
+                 {"i": incident_id, "e": _j(evidence)})
+    outbox.enqueue(conn, tenant_id=tenant_id, aggregate_type="incident", aggregate_id=incident_id,
+                   event_type="incident.resolved", payload={"kind": "pon_mass_outage", **evidence})
+
+
+def _parse_dt(v: object) -> datetime | None:
+    try:
+        return datetime.fromisoformat(v) if isinstance(v, str) else None
+    except ValueError:
+        return None
 
 
 def _add_members(conn: Connection, tenant_id: UUID, incident_id: UUID, onu_ids: list[UUID]) -> None:
@@ -117,12 +137,13 @@ def _add_members(conn: Connection, tenant_id: UUID, incident_id: UUID, onu_ids: 
 
 
 def _open_incident(conn: Connection, tenant_id: UUID, olt_id: UUID, pon_id: UUID, key: str, path: str, observed: int,
-                   fresh: list, chronic: int, ratio: float) -> None:
+                   fresh: list, chronic: int, ratio: float, observed_at: datetime) -> None:
     los = sum(1 for r in fresh if r.status == "los")
     dg = sum(1 for r in fresh if r.status == "dying_gasp")
     cause = "fiber_or_los" if los >= len(fresh) / 2 else ("power" if dg >= len(fresh) / 2 else "unknown")
     evidence = {"pon_path": path, "onus_observed": observed, "onus_down": len(fresh), "los": los, "dying_gasp": dg,
-                "ratio": round(ratio, 3), "members": len(fresh), "chronic_offline": chronic}
+                "ratio": round(ratio, 3), "members": len(fresh), "chronic_offline": chronic,
+                "opened_observed_at": observed_at.isoformat(), "evidence_at": datetime.now(UTC).isoformat()}
     iid = conn.execute(
         text("INSERT INTO incidents (tenant_id, kind, olt_id, pon_id, dedupe_key, suspected_cause, evidence) "
              "VALUES (:t,'pon_mass_outage',:o,:p,:k,:c,CAST(:e AS jsonb)) ON CONFLICT DO NOTHING RETURNING id"),

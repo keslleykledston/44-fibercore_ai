@@ -150,14 +150,17 @@ def ingest_olt_snapshot(
         conn.execute(
             text(
                 "INSERT INTO onus (tenant_id, olt_id, pon_id, serial, status, rx_dbm, observed_at, last_online_at) "
-                "VALUES (:t,:o,:pi,:s,:st,:rx,:ts, CASE WHEN CAST(:st AS text) = 'online' THEN CAST(:ts AS timestamptz) END) "
+                "VALUES (:t,:o,:pi,:s,:st,:rx,:ts, CASE WHEN CAST(:st AS text) = 'online' THEN LEAST(CAST(:ts AS timestamptz), now()) END) "
                 "ON CONFLICT (tenant_id, olt_id, serial) DO UPDATE SET pon_id=EXCLUDED.pon_id, status=EXCLUDED.status, "
                 "rx_dbm=EXCLUDED.rx_dbm, observed_at=EXCLUDED.observed_at, "
-                "last_online_at = CASE WHEN EXCLUDED.status = 'online' THEN EXCLUDED.observed_at ELSE onus.last_online_at END, "
-                # down_since only records a REAL transition (seen online, now seen down). An ONU first seen down, or coming from
-                # 'unknown', has no known drop time and stays NULL: it is chronic as far as correlation can tell.
+                "last_online_at = CASE WHEN EXCLUDED.status = 'online' "
+                "THEN LEAST(EXCLUDED.observed_at, now()) ELSE onus.last_online_at END, "
+                # Transition times are clamped to the server clock (an Edge may be ahead by MAX_FUTURE_SKEW): no future
+                # state is persisted. down_since only records a REAL transition (seen online, now seen down). An ONU first
+                # seen down, or coming from 'unknown', has no known drop time and stays NULL: chronic as far as
+                # correlation can tell.
                 "down_since = CASE WHEN EXCLUDED.status = 'online' THEN NULL "
-                "WHEN onus.status = 'online' AND EXCLUDED.status IN ('offline','los','dying_gasp') THEN EXCLUDED.observed_at "
+                "WHEN onus.status = 'online' AND EXCLUDED.status IN ('offline','los','dying_gasp') THEN LEAST(EXCLUDED.observed_at, now()) "
                 "ELSE onus.down_since END "
                 # STRICTLY newer: a snapshot with the same observed_at is a retry/replay of the one already applied and must not
                 # re-apply states, or a reordered tie could fabricate or erase a drop (down_since is derived from the old row).

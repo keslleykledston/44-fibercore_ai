@@ -1,0 +1,31 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a183bb-c593-7dc3-bc0f-b86ba4744eec).
+[codex] Turn started (01a183bb-c5ca-7153-81c0-24b3c4e4ebc4).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de persistência, correlação, RLS e ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/noc.py app...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/noc.py app... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/tests/test_noc.py ...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/tests/test_noc.py ... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,75p' apps/api/app/api/inventory.py && sed -n '1,110p' apps/api/alemb...
+[codex] Command completed: /bin/bash -lc "sed -n '1,75p' apps/api/app/api/inventory.py && sed -n '1,110p' apps/api/alemb... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/noc.py | sed -n '35,115p'; nl -ba apps/api/app/api/inv...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/noc.py | sed -n '35,115p'; nl -ba apps/api/app/api/inv... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: há caminhos concretos para inciden...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: há caminhos concretos para incidentes de queda antiga serem reabertos indevidamente e para incidentes permanecerem abertos sem membros reportados.
+
+Findings:
+- [high] O frescor aceita snapshots com timestamp no futuro (apps/api/app/api/noc.py:50-51)
+  A validação de ingestão aceita `observed_at` até cinco minutos à frente; a avaliação só rejeita timestamps anteriores ao limite de 15 minutos. Assim, um Edge com relógio adiantado dentro dessa tolerância pode fazer a correlação tratar uma queda futura como atual e atribuir um `down_since` futuro. Snapshots subsequentes com timestamps menores serão ignorados pela regra de ordenação, podendo manter o estado incorreto até o relógio alcançar esse valor. Limite a avaliação superiormente ao relógio do servidor (com política explícita de tolerância) e evite persistir transições futuras como estado atual.
+  Recommendation: Exija `observed_at <= server_now` para correlação e não aplique atualizações de estado com timestamp futuro; teste um Edge adiantado dentro de `MAX_FUTURE_SKEW`.
+- [high] Membros sem observação atual podem manter incidentes abertos indefinidamente (apps/api/app/api/noc.py:90-108)
+  A resolução conta apenas membros presentes no snapshot (`reported`). Se menos que `max(5, prior // 2)` membros forem reportados, o incidente não é fechado nem atualizado; isso inclui o caso em que os membros saíram do inventário ou nunca mais são reportados. A observação de silêncio do Edge apenas marca o incidente como silencioso e não o resolve. O resultado provável é um incidente aberto permanente sem indicação de que seus membros desapareceram do inventário ou do feed.
+  Recommendation: Defina uma política limitada para membros removidos ou sem reporte, distinguindo silêncio de recuperação; por exemplo, reconciliação explícita de inventário e estado de expiração/supressão com evidência e prazo.
+- [high] A janela de entrada no incidente não tem limite final (apps/api/app/api/noc.py:85-88)
+  A condição de `joiners` exige apenas `down_since >= opened_at - JOIN_WINDOW`; não exige que a queda tenha ocorrido até `opened_at + JOIN_WINDOW`. Logo, uma ONU que cair horas ou dias depois pode ser adicionada ao incidente antigo, apesar da regra documentada de 30 minutos. Quedas posteriores podem aumentar os membros e impedir que o incidente original resolva, misturando eventos distintos.
+  Recommendation: Limite `down_since` ao intervalo fechado entre `opened_at - JOIN_WINDOW` e `opened_at + JOIN_WINDOW`; considere encerrar a admissão de membros após esse prazo.
