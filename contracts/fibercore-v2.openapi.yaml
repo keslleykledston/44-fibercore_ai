@@ -22,6 +22,7 @@ paths:
     get:
       tags: [Platform]
       operationId: listModuleHealth
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}]
       summary: Consultar saúde dos módulos, dependências e capacidades
       responses:
         '200':
@@ -32,6 +33,7 @@ paths:
     get:
       tags: [Platform]
       operationId: listVersionInventory
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}]
       responses:
         '200':
           description: Versões da plataforma, Edge e adapters

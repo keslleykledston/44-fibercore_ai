@@ -36,7 +36,22 @@ def upgrade() -> None:
             CREATE ROLE fibercore_app LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
           END IF;
         END $$;
-        ALTER ROLE fibercore_app PASSWORD '{pw}';
+        ALTER ROLE fibercore_app LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD '{pw}';
+        """
+    )
+    # Pre-existing role may carry inherited privileges: refuse rather than assume.
+    op.execute(
+        """
+        DO $$ BEGIN
+          IF EXISTS (SELECT 1 FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.member
+                     WHERE r.rolname = 'fibercore_app') THEN
+            RAISE EXCEPTION 'fibercore_app must not be a member of any role';
+          END IF;
+          IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_roles r ON r.oid = c.relowner
+                     WHERE r.rolname = 'fibercore_app') THEN
+            RAISE EXCEPTION 'fibercore_app must not own any relation';
+          END IF;
+        END $$;
         """
     )
 

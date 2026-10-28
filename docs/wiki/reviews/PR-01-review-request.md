@@ -6,3 +6,6 @@ Focar em: (1) RLS/policies e grants em `apps/api/alembic/versions/0001_*.py`; (2
 
 Evidência: `docs/wiki/TEST_EVIDENCE.md`. ADRs 0001–0010 em `docs/wiki/adr/` (Proposed).
 Status do gate: **CODEX_PLUGIN_NOT_EXECUTED** — nenhuma revisão feita até aqui.
+
+## Resultado Codex (adversarial-review, 2026-10-27)
+Rodada 1: needs-attention — [critical] role preexistente não endurecido; [medium] OpenAPI sem X-Workspace-ID em /platform/modules e /platform/versions sem rota. Ambos corrigidos (ALTER ROLE explícito + checagem de membership/ownership; rota /v1/platform/versions; teste `test_zz_migration.py`).

@@ -140,3 +140,10 @@ def modules(_: Principal = Depends(get_principal), settings: Settings = Depends(
         engine = None
     infra = Infra(postgres=probe_postgres(engine), nats=probe_nats(settings.nats_monitor_url))
     return evaluate(load_manifest(settings.module_manifest), infra)
+
+
+@router.get("/v1/platform/versions")
+def versions(_: Principal = Depends(get_principal), settings: Settings = Depends(get_settings)) -> list[dict]:
+    items = [{"module": "api-core", "version": __version__}]
+    items += [{"module": m["id"], "version": m["version"]} for m in load_manifest(settings.module_manifest)]
+    return items

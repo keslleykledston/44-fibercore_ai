@@ -102,3 +102,4 @@ def test_access_is_audited(client, seed):
     client.get("/v1/tenant", headers=h)
     actions = [a["action"] for a in client.get("/v1/audit", headers=h).json()]
     assert "tenant.read" in actions
+

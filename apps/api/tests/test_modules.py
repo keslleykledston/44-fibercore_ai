@@ -29,3 +29,8 @@ def test_endpoint_requires_auth_and_returns_registry(client, seed):
     h = login(client, "alice")
     r = client.get("/v1/platform/modules", headers=h)
     assert r.status_code == 200 and {m["id"] for m in r.json()} >= {"identity-access", "copilot"}
+
+
+def test_versions_endpoint(client, seed):
+    r = client.get("/v1/platform/versions", headers=login(client, "alice"))
+    assert r.status_code == 200 and r.json()[0] == {"module": "api-core", "version": "0.1.0"}
