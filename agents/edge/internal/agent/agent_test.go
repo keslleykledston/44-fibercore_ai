@@ -214,6 +214,9 @@ func TestPollJobExecutesVerifiedReadOnlyJobOnceAndRejectsReplayAndForgery(t *tes
 	srv, results := goldenJobServer(t, envBytes)
 	q, _ := queue.Open(filepath.Join(t.TempDir(), "q.db"))
 	defer q.Close()
+	// the golden envelope is valid only around 2026-10-28T10:00Z: the nonce store must use the same fixed clock as the verifier,
+	// otherwise real time prunes the nonce as expired and the replay is (wrongly) allowed once the wall clock passes the fixture
+	q.Now = func() time.Time { return time.Date(2026, 10, 28, 10, 5, 0, 0, time.UTC) }
 	a := &Agent{EdgeID: "33333333-3333-4333-8333-333333333333", TenantID: "22222222-2222-4222-8222-222222222222", Version: "v",
 		GW: gateway.New(srv.URL, "c", "s", srv.Client()), Q: q,
 		Collectors: []collector.Collector{fixedCollector{[]string{`{"n":1}`}}},

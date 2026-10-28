@@ -1,0 +1,7 @@
+  ------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side
+  ------------------------------------------------------------------------
+  0/1/0    0  48575443AAAA0001  active      online   normal   match    no
+  0/1/0    1  48575443AAAA0002  active      online   normal   match    no
+  ---- More ( Press 'Q' to break ) ----

@@ -23,3 +23,4 @@ Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetido
 - Testes: pytest 128 passed (Postgres descartável); E2E 17 passed (incl. refresh, logout, MFA). Lint ruff ok.
 - Aberto: tela de cadastro MFA, MFA obrigatório p/ admin, eventos de segurança globais, CSP com nonce.
 - Deploy LAB: 0011 aplicada no prod (backup pré-migração fora do repo), MFA_ENCRYPTION_KEY gerada no .env.prod; verificado no site público: login, cookies HttpOnly/Secure, renovação por refresh rotativo (fc_token apagado -> /rede 200, refresh rotacionado), zero issues de console/CSP.
+- Edge: saída paginada (--More--) agora falha fechado (ErrPaginated) em vez de gerar inventário parcial marcado complete=true; relógio da fila de nonces injetável (teste do agent quebrava após 10:15Z do dia por relógio real vs. fixture).

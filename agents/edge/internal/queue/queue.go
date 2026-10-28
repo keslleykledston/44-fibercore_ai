@@ -34,7 +34,8 @@ type Queue struct {
 	MaxPending  int // per kind
 	MaxBytes    int64
 	MaxDead     int
-	Dropped     int64 // pending items dropped by backpressure since start (exposed for logs/metrics)
+	Dropped     int64            // pending items dropped by backpressure since start (exposed for logs/metrics)
+	Now         func() time.Time // clock for nonce expiry; nil => time.Now. Must be the same clock the job verifier uses.
 }
 
 func Open(path string) (*Queue, error) {
@@ -184,7 +185,11 @@ func (q *Queue) Counts(ctx context.Context) (pending, dead int, err error) {
 
 // Remember implements jobs.NonceStore: true if the nonce is new. Expired nonces are pruned opportunistically.
 func (q *Queue) Remember(ctx context.Context, nonce string, until time.Time) (bool, error) {
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	clock := time.Now
+	if q.Now != nil {
+		clock = q.Now
+	}
+	now := clock().UTC().Format(time.RFC3339Nano)
 	if _, err := q.db.ExecContext(ctx, `DELETE FROM seen_nonces WHERE until < ?`, now); err != nil {
 		return false, err
 	}

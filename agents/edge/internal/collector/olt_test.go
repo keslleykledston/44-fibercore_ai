@@ -135,3 +135,24 @@ func TestMaxPortsFitsCommandBudgetForBothVendors(t *testing.T) {
 		}
 	}
 }
+
+type pagedSession struct{ fileSession }
+
+func (p pagedSession) Run(ctx context.Context, cmd string) (string, error) {
+	if cmd == "display ont info summary 0/1/0" {
+		b, err := os.ReadFile(filepath.Join("..", "olt", "testdata", "huawei_ma5800/R018", "ont_info_summary_paginated_0_1_0.txt"))
+		return string(b), err
+	}
+	return p.fileSession.Run(ctx, cmd)
+}
+
+func TestPaginatedOLTOutputYieldsNoSnapshotAndNeverACompletePON(t *testing.T) {
+	s := src("OLT-P", "huawei_ma5800/R018", false)
+	s.Open = func(context.Context) (olt.Session, func(), error) {
+		return pagedSession{fileSession{"huawei_ma5800/R018"}}, func() {}, nil
+	}
+	items, err := (&OLT{EdgeID: "e", Sources: []OLTSource{s}}).Collect(context.Background())
+	if !errors.Is(err, olt.ErrPaginated) || len(items) != 0 {
+		t.Fatalf("truncated output must not produce a snapshot (it would be sent with complete=true): items=%v err=%v", items, err)
+	}
+}

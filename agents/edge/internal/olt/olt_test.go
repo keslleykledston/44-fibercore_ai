@@ -184,3 +184,26 @@ func TestBudgetStopsRunawayCollection(t *testing.T) {
 		t.Fatalf("byte budget not enforced: %v", err)
 	}
 }
+
+func TestPaginatedDetection(t *testing.T) {
+	for _, out := range []string{"a\n---- More ( Press 'Q' to break ) ----", "x\n --More-- ", "foo\nPress any key to continue", "--- MORE"} {
+		if !Paginated(out) {
+			t.Fatalf("pager prompt not detected: %q", out)
+		}
+	}
+	for _, out := range []string{"", "no more data", "1/1/1 more-than-one-word", "ONT-ID desc: more info needed", "-1.5 dBm"} {
+		if Paginated(out) {
+			t.Fatalf("false positive: %q", out)
+		}
+	}
+}
+
+func TestPaginatedOutputFailsClosedInsteadOfPartialInventory(t *testing.T) {
+	raw := huaweiFixture()
+	raw.files["display ont info summary 0/1/0"] = "ont_info_summary_paginated_0_1_0.txt"
+	s := ReadOnlySession{Inner: raw, Allowed: Huawei{}.Allowed}
+	snap, err := Huawei{}.Snapshot(context.Background(), s, []string{"0/1/0"})
+	if !errors.Is(err, ErrPaginated) || len(snap.ONUs) != 0 || len(snap.PONs) != 0 {
+		t.Fatalf("a truncated listing must fail the snapshot, not yield a partial one: snap=%+v err=%v", snap, err)
+	}
+}

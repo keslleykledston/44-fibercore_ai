@@ -6,13 +6,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
 var (
 	ErrCommandDenied       = errors.New("command not in read-only allowlist")
 	ErrUnsupportedFirmware = errors.New("firmware not covered by a homologated fixture")
+	// ErrPaginated: the CLI stopped at a "-- More --" prompt. The Edge cannot send keys or disable paging (exec channel, read-only
+	// allowlist), so the output is truncated. A truncated list must never be reported as a complete PON.
+	ErrPaginated = errors.New("cli output is paginated (truncated)")
 )
+
+// paginationMarker matches the pager prompts of the supported CLIs, e.g. "---- More ( Press 'Q' to break ) ----" (VRP),
+// "--More--" (ZXROS and most others) and "press any key to continue".
+var paginationMarker = regexp.MustCompile(`(?i)-{2,}\s*more\b|\bpress\s+'?q'?\s+to\s+break\b|\bpress\s+any\s+key\b`)
+
+// Paginated reports whether CLI output ends in (or contains) a pager prompt.
+func Paginated(out string) bool { return paginationMarker.MatchString(out) }
 
 // Session runs one CLI command and returns its output.
 type Session interface {
@@ -91,7 +102,14 @@ func (r ReadOnlySession) Run(ctx context.Context, cmd string) (string, error) {
 	if !SafeCommand(cmd) || !r.Allowed(cmd) {
 		return "", fmt.Errorf("%w: %q", ErrCommandDenied, cmd)
 	}
-	return r.Inner.Run(ctx, cmd)
+	out, err := r.Inner.Run(ctx, cmd)
+	if err != nil {
+		return "", err
+	}
+	if Paginated(out) {
+		return "", fmt.Errorf("%w: %q", ErrPaginated, cmd)
+	}
+	return out, nil
 }
 
 // SafeCommand rejects control characters and shell/CLI chaining metacharacters before any allowlist match.

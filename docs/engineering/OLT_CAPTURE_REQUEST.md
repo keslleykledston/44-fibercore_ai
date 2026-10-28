@@ -28,7 +28,7 @@ Se o comando exigir outro modo/forma na sua versão (ex.: entrar em `config` ou 
 4. Se der: duas ONUs com `Rx` ausente/`N/A`.
 
 ## Paginação (limite conhecido)
-O Edge **não** executa ajustes de terminal (`scroll`, `terminal length`): estão fora da allowlist e continuarão fora. O driver atual também **não trata** o marcador `---- More ----`; hoje ele depende de a conta de leitura da OLT já estar com paginação desligada. Por isso:
+O Edge **não** executa ajustes de terminal (`scroll`, `terminal length`): estão fora da allowlist e continuarão fora. O driver **não consegue** avançar páginas, mas agora **falha fechado**: se a saída contiver um prompt de paginação (`---- More ( Press 'Q' to break ) ----`, `--More--`, `press any key`), a coleta daquela OLT é descartada com `ErrPaginated` e nenhum inventário parcial é enviado (antes, uma lista cortada seria enviada como PON completa). Na prática a OLT precisa responder sem paginação para a conta de leitura. Por isso:
 - Capture a saída **como o Edge a veria** (conta de leitura nas configurações dela). Se a saída vier truncada ou com `---- More ----`, **envie assim mesmo e avise**: isso é uma lacuna do driver a corrigir (com testes), não algo a contornar na captura.
 - Se, para obter a saída completa, você precisar ligar/desligar paginação manualmente, anote no `lab_run.md` que foi um ajuste manual fora do fluxo do Edge.
 
