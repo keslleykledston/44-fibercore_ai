@@ -50,8 +50,8 @@ class OltSnapshot(BaseModel):
     model: Short | None = None
     firmware: Short | None = None
     driver_level: Literal["identified", "observed"] = "identified"  # 'certified' is never self-declared
-    pons: list[PonIn] = Field(default_factory=list, max_length=512)
-    onus: list[OnuIn] = Field(default_factory=list, max_length=20000)
+    pons: list[PonIn] = Field(default_factory=list, max_length=256)
+    onus: list[OnuIn] = Field(default_factory=list, max_length=5000)
 
     _obs = field_validator("observed_at")(_check_observed)
 
@@ -73,7 +73,7 @@ class CpeIn(BaseModel):
 class CpeSnapshot(BaseModel):
     edge_id: UUID
     observed_at: datetime
-    cpes: list[CpeIn] = Field(max_length=20000)
+    cpes: list[CpeIn] = Field(max_length=5000)
 
     _obs = field_validator("observed_at")(_check_observed)
 
@@ -114,24 +114,20 @@ def ingest_olt_snapshot(
             {"t": p.tenant_id, "e": body.edge_id, "n": body.name, "v": body.vendor, "m": body.model,
              "f": body.firmware, "l": level, "o": body.observed_at},
         ).scalar_one()
-    pon_ids: dict[str, UUID] = {}
-    for pon in body.pons:
-        pon_ids[pon.pon_path] = conn.execute(
+    if body.pons:  # one round trip for all PONs, then one lookup of the OLT's PON map
+        conn.execute(
             text(
                 "INSERT INTO pon_ports (tenant_id, olt_id, pon_path, status, observed_at) VALUES (:t,:o,:p,:s,:ts) "
                 "ON CONFLICT (tenant_id, olt_id, pon_path) DO UPDATE SET status=EXCLUDED.status, observed_at=EXCLUDED.observed_at "
-                "WHERE pon_ports.observed_at IS NULL OR pon_ports.observed_at <= EXCLUDED.observed_at RETURNING id"
+                "WHERE pon_ports.observed_at IS NULL OR pon_ports.observed_at <= EXCLUDED.observed_at"
             ),
-            {"t": p.tenant_id, "o": olt_id, "p": pon.pon_path, "s": pon.status, "ts": body.observed_at},
-        ).scalar_one_or_none() or conn.execute(
-            text("SELECT id FROM pon_ports WHERE olt_id=:o AND pon_path=:p"), {"o": olt_id, "p": pon.pon_path}
-        ).scalar_one()
-    for onu in body.onus:
-        pon_id = pon_ids.get(onu.pon_path) if onu.pon_path else None
-        if onu.pon_path and pon_id is None:
-            pon_id = conn.execute(
-                text("SELECT id FROM pon_ports WHERE olt_id=:o AND pon_path=:p"), {"o": olt_id, "p": onu.pon_path}
-            ).scalar_one_or_none()
+            [{"t": p.tenant_id, "o": olt_id, "p": x.pon_path, "s": x.status, "ts": body.observed_at} for x in body.pons],
+        )
+    pon_ids = {
+        r.pon_path: r.id
+        for r in conn.execute(text("SELECT id, pon_path FROM pon_ports WHERE tenant_id=:t AND olt_id=:o"), {"t": p.tenant_id, "o": olt_id})
+    }
+    if body.onus:
         conn.execute(
             text(
                 "INSERT INTO onus (tenant_id, olt_id, pon_id, serial, status, rx_dbm, observed_at) "
@@ -140,7 +136,8 @@ def ingest_olt_snapshot(
                 "rx_dbm=EXCLUDED.rx_dbm, observed_at=EXCLUDED.observed_at "
                 "WHERE onus.observed_at IS NULL OR onus.observed_at <= EXCLUDED.observed_at"
             ),
-            {"t": p.tenant_id, "o": olt_id, "pi": pon_id, "s": onu.serial, "st": onu.status, "rx": onu.rx_dbm, "ts": body.observed_at},
+            [{"t": p.tenant_id, "o": olt_id, "pi": pon_ids.get(x.pon_path) if x.pon_path else None, "s": x.serial,
+              "st": x.status, "rx": x.rx_dbm, "ts": body.observed_at} for x in body.onus],
         )
     outbox.enqueue(
         conn, tenant_id=p.tenant_id, aggregate_type="olt", aggregate_id=olt_id, event_type="olt.snapshot_ingested",
@@ -155,34 +152,55 @@ def ingest_cpe_snapshot(
     body: CpeSnapshot, p: Principal = Depends(require("inventory:write")), conn: Connection = Depends(tenant_conn)
 ) -> dict:
     _bound_edge(p, body.edge_id)
-    for c in body.cpes:
-        cpe_id = conn.execute(
-            text(
-                "INSERT INTO cpes (tenant_id, canonical_serial, vendor, model, firmware, observed_at) VALUES (:t,:s,:v,:m,:f,:o) "
-                "ON CONFLICT (tenant_id, canonical_serial) DO UPDATE SET vendor=EXCLUDED.vendor, model=EXCLUDED.model, "
-                "firmware=EXCLUDED.firmware, observed_at=EXCLUDED.observed_at "
-                "WHERE cpes.observed_at IS NULL OR cpes.observed_at <= EXCLUDED.observed_at RETURNING id"
-            ),
-            {"t": p.tenant_id, "s": c.canonical_serial, "v": c.vendor, "m": c.model, "f": c.firmware, "o": body.observed_at},
-        ).scalar_one_or_none() or conn.execute(
-            text("SELECT id FROM cpes WHERE canonical_serial=:s"), {"s": c.canonical_serial}
-        ).scalar_one()
-        # A binding (connector, protocol, external_id) identifies ONE cpe; re-pointing it to another serial is refused.
-        existing = conn.execute(
-            text("SELECT cpe_id FROM cpe_protocol_bindings WHERE connector_id=:c AND protocol=:p AND external_id=:x"),
-            {"c": c.binding.connector_id, "p": c.binding.protocol, "x": c.binding.external_id},
-        ).scalar_one_or_none()
-        if existing and existing != cpe_id:
-            raise HTTPException(409, f"binding {c.binding.external_id} already linked to another cpe")
-        conn.execute(
-            text(
-                "INSERT INTO cpe_protocol_bindings (tenant_id, cpe_id, protocol, external_id, connector_id, observed_at) "
-                "VALUES (:t,:ci,:p,:x,:c,:o) ON CONFLICT (tenant_id, connector_id, protocol, external_id) "
-                "DO UPDATE SET observed_at = GREATEST(cpe_protocol_bindings.observed_at, EXCLUDED.observed_at)"
-            ),
-            {"t": p.tenant_id, "ci": cpe_id, "p": c.binding.protocol, "x": c.binding.external_id,
-             "c": c.binding.connector_id, "o": body.observed_at},
+    serials = [c.canonical_serial for c in body.cpes]
+    owners = {
+        r.canonical_serial: (r.id, r.edge_id)
+        for r in conn.execute(
+            text("SELECT id, edge_id, canonical_serial FROM cpes WHERE tenant_id=:t AND canonical_serial = ANY(:s)"),
+            {"t": p.tenant_id, "s": serials},
         )
+    }
+    if any(edge != body.edge_id for _, edge in owners.values()):
+        raise HTTPException(409, "cpe owned by another edge")  # an edge cannot overwrite another edge's CPEs
+    conn.execute(
+        text(
+            "INSERT INTO cpes (tenant_id, edge_id, canonical_serial, vendor, model, firmware, observed_at) "
+            "VALUES (:t,:e,:s,:v,:m,:f,:o) ON CONFLICT (tenant_id, canonical_serial) DO UPDATE SET vendor=EXCLUDED.vendor, "
+            "model=EXCLUDED.model, firmware=EXCLUDED.firmware, observed_at=EXCLUDED.observed_at "
+            "WHERE cpes.edge_id = EXCLUDED.edge_id AND (cpes.observed_at IS NULL OR cpes.observed_at <= EXCLUDED.observed_at)"
+        ),
+        [{"t": p.tenant_id, "e": body.edge_id, "s": c.canonical_serial, "v": c.vendor, "m": c.model, "f": c.firmware,
+          "o": body.observed_at} for c in body.cpes],
+    )
+    ids = {
+        r.canonical_serial: r.id
+        for r in conn.execute(
+            text("SELECT id, canonical_serial FROM cpes WHERE tenant_id=:t AND canonical_serial = ANY(:s)"),
+            {"t": p.tenant_id, "s": serials},
+        )
+    }
+    # A binding (connector, protocol, external_id) identifies ONE cpe; re-pointing it to another serial is refused.
+    keys = [(c.binding.connector_id, c.binding.protocol, c.binding.external_id) for c in body.cpes]
+    existing = {
+        (r.connector_id, r.protocol, r.external_id): r.cpe_id
+        for r in conn.execute(
+            text("SELECT connector_id, protocol, external_id, cpe_id FROM cpe_protocol_bindings WHERE tenant_id=:t "
+                 "AND external_id = ANY(:x)"),
+            {"t": p.tenant_id, "x": [k[2] for k in keys]},
+        )
+    }
+    for c, k in zip(body.cpes, keys, strict=True):
+        if k in existing and existing[k] != ids[c.canonical_serial]:
+            raise HTTPException(409, f"binding {k[2]} already linked to another cpe")
+    conn.execute(
+        text(
+            "INSERT INTO cpe_protocol_bindings (tenant_id, cpe_id, protocol, external_id, connector_id, observed_at) "
+            "VALUES (:t,:ci,:p,:x,:c,:o) ON CONFLICT (tenant_id, connector_id, protocol, external_id) "
+            "DO UPDATE SET observed_at = GREATEST(cpe_protocol_bindings.observed_at, EXCLUDED.observed_at)"
+        ),
+        [{"t": p.tenant_id, "ci": ids[c.canonical_serial], "p": c.binding.protocol, "x": c.binding.external_id,
+          "c": c.binding.connector_id, "o": body.observed_at} for c in body.cpes],
+    )
     return {"status": "accepted", "cpes": len(body.cpes)}
 
 
@@ -202,7 +220,7 @@ def list_olts(
     rows = conn.execute(
         text(
             "SELECT o.id, o.name, o.vendor, o.model, o.firmware, o.support_level, o.observed_at, o.edge_id, "
-            "(SELECT count(*) FROM onus u WHERE u.olt_id = o.id) AS onu_count "
+            "(SELECT count(*) FROM onus u WHERE u.tenant_id = o.tenant_id AND u.olt_id = o.id) AS onu_count "
             "FROM olts o ORDER BY o.name LIMIT :l"
         ),
         {"l": limit},

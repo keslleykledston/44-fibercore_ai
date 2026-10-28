@@ -155,3 +155,43 @@ def test_snapshot_emits_outbox_event(client, seed, inv, migrated):
         n = c.execute(text("SELECT count(*) FROM events_outbox WHERE event_type='olt.snapshot_ingested' AND tenant_id=:t"),
                       {"t": seed["A"]}).scalar()
     assert n >= 1
+
+
+def test_cpe_cannot_be_overwritten_by_another_edge(client, seed, inv):
+    body = {"edge_id": str(inv["a1"]["edge"]), "observed_at": _now(), "cpes": [
+        {"canonical_serial": "OWNED-CPE-1", "vendor": "Huawei",
+         "binding": {"protocol": "tr069", "external_id": "own-1", "connector_id": "genieacs-a1"}}]}
+    assert client.post("/v1/edge/cpe-snapshots", headers=agent(client, inv, "a1"), json=body).status_code == 202
+    evil = {**body, "edge_id": str(inv["a2"]["edge"]), "cpes": [{**body["cpes"][0], "vendor": "HACKED",
+            "binding": {"protocol": "tr069", "external_id": "own-2", "connector_id": "genieacs-a2"}}]}
+    assert client.post("/v1/edge/cpe-snapshots", headers=agent(client, inv, "a2"), json=evil).status_code == 409
+    rows = {c["canonical_serial"]: c for c in client.get("/v1/cpes", headers=hdr(client, "alice", seed, "A")).json()}
+    assert rows["OWNED-CPE-1"]["vendor"] == "Huawei" and len(rows["OWNED-CPE-1"]["bindings"]) == 1
+
+
+def test_db_rejects_onu_pointing_to_pon_of_another_olt(client, seed, inv, migrated):
+    a = agent(client, inv, "a1")
+    client.post("/v1/edge/olt-snapshots", headers=a, json=snap(inv, name="OLT-FK1"))
+    client.post("/v1/edge/olt-snapshots", headers=a, json=snap(inv, name="OLT-FK2"))
+    with migrated.begin() as c:
+        pon_other = c.execute(text("SELECT p.id FROM pon_ports p JOIN olts o ON o.id=p.olt_id WHERE o.name='OLT-FK2'")).scalar()
+        onu_id = c.execute(text("SELECT u.id FROM onus u JOIN olts o ON o.id=u.olt_id WHERE o.name='OLT-FK1' LIMIT 1")).scalar()
+    with pytest.raises(DBAPIError), migrated.begin() as c:
+        c.execute(text("UPDATE onus SET pon_id=:p WHERE id=:i"), {"p": pon_other, "i": onu_id})
+
+
+def test_unknown_pon_path_leaves_onu_without_pon(client, seed, inv):
+    s = snap(inv, name="OLT-NOPON", onus=[{"serial": "NP1", "pon_path": "9/9/9", "status": "online"}])
+    assert client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a1"), json=s).status_code == 202
+    onu = client.get("/v1/onus?serial=NP1", headers=hdr(client, "alice", seed, "A")).json()[0]
+    assert onu["pon_path"] is None
+
+
+def test_large_batch_ingests_in_one_request_and_limits_hold(client, seed, inv):
+    a = agent(client, inv, "a1")
+    onus = [{"serial": f"BULK{i:05d}", "pon_path": "0/1/0", "status": "online", "rx_dbm": -20.0} for i in range(5000)]
+    assert client.post("/v1/edge/olt-snapshots", headers=a, json=snap(inv, name="OLT-BULK", onus=onus)).status_code == 202
+    too_many = onus + [{"serial": "EXTRA", "status": "online"}]
+    assert client.post("/v1/edge/olt-snapshots", headers=a, json=snap(inv, name="OLT-BULK", onus=too_many)).status_code == 422
+    big = {"padding": "x" * (9 * 1024 * 1024)}
+    assert client.post("/v1/edge/olt-snapshots", headers=a, json=big).status_code == 413

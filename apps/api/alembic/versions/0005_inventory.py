@@ -41,6 +41,7 @@ def upgrade() -> None:
           observed_at timestamptz,
           PRIMARY KEY (tenant_id, id),
           UNIQUE (tenant_id, olt_id, pon_path),
+          UNIQUE (tenant_id, olt_id, id),   -- target of onus composite FK (PON must belong to the ONU's OLT)
           FOREIGN KEY (tenant_id, olt_id) REFERENCES olts(tenant_id, id) ON DELETE CASCADE
         );
         CREATE TABLE onus (
@@ -55,19 +56,22 @@ def upgrade() -> None:
           PRIMARY KEY (tenant_id, id),
           UNIQUE (tenant_id, olt_id, serial),
           FOREIGN KEY (tenant_id, olt_id) REFERENCES olts(tenant_id, id) ON DELETE CASCADE,
-          FOREIGN KEY (tenant_id, pon_id) REFERENCES pon_ports(tenant_id, id)
+          FOREIGN KEY (tenant_id, olt_id, pon_id) REFERENCES pon_ports(tenant_id, olt_id, id)
         );
         CREATE INDEX onus_tenant_serial_idx ON onus(tenant_id, serial);
+        CREATE INDEX onus_tenant_olt_idx ON onus(tenant_id, olt_id);
         CREATE TABLE cpes (
           tenant_id uuid NOT NULL REFERENCES tenants(id),
           id uuid NOT NULL DEFAULT gen_random_uuid(),
+          edge_id uuid NOT NULL,                -- owning edge: another edge cannot overwrite this CPE
           canonical_serial text NOT NULL,
           vendor text,
           model text,
           firmware text,
           observed_at timestamptz,
           PRIMARY KEY (tenant_id, id),
-          UNIQUE (tenant_id, canonical_serial)
+          UNIQUE (tenant_id, canonical_serial),
+          FOREIGN KEY (tenant_id, edge_id) REFERENCES edges(tenant_id, id)
         );
         CREATE TABLE cpe_protocol_bindings (
           tenant_id uuid NOT NULL,

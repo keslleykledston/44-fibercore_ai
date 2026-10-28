@@ -12,3 +12,4 @@
 - `/livez` `/readyz` `/version` estão na raiz (fora de `/v1`); contrato OpenAPI ainda não os descreve.
 - Tabelas de domínio (edges, olts, onus, cpes, jobs…) do `postgres_baseline_draft.sql` ainda não migradas.
 - JetStream: `FIBERCORE_EVENTS` sem expiração por idade (max_age=0); definir `max_bytes` + alerta de uso antes de piloto. `published_at` ≠ consumido. Recuperação: `python -m app.workers.relay replay <ISO-ts> [tenant]` (replay incrementa `replay_gen` => novo Nats-Msg-Id, ignora a janela de dedupe; consumidores idempotentes pelo ledger).
+- Ingestão: limite 5000 ONU/CPE por snapshot e 8 MiB por corpo; ainda sem rate-limit por agente (a implementar no Gateway/proxy ou middleware com Redis/NATS KV). Chunked upload recusado (411).
