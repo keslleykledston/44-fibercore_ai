@@ -14,7 +14,9 @@ check() { [[ "$2" == "$3" ]] && echo "PASS $1 ($2)" || { echo "FAIL $1: got $2 w
 check "api via proxy exige auth (401)"           "$(code "http://127.0.0.1:$PORT/api/v1/auth/me")" 401
 check "login inválido via proxy (401)"            "$(code -X POST -H 'content-type: application/json' -d '{"email":"x@example.com","password":"x"}' "http://127.0.0.1:$PORT/api/v1/auth/token")" 401
 check "/api/v1 sem rota => 404 da API"            "$(code "http://127.0.0.1:$PORT/api/v1/nao-existe")" 404
-check "prefixo /api removido (v1 direto no proxy não é API)" "$(code "http://127.0.0.1:$PORT/v1/auth/me")" 502
+check "/v1 direto no proxy NÃO alcança a API (só /api/v1)" "$(code "http://127.0.0.1:$PORT/v1/auth/me")" 503
+check "raiz: frontend ausente => 503 explícito (W1 pendente)" "$(code "http://127.0.0.1:$PORT/")" 503
+check "/ajuda: idem até existir a Central de Ajuda"        "$(code "http://127.0.0.1:$PORT/ajuda")" 503
 for p in /livez /readyz /metrics /internal/x /docs /openapi.json; do check "interno bloqueado $p" "$(code "http://127.0.0.1:$PORT$p")" 404; done
 echo "--- portas publicadas:"; docker ps --filter "name=fibercore-dev" --format '{{.Names}} {{.Ports}}' | grep -E '0\.0\.0\.0|\[::\]' && { echo "FAIL: porta pública inesperada"; fail=1; } || echo "nenhuma em 0.0.0.0 (apenas 127.0.0.1)"
 exit $fail

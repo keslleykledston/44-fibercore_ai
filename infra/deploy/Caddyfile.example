@@ -1,3 +1,4 @@
+# ATENÇÃO: a raiz encaminha para `web:3000`, serviço que só existirá com o backlog W1. NÃO usar em produção antes disso.
 # EXEMPLO para o Claude Code adaptar após frontend + auth completos.
 # Não usar para publicar o scaffold DEMO_MODE=true.
 # Caddy obtém/renova certificados quando DNS e ACME estiverem configurados.

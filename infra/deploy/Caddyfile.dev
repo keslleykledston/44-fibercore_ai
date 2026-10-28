@@ -20,8 +20,11 @@
         respond "not found" 404
     }
 
+    # O serviço `web` (Next.js) ainda NÃO existe (backlog W1). Até lá a raiz responde 503 explícito, em vez de
+    # encaminhar para um upstream inexistente. Ao criar `web`, trocar por `reverse_proxy web:3000` e exigir 200 em
+    # scripts/test-proxy.sh.
     handle {
-        reverse_proxy web:3000
+        respond "frontend not deployed" 503
     }
 
     header {
