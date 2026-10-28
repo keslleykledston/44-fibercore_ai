@@ -80,6 +80,20 @@ func main() {
 		oc := &collector.OLT{EdgeID: cfg.EdgeID}
 		for _, o := range cfg.OLTs {
 			o := o
+			if o.Transport == "snmp" {
+				oc.Sources = append(oc.Sources, collector.OLTSource{
+					Name: o.Name, Ports: o.PonPorts, AllowUnverified: o.AllowUnverifiedFirmware, SNMPDriver: olt.HuaweiSNMP{},
+					OpenSNMP: func(ctx context.Context) (olt.SNMPReader, func(), error) {
+						community, err := config.ReadSecret(o.SNMPCommunityFile)
+						if err != nil {
+							return nil, nil, err
+						}
+						return olt.DialSNMP(ctx, olt.SNMPConfig{Addr: o.SNMPAddress, Community: community, Allowed: al.Allowed,
+							Pace: time.Duration(o.SNMPPaceMillis) * time.Millisecond, MaxReqs: o.SNMPMaxRequests})
+					},
+				})
+				continue
+			}
 			var drv olt.Driver = olt.Huawei{}
 			if o.Vendor == "zte" {
 				drv = olt.ZTE{}

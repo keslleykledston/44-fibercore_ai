@@ -21,3 +21,10 @@ Pendências: mTLS (ADR-0011), assinatura/anti-replay de jobs (Sprint 3), SNMP/SS
  "ssh_mode":"shell","ssh_pager_space":true,"legacy_ssh":true}
 ```
 `legacy_ssh` habilita DH group1/14-SHA1, `ssh-rsa` e AES-CBC **só para esta OLT** (a MA5608T R015 não oferece mais nada); a host key fixada continua obrigatória.
+
+## Exemplo: OLT por SNMP (v2c, somente leitura; valores fictícios)
+```json
+{"name":"olt-exemplo-snmp","vendor":"huawei","transport":"snmp","snmp_address":"192.0.2.10:161",
+ "snmp_community_file":"/etc/fibercore-edge/olt-exemplo.snmp","snmp_pace_ms":1000,"snmp_max_requests":300,"pon_ports":["0/0/14"]}
+```
+`192.0.2.10:161` precisa constar em `allowlist` e ser IP literal. A OLT medida limita a taxa do agente SNMP (ver `docs/engineering/DRIVER_SDK_INTERFACE.md`).

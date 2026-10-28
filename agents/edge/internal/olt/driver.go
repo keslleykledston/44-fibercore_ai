@@ -87,6 +87,9 @@ var Registry = []Homologation{
 	// slot, and the offline causes (LOS/dying-gasp). Until then no PON of this firmware can be reported complete.
 	{"huawei", "MA5608T", "MA5600V800R015", LevelIdentified,
 		"real capture 2026-10-28 (testdata/huawei_ma5608t/MA5600V800R015C00), single PON 0/0/14; NOT enough to declare observed"},
+	// Identity seen over SNMP carries only the family/release (ifDescr "Huawei-MA5600-V800R015-GPON_UNI"). Same evidence and
+	// same limits as the CLI entry above: stays identified.
+	{"huawei", "MA5600", "MA5600V800R015", LevelIdentified, "SNMP identity (family+release); see MA5608T entry"},
 	{"zte", "C300", "V2.1", LevelIdentified, "synthetic fixtures only (testdata/zte_c300/V2.1); NOT captured from a device"},
 }
 

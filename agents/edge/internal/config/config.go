@@ -45,10 +45,15 @@ type OLTConfig struct {
 	HostKeySHA256           string   `json:"host_key_sha256"` // mandatory pinned SSH host key
 	PonPorts                []string `json:"pon_ports"`
 	AllowUnverifiedFirmware bool     `json:"allow_unverified_firmware"`
-	SSHMode                 string   `json:"ssh_mode"`        // "" | "exec" (default) | "shell" (interactive pty; firmwares that ignore exec)
-	SSHPagerSpace           bool     `json:"ssh_pager_space"` // shell mode: answer the VRP "---- More ----" pager with a single Space
-	Profile                 string   `json:"profile"`         // "" | "huawei_ma56_r015" (CLI-mode profile for the MA5600 family)
-	LegacySSH               bool     `json:"legacy_ssh"`      // explicit per-OLT opt-in to old SSH algorithms (SHA1 DH, ssh-rsa, AES-CBC)
+	Transport               string   `json:"transport"`           // "" | "cli" (SSH, default) | "snmp" (v2c, read-only)
+	SNMPAddress             string   `json:"snmp_address"`        // ip:161 - an IP LITERAL that is also in `allowlist`
+	SNMPCommunityFile       string   `json:"snmp_community_file"` // file (mode 0600) holding the read-only v2c community
+	SNMPPaceMillis          int      `json:"snmp_pace_ms"`        // pause before every SNMP request (default 1000): the OLT agent rate-limits
+	SNMPMaxRequests         int      `json:"snmp_max_requests"`   // SNMP requests per collection cycle (default 400)
+	SSHMode                 string   `json:"ssh_mode"`            // "" | "exec" (default) | "shell" (interactive pty; firmwares that ignore exec)
+	SSHPagerSpace           bool     `json:"ssh_pager_space"`     // shell mode: answer the VRP "---- More ----" pager with a single Space
+	Profile                 string   `json:"profile"`             // "" | "huawei_ma56_r015" (CLI-mode profile for the MA5600 family)
+	LegacySSH               bool     `json:"legacy_ssh"`          // explicit per-OLT opt-in to old SSH algorithms (SHA1 DH, ssh-rsa, AES-CBC)
 }
 
 var ponRe = regexp.MustCompile(`^\d+/\d+/\d+$`)
@@ -128,8 +133,10 @@ func (c *Config) Validate() error {
 		if o.Vendor != "huawei" && o.Vendor != "zte" {
 			errs = append(errs, fmt.Errorf("%s: vendor must be huawei or zte", p))
 		}
-		if _, _, err := net.SplitHostPort(o.Address); err != nil || !allowed[strings.ToLower(o.Address)] {
-			errs = append(errs, fmt.Errorf("%s: address must be host:port AND listed in allowlist", p))
+		if o.Transport != "snmp" {
+			if _, _, err := net.SplitHostPort(o.Address); err != nil || !allowed[strings.ToLower(o.Address)] {
+				errs = append(errs, fmt.Errorf("%s: address must be host:port AND listed in allowlist", p))
+			}
 		}
 		if o.SSHMode != "" && o.SSHMode != "exec" && o.SSHMode != "shell" {
 			errs = append(errs, fmt.Errorf("%s: ssh_mode must be exec or shell", p))
@@ -140,11 +147,33 @@ func (c *Config) Validate() error {
 		if o.SSHPagerSpace && o.SSHMode != "shell" {
 			errs = append(errs, fmt.Errorf("%s: ssh_pager_space requires ssh_mode shell", p))
 		}
-		if o.Username == "" || o.SecretFile == "" {
-			errs = append(errs, fmt.Errorf("%s: username and secret_file required", p))
-		}
-		if !strings.HasPrefix(o.HostKeySHA256, "SHA256:") {
-			errs = append(errs, fmt.Errorf("%s: host_key_sha256 (SHA256:...) is mandatory", p))
+		switch o.Transport {
+		case "", "cli":
+			if o.Username == "" || o.SecretFile == "" {
+				errs = append(errs, fmt.Errorf("%s: username and secret_file required", p))
+			}
+			if !strings.HasPrefix(o.HostKeySHA256, "SHA256:") {
+				errs = append(errs, fmt.Errorf("%s: host_key_sha256 (SHA256:...) is mandatory", p))
+			}
+			if o.SNMPAddress != "" || o.SNMPCommunityFile != "" || o.SNMPPaceMillis != 0 || o.SNMPMaxRequests != 0 {
+				errs = append(errs, fmt.Errorf("%s: snmp_* fields require transport snmp", p))
+			}
+		case "snmp":
+			h, _, err := net.SplitHostPort(o.SNMPAddress)
+			if err != nil || net.ParseIP(h) == nil || !allowed[strings.ToLower(o.SNMPAddress)] {
+				errs = append(errs, fmt.Errorf("%s: snmp_address must be ip:port (IP literal) AND listed in allowlist", p))
+			}
+			if o.Vendor != "huawei" {
+				errs = append(errs, fmt.Errorf("%s: snmp transport is implemented for huawei only", p))
+			}
+			if o.SNMPCommunityFile == "" || o.SNMPPaceMillis < 0 || o.SNMPPaceMillis > 10000 || o.SNMPMaxRequests < 0 || o.SNMPMaxRequests > 5000 {
+				errs = append(errs, fmt.Errorf("%s: snmp_community_file required, snmp_pace_ms 0..10000, snmp_max_requests 0..5000", p))
+			}
+			if o.Username != "" || o.SecretFile != "" || o.HostKeySHA256 != "" || o.SSHMode != "" || o.Profile != "" || o.LegacySSH || o.SSHPagerSpace {
+				errs = append(errs, fmt.Errorf("%s: ssh fields are not allowed with transport snmp", p))
+			}
+		default:
+			errs = append(errs, fmt.Errorf("%s: transport must be cli or snmp", p))
 		}
 		if len(o.PonPorts) == 0 || len(o.PonPorts) > 256 {
 			errs = append(errs, fmt.Errorf("%s: pon_ports required (1..256)", p))

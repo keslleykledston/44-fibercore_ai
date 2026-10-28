@@ -17,6 +17,9 @@ type OLTSource struct {
 	Ports           []string
 	AllowUnverified bool // collect even if firmware has no fixture coverage; level stays "identified"
 	Open            func(ctx context.Context) (olt.Session, func(), error)
+	// SNMP transport (alternative to Open): when OpenSNMP is set the OLT is read by SNMPDriver and Open/Driver are unused.
+	OpenSNMP   func(ctx context.Context) (olt.SNMPReader, func(), error)
+	SNMPDriver olt.SNMPDriver
 }
 
 const (
@@ -83,6 +86,9 @@ func (o *OLT) Collect(ctx context.Context) ([]Item, error) {
 }
 
 func (o *OLT) collectOne(ctx context.Context, src OLTSource, observed string) ([]Item, error) {
+	if src.OpenSNMP != nil {
+		return o.collectSNMP(ctx, src, observed)
+	}
 	raw, closeFn, err := src.Open(ctx)
 	if err != nil {
 		return nil, err
@@ -104,15 +110,46 @@ func (o *OLT) collectOne(ctx context.Context, src OLTSource, observed string) ([
 	if err != nil {
 		return nil, err
 	}
+	return o.buildItems(src.Name, observed, id, level, snap, func(p olt.PON) bool { return ponComplete(level, raw, p) })
+}
+
+// collectSNMP reads an OLT over SNMP. The end of an SNMP table is unambiguous, so completeness is whatever the driver proved
+// in band (PON.Verified), and still requires an observed driver level.
+func (o *OLT) collectSNMP(ctx context.Context, src OLTSource, observed string) ([]Item, error) {
+	r, closeFn, err := src.OpenSNMP(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer closeFn()
+	ctx, cancel := context.WithTimeout(ctx, oltTimeout)
+	defer cancel()
+	id, err := src.SNMPDriver.Identify(ctx, r, src.Ports)
+	if err != nil {
+		return nil, err
+	}
+	level, lerr := olt.Lookup(id)
+	if lerr != nil && !src.AllowUnverified {
+		return nil, lerr
+	}
+	snap, err := src.SNMPDriver.Snapshot(ctx, r, src.Ports)
+	if err != nil {
+		return nil, err
+	}
+	return o.buildItems(src.Name, observed, id, level, snap, func(p olt.PON) bool { return level == olt.LevelObserved && p.Verified })
+}
+
+// buildItems turns a snapshot into chunked payload items. complete decides, per PON, whether it may be reported complete
+// (it drives mass-outage incident correlation, so it must be backed by proof, never assumed).
+func (o *OLT) buildItems(name, observed string, id olt.Identity, level olt.Level, snap olt.Snapshot, complete func(olt.PON) bool) ([]Item, error) {
 	head := oltSnapshotJSON{
-		EdgeID: o.EdgeID, ObservedAt: observed, Name: src.Name, Vendor: id.Vendor, Model: id.Model, Firmware: id.Firmware,
+		EdgeID: o.EdgeID, ObservedAt: observed, Name: name, Vendor: id.Vendor, Model: id.Model, Firmware: id.Firmware,
 		DriverLevel: string(level), PONs: []ponJSON{}, ONUs: []onuJSON{},
 	}
 	// Completeness drives mass-outage incident correlation, so it is only asserted for drivers whose parsers were validated
 	// against real captures (observed). Synthetic-fixture drivers cannot tell a full listing from one cut without a pager
 	// prompt, so their PONs are reported as not complete and can neither open nor close an incident.
 	for _, p := range snap.PONs {
-		head.PONs = append(head.PONs, ponJSON{Path: p.Path, Status: p.Status, Complete: ponComplete(level, raw, p)})
+		head.PONs = append(head.PONs, ponJSON{Path: p.Path, Status: p.Status, Complete: complete(p)})
 	}
 	var items []Item
 	cur := head
@@ -121,7 +158,7 @@ func (o *OLT) collectOne(ctx context.Context, src OLTSource, observed string) ([
 		if err != nil {
 			return err
 		}
-		items = append(items, Item{Kind: "olt_snapshot", Key: "olt:" + src.Name, Payload: b})
+		items = append(items, Item{Kind: "olt_snapshot", Key: "olt:" + name, Payload: b})
 		cur = head
 		cur.PONs = []ponJSON{} // PONs travel with the first chunk only
 		cur.ONUs = []onuJSON{}

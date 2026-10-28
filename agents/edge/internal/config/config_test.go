@@ -140,3 +140,30 @@ func TestOLTProfileAndPagerSpaceValidation(t *testing.T) {
 		t.Fatal("pager key and profile must be off unless explicitly enabled")
 	}
 }
+
+func TestOLTSNMPTransportValidation(t *testing.T) {
+	olt := func(extra string) string {
+		return `,"allowlist":["192.0.2.10:161","olt.example:161","192.0.2.10:22"],"olts":[{"name":"A","vendor":"huawei","pon_ports":["0/0/14"]` + extra + `}]`
+	}
+	ok := `,"transport":"snmp","snmp_address":"192.0.2.10:161","snmp_community_file":"/c","snmp_pace_ms":1000,"snmp_max_requests":300`
+	cfg, err := Load(write(t, 0o600, good(olt(ok))), "v")
+	if err != nil {
+		t.Fatalf("valid snmp OLT rejected: %v", err)
+	}
+	if o := cfg.OLTs[0]; o.Transport != "snmp" || o.SNMPAddress != "192.0.2.10:161" || o.SNMPMaxRequests != 300 {
+		t.Fatalf("fields not loaded: %+v", o)
+	}
+	for name, extra := range map[string]string{
+		"hostname instead of an IP literal": `,"transport":"snmp","snmp_address":"olt.example:161","snmp_community_file":"/c"`,
+		"not in the allowlist":              `,"transport":"snmp","snmp_address":"192.0.2.99:161","snmp_community_file":"/c"`,
+		"no community file":                 `,"transport":"snmp","snmp_address":"192.0.2.10:161"`,
+		"ssh fields mixed in":               `,"transport":"snmp","snmp_address":"192.0.2.10:161","snmp_community_file":"/c","username":"u"`,
+		"pace out of range":                 `,"transport":"snmp","snmp_address":"192.0.2.10:161","snmp_community_file":"/c","snmp_pace_ms":99999`,
+		"unknown transport":                 `,"transport":"telnet","address":"192.0.2.10:22"`,
+		"snmp fields without the transport": `,"snmp_address":"192.0.2.10:161","address":"192.0.2.10:22","username":"u","secret_file":"/s","host_key_sha256":"SHA256:abc"`,
+	} {
+		if _, err := Load(write(t, 0o600, good(olt(extra))), "v"); err == nil {
+			t.Errorf("%s: must be rejected", name)
+		}
+	}
+}

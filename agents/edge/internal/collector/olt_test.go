@@ -255,7 +255,7 @@ func withObservedR015(t *testing.T) {
 	t.Helper()
 	saved := append([]olt.Homologation(nil), olt.Registry...)
 	for i := range olt.Registry {
-		if olt.Registry[i].ModelPrefix == "MA5608T" {
+		if strings.HasPrefix(olt.Registry[i].ModelPrefix, "MA56") {
 			olt.Registry[i].Level = olt.LevelObserved
 		}
 	}
@@ -280,5 +280,94 @@ func TestShippedRegistryKeepsR015IdentifiedSoNoPonIsEverComplete(t *testing.T) {
 	lvl, complete, n := r015Payload(t, shellLike{r015Session{}})
 	if lvl != "identified" || complete || n != 12 {
 		t.Fatalf("shipped registry: level=%s complete=%v onus=%d (want identified, incomplete, 12)", lvl, complete, n)
+	}
+}
+
+// snmpFake is a tiny agent for PON 0/0/14 (ifIndex 4194307584): 6 ONTs, 2 online. Values have the shape read from a real OLT.
+type snmpFake struct{ dropSerial bool }
+
+const (
+	fkBase = "1.3.6.1.4.1.2011.6.128.1.1.2"
+	fkIf   = 4194307584
+)
+
+func (f snmpFake) vals() map[string]olt.SNMPValue {
+	m := map[string]olt.SNMPValue{fmt.Sprintf("1.3.6.1.2.1.2.2.1.2.%d", fkIf): {Bytes: []byte("Huawei-MA5600-V800R015-GPON_UNI"), IsBytes: true}}
+	for id := 0; id < 6; id++ {
+		run := int64(2)
+		if id >= 4 {
+			run = 1
+			m[fmt.Sprintf("%s.51.1.4.%d.%d", fkBase, fkIf, id)] = olt.SNMPValue{Int: -1300 - int64(id), IsInt: true}
+		} else {
+			m[fmt.Sprintf("%s.46.1.24.%d.%d", fkBase, fkIf, id)] = olt.SNMPValue{Int: 13, IsInt: true}
+		}
+		m[fmt.Sprintf("%s.46.1.15.%d.%d", fkBase, fkIf, id)] = olt.SNMPValue{Int: run, IsInt: true}
+		if !(f.dropSerial && id == 3) {
+			m[fmt.Sprintf("%s.43.1.3.%d.%d", fkBase, fkIf, id)] = olt.SNMPValue{Bytes: []byte{0x48, 0x57, 0x54, 0x43, 0x40, 0, 0, byte(id)}, IsBytes: true}
+		}
+	}
+	return m
+}
+
+func (f snmpFake) Get(_ context.Context, oids []string) (map[string]olt.SNMPValue, error) {
+	v, out := f.vals(), map[string]olt.SNMPValue{}
+	for _, o := range oids {
+		if x, ok := v[o]; ok {
+			out[o] = x
+		} else {
+			out[o] = olt.SNMPValue{Missing: true}
+		}
+	}
+	return out, nil
+}
+
+func (f snmpFake) Walk(_ context.Context, root string, _ int) ([]olt.SNMPRow, error) {
+	var rows []olt.SNMPRow
+	for id := 0; id < 6; id++ { // ids ascend, so rows come out in OID order
+		if v, ok := f.vals()[fmt.Sprintf("%s.%d", root, id)]; ok {
+			rows = append(rows, olt.SNMPRow{Suffix: fmt.Sprint(id), Value: v})
+		}
+	}
+	return rows, nil
+}
+
+func snmpPayload(t *testing.T, r olt.SNMPReader) (level string, complete bool, onus int, statuses map[string]int) {
+	t.Helper()
+	s := OLTSource{Name: "OLT-SNMP", Ports: []string{"0/0/14"}, SNMPDriver: olt.HuaweiSNMP{},
+		OpenSNMP: func(context.Context) (olt.SNMPReader, func(), error) { return r, func() {}, nil }}
+	items, err := (&OLT{EdgeID: "e", Sources: []OLTSource{s}}).Collect(context.Background())
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items=%d err=%v", len(items), err)
+	}
+	var p struct {
+		Level string `json:"driver_level"`
+		PONs  []struct {
+			Complete bool `json:"complete"`
+		} `json:"pons"`
+		ONUs []struct {
+			Status string `json:"status"`
+		} `json:"onus"`
+	}
+	if err := json.Unmarshal(items[0].Payload, &p); err != nil || len(p.PONs) != 1 {
+		t.Fatalf("payload: %v %s", err, items[0].Payload)
+	}
+	statuses = map[string]int{}
+	for _, u := range p.ONUs {
+		statuses[u.Status]++
+	}
+	return p.Level, p.PONs[0].Complete, len(p.ONUs), statuses
+}
+
+func TestSNMPSourceFeedsTheSamePayloadAndCompletenessNeedsAnObservedDriverAndProof(t *testing.T) {
+	lvl, complete, n, st := snmpPayload(t, snmpFake{})
+	if lvl != "identified" || complete || n != 6 || st["online"] != 2 || st["dying_gasp"] != 4 {
+		t.Fatalf("shipped registry: level=%s complete=%v onus=%d statuses=%v", lvl, complete, n, st)
+	}
+	withObservedR015(t)
+	if lvl, complete, _, _ := snmpPayload(t, snmpFake{}); lvl != "observed" || !complete {
+		t.Fatalf("promoted + proven by the two walks: level=%s complete=%v", lvl, complete)
+	}
+	if _, complete, n, _ := snmpPayload(t, snmpFake{dropSerial: true}); complete || n != 5 {
+		t.Fatalf("a listing whose two walks disagree must not be complete: complete=%v onus=%d", complete, n)
 	}
 }

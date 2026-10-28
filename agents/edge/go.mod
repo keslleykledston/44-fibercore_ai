@@ -3,6 +3,7 @@ module github.com/keslleykledston/44-fibercore_ai/agents/edge
 go 1.22.2
 
 require (
+	github.com/gosnmp/gosnmp v1.38.0
 	golang.org/x/crypto v0.31.0
 	modernc.org/sqlite v1.34.5
 )
