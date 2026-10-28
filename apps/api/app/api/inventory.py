@@ -180,13 +180,17 @@ def ingest_cpe_snapshot(
         [{"t": p.tenant_id, "e": body.edge_id, "s": c.canonical_serial, "v": c.vendor, "m": c.model, "f": c.firmware,
           "o": body.observed_at} for c in fresh],
     )
-    ids = {
-        r.canonical_serial: r.id
-        for r in conn.execute(
-            text("SELECT id, canonical_serial FROM cpes WHERE tenant_id=:t AND canonical_serial = ANY(:s)"),
+    resolved = list(
+        conn.execute(
+            text("SELECT id, edge_id, canonical_serial FROM cpes WHERE tenant_id=:t AND canonical_serial = ANY(:s)"),
             {"t": p.tenant_id, "s": serials},
         )
-    }
+    )
+    # Re-check ownership AFTER the upsert: closes the race where two edges create the same new serial concurrently
+    # (the loser's ON CONFLICT is a no-op; raising here rolls the whole request back, bindings included).
+    if any(r.edge_id != body.edge_id for r in resolved):
+        raise HTTPException(409, "cpe owned by another edge")
+    ids = {r.canonical_serial: r.id for r in resolved}
     # A binding (connector, protocol, external_id) identifies ONE cpe; re-pointing it to another serial is refused.
     keys = [(c.binding.connector_id, c.binding.protocol, c.binding.external_id) for c in fresh]
     existing = {

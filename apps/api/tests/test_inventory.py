@@ -208,3 +208,30 @@ def test_stale_cpe_snapshot_does_not_touch_bindings(client, seed, inv):
     assert r.json()["status"] == "ignored_stale"
     row = next(c for c in client.get("/v1/cpes", headers=hdr(client, "alice", seed, "A")).json() if c["canonical_serial"] == "OOO-CPE")
     assert [b["external_id"] for b in row["bindings"]] == ["ext-new"]
+
+
+def test_concurrent_new_cpe_from_two_edges_has_single_owner(client, seed, inv, migrated):
+    import threading
+    results = {}
+
+    def push(key):
+        body = {"edge_id": str(inv[key]["edge"]), "observed_at": _now(), "cpes": [
+            {"canonical_serial": "RACE-CPE", "vendor": key,
+             "binding": {"protocol": "tr069", "external_id": f"race-{key}", "connector_id": f"c-{key}"}}]}
+        results[key] = client.post("/v1/edge/cpe-snapshots", headers=agent(client, inv, key), json=body).status_code
+
+    for _ in range(5):
+        with migrated.begin() as c:
+            c.execute(text("DELETE FROM cpes WHERE canonical_serial='RACE-CPE'"))
+        results.clear()
+        ts = [threading.Thread(target=push, args=(k,)) for k in ("a1", "a2")]
+        [t.start() for t in ts]
+        [t.join() for t in ts]
+        with migrated.connect() as c:
+            rows = c.execute(text(
+                "SELECT c.edge_id, b.external_id FROM cpes c LEFT JOIN cpe_protocol_bindings b ON b.cpe_id=c.id "
+                "WHERE c.canonical_serial='RACE-CPE'")).all()
+        owners = {r.edge_id for r in rows}
+        assert len(owners) == 1, rows                      # single owner
+        assert all(r.external_id in (None, f"race-{'a1' if r.edge_id == inv['a1']['edge'] else 'a2'}") for r in rows), rows
+        assert 202 in results.values()
