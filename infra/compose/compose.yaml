@@ -31,21 +31,38 @@ services:
     restart: unless-stopped
     security_opt: [no-new-privileges:true]
     # development only: NATS must be configured with TLS, credentials and ACL before production.
-  api-core:
+  migrate:
     build:
       context: ../..
-      dockerfile: starter/apps/api/Dockerfile
+      dockerfile: apps/api/Dockerfile
+    command: ["alembic", "upgrade", "head"]
     environment:
-      DATABASE_URL: postgresql://fibercore:${FIBERCORE_DB_PASSWORD}@postgres:5432/fibercore
-      MODULE_MANIFEST: /app/configs/modules.yaml
-      DEMO_MODE: "true"
-    ports:
-      - "127.0.0.1:8000:8000"
+      ADMIN_DATABASE_URL: postgresql://fibercore:${FIBERCORE_DB_PASSWORD}@postgres:5432/fibercore
+      APP_DB_PASSWORD: ${FIBERCORE_APP_DB_PASSWORD:?Set FIBERCORE_APP_DB_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
+    networks: [control]
+    restart: "no"
+    security_opt: [no-new-privileges:true]
+    read_only: true
+  api-core:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    environment:
+      ENVIRONMENT: dev
+      DATABASE_URL: postgresql://fibercore_app:${FIBERCORE_APP_DB_PASSWORD}@postgres:5432/fibercore
+      JWT_SECRET: ${FIBERCORE_JWT_SECRET:?Set FIBERCORE_JWT_SECRET (>=32 chars)}
+      MODULE_MANIFEST: /app/configs/modules.yaml
+      NATS_MONITOR_URL: http://nats:8222
+    ports:
+      - "127.0.0.1:${FIBERCORE_API_PORT:-18420}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
       nats:
-        condition: service_started
+        condition: service_healthy
     networks: [control]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/livez', timeout=2)"]

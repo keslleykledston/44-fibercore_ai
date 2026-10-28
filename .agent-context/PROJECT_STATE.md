@@ -1,9 +1,8 @@
 # Project State — FiberCore AI
 
-- As of 2026-10-27: planning/build kit delivered. No real device collection or production system implemented by this package.
-- Chosen stack: FastAPI+PostgreSQL+NATS+Go Edge+Next.js; Compose dev and K3s HA later.
-- GenieACS TR-069 pre-existing in ISP site; must access NBI only via authorized private Edge.
-- USP TR-369 requires separate controller; candidate lab OB-USPC, production not decided.
-- Current priority: Sprint 0 secure foundation (auth/tenants/RLS/CI/module registry), then Edge and read-only NBI.
-- Review route: Claude implements, Codex review gate, Lovable UX handoff; wiki and evidence each PR.
-- Read `README_START_HERE.md` and `docs/product/ROADMAP_BACKLOG.md` for next steps.
+- As of 2026-10-27: Sprint 0 PR 1 pronto para review (branch `sprint0/01-foundation`, local; sem remote, sem push).
+- Feito e testado: API (livez/readyz/version/modules com probes reais), auth JWT+Argon2id, tenants/users/roles/service accounts, RLS forçada com role sem BYPASSRLS, audit append-only, Compose (postgres+nats+migrate+api) saudável, 18 testes PASS.
+- Não feito: outbox relay/consumer, mock Edge/NBI, SBOM/scan/backup, Codex gate, domínio de rede (OLT/ONU/CPE).
+- Stack: FastAPI+PostgreSQL+NATS+Go Edge+Next.js. GenieACS só via NBI/Edge privado. Hardware não validado; nada de escrita em rede.
+- Porta dev da API: 18420 (8000/8001/8002/18000 ocupadas por outros projetos). Venv de trabalho fora do repo: /data/cafegpt/tmp/fc-venv (ou `make venv` → .venv).
+- Status detalhado: `docs/wiki/IMPLEMENTATION_STATUS.md`; evidências: `docs/wiki/TEST_EVIDENCE.md`.

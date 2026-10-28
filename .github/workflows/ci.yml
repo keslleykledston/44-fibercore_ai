@@ -1,22 +1,35 @@
-name: FiberCore Kit Checks
+name: CI
 on:
   push:
   pull_request:
 jobs:
-  kit:
+  api:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env: {POSTGRES_USER: fibercore, POSTGRES_PASSWORD: ci_admin_pw_only, POSTGRES_DB: fibercore_test}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fibercore" --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install kit test dependencies
-        run: pip install 'PyYAML>=6,<7' 'pytest>=8,<10' 'fastapi>=0.115,<1' 'httpx>=0.27,<1' 'psycopg[binary]>=3.2,<4'
-      - name: Validate manifest and JSON
-        run: python tests/validate_kit.py
-      - name: Unit demo tests
-        run: cd starter/apps/api && PYTHONPATH=. python -m pytest -q
-      - name: Compose syntax
+        with: {python-version: '3.12'}
+      - run: pip install -e 'apps/api[dev]' && pip install pyyaml
+      - run: python tests/validate_kit.py
+      - run: ruff check apps/api
+      - run: cd apps/api && python -m pytest -q
         env:
-          FIBERCORE_DB_PASSWORD: ci_example_only
-        run: docker compose -f infra/compose/compose.yaml config --quiet
+          TEST_ADMIN_DATABASE_URL: postgresql://fibercore:ci_admin_pw_only@127.0.0.1:5432/fibercore_test
+      - name: Compose syntax
+        run: |
+          printf 'FIBERCORE_DB_PASSWORD=ci\nFIBERCORE_APP_DB_PASSWORD=ci\nFIBERCORE_JWT_SECRET=%s\n' "$(openssl rand -hex 32)" > .env.dev
+          docker compose --env-file .env.dev -f infra/compose/compose.yaml config --quiet
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: gitleaks/gitleaks-action@v2
+        env: {GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"}

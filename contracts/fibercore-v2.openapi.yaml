@@ -36,6 +36,57 @@ paths:
         '200':
           description: Versões da plataforma, Edge e adapters
           content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/VersionInfo'}}}}
+  /auth/token:
+    post:
+      tags: [Platform]
+      operationId: loginUser
+      summary: Troca e-mail+senha por access token curto (HS256, Sprint 0; OIDC planejado, ver ADR-0004)
+      security: []
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/LoginRequest'}}}
+      responses:
+        '200': {description: Token emitido, content: {application/json: {schema: {$ref: '#/components/schemas/TokenResponse'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /auth/service-token:
+    post:
+      tags: [Platform]
+      operationId: loginServiceAccount
+      summary: Token de service account, fixo no tenant da conta
+      security: []
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ServiceLoginRequest'}}}
+      responses:
+        '200': {description: Token emitido, content: {application/json: {schema: {$ref: '#/components/schemas/TokenResponse'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /auth/me:
+    get:
+      tags: [Platform]
+      operationId: whoAmI
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}]
+      responses:
+        '200': {description: Principal resolvido por membership, content: {application/json: {schema: {$ref: '#/components/schemas/Principal'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {description: Workspace inexistente ou sem membership (indistinguíveis)}
+  /tenant:
+    get:
+      tags: [Platform]
+      operationId: getCurrentTenant
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}]
+      responses:
+        '200': {description: Tenant atual (RLS), content: {application/json: {schema: {type: object}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /audit:
+    get:
+      tags: [Platform]
+      operationId: listAudit
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200': {description: Auditoria do tenant, content: {application/json: {schema: {type: array, items: {type: object}}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /olts:
     get:
       tags: [Network]
@@ -183,6 +234,12 @@ components:
       description: >-
         Contexto pedido pelo usuário; deve ser comparado à membership validada do token no servidor.
       schema: {type: string, format: uuid}
+    WorkspaceOptional:
+      name: X-Workspace-ID
+      in: header
+      required: false
+      description: Obrigatório só se o usuário tiver mais de uma membership (400 caso contrário). Ignorado para service accounts.
+      schema: {type: string, format: uuid}
     IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 8, maxLength: 128}}
     Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000, default: 100}}
   responses:
@@ -190,6 +247,26 @@ components:
     Forbidden: {description: Usuário sem permissão sobre tenant ou capacidade}
     Conflict: {description: Operação concorrente ou estado incompatível}
   schemas:
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties: {email: {type: string, format: email}, password: {type: string, minLength: 1, maxLength: 256}}
+    ServiceLoginRequest:
+      type: object
+      required: [client_id, client_secret]
+      properties: {client_id: {type: string, format: uuid}, client_secret: {type: string, minLength: 1, maxLength: 256}}
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties: {access_token: {type: string}, token_type: {type: string, enum: [bearer]}, expires_in: {type: integer}}
+    Principal:
+      type: object
+      required: [id, kind, tenant_id, role]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [user, service]}
+        tenant_id: {type: string, format: uuid}
+        role: {type: string}
     SourceMetadata:
       type: object
       additionalProperties: false

@@ -1,5 +1,7 @@
 import asyncio
+
 import httpx
+
 from app.integrations.genieacs_nbi import GenieACSReadOnlyClient
 
 
