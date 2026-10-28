@@ -34,11 +34,26 @@ func (a *Agent) CollectOnce(ctx context.Context) error {
 			errs = append(errs, err)
 			continue
 		}
+		round := time.Now().UnixNano()
+		complete := true
+		keys := map[string]struct{}{}
 		for i, it := range items {
-			if err := a.Q.Enqueue(ctx, it.Kind, it.Payload); err != nil {
+			if err := a.Q.Enqueue(ctx, it.Kind, it.Key, round, it.Payload); err != nil {
 				a.Log.Error("enqueue failed; round incomplete", "collector", c.Name(), "unsaved_items", len(items)-i, "err", err)
 				errs = append(errs, err)
+				complete = false
 				break // remaining items of this collector stay un-persisted => round marked incomplete
+			}
+			keys[it.Key] = struct{}{}
+		}
+		if complete { // only a fully persisted round may supersede the previous one
+			for k := range keys {
+				if k == "" {
+					continue
+				}
+				if err := a.Q.PruneSuperseded(ctx, k, round); err != nil {
+					a.Log.Warn("prune superseded failed", "key", k, "err", err)
+				}
 			}
 		}
 	}
@@ -66,8 +81,11 @@ func (a *Agent) Flush(ctx context.Context) {
 					return
 				}
 			case gateway.Rejected:
-				a.Log.Error("payload rejected by cloud; dead-lettered", "id", it.ID, "err", derr)
-				_ = a.Q.Dead(ctx, it, derr.Error())
+				a.Log.Error("payload rejected by cloud; dead-lettering", "id", it.ID, "err", derr)
+				if err := a.Q.Dead(ctx, it, derr.Error()); err != nil {
+					a.Log.Error("dead-letter failed; stopping flush to retry later", "id", it.ID, "err", err)
+					return
+				}
 			default:
 				dead, _ := a.Q.Retry(ctx, it, errString(derr))
 				a.Log.Warn("delivery deferred", "id", it.ID, "err", derr, "dead_lettered", dead)

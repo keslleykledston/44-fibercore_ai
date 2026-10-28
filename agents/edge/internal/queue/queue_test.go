@@ -15,7 +15,7 @@ func TestPersistsAcrossRestartInOrderWith0600(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, p := range []string{"a", "b", "c"} {
-		if err := q.Enqueue(ctx, "cpe_snapshot", []byte(p)); err != nil {
+		if err := q.Enqueue(ctx, "cpe_snapshot", "", 0, []byte(p)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -43,8 +43,8 @@ func TestDeadLetterAfterMaxAttemptsAndOnReject(t *testing.T) {
 	q, _ := Open(filepath.Join(t.TempDir(), "q.db"))
 	defer q.Close()
 	q.MaxAttempts = 3
-	_ = q.Enqueue(ctx, "k", []byte("x"))
-	_ = q.Enqueue(ctx, "k", []byte("y"))
+	_ = q.Enqueue(ctx, "k", "", 0, []byte("x"))
+	_ = q.Enqueue(ctx, "k", "", 0, []byte("y"))
 	for i := 0; i < 3; i++ {
 		items, _ := q.Next(ctx, 1)
 		dead, err := q.Retry(ctx, items[0], "boom")
@@ -72,7 +72,7 @@ func TestBackpressureDropsOldestAndRespectsLimits(t *testing.T) {
 	defer q.Close()
 	q.MaxPending = 3
 	for _, p := range []string{"1", "2", "3", "4", "5"} {
-		if err := q.Enqueue(ctx, "k", []byte(p)); err != nil {
+		if err := q.Enqueue(ctx, "k", "", 0, []byte(p)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -81,11 +81,11 @@ func TestBackpressureDropsOldestAndRespectsLimits(t *testing.T) {
 		t.Fatalf("items=%v dropped=%d", items, q.Dropped)
 	}
 	q.MaxBytes = 10
-	if err := q.Enqueue(ctx, "k", make([]byte, 11)); err == nil {
+	if err := q.Enqueue(ctx, "k", "", 0, make([]byte, 11)); err == nil {
 		t.Fatal("oversized payload must be refused")
 	}
 	for i := 0; i < 5; i++ {
-		_ = q.Enqueue(ctx, "k", make([]byte, 4))
+		_ = q.Enqueue(ctx, "k", "", 0, make([]byte, 4))
 	}
 	var total int
 	items, _ = q.Next(ctx, 100)
@@ -103,11 +103,53 @@ func TestDeadLetterRetention(t *testing.T) {
 	defer q.Close()
 	q.MaxDead = 2
 	for i := 0; i < 5; i++ {
-		_ = q.Enqueue(ctx, "k", []byte{byte(i)})
+		_ = q.Enqueue(ctx, "k", "", 0, []byte{byte(i)})
 		items, _ := q.Next(ctx, 1)
 		_ = q.Dead(ctx, items[0], "r")
 	}
 	if _, d, _ := q.Counts(ctx); d != 2 {
 		t.Fatalf("dead=%d want 2", d)
+	}
+}
+
+func TestBackpressureNeverEvictsAnotherKind(t *testing.T) {
+	ctx := context.Background()
+	q, _ := Open(filepath.Join(t.TempDir(), "q.db"))
+	defer q.Close()
+	q.MaxPending = 2
+	_ = q.Enqueue(ctx, "olt_snapshot", "olt:A", 1, []byte("olt-old"))
+	for i := 0; i < 10; i++ { // flood of CPE snapshots
+		_ = q.Enqueue(ctx, "cpe_snapshot", "cpe:c", int64(i), []byte{byte(i)})
+	}
+	items, _ := q.Next(ctx, 100)
+	var olt, cpe int
+	for _, it := range items {
+		if it.Kind == "olt_snapshot" {
+			olt++
+		} else {
+			cpe++
+		}
+	}
+	if olt != 1 || cpe != 2 {
+		t.Fatalf("olt=%d cpe=%d (OLT snapshot must survive a CPE flood)", olt, cpe)
+	}
+}
+
+func TestPruneSupersededOnlyOlderRoundsOfSameKey(t *testing.T) {
+	ctx := context.Background()
+	q, _ := Open(filepath.Join(t.TempDir(), "q.db"))
+	defer q.Close()
+	_ = q.Enqueue(ctx, "cpe_snapshot", "cpe:c", 1, []byte("r1a"))
+	_ = q.Enqueue(ctx, "cpe_snapshot", "cpe:c", 1, []byte("r1b"))
+	_ = q.Enqueue(ctx, "cpe_snapshot", "cpe:c", 2, []byte("r2a"))
+	_ = q.Enqueue(ctx, "cpe_snapshot", "cpe:other", 1, []byte("o1"))
+	_ = q.PruneSuperseded(ctx, "cpe:c", 2)
+	items, _ := q.Next(ctx, 10)
+	got := ""
+	for _, it := range items {
+		got += string(it.Payload) + ","
+	}
+	if got != "r2a,o1," {
+		t.Fatalf("got %s", got)
 	}
 }

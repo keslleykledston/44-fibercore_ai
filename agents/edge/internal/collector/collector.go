@@ -12,6 +12,7 @@ import (
 // Item is a ready-to-queue payload.
 type Item struct {
 	Kind    string
+	Key     string // logical stream; a newer complete round of the same Key supersedes older queued items
 	Payload []byte
 }
 
@@ -73,7 +74,7 @@ func (g *GenieACS) Collect(ctx context.Context) ([]Item, error) {
 		if err != nil {
 			return err
 		}
-		items = append(items, Item{Kind: "cpe_snapshot", Payload: b})
+		items = append(items, Item{Kind: "cpe_snapshot", Key: "cpe:" + g.ConnectorID, Payload: b})
 		batch = nil
 		return nil
 	}

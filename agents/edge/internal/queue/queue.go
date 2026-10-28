@@ -19,8 +19,9 @@ type Item struct {
 	Attempts int
 }
 
-// Defaults bound disk use on the ISP site. Snapshots are full-state observations that supersede older ones
-// (the Cloud ignores out-of-order data), so when a limit is hit the OLDEST pending items are dropped first.
+// Defaults bound disk use on the ISP site. Backpressure is applied PER KIND (a flood of one snapshot kind never
+// evicts another kind), oldest first. Within one (kind,key) a completed newer round supersedes older rounds
+// (PruneSuperseded) because snapshots are full-state observations.
 const (
 	DefaultMaxPending = 2000
 	DefaultMaxBytes   = 256 << 20
@@ -30,7 +31,7 @@ const (
 type Queue struct {
 	db          *sql.DB
 	MaxAttempts int
-	MaxPending  int
+	MaxPending  int // per kind
 	MaxBytes    int64
 	MaxDead     int
 	Dropped     int64 // pending items dropped by backpressure since start (exposed for logs/metrics)
@@ -49,7 +50,7 @@ func Open(path string) (*Queue, error) {
 	}
 	db.SetMaxOpenConns(1)
 	for _, ddl := range []string{
-		`CREATE TABLE IF NOT EXISTS pending (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, payload BLOB NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS pending (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, key TEXT NOT NULL DEFAULT '', round INTEGER NOT NULL DEFAULT 0, payload BLOB NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS dead (id INTEGER PRIMARY KEY, kind TEXT NOT NULL, payload BLOB NOT NULL, reason TEXT NOT NULL, dead_at TEXT NOT NULL)`,
 	} {
 		if _, err := db.Exec(ddl); err != nil {
@@ -62,7 +63,9 @@ func Open(path string) (*Queue, error) {
 
 func (q *Queue) Close() error { return q.db.Close() }
 
-func (q *Queue) Enqueue(ctx context.Context, kind string, payload []byte) error {
+// Enqueue stores a payload. key identifies the logical stream it belongs to (e.g. "cpe:<connector>") and round
+// the collection round; both are used only by PruneSuperseded.
+func (q *Queue) Enqueue(ctx context.Context, kind, key string, round int64, payload []byte) error {
 	if int64(len(payload)) > q.MaxBytes {
 		return fmt.Errorf("payload of %d bytes exceeds queue byte limit", len(payload))
 	}
@@ -71,16 +74,19 @@ func (q *Queue) Enqueue(ctx context.Context, kind string, payload []byte) error 
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO pending (kind, payload, created_at) VALUES (?,?,?)`, kind, payload, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
-		return err
-	}
-	// Backpressure: evict oldest until both item and byte limits hold (never the item just inserted).
-	res, err := tx.ExecContext(ctx, `DELETE FROM pending WHERE id IN (
-		SELECT id FROM pending ORDER BY id DESC LIMIT -1 OFFSET ?)`, q.MaxPending)
+	res, err := tx.ExecContext(ctx, `INSERT INTO pending (kind, key, round, payload, created_at) VALUES (?,?,?,?,?)`, kind, key, round, payload, time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return err
 	}
-	dropped, _ := res.RowsAffected()
+	newID, _ := res.LastInsertId()
+	// Per-kind item limit: evict the oldest of THIS kind only.
+	r, err := tx.ExecContext(ctx, `DELETE FROM pending WHERE kind = ? AND id IN (
+		SELECT id FROM pending WHERE kind = ? ORDER BY id DESC LIMIT -1 OFFSET ?)`, kind, kind, q.MaxPending)
+	if err != nil {
+		return err
+	}
+	dropped, _ := r.RowsAffected()
+	// Global byte limit: evict the oldest item of the kind holding the most bytes (never the one just inserted).
 	for {
 		var total int64
 		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(length(payload)),0) FROM pending`).Scan(&total); err != nil {
@@ -89,7 +95,9 @@ func (q *Queue) Enqueue(ctx context.Context, kind string, payload []byte) error 
 		if total <= q.MaxBytes {
 			break
 		}
-		r, err := tx.ExecContext(ctx, `DELETE FROM pending WHERE id = (SELECT MIN(id) FROM pending) AND (SELECT COUNT(*) FROM pending) > 1`)
+		r, err := tx.ExecContext(ctx, `DELETE FROM pending WHERE id = (
+			SELECT MIN(id) FROM pending WHERE id <> ? AND kind = (
+				SELECT kind FROM pending GROUP BY kind ORDER BY SUM(length(payload)) DESC LIMIT 1))`, newID)
 		if err != nil {
 			return err
 		}
@@ -104,6 +112,13 @@ func (q *Queue) Enqueue(ctx context.Context, kind string, payload []byte) error 
 	}
 	q.Dropped += dropped
 	return nil
+}
+
+// PruneSuperseded removes pending items of a stream that belong to rounds older than `round`. Call it only after
+// the whole round was persisted, so an incomplete round never discards the previous complete one.
+func (q *Queue) PruneSuperseded(ctx context.Context, key string, round int64) error {
+	_, err := q.db.ExecContext(ctx, `DELETE FROM pending WHERE key = ? AND round < ?`, key, round)
+	return err
 }
 
 // Next returns up to n oldest items.
