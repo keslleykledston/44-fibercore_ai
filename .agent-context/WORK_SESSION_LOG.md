@@ -22,3 +22,4 @@ Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetido
 - BFF/web: cookies `fc_refresh`/`fc_mfa`, passo `/login/mfa`, `middleware` de renovação, logout revoga no servidor.
 - Testes: pytest 128 passed (Postgres descartável); E2E 17 passed (incl. refresh, logout, MFA). Lint ruff ok.
 - Aberto: tela de cadastro MFA, MFA obrigatório p/ admin, eventos de segurança globais, CSP com nonce.
+- Deploy LAB: 0011 aplicada no prod (backup pré-migração fora do repo), MFA_ENCRYPTION_KEY gerada no .env.prod; verificado no site público: login, cookies HttpOnly/Secure, renovação por refresh rotativo (fc_token apagado -> /rede 200, refresh rotacionado), zero issues de console/CSP.
