@@ -15,7 +15,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import Connection, text
 
-from app.api.deps import Principal, require, tenant_conn
+from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import EDGE_OFFLINE_AFTER, audit
 from app.events import outbox
 
@@ -173,7 +173,7 @@ def list_incidents(
     status: Literal["open", "resolved"] | None = None,
     limit: int = Query(100, ge=1, le=500),
     p: Principal = Depends(require("incidents:read")),
-    conn: Connection = Depends(tenant_conn),
+    conn: Connection = TENANT_CONN,
 ) -> dict:
     cutoff = datetime.now(UTC) - EDGE_OFFLINE_AFTER
     silent = conn.execute(  # filtered and bounded in SQL (tenant scoped by RLS)
@@ -207,7 +207,7 @@ def list_incidents(
 
 
 @router.post("/v1/incidents/{incident_id}/ack")
-def ack_incident(incident_id: UUID, p: Principal = Depends(require("incidents:ack")), conn: Connection = Depends(tenant_conn)) -> dict:
+def ack_incident(incident_id: UUID, p: Principal = Depends(require("incidents:ack")), conn: Connection = TENANT_CONN) -> dict:
     res = conn.execute(
         text("UPDATE incidents SET acknowledged_by=:u, acknowledged_at=now() WHERE id=:i AND acknowledged_at IS NULL RETURNING id"),
         {"u": p.id, "i": incident_id},

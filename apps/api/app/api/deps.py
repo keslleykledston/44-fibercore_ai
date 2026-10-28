@@ -89,5 +89,10 @@ def require(perm: str):
 
 
 def tenant_conn(p: Principal = Depends(get_principal)) -> Iterator[Connection]:
+    """Always use TENANT_CONN (Depends(tenant_conn, scope="function")): the transaction must COMMIT before the response is sent. With the
+    default request scope the commit runs after the client already has its 2xx, so a follow-up call (read-your-writes) can race it."""
     with scoped_connection(get_engine(), user_id=p.id, tenant_id=p.tenant_id) as conn:
         yield conn
+
+
+TENANT_CONN = Depends(tenant_conn, scope="function")

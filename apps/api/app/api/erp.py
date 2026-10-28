@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import Connection, text
 from sqlalchemy.exc import IntegrityError
 
-from app.api.deps import Principal, require, tenant_conn
+from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import audit
 from app.core.settings import Settings, get_settings
 from app.events import outbox
@@ -60,7 +60,7 @@ async def import_csv(
     request: Request,
     source: str = Query(..., description="short id of the CSV origin, e.g. csv-manual"),
     p: Principal = Depends(require("customers:import")),
-    conn: Connection = Depends(tenant_conn),
+    conn: Connection = TENANT_CONN,
     settings: Settings = Depends(get_settings),
 ) -> dict:
     if not settings.pii_hmac_key:
@@ -192,7 +192,7 @@ def _suggest(conn: Connection, tenant_id: UUID, customer_id: UUID, serial: str) 
 def list_customers(
     limit: int = Query(100, ge=1, le=1000),
     p: Principal = Depends(require("customers:read")),
-    conn: Connection = Depends(tenant_conn),
+    conn: Connection = TENANT_CONN,
 ) -> list[dict]:
     rows = conn.execute(
         text("SELECT id, erp_source, erp_customer_id, display_name, document_last4, contract_status FROM customers "
@@ -211,7 +211,7 @@ def list_associations(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0, le=1_000_000),
     p: Principal = Depends(require("customers:read")),
-    conn: Connection = Depends(tenant_conn),
+    conn: Connection = TENANT_CONN,
 ) -> list[dict]:
     rows = conn.execute(
         text(
@@ -260,12 +260,12 @@ def _review(conn: Connection, p: Principal, assoc_id: UUID, new_status: str) -> 
 
 
 @router.post("/v1/associations/{assoc_id}/approve")
-def approve(assoc_id: UUID, p: Principal = Depends(require("associations:review")), conn: Connection = Depends(tenant_conn)) -> dict:
+def approve(assoc_id: UUID, p: Principal = Depends(require("associations:review")), conn: Connection = TENANT_CONN) -> dict:
     return _review(conn, p, assoc_id, "approved")
 
 
 @router.post("/v1/associations/{assoc_id}/reject")
-def reject(assoc_id: UUID, p: Principal = Depends(require("associations:review")), conn: Connection = Depends(tenant_conn)) -> dict:
+def reject(assoc_id: UUID, p: Principal = Depends(require("associations:review")), conn: Connection = TENANT_CONN) -> dict:
     return _review(conn, p, assoc_id, "rejected")
 
 

@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import Connection, text
 
-from app.api.deps import Principal, require, tenant_conn
+from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import audit
 from app.core import jobsign
 from app.core.settings import Settings, get_settings
@@ -108,7 +108,7 @@ def preview(
     body: PreviewIn,
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=8, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$"),
     p: Principal = Depends(require("jobs:request")),
-    conn: Connection = Depends(tenant_conn),
+    conn: Connection = TENANT_CONN,
 ) -> dict:
     op = OPERATIONS.get(body.operation)
     if op is None:
@@ -151,7 +151,7 @@ def _expire_if_needed(conn: Connection, row) -> None:
 
 
 @router.post("/v1/jobs/{job_id}/submit")
-def submit(job_id: UUID, p: Principal = Depends(require("jobs:request")), conn: Connection = Depends(tenant_conn)) -> dict:
+def submit(job_id: UUID, p: Principal = Depends(require("jobs:request")), conn: Connection = TENANT_CONN) -> dict:
     row = _load(conn, job_id)
     if row.requested_by != p.id:
         raise HTTPException(403, "only the requester can submit")
@@ -169,7 +169,7 @@ def submit(job_id: UUID, p: Principal = Depends(require("jobs:request")), conn: 
 
 
 @router.post("/v1/jobs/{job_id}/approve")
-def approve(job_id: UUID, p: Principal = Depends(require("jobs:approve")), conn: Connection = Depends(tenant_conn)) -> dict:
+def approve(job_id: UUID, p: Principal = Depends(require("jobs:approve")), conn: Connection = TENANT_CONN) -> dict:
     row = _load(conn, job_id)
     _expire_if_needed(conn, row)
     if row.status != "PENDING_APPROVAL":
@@ -192,7 +192,7 @@ def approve(job_id: UUID, p: Principal = Depends(require("jobs:approve")), conn:
 
 
 @router.post("/v1/jobs/{job_id}/cancel")
-def cancel(job_id: UUID, p: Principal = Depends(require("jobs:request")), conn: Connection = Depends(tenant_conn)) -> dict:
+def cancel(job_id: UUID, p: Principal = Depends(require("jobs:request")), conn: Connection = TENANT_CONN) -> dict:
     row = _load(conn, job_id)
     if row.requested_by != p.id and not p.can("jobs:approve"):
         raise HTTPException(403, "only the requester or an approver can cancel")
@@ -204,14 +204,14 @@ def cancel(job_id: UUID, p: Principal = Depends(require("jobs:request")), conn: 
 
 @router.get("/v1/jobs")
 def list_jobs(
-    limit: int = Query(50, ge=1, le=200), p: Principal = Depends(require("jobs:read")), conn: Connection = Depends(tenant_conn)
+    limit: int = Query(50, ge=1, le=200), p: Principal = Depends(require("jobs:read")), conn: Connection = TENANT_CONN
 ) -> list[dict]:
     rows = conn.execute(text(f"SELECT {COLS} FROM jobs ORDER BY created_at DESC LIMIT :l"), {"l": limit})  # noqa: S608
     return [_view(r) for r in rows]
 
 
 @router.get("/v1/jobs/{job_id}")
-def get_job(job_id: UUID, p: Principal = Depends(require("jobs:read")), conn: Connection = Depends(tenant_conn)) -> dict:
+def get_job(job_id: UUID, p: Principal = Depends(require("jobs:read")), conn: Connection = TENANT_CONN) -> dict:
     return _view(_load(conn, job_id, lock=False))
 
 
@@ -220,7 +220,7 @@ def get_job(job_id: UUID, p: Principal = Depends(require("jobs:read")), conn: Co
 def next_job(
     response: Response,
     p: Principal = Depends(require("jobs:execute")),
-    conn: Connection = Depends(tenant_conn),
+    conn: Connection = TENANT_CONN,
     settings: Settings = Depends(get_settings),
 ):
     if p.edge_id is None:
@@ -273,7 +273,7 @@ class ResultIn(BaseModel):
 
 @router.post("/v1/edge/jobs/{job_id}/result", status_code=204)
 def job_result(
-    job_id: UUID, body: ResultIn, p: Principal = Depends(require("jobs:execute")), conn: Connection = Depends(tenant_conn)
+    job_id: UUID, body: ResultIn, p: Principal = Depends(require("jobs:execute")), conn: Connection = TENANT_CONN
 ) -> None:
     row = _load(conn, job_id)
     if p.edge_id is None or row.edge_id != p.edge_id:

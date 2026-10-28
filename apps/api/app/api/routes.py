@@ -10,7 +10,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import Connection, text
 
 from app import __version__
-from app.api.deps import Principal, get_principal, require, tenant_conn
+from app.api.deps import TENANT_CONN, Principal, get_principal, require
 from app.core.db import get_engine, scoped_connection
 from app.core.modules import Infra, evaluate, load_manifest, probe_nats, probe_postgres
 from app.core.security import decode_token, issue_mfa_challenge, issue_token, verify_secret
@@ -205,7 +205,7 @@ def me(p: Principal = Depends(get_principal)) -> dict:
 
 # ---- tenant-scoped ---------------------------------------------------------------------------
 @router.get("/v1/tenant")
-def current_tenant(p: Principal = Depends(require("tenant:read")), conn: Connection = Depends(tenant_conn)) -> dict:
+def current_tenant(p: Principal = Depends(require("tenant:read")), conn: Connection = TENANT_CONN) -> dict:
     row = conn.execute(text("SELECT id, name, status, created_at FROM tenants")).first()  # RLS scopes
     if not row:
         raise HTTPException(404, "tenant not found")
@@ -217,7 +217,7 @@ def current_tenant(p: Principal = Depends(require("tenant:read")), conn: Connect
 def list_audit(
     limit: int = Query(50, ge=1, le=200),
     p: Principal = Depends(require("audit:read")),
-    conn: Connection = Depends(tenant_conn),
+    conn: Connection = TENANT_CONN,
 ) -> list[dict]:
     rows = conn.execute(
         text(
@@ -265,7 +265,7 @@ class EdgeHeartbeat(BaseModel):
 def edge_heartbeat(
     body: EdgeHeartbeat,
     p: Principal = Depends(require("edge:heartbeat")),
-    conn: Connection = Depends(tenant_conn),
+    conn: Connection = TENANT_CONN,
 ) -> None:
     """Interim auth: Edge service-account bearer (role edge_agent). Target: mTLS identity (ADR-0011)."""
     if body.tenant_id != p.tenant_id or p.edge_id is None or body.edge_id != p.edge_id:
@@ -282,7 +282,7 @@ def edge_heartbeat(
 
 
 @router.get("/v1/edges")
-def list_edges(p: Principal = Depends(require("edge:read")), conn: Connection = Depends(tenant_conn)) -> list[dict]:
+def list_edges(p: Principal = Depends(require("edge:read")), conn: Connection = TENANT_CONN) -> list[dict]:
     now = datetime.now(UTC)
     out = []
     for r in conn.execute(text("SELECT id, name, site_name, version, last_heartbeat_at, status FROM edges ORDER BY name")):

@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import Connection, text
 
-from app.api.deps import Principal, require, tenant_conn
+from app.api.deps import TENANT_CONN, Principal, require
 from app.api.noc import evaluate_pons
 from app.events import outbox
 
@@ -89,7 +89,7 @@ def _bound_edge(p: Principal, edge_id: UUID) -> None:
 
 @router.post("/v1/edge/olt-snapshots", status_code=202)
 def ingest_olt_snapshot(
-    body: OltSnapshot, p: Principal = Depends(require("inventory:write")), conn: Connection = Depends(tenant_conn)
+    body: OltSnapshot, p: Principal = Depends(require("inventory:write")), conn: Connection = TENANT_CONN
 ) -> dict:
     _bound_edge(p, body.edge_id)
     row = conn.execute(
@@ -181,7 +181,7 @@ def ingest_olt_snapshot(
 
 @router.post("/v1/edge/cpe-snapshots", status_code=202)
 def ingest_cpe_snapshot(
-    body: CpeSnapshot, p: Principal = Depends(require("inventory:write")), conn: Connection = Depends(tenant_conn)
+    body: CpeSnapshot, p: Principal = Depends(require("inventory:write")), conn: Connection = TENANT_CONN
 ) -> dict:
     _bound_edge(p, body.edge_id)
     all_serials = [c.canonical_serial for c in body.cpes]
@@ -259,7 +259,7 @@ def _fresh(ts: datetime | None) -> str:
 def list_olts(
     limit: int = Query(100, ge=1, le=1000),
     p: Principal = Depends(require("inventory:read")),
-    conn: Connection = Depends(tenant_conn),
+    conn: Connection = TENANT_CONN,
 ) -> list[dict]:
     rows = conn.execute(
         text(
@@ -283,7 +283,7 @@ def list_onus(
     olt_id: UUID | None = None,
     limit: int = Query(100, ge=1, le=1000),
     p: Principal = Depends(require("inventory:read")),
-    conn: Connection = Depends(tenant_conn),
+    conn: Connection = TENANT_CONN,
 ) -> list[dict]:
     rows = conn.execute(
         text(
@@ -306,7 +306,7 @@ def list_onus(
 def list_cpes(
     limit: int = Query(100, ge=1, le=1000),
     p: Principal = Depends(require("inventory:read")),
-    conn: Connection = Depends(tenant_conn),
+    conn: Connection = TENANT_CONN,
 ) -> list[dict]:
     rows = conn.execute(
         text(
