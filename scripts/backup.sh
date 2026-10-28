@@ -15,7 +15,8 @@ COMPOSE=(docker compose --env-file "${ENV_FILE:-.env.dev}" -f infra/compose/comp
 "${COMPOSE[@]}" exec -T postgres pg_dump -U fibercore -d fibercore -Fc --no-owner > "$TMP"
 test -s "$TMP" || { echo "backup vazio" >&2; exit 1; }
 chmod 600 "$TMP"
-mv -n "$TMP" "$OUT"
+ln "$TMP" "$OUT" || { echo "colisão: destino criado por outra execução: $OUT" >&2; exit 1; }  # ln falha se existir (atômico)
+rm -f "$TMP"
 sha256sum "$OUT" > "$OUT.sha256"
 if [[ -n "${BACKUP_GPG_RECIPIENT:-}" ]]; then
   gpg --batch --yes --encrypt --recipient "$BACKUP_GPG_RECIPIENT" --output "$OUT.gpg" "$OUT"
