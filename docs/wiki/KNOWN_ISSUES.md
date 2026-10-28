@@ -11,3 +11,4 @@
 - NATS em dev sem TLS/ACL. Imagens Docker por tag, não digest.
 - `/livez` `/readyz` `/version` estão na raiz (fora de `/v1`); contrato OpenAPI ainda não os descreve.
 - Tabelas de domínio (edges, olts, onus, cpes, jobs…) do `postgres_baseline_draft.sql` ainda não migradas.
+- JetStream: `FIBERCORE_EVENTS` sem expiração por idade (max_age=0); definir `max_bytes` + alerta de uso antes de piloto. `published_at` ≠ consumido. Recuperação: `python -m app.workers.relay replay <ISO-ts> [tenant]` (replay dentro da janela de dedupe de 1h é descartado pelo bus; consumidores idempotentes).

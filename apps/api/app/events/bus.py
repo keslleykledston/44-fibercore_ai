@@ -25,14 +25,17 @@ async def connect(url: str):
     return nc, nc.jetstream()
 
 
-async def ensure_streams(js, *, duplicate_window_s: float = 3600.0) -> None:
+async def ensure_streams(js, *, duplicate_window_s: float = 3600.0, max_age_s: int = 0, max_bytes: int = -1) -> None:
+    """max_age_s=0 => never expire by age (published_at != consumed; expiry would lose events for
+    offline consumers). Bound by max_bytes + alerting; recover older events with relay.replay()."""
     await js.add_stream(
         StreamConfig(
             name=STREAM,
             subjects=[f"{SUBJECT_ROOT}.>"],
             retention=RetentionPolicy.LIMITS,
             duplicate_window=duplicate_window_s,
-            max_age=7 * 24 * 3600,
+            max_age=max_age_s,
+            max_bytes=max_bytes,
         )
     )
     await js.add_stream(StreamConfig(name=DLQ_STREAM, subjects=[f"{DLQ_ROOT}.>"], max_age=30 * 24 * 3600))

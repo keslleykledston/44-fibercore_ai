@@ -60,6 +60,22 @@ async def relay_once(engine: Engine, js, *, batch: int = 100, crash_after_publis
     return len(done)
 
 
+def replay(engine: Engine, since: str, tenant_id: str | None = None) -> int:
+    """Mark events created since `since` (ISO timestamp) as unpublished so the relay republishes them.
+
+    Recovery path for expired/lost bus messages. Safe because consumers are idempotent and the
+    bus dedupes by Nats-Msg-Id inside its duplicate window.
+    """
+    with engine.begin() as conn:
+        return conn.execute(
+            text(
+                "UPDATE events_outbox SET published_at = NULL "
+                "WHERE created_at >= CAST(:s AS timestamptz) AND (CAST(:t AS uuid) IS NULL OR tenant_id = CAST(:t AS uuid))"
+            ),
+            {"s": since, "t": tenant_id},
+        ).rowcount
+
+
 async def run() -> None:  # pragma: no cover - process entrypoint
     logging.basicConfig(level=logging.INFO)
     engine = make_engine(os.environ["WORKER_DATABASE_URL"])
@@ -78,4 +94,9 @@ async def run() -> None:  # pragma: no cover - process entrypoint
 
 
 if __name__ == "__main__":
-    asyncio.run(run())
+    import sys
+
+    if len(sys.argv) >= 3 and sys.argv[1] == "replay":
+        print(replay(make_engine(os.environ["WORKER_DATABASE_URL"]), sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None))
+    else:
+        asyncio.run(run())

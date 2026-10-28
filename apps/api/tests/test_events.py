@@ -21,14 +21,14 @@ def run(coro):
     return asyncio.run(coro)
 
 
-async def fresh_js():
+async def fresh_js(dup: float = 3600.0):
     nc, js = await bus.connect(NATS_URL)
     for name in (bus.STREAM, bus.DLQ_STREAM):
         try:
             await js.delete_stream(name)
         except Exception:  # noqa: S110
             pass
-    await bus.ensure_streams(js)
+    await bus.ensure_streams(js, duplicate_window_s=dup)
     return nc, js
 
 
@@ -169,3 +169,24 @@ def test_tenant_subject_mismatch_not_processed(engines, seed):
         return called
 
     assert run(go()) == []
+
+
+def test_replay_republishes_after_bus_loss(engines, seed):
+    from app.workers.relay import replay
+    app_e, worker_e = engines
+    new_event(app_e, seed["A"])
+
+    async def go():
+        nc, js = await fresh_js(dup=1.0)
+        await relay_once(worker_e, js)
+        await js.purge_stream(bus.STREAM)  # simulate expired/lost messages
+        assert await stream_count(js) == 0
+        await asyncio.sleep(1.5)  # replay inside the dedupe window would be (correctly) dropped by the bus
+        assert replay(worker_e, "2000-01-01T00:00:00Z") == 1
+        assert replay(worker_e, "2000-01-01T00:00:00Z", str(seed["B"])) == 0  # tenant filter
+        await relay_once(worker_e, js)
+        n = await stream_count(js)
+        await nc.close()
+        return n
+
+    assert run(go()) == 1
