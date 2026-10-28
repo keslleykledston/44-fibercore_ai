@@ -20,3 +20,4 @@
 - Capturas: tempos relativos são mascarados (cinza) nas imagens; seed recria dados a cada execução.
 - Login: o lockout por conta permite DoS direcionado (quem conhece o e-mail bloqueia por 15 min); mitigações: throttle por IP (30 falhas/15 min; `TRUSTED_PROXY=true` atrás do Caddy), recuperação `python -m app.cli unlock-login <chave>`; desafio/atraso progressivo e MFA permanecem pendentes.
 - Throttle por IP: depende do `X-Forwarded-For` do Caddy repassado pelo BFF; em Compose dev a porta 127.0.0.1:18420 do api-core permite spoof de XFF (só afeta o limite por IP; o lockout por conta continua). Não publicar essa porta.
+- E2E: `assinantes: ... aprovação` falhou 2 vezes em ~10 execuções locais (não reproduzido em 6 consecutivas); causa não identificada. CI usa `retries: 1`; investigar com trace se reaparecer.
