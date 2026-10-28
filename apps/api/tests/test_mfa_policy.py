@@ -157,3 +157,29 @@ def test_concurrent_activation_is_serialised_and_the_loser_gets_a_conflict(clien
     t.join(10)
     assert result["r"].status_code == 409, result["r"].text
     assert "recovery_codes" not in result["r"].json()
+
+
+def test_enrol_racing_an_activation_cannot_switch_mfa_back_off(client, seed, member, migrated):
+    """Enrol's UPSERT used to overwrite a just-activated row (enabled=false, new secret). A second connection holds the row, the
+    enrol request waits on it, the "activation" commits meanwhile; MFA must stay enabled and the enrol must get a 409."""
+    import threading
+    import time
+
+    who = member("isp_admin")
+    tok = _token(client, who)
+    client.post("/v1/auth/mfa/enroll", json={"password": PW}, headers=_bearer(tok))
+    result: dict = {}
+
+    def enrol():
+        result["r"] = client.post("/v1/auth/mfa/enroll", json={"password": PW}, headers=_bearer(tok))
+
+    with migrated.begin() as holder:
+        holder.execute(text("SELECT 1 FROM user_mfa WHERE user_id = :u FOR UPDATE"), {"u": who["id"]})
+        t = threading.Thread(target=enrol)
+        t.start()
+        time.sleep(1.5)  # long enough for the request to pass its own checks and block on the row
+        holder.execute(text("UPDATE user_mfa SET enabled = true WHERE user_id = :u"), {"u": who["id"]})  # activation commits
+    t.join(10)
+    assert result["r"].status_code == 409, result["r"].text
+    with migrated.begin() as c:
+        assert c.execute(text("SELECT enabled FROM user_mfa WHERE user_id = :u"), {"u": who["id"]}).scalar() is True

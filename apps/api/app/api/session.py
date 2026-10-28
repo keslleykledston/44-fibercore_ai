@@ -216,16 +216,17 @@ def mfa_enroll(
         email = _reauth(conn, request, settings, uid, body.password)
         if email is None:
             outcome = "bad"
-        elif conn.execute(text("SELECT enabled FROM user_mfa WHERE user_id = :u"), {"u": uid}).scalar():
-            outcome = "enabled"
         else:
             secret = mfa.new_secret()
-            conn.execute(
+            # Conditional upsert: an ENABLED row is never overwritten. Postgres re-checks the WHERE against the latest committed row
+            # after waiting for a concurrent activation, so enrol can no longer switch MFA back off behind its back.
+            done = conn.execute(
                 text("INSERT INTO user_mfa (user_id, secret_enc) VALUES (:u, :s) "
-                     "ON CONFLICT (user_id) DO UPDATE SET secret_enc = EXCLUDED.secret_enc, last_step = 0, enabled = false"),
+                     "ON CONFLICT (user_id) DO UPDATE SET secret_enc = EXCLUDED.secret_enc, last_step = 0, enabled = false "
+                     "WHERE user_mfa.enabled = false RETURNING 1"),
                 {"u": uid, "s": mfa.encrypt_secret(settings, secret)},
-            )
-            outcome = "ok"
+            ).first()
+            outcome = "ok" if done else "enabled"
     if outcome == "bad":
         raise HTTPException(401, "invalid credentials")
     if outcome == "enabled":
