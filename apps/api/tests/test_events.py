@@ -222,3 +222,15 @@ def test_ensure_streams_idempotent_and_concurrent():
         return info.config.duplicate_window
 
     assert run(go()) == 120.0
+
+
+def test_ensure_streams_preserves_admin_limits():
+    async def go():
+        nc, js = await fresh_js()
+        await bus.ensure_streams(js, max_bytes=5_000_000, max_age_s=86400)  # "admin" tuning
+        await bus.ensure_streams(js)  # relay/consumer restart with no explicit limits
+        cfg = (await js.stream_info(bus.STREAM)).config
+        await nc.close()
+        return cfg.max_bytes, cfg.max_age
+
+    assert run(go()) == (5_000_000, 86400)
