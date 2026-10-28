@@ -217,9 +217,13 @@ func walkBulk(ctx context.Context, root string, maxRows int, tick func(context.C
 		}
 		for _, pdu := range vars {
 			name := strings.TrimPrefix(pdu.Name, ".")
+			// The ONLY two ways a table ends: the agent says endOfMibView, or the answer is outside the subtree.
+			if pdu.Type == gosnmp.EndOfMibView || !strings.HasPrefix(name, prefix) {
+				return rows, nil
+			}
 			v := toValue(pdu)
-			if v.Missing || !strings.HasPrefix(name, prefix) {
-				return rows, nil // left the subtree (or endOfMibView): the table is finished
+			if v.Missing { // noSuchObject/noSuchInstance/null/unsupported type INSIDE the table is a broken answer, never an end
+				return nil, errors.New("snmp: missing or unsupported value inside the table (not an end of table)")
 			}
 			if prev != "" && !oidLess(prev, name) {
 				return nil, errors.New("snmp: agent returned non-increasing OIDs")

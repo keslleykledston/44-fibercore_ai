@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a183e1-43a5-7563-a087-236ab2625c17).
+[codex] Turn started (01a183e1-43e2-7622-be9c-9134d887c0fa).
+[codex] Assistant message captured: Vou inspecionar o diff completo contra `main`, priorizando os caminhos de escrita, exposição ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- agents/edge/internal/olt ag...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- agents/edge/internal/olt ag... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- agents/edge/internal/config...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- agents/edge/internal/config... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/snmp.go | sed -n '65,230p'; nl -ba agents/edge...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/snmp.go | sed -n '65,230p'; nl -ba agents/edge... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: a caminhada SNMP pode tratar uma linh...
+[codex] Turn completion inferred after the main thread finished and subagent work drained.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: a caminhada SNMP pode tratar uma linha inválida como fim de tabela e marcar uma PON incompleta como completa, afetando a correlação de incidentes.
+
+Findings:
+- [high] PDU inválido pode encerrar a caminhada e forjar completude (agents/edge/internal/olt/snmp.go:152-163)
+  `toValue` classifica `Null` e qualquer tipo ASN.1 não tratado como `Missing`; `walkBulk` interpreta todo `Missing` como fim legítimo da tabela e retorna sucesso. Se a resposta terminar assim dentro da subárvore, os estados e seriais podem ser truncados e ainda produzir mapas coincidentes; `readPon` então pode deixar `Verified=true`, e `collectSNMP` publica `Complete=true`. Uma leitura parcial pode, portanto, ser usada pela correlação de incidentes como inventário completo. Só aceite `EndOfMibView` como término; rejeite `Null` ou tipos inesperados dentro da subárvore como erro de caminhada.
+  Recommendation: Distinguir explicitamente `EndOfMibView` dos demais tipos ausentes ou não suportados e fazer a caminhada falhar quando estes aparecerem dentro da subárvore.

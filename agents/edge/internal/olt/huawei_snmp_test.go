@@ -233,6 +233,24 @@ func TestWalkBulkProvesTheEndOfTheTableOnlyByLeavingTheSubtree(t *testing.T) {
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("rows=%v err=%v", rows, err)
 	}
+	// anything missing/odd INSIDE the subtree is a broken answer, not an end (it would truncate the listing and fake completeness)
+	for name, bad := range map[string]gosnmp.SnmpPDU{
+		"null":             pdu(root+".1", nil, gosnmp.Null),
+		"noSuchObject":     pdu(root+".1", nil, gosnmp.NoSuchObject),
+		"noSuchInstance":   pdu(root+".1", nil, gosnmp.NoSuchInstance),
+		"unsupported type": pdu(root+".1", "1.3.6.1", gosnmp.ObjectIdentifier),
+	} {
+		call := 0
+		if _, err := walkBulk(context.Background(), root, 100, noTick, func(string) ([]gosnmp.SnmpPDU, error) {
+			call++
+			if call == 1 {
+				return []gosnmp.SnmpPDU{row(0, 1), bad}, nil
+			}
+			return []gosnmp.SnmpPDU{out}, nil // a later page would end the table cleanly: only the bad value may cause the error
+		}); err == nil {
+			t.Errorf("%s inside the subtree must fail the walk, not end it", name)
+		}
+	}
 	// an error mid-walk is NEVER a finished table
 	i = 0
 	if _, err := walkBulk(context.Background(), root, 100, noTick, func(string) ([]gosnmp.SnmpPDU, error) {
