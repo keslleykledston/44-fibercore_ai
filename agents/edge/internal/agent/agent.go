@@ -3,6 +3,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"sync/atomic"
@@ -120,9 +121,9 @@ func (a *Agent) PollJob(ctx context.Context) {
 		return
 	}
 	a.Log.Info("job accepted", "job_id", env.JobID, "operation", env.Operation)
-	if err := a.GW.JobResult(ctx, env.JobID, "accepted", "", false); err != nil {
-		a.Log.Warn("accept report failed", "err", err)
-	}
+	// Outcomes go through the durable queue (ordered after the data they refer to, retried until the Cloud acknowledges;
+	// the Cloud treats repeats of the same outcome as no-ops). A lost response can no longer strand a job.
+	a.reportJob(ctx, env.JobID, "accepted", "", false)
 	// collect/refresh are the only operations that pass Verify: a fresh read-only round, then delivery.
 	cerr := a.CollectOnce(ctx)
 	a.Flush(ctx)
@@ -132,8 +133,14 @@ func (a *Agent) PollJob(ctx context.Context) {
 	if !ok {
 		state, detail = "failed", "collection incomplete or delivery pending"
 	}
-	if err := a.GW.JobResult(ctx, env.JobID, state, detail, ok); err != nil {
-		a.Log.Warn("result report failed", "err", err)
+	a.reportJob(ctx, env.JobID, state, detail, ok)
+	a.Flush(ctx)
+}
+
+func (a *Agent) reportJob(ctx context.Context, jobID, state, detail string, postcheck bool) {
+	b, _ := json.Marshal(map[string]any{"job_id": jobID, "state": state, "detail": detail, "postcheck_ok": postcheck})
+	if err := a.Q.Enqueue(ctx, "job_result", "", 0, b); err != nil {
+		a.Log.Error("could not persist job result", "job_id", jobID, "err", err)
 	}
 }
 

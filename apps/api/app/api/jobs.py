@@ -279,6 +279,8 @@ def job_result(
     if p.edge_id is None or row.edge_id != p.edge_id:
         raise HTTPException(403, "job belongs to another edge")
     to = {"accepted": "ACCEPTED", "failed": "FAILED"}.get(body.state) or ("SUCCEEDED" if body.postcheck_ok else "UNKNOWN")
+    if row.status == to:
+        return  # idempotent: the Edge re-sends a durable result until acknowledged; the same outcome is a no-op
     if not cas(conn, job_id, to, extra=", result = CAST(:res AS jsonb)",
                params={"res": json.dumps({"detail": body.detail, "postcheck_ok": body.postcheck_ok})}):
         raise HTTPException(409, f"illegal transition from {row.status} to {to}")

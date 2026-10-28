@@ -235,3 +235,20 @@ def test_idempotency_key_charset_is_ascii_safe_for_cross_language_signing(client
     h = hdr(client, "alice", seed, "A")
     r = client.post("/v1/jobs/preview", headers={**h, "Idempotency-Key": key}, json={"operation": "collect", "target_id": targets["olt"]})
     assert r.status_code == 422
+
+
+def test_result_report_is_idempotent_for_edge_retries(client, seed, inv, targets):
+    h = hdr(client, "alice", seed, "A")
+    a = agent(client, inv, "a1")
+    while client.get("/v1/edge/jobs/next", headers=a).status_code == 200:
+        pass
+    jid = preview(client, h, "collect", targets["olt"]).json()["id"]
+    client.post(f"/v1/jobs/{jid}/submit", headers=h)
+    client.get("/v1/edge/jobs/next", headers=a)
+    for _ in range(2):
+        assert client.post(f"/v1/edge/jobs/{jid}/result", headers=a, json={"state": "accepted"}).status_code == 204
+    for _ in range(3):
+        assert client.post(f"/v1/edge/jobs/{jid}/result", headers=a, json={"state": "succeeded", "postcheck_ok": True}).status_code == 204
+    assert client.get(f"/v1/jobs/{jid}", headers=h).json()["status"] == "SUCCEEDED"
+    # a DIFFERENT outcome after a terminal one is still refused
+    assert client.post(f"/v1/edge/jobs/{jid}/result", headers=a, json={"state": "failed"}).status_code == 409

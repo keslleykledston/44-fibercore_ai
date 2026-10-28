@@ -240,3 +240,59 @@ func TestPollJobExecutesVerifiedReadOnlyJobOnceAndRejectsReplayAndForgery(t *tes
 		t.Fatalf("forged job produced reports: %v", *results2)
 	}
 }
+
+func TestJobResultSurvivesCloudOutageAndIsRetried(t *testing.T) {
+	b, _ := os.ReadFile(filepath.Join("..", "..", "..", "..", "tests", "fixtures", "edge", "job_envelope_signed.golden.json"))
+	var g struct {
+		PublicKey string         `json:"public_key_b64"`
+		Envelope  map[string]any `json:"envelope"`
+	}
+	_ = json.Unmarshal(b, &g)
+	pub, _ := jobs.ParsePublicKey(g.PublicKey)
+	envBytes, _ := json.Marshal(g.Envelope)
+	var mu sync.Mutex
+	down := true
+	var results []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case r.URL.Path == "/v1/auth/service-token":
+			json.NewEncoder(w).Encode(map[string]string{"access_token": "t"})
+		case r.URL.Path == "/v1/edge/jobs/next":
+			w.Write(envBytes)
+		case strings.HasSuffix(r.URL.Path, "/result"):
+			if down {
+				w.WriteHeader(503)
+				return
+			}
+			bb, _ := io.ReadAll(r.Body)
+			results = append(results, string(bb))
+			w.WriteHeader(204)
+		default:
+			w.WriteHeader(202)
+		}
+	}))
+	defer srv.Close()
+	q, _ := queue.Open(filepath.Join(t.TempDir(), "q.db"))
+	defer q.Close()
+	a := &Agent{EdgeID: "33333333-3333-4333-8333-333333333333", TenantID: "22222222-2222-4222-8222-222222222222", Version: "v",
+		GW: gateway.New(srv.URL, "c", "s", srv.Client()), Q: q, Collectors: []collector.Collector{fixedCollector{[]string{`{"n":1}`}}},
+		Jobs: &jobs.Verifier{Pub: pub, EdgeID: "33333333-3333-4333-8333-333333333333", TenantID: "22222222-2222-4222-8222-222222222222",
+			Allowed: map[string]bool{"collect": true}, Nonces: q, Now: func() time.Time { return time.Date(2026, 10, 28, 10, 5, 0, 0, time.UTC) }},
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	ctx := context.Background()
+	a.PollJob(ctx) // Cloud rejects result reports (503): outcome must stay queued, not vanish
+	if p, d, _ := q.Counts(ctx); p == 0 || d != 0 {
+		t.Fatalf("results must remain queued: pending=%d dead=%d", p, d)
+	}
+	mu.Lock()
+	down = false
+	mu.Unlock()
+	a.Flush(ctx)
+	mu.Lock()
+	defer mu.Unlock()
+	if len(results) != 2 || !strings.Contains(results[0], "accepted") || !strings.Contains(results[1], "state") {
+		t.Fatalf("results after recovery=%v", results)
+	}
+}

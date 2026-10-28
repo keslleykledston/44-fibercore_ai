@@ -10,10 +10,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 )
+
+var jobIDRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // Outcome classifies a delivery attempt.
 type Outcome int
@@ -118,6 +121,20 @@ func (c *Client) Heartbeat(ctx context.Context, edgeID, tenantID, version string
 
 // Deliver sends a queued payload to the endpoint mapped from its kind.
 func (c *Client) Deliver(ctx context.Context, kind string, payload []byte) (Outcome, error) {
+	if kind == "job_result" { // durable job outcome: {"job_id":..., "state":..., "detail":..., "postcheck_ok":...}
+		var m map[string]any
+		if err := json.Unmarshal(payload, &m); err != nil {
+			return Rejected, err
+		}
+		id, _ := m["job_id"].(string)
+		if !jobIDRe.MatchString(id) {
+			return Rejected, fmt.Errorf("job_result without valid job_id")
+		}
+		delete(m, "job_id")
+		b, _ := json.Marshal(m)
+		o, _, err := c.post(ctx, "/v1/edge/jobs/"+id+"/result", b)
+		return o, err
+	}
 	path, ok := map[string]string{"olt_snapshot": "/v1/edge/olt-snapshots", "cpe_snapshot": "/v1/edge/cpe-snapshots"}[kind]
 	if !ok {
 		return Rejected, fmt.Errorf("unknown kind %q", kind)
@@ -162,14 +179,4 @@ func (c *Client) NextJob(ctx context.Context) ([]byte, error) {
 		}
 	}
 	return nil, errors.New("next job: auth retry exhausted")
-}
-
-// JobResult reports progress/outcome. state: accepted | succeeded | failed.
-func (c *Client) JobResult(ctx context.Context, jobID, state, detail string, postcheckOK bool) error {
-	b, _ := json.Marshal(map[string]any{"state": state, "detail": detail, "postcheck_ok": postcheckOK})
-	o, _, err := c.post(ctx, "/v1/edge/jobs/"+jobID+"/result", b)
-	if o != Delivered {
-		return fmt.Errorf("job result not delivered: %v", err)
-	}
-	return nil
 }
