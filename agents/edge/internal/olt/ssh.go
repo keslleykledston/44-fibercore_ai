@@ -76,13 +76,16 @@ func DialSSH(ctx context.Context, cfg SSHConfig) (*SSHSession, error) {
 	return &SSHSession{client: ssh.NewClient(conn, chans, reqs), cfg: cfg}, nil
 }
 
+// Close tears the connection down FIRST, so a Run blocked in openShell or waiting for a prompt is released immediately
+// instead of Close waiting for the command timeout behind s.mu.
 func (s *SSHSession) Close() error {
+	err := s.client.Close()
 	s.mu.Lock()
 	if s.sh != nil {
 		s.sh.close()
 	}
 	s.mu.Unlock()
-	return s.client.Close()
+	return err
 }
 
 func (s *SSHSession) Run(ctx context.Context, cmd string) (string, error) {

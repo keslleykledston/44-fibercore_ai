@@ -1,0 +1,32 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1834b-4b9c-7a22-8ca7-0c3c3cc4c592).
+[codex] Turn started (01a1834b-4e34-7e50-873c-eb8f38ed03dd).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de envio, leitura, timeout e reutil...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/sh...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/sh... (exit 0)
+[codex] Running command: /bin/bash -lc "git status --short && git diff --no-ext-diff --unified=50 main...HEAD -- agent...
+[codex] Command completed: /bin/bash -lc "git status --short && git diff --no-ext-diff --unified=50 main...HEAD -- agent... (exit 0)
+[codex] Assistant message captured: Encontrei um possível risco de travamento na espera do prompt; vou conferir também os limites...
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/shell.go | sed -n '35,265p'; nl -ba agents/edg...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/shell.go | sed -n '35,265p'; nl -ba agents/edg... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"func \\(.*Allowed|Allowed func|display version|show version\" agents/e...
+[codex] Command completed: /bin/bash -lc "rg -n \"func \\(.*Allowed|Allowed func|display version|show version\" agents/e... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: no modo shell, a resposta do equipame...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: no modo shell, a resposta do equipamento pode ser confundida com a conclusão do comando e a linha `tidy` pode descartar saída válida. Há também um caminho em que `Close` não consegue interromper uma sessão ainda abrindo o shell.
+
+Findings:
+- [high] A linha de comando ecoada pode forjar o fim do comando (agents/edge/internal/olt/shell.go:221-257)
+  `finished` exige que o primeiro texto não vazio seja exatamente o eco do comando e aceita o prompt aprendido como última linha, mas não rejeita outro eco idêntico dentro do corpo. Se a própria saída contiver uma linha igual ao comando e depois terminar com o prompt, `Run` retorna sucesso antes de distinguir a saída real; `tidy` também remove somente a primeira linha que contém `cmd`, permitindo que a ecoada no corpo permaneça ou que a saída seja truncada semanticamente. Os drivers interpretam essa saída como dado de inventário. Rejeite ecos duplicados/inesperados (ou use um delimitador de protocolo que a saída não possa forjar) e remova o eco somente se for linha inicial exata.
+  Recommendation: Falhar fechado quando houver mais de uma linha igual ao comando ou qualquer eco fora da posição inicial; ajustar `tidy` para remover apenas o eco inicial exato.
+- [medium] `tidy` remove saída legítima que apenas contém o comando (agents/edge/internal/olt/shell.go:249-254)
+  A conclusão aceita apenas o primeiro eco exato, mas `tidy` usa `strings.Contains(t, cmd)` em qualquer linha até encontrar uma correspondência. Uma resposta como `last command: display version` antes do prompt é descartada junto com a linha; a chamada ainda retorna sucesso, sem sinalizar truncamento. Isso pode ocultar conteúdo de saída que os parsers precisam para identificar ou coletar dados. Remova somente a linha inicial exata já validada por `finished`.
+  Recommendation: Alinhar `tidy` ao protocolo de conclusão: descartar apenas o eco inicial exato e preservar todas as linhas do payload.
+- [medium] `Close` pode bloquear enquanto `Run` abre o shell (agents/edge/internal/olt/ssh.go:79-99)
+  No modo shell, `Run` segura `s.mu` durante `openShell`, que pode esperar até `CommandTimout` pelo prompt de login. `Close` precisa adquirir o mesmo mutex antes de fechar o cliente; portanto, chamada concorrente de fechamento não cancela essa espera e pode bloquear por até 30 segundos (ou pelo timeout configurado). Isso enfraquece cancelamento/shutdown e pode prender a coleta ou encerramento do agente. Torne abertura/cancelamento coordenáveis sem manter o mutex durante a espera, ou feche o cliente antes de aguardar a trava.
+  Recommendation: Evitar manter o mutex durante a abertura bloqueante e assegurar que `Close` possa interromper a conexão/sessão em abertura.

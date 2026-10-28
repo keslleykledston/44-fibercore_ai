@@ -238,22 +238,26 @@ func finished(c, cmd, prompt string) (bool, error) {
 	return true, nil
 }
 
-// tidy drops the command echo, the optional-parameter prompt and the trailing prompt, keeping the device output.
+// tidy drops ONLY the initial command echo, the optional-parameter prompt that follows it and the trailing prompt; every
+// other line is device payload, even if it happens to contain the command text (Huawei prints a "Command:" block).
 func tidy(text, cmd, prompt string) string {
 	lines := strings.Split(stripCtl(text), "\n")
 	end := len(lines) - 1
 	for end >= 0 && strings.TrimSpace(lines[end]) == "" {
 		end--
 	}
+	first := 0
+	for first < len(lines) && strings.TrimSpace(lines[first]) == "" {
+		first++
+	}
 	var out []string
-	echoed := false
 	for i, l := range lines {
 		t := strings.TrimSpace(l)
 		switch {
-		case !echoed && strings.Contains(t, cmd):
-			echoed = true
-		case optParamRe.MatchString(t):
-		case i == end && strings.HasSuffix(t, prompt):
+		case i < first:
+		case i == first && t == cmd:
+		case i == first+1 && optParamRe.MatchString(t) && strings.TrimSpace(lines[first]) == cmd:
+		case i == end && t == prompt:
 		default:
 			out = append(out, l)
 		}

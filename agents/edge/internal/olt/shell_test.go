@@ -363,6 +363,9 @@ func TestRealMA5608TDisplayVersionCapture(t *testing.T) {
 	if strings.Contains(out, "<cr>") || strings.Contains(out, "OLT-TEST-1>") || strings.HasPrefix(strings.TrimSpace(out), "display version") {
 		t.Fatalf("echo/prompt not stripped:\n%s", out)
 	}
+	if !strings.Contains(out, "Command:") || !strings.Contains(out, "          display version") {
+		t.Fatalf("legitimate payload that contains the command text must be preserved:\n%s", out)
+	}
 	id, err := Huawei{}.Identify(context.Background(), stubSession{out})
 	if err != nil {
 		t.Fatal(err)
@@ -430,5 +433,67 @@ func TestShellLineEndingWithPromptTextIsOrdinaryOutput(t *testing.T) {
 	out, err := s.Run(context.Background(), "display suffix")
 	if err != nil || !strings.Contains(out, "see "+testPrompt) || !strings.Contains(out, "rest") {
 		t.Fatalf("out=%q err=%v", out, err)
+	}
+}
+
+func TestTidyKeepsPayloadLinesThatMentionTheCommand(t *testing.T) {
+	raw := "display version\n{ <cr>|x }:\n  last command: display version\n  display version\n  VERSION : V1\nOLT-TEST-1>"
+	out := tidy(raw, "display version", "OLT-TEST-1>")
+	want := "  last command: display version\n  display version\n  VERSION : V1"
+	if out != want {
+		t.Fatalf("got %q want %q", out, want)
+	}
+}
+
+func TestCloseReleasesARunBlockedWaitingForTheLoginPrompt(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	signer := mustEd25519(t)
+	cfg := &ssh.ServerConfig{PasswordCallback: func(ssh.ConnMetadata, []byte) (*ssh.Permissions, error) { return nil, nil }}
+	cfg.AddHostKey(signer)
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		conn, chans, reqs, err := ssh.NewServerConn(c, cfg)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		go ssh.DiscardRequests(reqs)
+		for nc := range chans {
+			ch, creqs, _ := nc.Accept()
+			go func() {
+				for r := range creqs {
+					r.Reply(true, nil) // shell opens but the banner never reaches a prompt
+					_ = ch
+				}
+			}()
+		}
+	}()
+	s, err := DialSSH(context.Background(), SSHConfig{Addr: ln.Addr().String(), User: "u", Password: "pw",
+		HostKeySHA256: ssh.FingerprintSHA256(signer.PublicKey()), Dial: dialer, Shell: true, CommandTimout: 20 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { _, err := s.Run(context.Background(), "display version"); done <- err }()
+	time.Sleep(300 * time.Millisecond)
+	start := time.Now()
+	s.Close()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("run must fail after Close")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Close did not release the blocked Run")
+	}
+	if time.Since(start) > 3*time.Second {
+		t.Fatal("Close was held behind the command timeout")
 	}
 }
