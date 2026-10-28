@@ -108,9 +108,14 @@ def evaluate_pons(
             _resolve(conn, tenant_id, open_row.id, evidence)
         elif enough_to_resolve:  # still open: refresh counters (never from thin evidence)
             conn.execute(text("UPDATE incidents SET evidence=CAST(:e AS jsonb) WHERE id=:i"), {"i": open_row.id, "e": _j(evidence)})
+        elif still_down:  # too few covered ONUs to judge, but the ones reported are still down: the event is alive, renew the deadline
+            conn.execute(
+                text("UPDATE incidents SET evidence = jsonb_set(evidence, '{evidence_at}', to_jsonb(CAST(:ts AS text))) WHERE id=:i"),
+                {"i": open_row.id, "ts": datetime.now(UTC).isoformat()},
+            )
         else:
             last = _parse_dt(ev.get("evidence_at")) or open_row.opened_at
-            if datetime.now(UTC) - last > INCIDENT_STALE_AFTER:  # members no longer reported: expire, say so, keep the last evidence
+            if datetime.now(UTC) - last > INCIDENT_STALE_AFTER:  # members gone/recovered but never enough to judge: expire, say so
                 _resolve(conn, tenant_id, open_row.id, {**ev, "resolution": "expired_no_evidence"})
 
 
@@ -122,10 +127,12 @@ def _resolve(conn: Connection, tenant_id: UUID, incident_id: UUID, evidence: dic
 
 
 def _parse_dt(v: object) -> datetime | None:
+    """Timezone-aware ISO datetime or None. Naive/malformed values (legacy or hand-edited evidence) are invalid, never compared."""
     try:
-        return datetime.fromisoformat(v) if isinstance(v, str) else None
+        d = datetime.fromisoformat(v) if isinstance(v, str) else None
     except ValueError:
         return None
+    return d if d is not None and d.tzinfo is not None else None
 
 
 def _add_members(conn: Connection, tenant_id: UUID, incident_id: UUID, onu_ids: list[UUID]) -> None:

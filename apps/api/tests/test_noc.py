@@ -233,7 +233,8 @@ def test_incident_without_membership_rows_is_adopted_not_orphaned(client, seed, 
     h = hdr(client, "alice", seed, "A")
     drop_pair(client, inv, "OLT-C8", "C8A")
     with migrated.begin() as c:                                                 # simulate an incident opened before membership existed
-        c.execute(text("DELETE FROM incident_onus"))
+        c.execute(text("DELETE FROM incident_onus WHERE incident_id IN (SELECT id FROM incidents WHERE olt_id = "
+                       "(SELECT id FROM olts WHERE name = 'OLT-C8'))"))
     push(client, inv, "OLT-C8", up("C8A", 10), observed=_now(-480))
     assert mine(client, h, "OLT-C8")[0]["status"] == "resolved"
 
@@ -283,6 +284,23 @@ def test_ongoing_outage_discovered_after_a_backlog_opens_on_the_fresh_snapshot(c
     assert len(inc) == 1 and inc[0]["evidence"]["onus_down"] == 10
 
 
+def _set_evidence_age(conn, olt: str, hours: int) -> None:
+    conn.execute(text(
+        "UPDATE incidents SET evidence = jsonb_set(evidence, '{evidence_at}', to_jsonb((now() - make_interval(hours => :h))::text)) "
+        "WHERE olt_id = (SELECT id FROM olts WHERE name = :n)"), {"h": hours, "n": olt})
+
+
+def _evidence_age_s(conn, olt: str) -> float:
+    return conn.execute(text(
+        "SELECT extract(epoch FROM now() - (evidence->>'evidence_at')::timestamptz) FROM incidents "
+        "WHERE olt_id = (SELECT id FROM olts WHERE name = :n)"), {"n": olt}).scalar()
+
+
+def _patch_evidence(conn, olt: str, patch: str) -> None:
+    conn.execute(text("UPDATE incidents SET evidence = evidence || CAST(:j AS jsonb) "
+                      "WHERE olt_id = (SELECT id FROM olts WHERE name = :n)"), {"j": patch, "n": olt})
+
+
 # ---- review findings: server-clock clamp, bilateral join window, expiry of unjudgeable incidents ------------------------------
 
 def test_an_edge_clock_ahead_within_tolerance_never_persists_a_future_transition(client, seed, inv, migrated):
@@ -291,7 +309,8 @@ def test_an_edge_clock_ahead_within_tolerance_never_persists_a_future_transition
     push(client, inv, "OLT-F1", onus(10, "los", "F1A"), observed=_now(120))      # Edge clock 2 min ahead (tolerated up to 5)
     assert len(mine(client, h, "OLT-F1")) == 1                                   # still evaluated: it is not stale
     with migrated.connect() as c:
-        future = c.execute(text("SELECT count(*) FROM onus WHERE serial LIKE 'F1A%' AND (down_since > now() OR last_online_at > now())")).scalar()
+        future = c.execute(text(
+            "SELECT count(*) FROM onus WHERE serial LIKE 'F1A%' AND (down_since > now() OR last_online_at > now())")).scalar()
     assert future == 0
 
 
@@ -312,7 +331,7 @@ def test_incident_whose_members_are_no_longer_reported_expires_instead_of_stayin
     push(client, inv, "OLT-X1", up("X1A", 2), observed=_now(-480))              # thin evidence: 2 of 10 covered ONUs reported
     assert mine(client, h, "OLT-X1")[0]["status"] == "open"                     # ...not enough to judge, and not stale yet
     with migrated.begin() as c:                                                 # pretend the last good evidence is 25 h old
-        c.execute(text("UPDATE incidents SET evidence = jsonb_set(evidence, '{evidence_at}', to_jsonb((now() - interval '25 hours')::text))"))
+        _set_evidence_age(c, "OLT-X1", 25)
     push(client, inv, "OLT-X1", up("X1A", 2), observed=_now(-420))
     inc = mine(client, h, "OLT-X1")[0]
     assert inc["status"] == "resolved" and inc["evidence"]["resolution"] == "expired_no_evidence"
@@ -322,5 +341,40 @@ def test_silence_never_expires_an_incident(client, seed, inv, migrated):
     h = hdr(client, "alice", seed, "A")
     drop_pair(client, inv, "OLT-X2", "X2A")
     with migrated.begin() as c:
-        c.execute(text("UPDATE incidents SET evidence = jsonb_set(evidence, '{evidence_at}', to_jsonb((now() - interval '48 hours')::text))"))
+        _set_evidence_age(c, "OLT-X2", 48)
     assert mine(client, h, "OLT-X2")[0]["status"] == "open"                     # no snapshot arrives: nothing is evaluated, nothing expires
+
+
+def test_thin_evidence_that_is_still_down_renews_the_deadline_and_never_expires(client, seed, inv, migrated):
+    h = hdr(client, "alice", seed, "A")
+    drop_pair(client, inv, "OLT-X3", "X3A")
+    with migrated.begin() as c:
+        _set_evidence_age(c, "OLT-X3", 25)
+    push(client, inv, "OLT-X3", onus(2, "los", "X3A"), observed=_now(-480))     # 2 of 10 reported, both still down
+    inc = mine(client, h, "OLT-X3")[0]
+    assert inc["status"] == "open" and "resolution" not in inc["evidence"]
+    with migrated.connect() as c:
+        age = _evidence_age_s(c, "OLT-X3")
+    assert age < 3600                                           # the deadline was renewed by the live evidence
+
+
+def test_naive_evidence_dates_cannot_break_the_expiry_path(client, seed, inv, migrated):
+    h = hdr(client, "alice", seed, "A")
+    drop_pair(client, inv, "OLT-X4", "X4A")
+    with migrated.begin() as c:                                                 # legacy/hand-edited evidence: no timezone
+        _patch_evidence(c, "OLT-X4", '{"evidence_at": "2026-01-01T00:00:00", "opened_observed_at": "nonsense"}')
+    # thin evidence, covered ONUs back: takes the expiry comparison with the naive evidence_at (must not raise)
+    assert push(client, inv, "OLT-X4", up("X4A", 2), observed=_now(-480)).status_code == 202
+    assert mine(client, h, "OLT-X4")[0]["status"] == "open"                     # invalid date => fallback to opened_at (recent)
+
+
+def test_naive_opened_observed_at_cannot_break_the_join_path(client, seed, inv, migrated):
+    h = hdr(client, "alice", seed, "A")
+    push(client, inv, "OLT-X5", up("X5A", 12), observed=_now(-600))
+    push(client, inv, "OLT-X5", onus(10, "los", "X5A") + [{"serial": f"X5A{i:03d}", "pon_path": "0/1/0", "status": "online"} for i in (10, 11)],
+         observed=_now(-540))
+    with migrated.begin() as c:
+        _patch_evidence(c, "OLT-X5", '{"opened_observed_at": "2026-01-01T00:00:00"}')
+    # two more ONUs drop: the join comparison must not mix naive and aware datetimes
+    assert push(client, inv, "OLT-X5", onus(12, "los", "X5A"), observed=_now(-480)).status_code == 202
+    assert mine(client, h, "OLT-X5")[0]["status"] == "open"

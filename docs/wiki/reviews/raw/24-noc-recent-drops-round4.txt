@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a183bf-6dd9-7de1-8b0d-c49987e58364).
+[codex] Turn started (01a183bf-6e1b-73a1-8dc8-5ac8384bf974).
+[codex] Assistant message captured: Vou inspecionar o diff completo contra `main` e seguir especialmente os caminhos de upsert, c...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=60 main...HEAD -- apps/api/a...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=60 main...HEAD -- apps/api/a... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/noc.py | sed -n '65,145p'; rg -n \"incidents.*dedupe|U...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/noc.py | sed -n '65,145p'; rg -n \"incidents.*dedupe|U... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: incidentes antigos ou evidência JS...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: incidentes antigos ou evidência JSON com datas sem fuso podem fazer a ingestão falhar; o caminho de expiração também não distingue ausência de evidência de evidência parcial recente.
+
+Findings:
+- [high] Datas legadas sem fuso podem abortar a ingestão do snapshot (apps/api/app/api/noc.py:89-113)
+  `_parse_dt` aceita strings ISO sem offset e retorna `datetime` naive. Se `opened_observed_at` vier assim, a comparação com `opened_at` aware em `joiners` pode levantar `TypeError`; se `evidence_at` vier assim, a subtração de `datetime.now(UTC)` também falha. Datas JSON malformadas que parseiem como naive são plausíveis em incidentes antigos e podem transformar a avaliação do PON em erro da requisição de inventário. Trate datas naive/malformadas como inválidas e normalize/valide o fuso antes de comparar; inclua fallback seguro para dados legados.
+  Recommendation: Validar `tzinfo` em `_parse_dt`; rejeitar ou normalizar datas naive segundo uma regra explícita e usar fallback UTC seguro para evidências antigas.
+- [medium] Evidência parcial recente não impede expiração por idade da última evidência suficiente (apps/api/app/api/noc.py:95-114)
+  Quando `enough_to_resolve` é falso, mesmo que o snapshot atual reporte alguns membros cobertos com estado fresco, `evidence_at` não é atualizado; o relógio de expiração continua usando o valor antigo de `ev`. Assim um incidente pode ser marcado `expired_no_evidence` após 24 horas apesar de haver relatos recentes dos membros, só que em quantidade insuficiente para resolver ou confirmar o incidente. Isso perde a distinção entre ausência total de evidência e observação parcial recente, e fecha o incidente de forma enganosa. Separe `last_seen_at`/evidência recente de `last_sufficient_evidence_at`, ou atualize a evidência de presença sem usá-la como prova para resolver.
+  Recommendation: Definir explicitamente qual evidência renova o prazo e persistir o timestamp da última observação de membro mesmo quando ela não alcança o limiar de resolução.
