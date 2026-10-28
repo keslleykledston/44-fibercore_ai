@@ -31,12 +31,10 @@ def test_0004_downgrade_removes_edge_agent_and_restores_role_checks(migrated, ad
         eid = c.execute(text("INSERT INTO edges(tenant_id,name) VALUES (:t,'e') RETURNING id"), {"t": tid}).scalar()
         c.execute(text("INSERT INTO service_accounts(tenant_id,name,role,secret_hash,edge_id) VALUES (:t,'a','edge_agent','x',:e)"), {"t": tid, "e": eid})
     subprocess.run([sys.executable, "-m", "alembic", "downgrade", "0003"], cwd=API_DIR, env=env, check=True)
-    with migrated.begin() as c:
+    with migrated.connect() as c:
         assert c.execute(text("SELECT count(*) FROM service_accounts WHERE role='edge_agent'")).scalar() == 0
-        try:
-            c.execute(text("SAVEPOINT s"))
-            c.execute(text("INSERT INTO service_accounts(tenant_id,name,role,secret_hash) VALUES (:t,'n','edge_agent','x')"), {"t": tid})
-            raise AssertionError("edge_agent still accepted after downgrade")
-        except Exception as exc:  # noqa: BLE001
-            assert "AssertionError" not in type(exc).__name__
+    import pytest
+    from sqlalchemy.exc import DBAPIError
+    with pytest.raises(DBAPIError), migrated.begin() as c:  # separate transaction: CHECK must reject edge_agent
+        c.execute(text("INSERT INTO service_accounts(tenant_id,name,role,secret_hash) VALUES (:t,'n','edge_agent','x')"), {"t": tid})
     subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], cwd=API_DIR, env=env, check=True)
