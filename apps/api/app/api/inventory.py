@@ -107,14 +107,29 @@ def ingest_olt_snapshot(
             {"v": body.vendor, "m": body.model, "f": body.firmware, "l": level, "o": body.observed_at, "i": olt_id},
         )
     else:
-        olt_id = conn.execute(
+        created = conn.execute(
             text(
                 "INSERT INTO olts (tenant_id, edge_id, name, vendor, model, firmware, support_level, observed_at) "
-                "VALUES (:t,:e,:n,:v,:m,:f,:l,:o) RETURNING id"
+                "VALUES (:t,:e,:n,:v,:m,:f,:l,:o) ON CONFLICT (tenant_id, name) DO NOTHING RETURNING id"
             ),
             {"t": p.tenant_id, "e": body.edge_id, "n": body.name, "v": body.vendor, "m": body.model,
              "f": body.firmware, "l": level, "o": body.observed_at},
-        ).scalar_one()
+        ).scalar_one_or_none()
+        if created is None:  # lost a first-ingest race: another request created it; re-run the existing-OLT checks
+            row = conn.execute(
+                text("SELECT id, edge_id, observed_at FROM olts WHERE name = :n FOR UPDATE"), {"n": body.name}
+            ).first()
+            if row.edge_id != body.edge_id:
+                raise HTTPException(409, "olt name owned by another edge")
+            if row.observed_at and body.observed_at < row.observed_at:
+                return {"status": "ignored_stale", "olt_id": str(row.id)}
+            olt_id = row.id
+            conn.execute(
+                text("UPDATE olts SET vendor=:v, model=:m, firmware=:f, support_level=:l, observed_at=:o WHERE id=:i"),
+                {"v": body.vendor, "m": body.model, "f": body.firmware, "l": level, "o": body.observed_at, "i": olt_id},
+            )
+        else:
+            olt_id = created
     if body.pons:  # one round trip for all PONs, then one lookup of the OLT's PON map
         conn.execute(
             text(
@@ -140,7 +155,7 @@ def ingest_olt_snapshot(
             [{"t": p.tenant_id, "o": olt_id, "pi": pon_ids.get(x.pon_path) if x.pon_path else None, "s": x.serial,
               "st": x.status, "rx": x.rx_dbm, "ts": body.observed_at} for x in body.onus],
         )
-    evaluate_pons(conn, p.tenant_id, olt_id, body.observed_at)
+    evaluate_pons(conn, p.tenant_id, olt_id, [o.serial for o in body.onus])
     outbox.enqueue(
         conn, tenant_id=p.tenant_id, aggregate_type="olt", aggregate_id=olt_id, event_type="olt.snapshot_ingested",
         payload={"edge_id": str(body.edge_id), "pons": len(body.pons), "onus": len(body.onus),

@@ -26,8 +26,11 @@ OPEN_RATIO = 0.8
 RESOLVE_RATIO = 0.5  # hysteresis: prevents flapping around the threshold
 
 
-def evaluate_pons(conn: Connection, tenant_id: UUID, olt_id: UUID, observed_at: datetime) -> None:
-    """Called inside the ingestion transaction. Only ONUs observed in THIS snapshot count."""
+def evaluate_pons(conn: Connection, tenant_id: UUID, olt_id: UUID, serials: list[str]) -> None:
+    """Called inside the ingestion transaction, which already holds the OLT row lock (so evaluations of one OLT are
+    serialised). Only the ONUs REPORTED IN THIS REQUEST (by serial) count — never inferred from timestamps."""
+    if not serials:
+        return
     rows = conn.execute(
         text(
             "SELECT p.id AS pon_id, p.pon_path, count(*) AS total, "
@@ -35,9 +38,9 @@ def evaluate_pons(conn: Connection, tenant_id: UUID, olt_id: UUID, observed_at: 
             "count(*) FILTER (WHERE u.status = 'los') AS los, "
             "count(*) FILTER (WHERE u.status = 'dying_gasp') AS dg "
             "FROM onus u JOIN pon_ports p ON p.id = u.pon_id AND p.tenant_id = u.tenant_id "
-            "WHERE u.olt_id = :o AND u.observed_at >= :ts GROUP BY p.id, p.pon_path"
+            "WHERE u.olt_id = :o AND u.serial = ANY(:serials) GROUP BY p.id, p.pon_path"
         ),
-        {"o": olt_id, "ts": observed_at},
+        {"o": olt_id, "serials": serials},
     ).all()
     for r in rows:
         key = f"pon_mass:{r.pon_id}"
@@ -83,11 +86,13 @@ def list_incidents(
     p: Principal = Depends(require("incidents:read")),
     conn: Connection = Depends(tenant_conn),
 ) -> dict:
-    now = datetime.now(UTC)
-    silent_edges = {
-        r.id: r for r in conn.execute(text("SELECT id, name, last_heartbeat_at, status FROM edges"))
-        if r.status != "revoked" and r.last_heartbeat_at is not None and now - r.last_heartbeat_at > EDGE_OFFLINE_AFTER
-    }
+    cutoff = datetime.now(UTC) - EDGE_OFFLINE_AFTER
+    silent = conn.execute(  # filtered and bounded in SQL (tenant scoped by RLS)
+        text("SELECT id, name, last_heartbeat_at FROM edges WHERE status <> 'revoked' AND last_heartbeat_at IS NOT NULL "
+             "AND last_heartbeat_at < :c ORDER BY last_heartbeat_at LIMIT 100"),
+        {"c": cutoff},
+    ).all()
+    silent_ids = {e.id for e in silent}
     rows = conn.execute(
         text(
             "SELECT i.id, i.kind, i.status, i.suspected_cause, i.evidence, i.opened_at, i.resolved_at, i.acknowledged_at, "
@@ -103,12 +108,12 @@ def list_incidents(
          "resolved_at": r.resolved_at.isoformat() if r.resolved_at else None,
          "acknowledged": r.acknowledged_at is not None,
          # open incident behind a silent edge: state is last-known, cannot be confirmed or cleared right now
-         "edge_silent": r.status == "open" and r.edge_id in silent_edges}
+         "edge_silent": r.status == "open" and r.edge_id in silent_ids}
         for r in rows
     ]
     alerts = [{"kind": "edge_silent", "edge": e.name, "last_heartbeat_at": e.last_heartbeat_at.isoformat(),
                "note": "no data from this edge; ONU/OLT states behind it are last-known, not offline"}
-              for e in silent_edges.values()]
+              for e in silent]
     return {"incidents": incidents, "alerts": alerts}
 
 

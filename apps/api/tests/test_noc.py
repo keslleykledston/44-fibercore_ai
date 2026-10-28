@@ -110,3 +110,26 @@ def test_events_emitted_for_open_and_resolve(client, seed, inv, migrated):
     with migrated.connect() as c:
         types = {r[0] for r in c.execute(text("SELECT event_type FROM events_outbox WHERE tenant_id=:t"), {"t": seed["A"]})}
     assert {"incident.opened", "incident.resolved"} <= types
+
+
+def test_same_timestamp_resend_with_omitted_onus_does_not_reuse_old_states(client, seed, inv):
+    h = hdr(client, "alice", seed, "A")
+    ts = _now(-30)
+    push(client, inv, "OLT-N8", onus(10, "online", "N8A"), observed=ts)
+    # resend with the SAME observed_at, reporting only 2 ONUs (both down): old states of the other 8 must not count
+    push(client, inv, "OLT-N8", onus(2, "los", "N8A"), observed=ts)
+    assert mine(client, h, "OLT-N8") == []
+
+
+def test_concurrent_first_ingest_of_new_olt_has_no_500_and_single_incident(client, seed, inv):
+    import threading
+    codes = []
+
+    def go():
+        codes.append(push(client, inv, "OLT-N9", onus(10, "los", "N9A")).status_code)
+
+    ts = [threading.Thread(target=go) for _ in range(4)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert 500 not in codes and codes.count(202) >= 1, codes
+    assert len(mine(client, hdr(client, "alice", seed, "A"), "OLT-N9")) == 1
