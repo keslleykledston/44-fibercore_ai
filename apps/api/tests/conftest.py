@@ -18,6 +18,7 @@ from sqlalchemy import create_engine, text
 APP_PW = "app_role_test_pw_0123456789"
 WORKER_PW = "worker_role_test_pw_0123456789"
 JWT_SECRET = "test-secret-with-more-than-32-characters!!"
+MFA_KEY = base64.urlsafe_b64encode(bytes(range(32, 64))).decode()
 PII_KEY = "pii-hmac-key-with-more-than-32-characters!!"
 JOB_SEED_B64 = base64.b64encode(bytes(range(32))).decode()
 API_DIR = Path(__file__).resolve().parents[1]
@@ -56,7 +57,7 @@ def migrated(admin_url: str, app_url: str):
     env = {**os.environ, "ADMIN_DATABASE_URL": admin_url, "APP_DB_PASSWORD": APP_PW, "WORKER_DB_PASSWORD": WORKER_PW}
     subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], cwd=API_DIR, env=env, check=True)
     os.environ.update(
-        DATABASE_URL=app_url, JWT_SECRET=JWT_SECRET, PII_HMAC_KEY=PII_KEY, JOB_SIGNING_KEY=JOB_SEED_B64, MODULE_MANIFEST=str(MANIFEST), NATS_MONITOR_URL=""
+        DATABASE_URL=app_url, JWT_SECRET=JWT_SECRET, MFA_ENCRYPTION_KEY=MFA_KEY, PII_HMAC_KEY=PII_KEY, JOB_SIGNING_KEY=JOB_SEED_B64, MODULE_MANIFEST=str(MANIFEST), NATS_MONITOR_URL=""
     )
     from app.core import db, settings
     settings.get_settings.cache_clear(); db.get_engine.cache_clear()

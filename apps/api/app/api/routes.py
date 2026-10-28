@@ -13,7 +13,8 @@ from app import __version__
 from app.api.deps import Principal, get_principal, require, tenant_conn
 from app.core.db import get_engine, scoped_connection
 from app.core.modules import Infra, evaluate, load_manifest, probe_nats, probe_postgres
-from app.core.security import decode_token, issue_token, verify_secret
+from app.core.security import decode_token, issue_mfa_challenge, issue_token, verify_secret
+from app.core.sessions import issue_session, mfa_enabled
 from app.core.settings import Settings, get_settings
 
 router = APIRouter()
@@ -116,8 +117,19 @@ class TokenOut(BaseModel):
     expires_in: int
 
 
-@router.post("/v1/auth/token", response_model=TokenOut)
-def login(body: LoginIn, request: Request, settings: Settings = Depends(get_settings)) -> TokenOut:
+class LoginOut(BaseModel):
+    """Either a session (access + refresh) or, when the account has MFA, a challenge to complete at /v1/auth/mfa/verify."""
+
+    access_token: str | None = None
+    refresh_token: str | None = None
+    token_type: str = "bearer"  # noqa: S105
+    expires_in: int | None = None
+    mfa_required: bool = False
+    mfa_token: str | None = None
+
+
+@router.post("/v1/auth/token", response_model=LoginOut)
+def login(body: LoginIn, request: Request, settings: Settings = Depends(get_settings)) -> LoginOut:
     key, ip = body.email.lower(), _client_ip(request, settings)
     with scoped_connection(get_engine()) as conn:
         if _gate(conn, key, ip):
@@ -129,11 +141,15 @@ def login(body: LoginIn, request: Request, settings: Settings = Depends(get_sett
             ok = verify_secret(row.password_hash if row else None, body.password)
             outcome = "ok" if (row and row.is_active and ok) else "bad"
             _record(conn, key, ip, outcome == "ok")  # unknown accounts are recorded too: no enumeration via lockout behaviour
+            if outcome == "ok":
+                if mfa_enabled(conn, row.id):
+                    return LoginOut(mfa_required=True, mfa_token=issue_mfa_challenge(settings, sub=row.id))
+                sess = issue_session(conn, settings, row.id)
     if outcome == "locked":
         raise _throttled()
     if outcome == "bad":
         raise HTTPException(401, "invalid credentials")
-    return TokenOut(access_token=issue_token(settings, sub=row.id, kind="user"), expires_in=settings.jwt_ttl_seconds)
+    return LoginOut(access_token=sess.access_token, refresh_token=sess.refresh_token, expires_in=sess.expires_in)
 
 
 @router.post("/v1/auth/service-token", response_model=TokenOut)

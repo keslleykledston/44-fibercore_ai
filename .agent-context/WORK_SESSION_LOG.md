@@ -16,3 +16,9 @@ Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetido
 - E2E dev agora exige `FIBERCORE_API_PORT=18421 VENV_PY=<venv>/bin/python` (18420 é a produção).
 - Revisão visual do Lovable aplicada (web/17); Codex approve nas duas branches (raw 16 e 17). 28 E2E passed.
 - Pendente: MFA, refresh token, CSP com nonce, ensaio de restore, ONU 360/login em passos, capturas reais de OLT, corrigir GenieACS (decisão do dono).
+
+## 2026-10-28 — W9 slice 1 (branch security/19-w9-auth-hardening)
+- API: refresh token rotativo com detecção de reuso (migration 0011), MFA TOTP (segredo cifrado, replay, recuperação), `kid` + chave anterior para rotação. ADR-0017.
+- BFF/web: cookies `fc_refresh`/`fc_mfa`, passo `/login/mfa`, `middleware` de renovação, logout revoga no servidor.
+- Testes: pytest 128 passed (Postgres descartável); E2E 17 passed (incl. refresh, logout, MFA). Lint ruff ok.
+- Aberto: tela de cadastro MFA, MFA obrigatório p/ admin, eventos de segurança globais, CSP com nonce.

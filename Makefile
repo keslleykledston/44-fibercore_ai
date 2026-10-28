@@ -17,6 +17,7 @@ env-dev:  ## gera .env.dev com segredos aleatórios (nunca toca .env)
 	  echo "FIBERCORE_JWT_SECRET=$$(openssl rand -hex 32)" >> .env.dev; \
 	  echo "FIBERCORE_PII_HMAC_KEY=$$(openssl rand -hex 32)" >> .env.dev; \
 	  echo "FIBERCORE_JOB_SIGNING_KEY=$$(openssl rand -base64 32)" >> .env.dev; echo ".env.dev criado"; }
+	@grep -q '^FIBERCORE_MFA_ENCRYPTION_KEY=' .env.dev || echo "FIBERCORE_MFA_ENCRYPTION_KEY=$$(openssl rand -base64 32 | tr '+/' '-_')" >> .env.dev
 
 validate: venv
 	$(PY) tests/validate_kit.py
@@ -58,11 +59,13 @@ env-prod:  ## gera .env.prod (0600) com segredos aleatórios; Caddy atrás do ng
 	  echo "FIBERCORE_WORKER_DB_PASSWORD=$$(openssl rand -hex 24)"; \
 	  echo "FIBERCORE_JWT_SECRET=$$(openssl rand -hex 32)"; \
 	  echo "FIBERCORE_PII_HMAC_KEY=$$(openssl rand -hex 32)"; \
+	  echo "FIBERCORE_MFA_ENCRYPTION_KEY=$$(openssl rand -base64 32 | tr '+/' '-_')"; \
 	  echo "FIBERCORE_CADDYFILE=Caddyfile.upstream"; \
 	  echo "FIBERCORE_INSECURE_COOKIES=0"; \
 	  echo "FIBERCORE_TRUSTED_PROXY=true"; \
 	  echo "FIBERCORE_PROXY_HTTP_PORT=18480"; \
 	  echo "FIBERCORE_API_PORT=18420"; } > .env.prod; echo ".env.prod criado (0600)"; }
+	@grep -q '^FIBERCORE_MFA_ENCRYPTION_KEY=' .env.prod || { umask 077; echo "FIBERCORE_MFA_ENCRYPTION_KEY=$$(openssl rand -base64 32 | tr '+/' '-_')" >> .env.prod; echo "MFA_ENCRYPTION_KEY adicionada ao .env.prod"; }
 
 up-prod: env-prod
 	$(COMPOSE_PROD) up -d --build

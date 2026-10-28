@@ -49,8 +49,90 @@ paths:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/LoginRequest'}}}
       responses:
-        '200': {description: Token emitido, content: {application/json: {schema: {$ref: '#/components/schemas/TokenResponse'}}}}
+        '200': {description: "Sessão (access + refresh) ou, se a conta tem MFA, desafio mfa_required/mfa_token a concluir em /auth/mfa/verify", content: {application/json: {schema: {$ref: '#/components/schemas/LoginResponse'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {description: Bloqueio temporário por tentativas falhas}
+  /auth/refresh:
+    post:
+      tags: [Platform]
+      operationId: refreshSession
+      summary: Rotaciona o refresh token (uso único). Reapresentar um token já consumido revoga a família inteira.
+      security: []
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/RefreshRequest'}}}
+      responses:
+        '200': {description: Novo par access+refresh, content: {application/json: {schema: {$ref: '#/components/schemas/SessionResponse'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /auth/logout:
+    post:
+      tags: [Platform]
+      operationId: logoutSession
+      summary: Revoga a família do refresh token (idempotente)
+      security: []
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/RefreshRequest'}}}
+      responses:
+        '204': {description: Revogado}
+  /auth/mfa/verify:
+    post:
+      tags: [Platform]
+      operationId: verifyMfa
+      summary: Segundo fator do login (TOTP com proteção contra replay, ou código de recuperação de uso único)
+      security: []
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [mfa_token, code], properties: {mfa_token: {type: string}, code: {type: string, minLength: 6, maxLength: 32}}}}}
+      responses:
+        '200': {description: Sessão, content: {application/json: {schema: {$ref: '#/components/schemas/SessionResponse'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {description: Bloqueio temporário por tentativas falhas}
+  /auth/mfa/status:
+    get:
+      tags: [Platform]
+      operationId: mfaStatus
+      summary: Estado do MFA do usuário autenticado
+      responses:
+        '200': {description: "{enabled, recovery_codes_left, enrolment_available}"}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /auth/mfa/enroll:
+    post:
+      tags: [Platform]
+      operationId: enrollMfa
+      summary: Inicia o cadastro de TOTP (exige a senha atual). 503 se MFA_ENCRYPTION_KEY não estiver configurada.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [password], properties: {password: {type: string}}}}}
+      responses:
+        '200': {description: "{secret, otpauth_uri}"}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {description: MFA não configurado}
+  /auth/mfa/activate:
+    post:
+      tags: [Platform]
+      operationId: activateMfa
+      summary: Confirma o TOTP e devolve, uma única vez, os códigos de recuperação
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [code], properties: {code: {type: string}}}}}
+      responses:
+        '200': {description: "{enabled, recovery_codes[]}"}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {description: Bloqueio temporário por tentativas falhas}
+  /auth/mfa/disable:
+    post:
+      tags: [Platform]
+      operationId: disableMfa
+      summary: Desativa o MFA (exige senha atual e um segundo fator válido)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [password, code], properties: {password: {type: string}, code: {type: string}}}}}
+      responses:
+        '204': {description: Desativado}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {description: Bloqueio temporário por tentativas falhas}
   /auth/service-token:
     post:
       tags: [Platform]
@@ -407,6 +489,23 @@ components:
       type: object
       required: [email, password]
       properties: {email: {type: string, format: email}, password: {type: string, minLength: 1, maxLength: 256}}
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties: {refresh_token: {type: string, minLength: 20, maxLength: 200}}
+    SessionResponse:
+      type: object
+      required: [access_token, refresh_token, token_type, expires_in]
+      properties: {access_token: {type: string}, refresh_token: {type: string}, token_type: {type: string, enum: [bearer]}, expires_in: {type: integer}}
+    LoginResponse:
+      type: object
+      properties:
+        access_token: {type: [string, 'null']}
+        refresh_token: {type: [string, 'null']}
+        token_type: {type: string, enum: [bearer]}
+        expires_in: {type: [integer, 'null']}
+        mfa_required: {type: boolean}
+        mfa_token: {type: [string, 'null']}
     ServiceLoginRequest:
       type: object
       required: [client_id, client_secret]

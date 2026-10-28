@@ -27,14 +27,32 @@ export async function apiSafe<T>(path: string): Promise<{ data: T | null; status
   catch (e) { if (e instanceof ApiError) return { data: null, status: e.status }; throw e; }
 }
 
-export async function apiLogin(email: string, password: string, clientIp?: string): Promise<{ token: string | null; status: number }> {
-  const res = await fetch(`${API}/v1/auth/token`, {
-    method: "POST", // o IP do cliente vem do proxy de borda (Caddy) e é repassado para o throttle por origem da API
-    headers: { "content-type": "application/json", ...(clientIp ? { "x-forwarded-for": clientIp } : {}) }, body: JSON.stringify({ email, password }), cache: "no-store",
-  });
-  if (!res.ok) return { token: null, status: res.status };
-  return { token: ((await res.json()) as { access_token: string }).access_token, status: 200 };
+export type LoginResult =
+  | { kind: "session"; access: string; refresh: string; expiresIn: number }
+  | { kind: "mfa"; mfaToken: string }
+  | { kind: "error"; status: number };
+
+type SessionBody = { access_token?: string; refresh_token?: string; expires_in?: number; mfa_required?: boolean; mfa_token?: string };
+
+function parseSession(res: Response, body: SessionBody | null): LoginResult {
+  if (!res.ok || !body) return { kind: "error", status: res.status };
+  if (body.mfa_required && body.mfa_token) return { kind: "mfa", mfaToken: body.mfa_token };
+  if (body.access_token && body.refresh_token) return { kind: "session", access: body.access_token, refresh: body.refresh_token, expiresIn: body.expires_in ?? 900 };
+  return { kind: "error", status: 502 };
 }
+
+async function postJson(path: string, payload: unknown, clientIp?: string): Promise<LoginResult> {
+  const res = await fetch(`${API}${path}`, {
+    method: "POST", // o IP do cliente vem do proxy de borda e é repassado para o throttle por origem da API
+    headers: { "content-type": "application/json", ...(clientIp ? { "x-forwarded-for": clientIp } : {}) }, body: JSON.stringify(payload), cache: "no-store",
+  });
+  let body: SessionBody | null = null;
+  try { body = (await res.json()) as SessionBody; } catch { /* sem corpo */ }
+  return parseSession(res, body);
+}
+
+export const apiLogin = (email: string, password: string, clientIp?: string) => postJson("/v1/auth/token", { email, password }, clientIp);
+export const apiMfaVerify = (mfaToken: string, code: string, clientIp?: string) => postJson("/v1/auth/mfa/verify", { mfa_token: mfaToken, code }, clientIp);
 
 /** POST server-side com o token da sessão. Devolve status e corpo JSON (se houver). */
 export async function apiPost(path: string, body?: BodyInit, headers: Record<string, string> = {}): Promise<{ status: number; json: unknown }> {

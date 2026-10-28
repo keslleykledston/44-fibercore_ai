@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { login } from "./helpers";
+import { API_URL, EMAIL, PASSWORD, login, totp } from "./helpers";
 
 const routes = ["/", "/rede", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/ajuda", "/ajuda/rede/consultar-onu"];
 
@@ -130,4 +130,60 @@ test("importação: corpo acima do limite é recusado antes de ser processado; s
   });
   expect(r.status()).toBe(303);
   expect(r.headers()["location"]).toContain("erro=arquivo");
+});
+
+test("sessão renova com o refresh token rotativo quando o access token expira", async ({ page, context }) => {
+  await login(page);
+  const refresh1 = (await context.cookies()).find((c) => c.name === "fc_refresh")!;
+  expect(refresh1.httpOnly).toBe(true);
+  await context.clearCookies({ name: "fc_token" }); // simula o access token expirado
+  await page.goto("/rede");
+  await expect(page.getByRole("heading", { name: "Rede" }).first()).toBeVisible();
+  const jar = await context.cookies();
+  expect(jar.find((c) => c.name === "fc_token")).toBeDefined();
+  expect(jar.find((c) => c.name === "fc_refresh")!.value).not.toBe(refresh1.value);
+  // o refresh antigo já foi consumido: reapresentá-lo é reutilização e derruba a sessão inteira
+  const reuse = await page.request.post(`${API_URL}/v1/auth/refresh`, { data: { refresh_token: refresh1.value } });
+  expect(reuse.status()).toBe(401);
+  await context.clearCookies({ name: "fc_token" });
+  await page.goto("/rede");
+  await expect(page).toHaveURL(/\/login/);
+});
+
+test("logout revoga o refresh token no servidor", async ({ page, context }) => {
+  await login(page);
+  const refresh = (await context.cookies()).find((c) => c.name === "fc_refresh")!.value;
+  await page.getByRole("button", { name: /sair/i }).first().click();
+  await expect(page).toHaveURL(/\/login/);
+  expect((await page.request.post(`${API_URL}/v1/auth/refresh`, { data: { refresh_token: refresh } })).status()).toBe(401);
+});
+
+test("MFA: login em duas etapas com TOTP e código de recuperação; desativação limpa", async ({ page, request }) => {
+  const tok = (await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json()).access_token as string;
+  const h = { Authorization: `Bearer ${tok}` };
+  const secret = (await (await request.post(`${API_URL}/v1/auth/mfa/enroll`, { headers: h, data: { password: PASSWORD } })).json()).secret as string;
+  const act = await request.post(`${API_URL}/v1/auth/mfa/activate`, { headers: h, data: { code: totp(secret) } });
+  expect(act.status()).toBe(200);
+  const recovery = (await act.json()).recovery_codes as string[];
+  let disabled = false;
+  try {
+    await page.goto("/login");
+    await page.getByLabel("E-mail").fill(EMAIL);
+    await page.getByLabel("Senha").fill(PASSWORD);
+    await page.getByRole("button", { name: "Entrar" }).click();
+    await expect(page.getByRole("heading", { name: "Verificação em duas etapas" })).toBeVisible();
+    await page.getByLabel(/Código do aplicativo/).fill("000000");
+    await page.getByRole("button", { name: "Verificar" }).click();
+    await expect(page.getByTestId("mfa-error")).toBeVisible();
+    await page.getByLabel(/Código do aplicativo/).fill(totp(secret, 1)); // passo seguinte: o do ativamento já foi consumido
+    await page.getByRole("button", { name: "Verificar" }).click();
+    await expect(page.getByRole("heading", { name: "Visão Geral" })).toBeVisible();
+    const t2 = (await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json());
+    expect(t2.mfa_required).toBe(true);
+    const off = await request.post(`${API_URL}/v1/auth/mfa/disable`, { headers: h, data: { password: PASSWORD, code: recovery[0] } });
+    expect(off.status()).toBe(204);
+    disabled = true;
+  } finally {
+    if (!disabled) await request.post(`${API_URL}/v1/auth/mfa/disable`, { headers: h, data: { password: PASSWORD, code: recovery[1] } });
+  }
 });

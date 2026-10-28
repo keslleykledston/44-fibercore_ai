@@ -11,6 +11,7 @@ from app.api.inventory import router as inventory_router
 from app.api.jobs import router as jobs_router
 from app.api.noc import router as noc_router
 from app.api.routes import router
+from app.api.session import router as session_router
 
 logging.basicConfig(level=logging.INFO, format='{"ts":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","msg":"%(message)s"}')
 
@@ -31,6 +32,7 @@ async def limit_body(request, call_next):
 
 
 app.include_router(router)
+app.include_router(session_router)
 app.include_router(inventory_router)
 app.include_router(erp_router)
 app.include_router(noc_router)

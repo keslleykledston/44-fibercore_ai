@@ -21,11 +21,19 @@ class Settings(BaseSettings):
     jwt_issuer: str = "fibercore-api"
     jwt_audience: str = "fibercore"
     jwt_ttl_seconds: int = 900
+    # Key ring: new tokens are signed with jwt_secret/jwt_kid; tokens signed with the previous key stay valid until they expire.
+    jwt_kid: str = "k1"
+    jwt_secret_previous: str = Field(default="", repr=False)
+    jwt_kid_previous: str = ""
+    refresh_ttl_seconds: int = 8 * 3600  # sliding: each rotation issues a fresh window
+    refresh_family_ttl_seconds: int = 7 * 24 * 3600  # absolute cap: re-login required after this
+    mfa_encryption_key: str = Field(default="", repr=False)  # Fernet key (urlsafe base64, 32 bytes); empty => MFA enrolment disabled
+    mfa_issuer: str = "FiberCore"
     trusted_proxy: bool = False  # trust X-Forwarded-For (set only behind our own reverse proxy)
     job_signing_key: str = Field(default="", repr=False)  # base64 Ed25519 seed; empty => dispatch disabled (fail closed)
     pii_hmac_key: str = Field(default="", repr=False)  # HMAC key for customer documents; import fails closed without it
 
-    @field_validator("jwt_secret", "pii_hmac_key")
+    @field_validator("jwt_secret", "jwt_secret_previous", "pii_hmac_key")
     @classmethod
     def _strong_secret(cls, v: str) -> str:
         if v and len(v) < 32:

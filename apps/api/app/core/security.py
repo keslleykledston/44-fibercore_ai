@@ -66,7 +66,41 @@ def issue_token(settings: Settings, *, sub: UUID, kind: str, tenant_id: UUID | N
     }
     if tenant_id:
         claims["tid"] = str(tenant_id)
-    return jwt.encode(claims, settings.jwt_secret, algorithm="HS256")
+    return jwt.encode(claims, settings.jwt_secret, algorithm="HS256", headers={"kid": settings.jwt_kid})
+
+
+def _verification_key(settings: Settings, token: str) -> str:
+    """Pick the key by the (unverified) kid header; the signature check afterwards is what authenticates. A token without
+    kid (issued before rotation support) is only tried against the current key. An unknown kid never falls back."""
+    kid = jwt.get_unverified_header(token).get("kid")
+    if kid is None or kid == settings.jwt_kid:
+        return settings.jwt_secret
+    if settings.jwt_secret_previous and settings.jwt_kid_previous and kid == settings.jwt_kid_previous:
+        return settings.jwt_secret_previous
+    raise ValueError("unknown kid")
+
+
+CHALLENGE_TTL_SECONDS = 300
+
+
+def issue_mfa_challenge(settings: Settings, *, sub: UUID) -> str:
+    """Short-lived proof that the password step succeeded. Distinct audience: it can never be used as an access token."""
+    if not settings.jwt_secret:
+        raise RuntimeError("JWT_SECRET not configured")
+    now = int(time.time())
+    claims = {"iss": settings.jwt_issuer, "aud": f"{settings.jwt_audience}:mfa", "sub": str(sub), "kind": "mfa", "iat": now,
+              "exp": now + CHALLENGE_TTL_SECONDS}
+    return jwt.encode(claims, settings.jwt_secret, algorithm="HS256", headers={"kid": settings.jwt_kid})
+
+
+def decode_mfa_challenge(settings: Settings, token: str) -> UUID:
+    if not settings.jwt_secret:
+        raise ValueError("auth not configured")
+    data = jwt.decode(token, _verification_key(settings, token), algorithms=["HS256"], audience=f"{settings.jwt_audience}:mfa",
+                      issuer=settings.jwt_issuer, options={"require": ["exp", "iat", "sub", "iss", "aud"]})
+    if data.get("kind") != "mfa":
+        raise ValueError("bad kind")
+    return UUID(data["sub"])
 
 
 def decode_token(settings: Settings, token: str) -> TokenClaims:
@@ -75,7 +109,7 @@ def decode_token(settings: Settings, token: str) -> TokenClaims:
         raise ValueError("auth not configured")
     data = jwt.decode(
         token,
-        settings.jwt_secret,
+        _verification_key(settings, token),
         algorithms=["HS256"],
         audience=settings.jwt_audience,
         issuer=settings.jwt_issuer,
