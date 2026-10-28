@@ -28,6 +28,6 @@
 - Pendente do dono: restringir SSH do host do GenieACS (exposto à internet); `pam_systemd` atrasa cada login em 25 s.
 
 ## Atualização 2026-10-28 (perfil R015 / MA5608T)
-- Feito: perfil `huawei_ma56_r015` (modo de CLI, pager por Espaço, prova de completude pelo rodapé da OLT), driver `observed` p/ MA5608T R015, capturas reais sanitizadas.
+- Feito: perfil `huawei_ma56_r015` (modo de CLI, pager por Espaço, prova de completude pelo rodapé da OLT), MA5608T R015 mantido `identified` (1 PON não sustenta observed; checklist de promoção no DRIVER_SDK_INTERFACE), capturas reais sanitizadas.
 - Pendente: `display ont register-info` (causas de queda LOS/dying-gasp) e mais PONs/OLTs para ampliar a homologação; SNMP (`snmpwalk` de leitura + credencial no `.env`).
 - Pendente do dono: restringir SSH do host do GenieACS; credencial SNMP de leitura.

@@ -250,7 +250,20 @@ func r015Payload(t *testing.T, sess olt.Session) (level string, complete bool, o
 	return p.Level, p.PONs[0].Complete, len(p.ONUs)
 }
 
+// withObservedR015 simulates the future promotion of the R015 profile; it never touches the shipped registry permanently.
+func withObservedR015(t *testing.T) {
+	t.Helper()
+	saved := append([]olt.Homologation(nil), olt.Registry...)
+	for i := range olt.Registry {
+		if olt.Registry[i].ModelPrefix == "MA5608T" {
+			olt.Registry[i].Level = olt.LevelObserved
+		}
+	}
+	t.Cleanup(func() { olt.Registry = saved })
+}
+
 func TestR015ShellListingIsCompleteOnlyWhenTheCLIsOwnTotalMatches(t *testing.T) {
+	withObservedR015(t)
 	lvl, complete, n := r015Payload(t, shellLike{r015Session{}})
 	if lvl != "observed" || !complete || n != 12 {
 		t.Fatalf("full listing over a shell: level=%s complete=%v onus=%d", lvl, complete, n)
@@ -258,5 +271,14 @@ func TestR015ShellListingIsCompleteOnlyWhenTheCLIsOwnTotalMatches(t *testing.T) 
 	_, complete, n = r015Payload(t, shellLike{r015Session{dropRow: true}})
 	if complete || n != 11 {
 		t.Fatalf("a listing cut short must not be complete: complete=%v onus=%d", complete, n)
+	}
+}
+
+// The shipped registry must NOT promote the R015 family on a single-PON capture (Codex review): until the promotion
+// checklist is met every PON of this firmware is reported incomplete, so it cannot open or close a mass-outage incident.
+func TestShippedRegistryKeepsR015IdentifiedSoNoPonIsEverComplete(t *testing.T) {
+	lvl, complete, n := r015Payload(t, shellLike{r015Session{}})
+	if lvl != "identified" || complete || n != 12 {
+		t.Fatalf("shipped registry: level=%s complete=%v onus=%d (want identified, incomplete, 12)", lvl, complete, n)
 	}
 }

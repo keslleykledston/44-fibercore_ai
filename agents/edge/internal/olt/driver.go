@@ -82,8 +82,11 @@ type Homologation struct {
 // Registry of firmware families whose output format is covered by a fixture set.
 var Registry = []Homologation{
 	{"huawei", "MA5800", "R018", LevelIdentified, "synthetic fixtures only (testdata/huawei_ma5800/R018); NOT captured from a device"},
-	{"huawei", "MA5608T", "MA5600V800R015", LevelObserved,
-		"real capture 2026-10-28 (testdata/huawei_ma5608t/MA5600V800R015C00): display version, board, ont info <port> all (paged, with total footer), ont optical-info <port> all; one PON, states online/offline only"},
+	// Real capture exists (testdata/huawei_ma5608t) but covers ONE PON (12 ONTs, online/offline only). It stays "identified"
+	// until the promotion checklist in DRIVER_SDK_INTERFACE.md is met: an empty PON, a PON that pages several times, a second
+	// slot, and the offline causes (LOS/dying-gasp). Until then no PON of this firmware can be reported complete.
+	{"huawei", "MA5608T", "MA5600V800R015", LevelIdentified,
+		"real capture 2026-10-28 (testdata/huawei_ma5608t/MA5600V800R015C00), single PON 0/0/14; NOT enough to declare observed"},
 	{"zte", "C300", "V2.1", LevelIdentified, "synthetic fixtures only (testdata/zte_c300/V2.1); NOT captured from a device"},
 }
 

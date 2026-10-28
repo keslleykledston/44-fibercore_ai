@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18388-8de8-7fc0-9421-62d9b5d943d3).
+[codex] Turn started (01a18388-8f59-7902-960c-73c7edd04df0).
+[codex] Assistant message captured: Vou comparar a branch com `main` e seguir os caminhos de sessão SSH, parser/completude e obse...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/hu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/hu... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- agents/edge/cmd/fibercore-e...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- agents/edge/cmd/fibercore-e... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/shell.go | sed -n '20,300p'; nl -ba agents/edg...
+[codex] Command failed: /bin/bash -lc "nl -ba agents/edge/internal/olt/shell.go | sed -n '20,300p'; nl -ba agents/edg... (exit 2)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: o perfil declara homologação obser...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: o perfil declara homologação observada para toda a família MA5600 R015, embora a evidência cubra apenas uma porta e um conjunto estreito de estados; isso pode habilitar completude usada na correlação de incidentes sem cobertura equivalente.
+
+Findings:
+- [high] Homologação observada cobre mais que a evidência capturada (agents/edge/internal/olt/driver.go:75-76)
+  O registro classifica como `observed` qualquer identidade Huawei cujo modelo comece com `MA5608T` e firmware com `MA5600V800R015`, e o collector pode então marcar PONs completos quando o rodapé e as linhas analisadas coincidem. A evidência declarada cobre uma única PON (0/0/14), 12 ONTs e apenas estados online/offline. Assim, portas com variações de saída ou estados não cobertos podem receber `complete=true` e influenciar a correlação de incidentes em massa como se tivessem sido validadas. Restrinja a habilitação observada ao escopo realmente homologado, ou mantenha `identified` até validar portas e estados representativos.
+  Recommendation: Não promova toda a família a `LevelObserved` com essa captura; aplique uma condição de escopo validada por modelo/firmware/porta, ou amplie as capturas e testes antes de permitir `complete=true`.
+
+Next steps:
+- Restringir o nível `observed` ao escopo demonstrado pela captura e adicionar cobertura real para as portas e estados adicionais antes de ampliar a correlação baseada em completude.
