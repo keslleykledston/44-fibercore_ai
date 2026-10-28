@@ -1,12 +1,23 @@
 #!/usr/bin/env bash
 # Backup lógico do PostgreSQL do Compose dev/staging. Uso: scripts/backup.sh [arquivo.dump]
 # Formato custom (-Fc), sem owner/ACL do host. NÃO inclui NATS (reconstruível do outbox via `relay replay`).
+# O dump contém TODOS os dados (PII incluída): arquivo 0600 em diretório 0700.
+# Para sair do ambiente controlado, cifre: BACKUP_GPG_RECIPIENT=<chave> scripts/backup.sh  (gera .gpg e remove o claro).
 set -euo pipefail
+umask 077
 cd "$(dirname "$0")/.."
 OUT="${1:-build/backups/fibercore-$(date -u +%Y%m%dT%H%M%SZ).dump}"
-mkdir -p "$(dirname "$OUT")"
+mkdir -p -m 700 "$(dirname "$OUT")"
 COMPOSE=(docker compose --env-file "${ENV_FILE:-.env.dev}" -f infra/compose/compose.yaml)
 "${COMPOSE[@]}" exec -T postgres pg_dump -U fibercore -d fibercore -Fc --no-owner > "$OUT"
+test -s "$OUT" || { echo "backup vazio" >&2; rm -f "$OUT"; exit 1; }
+chmod 600 "$OUT"
 sha256sum "$OUT" > "$OUT.sha256"
-test -s "$OUT" || { echo "backup vazio" >&2; exit 1; }
-echo "backup: $OUT ($(stat -c %s "$OUT") bytes)"
+if [[ -n "${BACKUP_GPG_RECIPIENT:-}" ]]; then
+  gpg --batch --yes --encrypt --recipient "$BACKUP_GPG_RECIPIENT" --output "$OUT.gpg" "$OUT"
+  chmod 600 "$OUT.gpg"
+  shred -u "$OUT" 2>/dev/null || rm -f "$OUT"
+  echo "backup cifrado: $OUT.gpg (checksum do claro em $OUT.sha256)"
+else
+  echo "backup: $OUT ($(stat -c %s "$OUT") bytes) — ATENÇÃO: sem cifra; manter só em disco controlado"
+fi

@@ -22,3 +22,7 @@ Estado: **dev/lab**. Nada aqui autoriza produção; ver gates em `CLAUDE.md`/PRD
 - Compose não garante rolling update nem auto-recuperação total; há janela de indisponibilidade da API durante recreate.
 - NATS dev sem TLS/ACL. Postgres sem HA. Sem métricas/alertas ainda (Sprint 1+: Prometheus/Grafana).
 - K3s/HA somente após ensaio e necessidade comprovada (ADR futuro).
+
+## Backups: proteção e retenção
+- Dumps contêm PII e todos os tenants: gerados `0600` em diretório `0700`; `BACKUP_GPG_RECIPIENT` cifra e remove o claro. Fora do host controlado, só cifrado. Retenção a definir com o ISP (LGPD) — pendente de decisão de campo; `build/` é ignorado pelo Git e nunca deve virar artefato de CI.
+- `restore-verify.sh` usa banco aleatório próprio e só remove o que criou.
