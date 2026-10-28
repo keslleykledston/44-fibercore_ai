@@ -371,3 +371,37 @@ func TestSNMPSourceFeedsTheSamePayloadAndCompletenessNeedsAnObservedDriverAndPro
 		t.Fatalf("a listing whose two walks disagree must not be complete: complete=%v onus=%d", complete, n)
 	}
 }
+
+type failingSNMP struct{ snmpFake }
+
+func (failingSNMP) Get(context.Context, []string) (map[string]olt.SNMPValue, error) {
+	return nil, errors.New("request timeout (after 1 retries)")
+}
+
+func TestAFailedSNMPCollectionLeavesTheDeviceAloneForTheCooldown(t *testing.T) {
+	opens := 0
+	clock := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	src := OLTSource{Name: "OLT-COOL", Ports: []string{"0/0/14"}, SNMPDriver: olt.HuaweiSNMP{},
+		OpenSNMP: func(context.Context) (olt.SNMPReader, func(), error) { opens++; return failingSNMP{}, func() {}, nil }}
+	o := &OLT{EdgeID: "e", Sources: []OLTSource{src}, Now: func() time.Time { return clock }}
+	if _, err := o.Collect(context.Background()); err == nil || opens != 1 {
+		t.Fatalf("first collection must fail after opening once: err=%v opens=%d", err, opens)
+	}
+	clock = clock.Add(time.Minute) // still cooling: nothing may be sent to the OLT
+	if _, err := o.Collect(context.Background()); err == nil || !strings.Contains(err.Error(), "cooling down") || opens != 1 {
+		t.Fatalf("during the cooldown the device must not be touched: err=%v opens=%d", err, opens)
+	}
+	clock = clock.Add(5 * time.Minute) // cooldown over: it may try again (and fail again, restarting the cooldown)
+	if _, err := o.Collect(context.Background()); err == nil || opens != 2 {
+		t.Fatalf("after the cooldown it tries again: err=%v opens=%d", err, opens)
+	}
+	// success is never cooled: a healthy OLT is collected every cycle
+	ok := OLTSource{Name: "OLT-OK", Ports: []string{"0/0/14"}, SNMPDriver: olt.HuaweiSNMP{},
+		OpenSNMP: func(context.Context) (olt.SNMPReader, func(), error) { return snmpFake{}, func() {}, nil }}
+	o2 := &OLT{EdgeID: "e", Sources: []OLTSource{ok}, Now: func() time.Time { return clock }}
+	for i := 0; i < 3; i++ {
+		if _, err := o2.Collect(context.Background()); err != nil {
+			t.Fatalf("cycle %d: %v", i, err)
+		}
+	}
+}

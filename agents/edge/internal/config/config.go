@@ -48,8 +48,8 @@ type OLTConfig struct {
 	Transport               string   `json:"transport"`           // "" | "cli" (SSH, default) | "snmp" (v2c, read-only)
 	SNMPAddress             string   `json:"snmp_address"`        // ip:161 - an IP LITERAL that is also in `allowlist`
 	SNMPCommunityFile       string   `json:"snmp_community_file"` // file (mode 0600) holding the read-only v2c community
-	SNMPPaceMillis          int      `json:"snmp_pace_ms"`        // pause before every SNMP request (default 1000): the OLT agent rate-limits
-	SNMPMaxRequests         int      `json:"snmp_max_requests"`   // SNMP requests per collection cycle (default 400)
+	SNMPPaceMillis          int      `json:"snmp_pace_ms"`        // pause before every SNMP request (0 = 1000; minimum 1000): the OLT agent rate-limits
+	SNMPMaxRequests         int      `json:"snmp_max_requests"`   // SNMP packets per collection cycle (default 400, max 1000)
 	SSHMode                 string   `json:"ssh_mode"`            // "" | "exec" (default) | "shell" (interactive pty; firmwares that ignore exec)
 	SSHPagerSpace           bool     `json:"ssh_pager_space"`     // shell mode: answer the VRP "---- More ----" pager with a single Space
 	Profile                 string   `json:"profile"`             // "" | "huawei_ma56_r015" (CLI-mode profile for the MA5600 family)
@@ -166,8 +166,8 @@ func (c *Config) Validate() error {
 			if o.Vendor != "huawei" {
 				errs = append(errs, fmt.Errorf("%s: snmp transport is implemented for huawei only", p))
 			}
-			if o.SNMPCommunityFile == "" || o.SNMPPaceMillis < 0 || o.SNMPPaceMillis > 10000 || o.SNMPMaxRequests < 0 || o.SNMPMaxRequests > 5000 {
-				errs = append(errs, fmt.Errorf("%s: snmp_community_file required, snmp_pace_ms 0..10000, snmp_max_requests 0..5000", p))
+			if o.SNMPCommunityFile == "" || (o.SNMPPaceMillis != 0 && o.SNMPPaceMillis < 1000) || o.SNMPPaceMillis > 10000 || o.SNMPMaxRequests < 0 || o.SNMPMaxRequests > 1000 {
+				errs = append(errs, fmt.Errorf("%s: snmp_community_file required, snmp_pace_ms 0 (=1000) or 1000..10000, snmp_max_requests 0..1000", p))
 			}
 			if o.Username != "" || o.SecretFile != "" || o.HostKeySHA256 != "" || o.SSHMode != "" || o.Profile != "" || o.LegacySSH || o.SSHPagerSpace {
 				errs = append(errs, fmt.Errorf("%s: ssh fields are not allowed with transport snmp", p))

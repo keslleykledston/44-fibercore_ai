@@ -37,6 +37,9 @@ type SNMPReader interface {
 	Walk(ctx context.Context, root string, maxRows int) ([]SNMPRow, error)
 }
 
+// snmpMinPace is a hard floor on the pause between SNMP requests (a variable only so tests can run fast).
+var snmpMinPace = time.Second
+
 var (
 	ErrSNMPDenied   = errors.New("snmp: destination not in local allowlist or not an IP literal")
 	ErrSNMPTooLarge = errors.New("snmp: walk exceeded the row limit (treated as incomplete)")
@@ -50,8 +53,9 @@ type SNMPConfig struct {
 	Timeout   time.Duration // per request (default 5s)
 	Retries   int           // retransmissions after a timeout, each one paced and budgeted (default 1)
 	// Pace is the pause before every request. The OLT's SNMP agent rate-limits: on the measured MA5608T it answers in
-	// 20-200 ms, then stops answering ANY request for over a minute after ~17 requests in ~20 s. Default 1s; lower it only
-	// after measuring the target.
+	// 20-200 ms, then stops answering ANY request for over a minute after ~17 requests in ~20 s (about 1 request/s). The
+	// floor (snmpMinPace) is the fastest rate ever observed to be survivable only in short bursts, NOT a proven-safe
+	// sustained rate: values below it are raised to it.
 	Pace    time.Duration
 	MaxReqs int // total requests per client, i.e. per collection cycle (default 400)
 }
@@ -82,8 +86,8 @@ func DialSNMP(ctx context.Context, cfg SNMPConfig) (SNMPReader, func(), error) {
 	if cfg.Retries == 0 {
 		cfg.Retries = 1
 	}
-	if cfg.Pace == 0 {
-		cfg.Pace = time.Second
+	if cfg.Pace < snmpMinPace {
+		cfg.Pace = snmpMinPace
 	}
 	if cfg.MaxReqs == 0 {
 		cfg.MaxReqs = 400

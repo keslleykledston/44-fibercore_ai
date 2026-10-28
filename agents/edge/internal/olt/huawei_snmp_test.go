@@ -354,6 +354,9 @@ func silentAgent(t *testing.T) (addr string, packets func() int) {
 
 func dialSilent(t *testing.T, addr string, mut func(*SNMPConfig)) SNMPReader {
 	t.Helper()
+	old := snmpMinPace
+	snmpMinPace = time.Millisecond // the floor is enforced separately (TestSNMPPaceFloor); other tests need to run fast
+	t.Cleanup(func() { snmpMinPace = old })
 	cfg := SNMPConfig{Addr: addr, Community: "s3cret", Allowed: func(h string) bool { return h == addr },
 		Timeout: 100 * time.Millisecond, Pace: time.Millisecond}
 	mut(&cfg)
@@ -400,5 +403,19 @@ func TestSNMPAnOperationContextInterruptsABlockedCall(t *testing.T) {
 	start = time.Now()
 	if _, err := r.Walk(ctx, "1.3.6.1.2.1.2.2.1.2", 10); err == nil || time.Since(start) > 3*time.Second {
 		t.Fatalf("same for Walk: err=%v after %v", err, time.Since(start))
+	}
+}
+
+func TestSNMPPaceFloorCannotBeLoweredByConfig(t *testing.T) {
+	addr, _ := silentAgent(t)
+	for _, pace := range []time.Duration{0, time.Millisecond, 200 * time.Millisecond, 999 * time.Millisecond} {
+		r, closeFn, err := DialSNMP(context.Background(), SNMPConfig{Addr: addr, Community: "x", Allowed: func(string) bool { return true }, Pace: pace})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := r.(*snmpClient).cfg.Pace; got < time.Second {
+			t.Errorf("pace %v became %v: below the 1s floor", pace, got)
+		}
+		closeFn()
 	}
 }

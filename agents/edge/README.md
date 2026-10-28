@@ -27,4 +27,4 @@ Pendências: mTLS (ADR-0011), assinatura/anti-replay de jobs (Sprint 3), SNMP/SS
 {"name":"olt-exemplo-snmp","vendor":"huawei","transport":"snmp","snmp_address":"192.0.2.10:161",
  "snmp_community_file":"/etc/fibercore-edge/olt-exemplo.snmp","snmp_pace_ms":1000,"snmp_max_requests":300,"pon_ports":["0/0/14"]}
 ```
-`192.0.2.10:161` precisa constar em `allowlist` e ser IP literal. A OLT medida limita a taxa do agente SNMP (ver `docs/engineering/DRIVER_SDK_INTERFACE.md`).
+`192.0.2.10:161` precisa constar em `allowlist` e ser IP literal. `snmp_pace_ms` nunca fica abaixo de 1000. A OLT medida limita a taxa do agente SNMP (ver `docs/engineering/DRIVER_SDK_INTERFACE.md`).

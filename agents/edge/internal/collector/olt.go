@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/olt"
@@ -39,7 +40,15 @@ type OLT struct {
 	EdgeID  string
 	Sources []OLTSource
 	Now     func() time.Time
+
+	mu   sync.Mutex
+	cool map[string]time.Time // SNMP: OLT name -> do not touch before this instant
 }
+
+// snmpCooldown: after ANY failed SNMP collection of an OLT the Edge leaves its agent alone for this long. The measured
+// MA5608T agent goes mute for over a minute once its rate limit trips, and retrying into a mute agent only prolongs it (and
+// starves the operator's own monitoring that shares the community).
+const snmpCooldown = 5 * time.Minute
 
 func (o *OLT) Name() string { return "olt" }
 
@@ -87,7 +96,7 @@ func (o *OLT) Collect(ctx context.Context) ([]Item, error) {
 
 func (o *OLT) collectOne(ctx context.Context, src OLTSource, observed string) ([]Item, error) {
 	if src.OpenSNMP != nil {
-		return o.collectSNMP(ctx, src, observed)
+		return o.collectSNMPCooled(ctx, src, observed)
 	}
 	raw, closeFn, err := src.Open(ctx)
 	if err != nil {
@@ -111,6 +120,33 @@ func (o *OLT) collectOne(ctx context.Context, src OLTSource, observed string) ([
 		return nil, err
 	}
 	return o.buildItems(src.Name, observed, id, level, snap, func(p olt.PON) bool { return ponComplete(level, raw, p) })
+}
+
+func (o *OLT) now() time.Time {
+	if o.Now != nil {
+		return o.Now()
+	}
+	return time.Now()
+}
+
+// collectSNMPCooled applies the per-OLT cooldown around collectSNMP: while cooling, nothing is sent to the device.
+func (o *OLT) collectSNMPCooled(ctx context.Context, src OLTSource, observed string) ([]Item, error) {
+	o.mu.Lock()
+	until := o.cool[src.Name]
+	o.mu.Unlock()
+	if now := o.now(); now.Before(until) {
+		return nil, fmt.Errorf("snmp cooling down after a failure (%s left)", until.Sub(now).Round(time.Second))
+	}
+	items, err := o.collectSNMP(ctx, src, observed)
+	if err != nil {
+		o.mu.Lock()
+		if o.cool == nil {
+			o.cool = map[string]time.Time{}
+		}
+		o.cool[src.Name] = o.now().Add(snmpCooldown)
+		o.mu.Unlock()
+	}
+	return items, err
 }
 
 // collectSNMP reads an OLT over SNMP. The end of an SNMP table is unambiguous, so completeness is whatever the driver proved

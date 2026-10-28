@@ -159,6 +159,8 @@ func TestOLTSNMPTransportValidation(t *testing.T) {
 		"no community file":                 `,"transport":"snmp","snmp_address":"192.0.2.10:161"`,
 		"ssh fields mixed in":               `,"transport":"snmp","snmp_address":"192.0.2.10:161","snmp_community_file":"/c","username":"u"`,
 		"pace out of range":                 `,"transport":"snmp","snmp_address":"192.0.2.10:161","snmp_community_file":"/c","snmp_pace_ms":99999`,
+		"pace below the 1s floor":           `,"transport":"snmp","snmp_address":"192.0.2.10:161","snmp_community_file":"/c","snmp_pace_ms":200`,
+		"budget above the cap":              `,"transport":"snmp","snmp_address":"192.0.2.10:161","snmp_community_file":"/c","snmp_max_requests":5000`,
 		"unknown transport":                 `,"transport":"telnet","address":"192.0.2.10:22"`,
 		"snmp fields without the transport": `,"snmp_address":"192.0.2.10:161","address":"192.0.2.10:22","username":"u","secret_file":"/s","host_key_sha256":"SHA256:abc"`,
 	} {
