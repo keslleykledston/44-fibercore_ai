@@ -48,7 +48,7 @@ type SNMPConfig struct {
 	Community string // v2c community; read-only account; never logged
 	Allowed   func(hostport string) bool
 	Timeout   time.Duration // per request (default 5s)
-	Retries   int           // default 1
+	Retries   int           // retransmissions after a timeout, each one paced and budgeted (default 1)
 	// Pace is the pause before every request. The OLT's SNMP agent rate-limits: on the measured MA5608T it answers in
 	// 20-200 ms, then stops answering ANY request for over a minute after ~17 requests in ~20 s. Default 1s; lower it only
 	// after measuring the target.
@@ -90,7 +90,9 @@ func DialSNMP(ctx context.Context, cfg SNMPConfig) (SNMPReader, func(), error) {
 	}
 	g := &gosnmp.GoSNMP{
 		Target: host, Port: uint16(p), Community: cfg.Community, Version: gosnmp.Version2c,
-		Timeout: cfg.Timeout, Retries: cfg.Retries, MaxRepetitions: 10, Context: ctx, Transport: "udp",
+		// gosnmp's own retransmission is OFF: it would resend outside the pace and the request budget. Retries are done by
+		// do(), which spends one paced, budgeted slot per packet actually sent.
+		Timeout: cfg.Timeout, Retries: 0, MaxRepetitions: 10, Context: ctx, Transport: "udp",
 	}
 	if err := g.Connect(); err != nil {
 		return nil, nil, fmt.Errorf("snmp: connect %s: %w", cfg.Addr, errors.New(redact(err.Error(), cfg.Community)))
@@ -118,6 +120,35 @@ func (c *snmpClient) tick(ctx context.Context) error {
 	}
 }
 
+// do sends ONE request with up to cfg.Retries retransmissions after a timeout. Every packet takes a paced, budgeted slot,
+// and the operation's own context (not the one the socket was opened with) bounds the call.
+func (c *snmpClient) do(ctx context.Context, fn func() error) error {
+	var err error
+	for attempt := 0; attempt <= c.cfg.Retries; attempt++ {
+		if e := c.tick(ctx); e != nil {
+			return e
+		}
+		c.g.Context = ctx
+		if err = fn(); err == nil || ctx.Err() != nil || !isTimeout(err) {
+			return err
+		}
+	}
+	return err
+}
+
+// scrub keeps our own sentinels (budget, cancellation) matchable and strips the community from anything the library says.
+func (c *snmpClient) scrub(err error) error {
+	if errors.Is(err, ErrSNMPBudget) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	return errors.New(redact(err.Error(), c.cfg.Community))
+}
+
+func isTimeout(err error) bool {
+	var ne net.Error
+	return (errors.As(err, &ne) && ne.Timeout()) || strings.Contains(err.Error(), "timeout")
+}
+
 func toValue(pdu gosnmp.SnmpPDU) SNMPValue {
 	switch pdu.Type {
 	case gosnmp.NoSuchObject, gosnmp.NoSuchInstance, gosnmp.EndOfMibView, gosnmp.Null:
@@ -136,12 +167,9 @@ func (c *snmpClient) Get(ctx context.Context, oids []string) (map[string]SNMPVal
 	out := map[string]SNMPValue{}
 	for len(oids) > 0 { // at most 10 OIDs per PDU: the agent is weak and large PDUs time out
 		n := min(len(oids), 10)
-		if err := c.tick(ctx); err != nil {
-			return nil, err
-		}
-		res, err := c.g.Get(oids[:n])
-		if err != nil {
-			return nil, errors.New(redact(err.Error(), c.cfg.Community))
+		var res *gosnmp.SnmpPacket
+		if err := c.do(ctx, func() (e error) { res, e = c.g.Get(oids[:n]); return e }); err != nil {
+			return nil, c.scrub(err)
 		}
 		if res.Error != gosnmp.NoError {
 			return nil, fmt.Errorf("snmp: agent error status %d", res.Error)
@@ -157,10 +185,10 @@ func (c *snmpClient) Get(ctx context.Context, oids []string) (map[string]SNMPVal
 // Walk is a GETBULK loop driven here (not gosnmp's BulkWalk) so that every request is paced and budgeted and so that the
 // ONLY success exit is "the agent answered with an OID outside the subtree or endOfMibView": nil error == complete listing.
 func (c *snmpClient) Walk(ctx context.Context, root string, maxRows int) ([]SNMPRow, error) {
-	return walkBulk(ctx, root, maxRows, c.tick, func(oid string) ([]gosnmp.SnmpPDU, error) {
-		res, err := c.g.GetBulk([]string{oid}, 0, 10)
-		if err != nil {
-			return nil, errors.New(redact(err.Error(), c.cfg.Community))
+	return walkBulk(ctx, root, maxRows, func(ctx context.Context) error { return ctx.Err() }, func(oid string) ([]gosnmp.SnmpPDU, error) {
+		var res *gosnmp.SnmpPacket
+		if err := c.do(ctx, func() (e error) { res, e = c.g.GetBulk([]string{oid}, 0, 10); return e }); err != nil {
+			return nil, c.scrub(err)
 		}
 		if res.Error != gosnmp.NoError {
 			return nil, fmt.Errorf("snmp: agent error status %d", res.Error)

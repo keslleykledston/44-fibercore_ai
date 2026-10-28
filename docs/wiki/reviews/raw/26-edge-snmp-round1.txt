@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a183df-7cbd-7d41-9705-42635df61146).
+[codex] Turn started (01a183df-7e10-7df1-8d98-3f506302607c).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e rastrear os caminhos SNMP/config/collector, com foco n...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/sn...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/sn... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/snmp.go | sed -n '55,220p'; nl -ba agents/edge...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/snmp.go | sed -n '55,220p'; nl -ba agents/edge... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não deve ir a produção ainda: timeout do ciclo não ch...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não deve ir a produção ainda: timeout do ciclo não chega às chamadas de rede SNMP, e o orçamento/ritmo contam operações lógicas, não retransmissões UDP.
+
+Findings:
+- [high] Timeout por OLT não limita chamadas SNMP (agents/edge/internal/olt/snmp.go:91-98)
+  `DialSNMP` fixa `gosnmp.Context` no contexto recebido ao abrir a sessão. `collectSNMP` cria o timeout de cinco minutos só depois da abertura, e os métodos `Get`/`GetBulk` usam o contexto guardado no cliente, não o contexto mais novo recebido pelos métodos. Assim, chamadas SNMP bloqueadas podem sobreviver ao timeout do ciclo e atrasar o collector até os timeouts/retries internos terminarem; cancelar o contexto do agente é a única interrupção efetiva. Passe o contexto de cada operação ao transporte (ou configure deadlines canceláveis na conexão) e teste cancelamento durante uma chamada bloqueada.
+  Recommendation: Faça o cliente SNMP usar o contexto recebido em cada `Get`/`Walk`, com deadline aplicado às operações; não retenha apenas o contexto de abertura.
+- [high] Retries multiplicam tráfego fora do orçamento e do pace (agents/edge/internal/olt/snmp.go:82-93)
+  Com `Retries` não configurado, o código define `Retries=1`. O contador e o pace avançam uma vez antes de cada chamada `Get`/`GetBulk`, mas o gosnmp pode retransmitir a requisição após timeout sem passar novamente por `tick`. Portanto `SNMPMaxRequests` não limita pacotes enviados e, em falha de resposta, o tráfego pode duplicar sem intervalo de pace — precisamente sob a condição em que o agente está degradado. Isso enfraquece o limite de carga da OLT. Desative retries ou contabilize e espace cada retransmissão no transporte, e defina o orçamento em pacotes efetivamente enviados.
+  Recommendation: Garanta que retries sejam zero ou que cada tentativa retransmitida consuma orçamento e respeite o pace; cubra o caso de timeout com limite verificável de pacotes.

@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/gosnmp/gosnmp"
 )
@@ -304,5 +307,80 @@ func TestSNMPCodeCanOnlyReadNeverSet(t *testing.T) {
 				t.Errorf("%s must not contain %q: the SNMP transport is read-only", f, banned)
 			}
 		}
+	}
+}
+
+// silentAgent is a UDP socket that receives and counts packets but never answers: the worst case for the client.
+func silentAgent(t *testing.T) (addr string, packets func() int) {
+	t.Helper()
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { pc.Close() })
+	var mu sync.Mutex
+	n := 0
+	go func() {
+		b := make([]byte, 2048)
+		for {
+			if _, _, err := pc.ReadFrom(b); err != nil {
+				return
+			}
+			mu.Lock()
+			n++
+			mu.Unlock()
+		}
+	}()
+	return pc.LocalAddr().String(), func() int { mu.Lock(); defer mu.Unlock(); return n }
+}
+
+func dialSilent(t *testing.T, addr string, mut func(*SNMPConfig)) SNMPReader {
+	t.Helper()
+	cfg := SNMPConfig{Addr: addr, Community: "s3cret", Allowed: func(h string) bool { return h == addr },
+		Timeout: 100 * time.Millisecond, Pace: time.Millisecond}
+	mut(&cfg)
+	r, closeFn, err := DialSNMP(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closeFn)
+	return r
+}
+
+func TestSNMPEveryRetransmissionIsCountedPacedAndBudgeted(t *testing.T) {
+	addr, packets := silentAgent(t)
+	r := dialSilent(t, addr, func(c *SNMPConfig) { c.Retries = 2 })
+	_, err := r.Get(context.Background(), []string{"1.3.6.1.2.1.1.3.0"})
+	if err == nil || strings.Contains(err.Error(), "s3cret") {
+		t.Fatalf("want a timeout error without the community, got %v", err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if packets() != 3 {
+		t.Fatalf("1 request + 2 retransmissions = 3 packets, saw %d", packets())
+	}
+	addr2, packets2 := silentAgent(t)
+	r2 := dialSilent(t, addr2, func(c *SNMPConfig) { c.Retries = 5; c.MaxReqs = 2 })
+	if _, err := r2.Get(context.Background(), []string{"1.3.6.1.2.1.1.3.0"}); !errors.Is(err, ErrSNMPBudget) {
+		t.Fatalf("want ErrSNMPBudget, got %v", err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if packets2() != 2 {
+		t.Fatalf("the request budget caps PACKETS, retransmissions included: saw %d", packets2())
+	}
+}
+
+func TestSNMPAnOperationContextInterruptsABlockedCall(t *testing.T) {
+	addr, _ := silentAgent(t)
+	r := dialSilent(t, addr, func(c *SNMPConfig) { c.Timeout = 30 * time.Second; c.Retries = 3 })
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := r.Get(ctx, []string{"1.3.6.1.2.1.1.3.0"})
+	if err == nil || time.Since(start) > 3*time.Second {
+		t.Fatalf("the cycle deadline must interrupt a blocked call: err=%v after %v", err, time.Since(start))
+	}
+	start = time.Now()
+	if _, err := r.Walk(ctx, "1.3.6.1.2.1.2.2.1.2", 10); err == nil || time.Since(start) > 3*time.Second {
+		t.Fatalf("same for Walk: err=%v after %v", err, time.Since(start))
 	}
 }
