@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import create_engine, text
 
 APP_PW = "app_role_test_pw_0123456789"
+WORKER_PW = "worker_role_test_pw_0123456789"
 JWT_SECRET = "test-secret-with-more-than-32-characters!!"
 API_DIR = Path(__file__).resolve().parents[1]
 MANIFEST = API_DIR.parents[1] / "configs" / "modules.yaml"
@@ -38,12 +39,18 @@ def app_url(admin_url: str) -> str:
     return urlunparse(p._replace(netloc=f"fibercore_app:{APP_PW}@{p.hostname}:{p.port}"))
 
 
+@pytest.fixture(scope="session")
+def worker_url(admin_url: str) -> str:
+    p = urlparse(admin_url)
+    return urlunparse(p._replace(netloc=f"fibercore_worker:{WORKER_PW}@{p.hostname}:{p.port}"))
+
+
 @pytest.fixture(scope="session", autouse=True)
 def migrated(admin_url: str, app_url: str):
     eng = create_engine(admin_url.replace("postgresql://", "postgresql+psycopg://", 1))
     with eng.begin() as c:
         c.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
-    env = {**os.environ, "ADMIN_DATABASE_URL": admin_url, "APP_DB_PASSWORD": APP_PW}
+    env = {**os.environ, "ADMIN_DATABASE_URL": admin_url, "APP_DB_PASSWORD": APP_PW, "WORKER_DB_PASSWORD": WORKER_PW}
     subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], cwd=API_DIR, env=env, check=True)
     os.environ.update(
         DATABASE_URL=app_url, JWT_SECRET=JWT_SECRET, MODULE_MANIFEST=str(MANIFEST), NATS_MONITOR_URL=""

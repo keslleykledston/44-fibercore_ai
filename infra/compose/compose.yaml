@@ -39,6 +39,7 @@ services:
     environment:
       ADMIN_DATABASE_URL: postgresql://fibercore:${FIBERCORE_DB_PASSWORD}@postgres:5432/fibercore
       APP_DB_PASSWORD: ${FIBERCORE_APP_DB_PASSWORD:?Set FIBERCORE_APP_DB_PASSWORD}
+      WORKER_DB_PASSWORD: ${FIBERCORE_WORKER_DB_PASSWORD:?Set FIBERCORE_WORKER_DB_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
@@ -74,6 +75,36 @@ services:
     security_opt: [no-new-privileges:true]
     read_only: true
     tmpfs: [/tmp]
+  outbox-relay:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    command: ["python", "-m", "app.workers.relay"]
+    environment:
+      WORKER_DATABASE_URL: postgresql://fibercore_worker:${FIBERCORE_WORKER_DB_PASSWORD}@postgres:5432/fibercore
+      NATS_URL: nats://nats:4222
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      nats: {condition: service_healthy}
+    networks: [control]
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    read_only: true
+  event-consumer:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    command: ["python", "-m", "app.events.consumer"]
+    environment:
+      DATABASE_URL: postgresql://fibercore_app:${FIBERCORE_APP_DB_PASSWORD}@postgres:5432/fibercore
+      NATS_URL: nats://nats:4222
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      nats: {condition: service_healthy}
+    networks: [control]
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    read_only: true
 networks:
   control:
     driver: bridge

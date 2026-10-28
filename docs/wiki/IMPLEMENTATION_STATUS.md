@@ -1,6 +1,6 @@
 # Implementation status (evidência, não promessa)
 
-Atualizado: 2026-10-27 | Branch: `sprint0/01-foundation` | Estado: **Sprint 0 em andamento (PR 1 de N)**
+Atualizado: 2026-10-27 | Branch: `sprint0/02-outbox-jetstream` | Estado: **Sprint 0 em andamento (PR 1 de N)**
 
 | Item Sprint 0 | Status | Prova | Pendência |
 |---|---|---|---|
@@ -8,7 +8,7 @@ Atualizado: 2026-10-27 | Branch: `sprint0/01-foundation` | Estado: **Sprint 0 em
 | B. `/livez` `/readyz` `/version` `/v1/platform/modules` | Feito | pytest + smoke via Compose | probes de módulos futuros |
 | C. Auth, tenants, users, roles, service accounts, RLS | Feito (base) | 18 testes PASS contra PostgreSQL 17 real | MFA, refresh, rate-limit, OIDC, CRUD HTTP de admin |
 | D. Registry/feature flags, OpenAPI | Parcial | OpenAPI válido (`openapi-spec-validator`); registry com probes reais | flags dinâmicas por tenant; lint Spectral; geração de tipos TS/Py |
-| E. Outbox + JetStream producer/consumer | **Não iniciado** (tabela criada) | — | PR seguinte |
+| E. Outbox + JetStream producer/consumer | Feito (PR 2) | 26 testes PASS incl. crash/restart, dedupe por Msg-Id, ledger idempotente, DLQ; E2E em Compose | TLS/ACL do NATS (produção); DLQ replay tool |
 | F. Mock Edge / Mock NBI | **Não iniciado** | — | PR seguinte |
 | G. SBOM/scan, backup/restore staging | **Não iniciado** (CI com gitleaks definido, **não executado**) | — | PR dedicado |
 | H. Wiki/ADRs/contexto | Feito (ADR 0001–0010 Proposed) | `docs/wiki/adr/` | aprovação Codex |

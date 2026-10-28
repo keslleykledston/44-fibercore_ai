@@ -13,6 +13,8 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U fibercore" --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
+      - name: NATS JetStream
+        run: docker run -d --name nats -p 127.0.0.1:4222:4222 nats:2.11-alpine -js
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
@@ -22,9 +24,10 @@ jobs:
       - run: cd apps/api && python -m pytest -q
         env:
           TEST_ADMIN_DATABASE_URL: postgresql://fibercore:ci_admin_pw_only@127.0.0.1:5432/fibercore_test
+          TEST_NATS_URL: nats://127.0.0.1:4222
       - name: Compose syntax
         run: |
-          printf 'FIBERCORE_DB_PASSWORD=ci\nFIBERCORE_APP_DB_PASSWORD=ci\nFIBERCORE_JWT_SECRET=%s\n' "$(openssl rand -hex 32)" > .env.dev
+          printf 'FIBERCORE_DB_PASSWORD=ci\nFIBERCORE_APP_DB_PASSWORD=ci\nFIBERCORE_WORKER_DB_PASSWORD=ci\nFIBERCORE_JWT_SECRET=%s\n' "$(openssl rand -hex 32)" > .env.dev
           docker compose --env-file .env.dev -f infra/compose/compose.yaml config --quiet
   secrets-scan:
     runs-on: ubuntu-latest

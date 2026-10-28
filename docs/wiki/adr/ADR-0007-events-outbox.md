@@ -8,7 +8,7 @@ Decisão herdada do PRD v2.
 
 ## Decisão
 
-Tabela `events_outbox` criada (RLS, tenant). Producer/relay e consumer idempotente ficam para o PR seguinte (entrega E da Sprint 0). NATS sobe no Compose dev sem TLS/ACL (apenas dev).
+`enqueue()` grava na mesma transação do estado. Relay (`app.workers.relay`) roda como role `fibercore_worker` (SELECT + UPDATE(published_at) em events_outbox via policy dedicada; nada mais), publica com `Nats-Msg-Id`=id do outbox (dedupe do JetStream) e depois marca publicado. Consumer (`app.events.consumer`) grava ledger `processed_events` na MESMA transação do efeito => exatamente-um efeito; ack só após commit; NAK com atraso; após 5 entregas vai a `fibercore.dlq.*`. Subject `fibercore.events.<tenant>.<tipo>` deve coincidir com o tenant do envelope. NATS sobe no Compose dev sem TLS/ACL (apenas dev).
 
 ## Consequências
 

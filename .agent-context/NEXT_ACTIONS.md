@@ -1,8 +1,10 @@
 # Next Actions
 
-1. Submeter PR 1 ao Codex (`docs/wiki/reviews/PR-01-review-request.md`); corrigir CRITICAL/HIGH.
-2. PR 2: outbox relay + consumer JetStream idempotente, teste restart+duplicidade.
-3. PR 3: mock GenieACS NBI + mock Edge + contrato de stream mTLS + estratégia de secrets.
-4. PR 4: CI (SBOM, pip-audit/trivy, gitleaks executados), backup/restore staging, plano de deploy.
-5. Pendente de campo (não bloqueia): host/versão NBI GenieACS, firmware OLT + contas read-only, ERP, retenção.
-6. Decidir com o usuário: criar remote `keslleykledston/120-OLT_SaaS` e fazer push (só com ordem).
+Ordem decidida (autonomia concedida pelo usuário; Codex = revisor de tudo que for construído; push autorizado em origin = keslleykledston/44-fibercore_ai via SSH 443):
+1. PR 3: mock GenieACS NBI + mock Edge + contrato stream/envelope + estratégia de secrets.
+2. PR 4: CI de segurança (SBOM, pip-audit, gitleaks local), backup/restore staging, plano de deploy.
+3. Sprint 1: migrations de domínio (edges/olts/pon/onu/cpe), Edge Go read-only + NBI mock, driver Huawei MA5800 (fixture) e ZTE (fixture).
+4. Sprint 2: CSV/ERP, associação ONU/cliente, incidentes, API de leitura; UX spec -> Lovable em lote.
+5. Sprint 3: job state machine/write gate (sem escrita real), USP adapter com simulador, release center.
+6. Sempre: Codex adversarial-review por branch antes de merge ff em main + push.
+Campo (não bloqueia): host/versão NBI GenieACS, firmware OLT + contas read-only, ERP, retenção.
