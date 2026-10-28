@@ -1,0 +1,14 @@
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Ainda há afirmações de aprovação dos PRs 1–14 sem respaldo auditável fora do relatório que já as qualifica; elas mantêm a mesma lacuna de confiança em documentos de estado e sessão.
+
+Findings:
+- [medium] Histórico de aprovações continua afirmado sem ressalva (.agent-context/WORK_SESSION_LOG.md:10-11)
+  O relatório diz que o histórico dos PRs 1–14 não é verificável por artefatos, mas este registro de sessão ainda declara categoricamente que todos receberam `approve`. Como o próprio log de revisões identifica seus resultados como relato não verificável, essa afirmação pode ser reutilizada como confirmação independente e induzir leitores a tratar o gate como comprovado.
+  Recommendation: Qualifique a frase como relato do implementador não verificável por artefatos e aponte para CODEX_REVIEW_LOG.md, ou remova a alegação de aprovações.
+- [medium] Estado do projeto ainda trata main como totalmente aprovado (.agent-context/PROJECT_STATE.md:3)
+  A afirmação `main = tudo aprovado pelo Codex` contradiz a ressalva do relatório e do registro de revisões de que as saídas brutas dos PRs 1–14 não foram persistidas. Isso reintroduz como fato no contexto operacional justamente o histórico que esta rodada procura classificar como não verificável.
+  Recommendation: Troque por uma formulação explícita de relato não verificável, ou descreva apenas o estado observado de main sem atribuir aprovação Codex.

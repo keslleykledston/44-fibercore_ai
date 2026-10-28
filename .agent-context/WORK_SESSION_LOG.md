@@ -8,4 +8,4 @@ Specification, planning docs, prompts, inventory seeds, OpenAPI draft, Compose a
 Kit validado (SHA256 OK) e importado; ADR 0001–0010; API real + auth + RLS + migrations; Compose validado; 18 testes PASS; OpenAPI alinhado (X-Workspace-ID, ModuleHealth). Codex gate não executado.
 
 ## 2026-10-28 — Entrega completa (PRs 1–14 + adendo v2.1)
-Sprint 0→3 (parcial) + frontend + ajuda por construção. Todos os PRs com Codex approve. Ver FINAL_REPORT.md. Aprendizados: E2E real pega bugs que unit tests não pegam (lock sem cryptography; servidor next órfão); `pkill -f` mata o próprio shell; portas do host são disputadas.
+Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetidos ao Codex com `approve` na última rodada de cada um (relato do implementador, não verificável por artefatos: ver CODEX_REVIEW_LOG.md). Ver FINAL_REPORT.md. Aprendizados: E2E real pega bugs que unit tests não pegam (lock sem cryptography; servidor next órfão); `pkill -f` mata o próprio shell; portas do host são disputadas.
