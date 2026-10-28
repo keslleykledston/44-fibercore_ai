@@ -50,3 +50,10 @@ jobs:
         run: |
           docker build -f apps/api/Dockerfile -t fibercore-api:ci .
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.58.1 image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed fibercore-api:ci
+  edge-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: '1.22'}
+      - run: cd agents/edge && go vet ./... && go test -race ./...

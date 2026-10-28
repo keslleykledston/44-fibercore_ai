@@ -1,0 +1,86 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"log/slog"
+	"net"
+	"net/url"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/agent"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/allowlist"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/collector"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/config"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/gateway"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/nbi"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/queue"
+)
+
+var version = "0.1.0-dev"
+
+func main() {
+	cfgPath := flag.String("config", "/etc/fibercore-edge/config.json", "config file (mode 0600)")
+	flag.Parse()
+	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	cfg, err := config.Load(*cfgPath, version)
+	if err != nil {
+		log.Error("invalid config", "err", err)
+		os.Exit(2)
+	}
+	secret, err := config.ReadSecret(cfg.SecretFile)
+	if err != nil {
+		log.Error("secret", "err", err)
+		os.Exit(2)
+	}
+	al, err := allowlist.New(cfg.Allowlist)
+	if err != nil {
+		log.Error("allowlist", "err", err)
+		os.Exit(2)
+	}
+	q, err := queue.Open(cfg.QueuePath)
+	if err != nil {
+		log.Error("queue", "err", err)
+		os.Exit(2)
+	}
+	defer q.Close()
+
+	// Gateway: its own single-destination allowlist derived from the LOCAL config (no proxies, no redirects).
+	gwURL, _ := url.Parse(cfg.GatewayURL)
+	gwHost := gwURL.Host
+	if gwURL.Port() == "" {
+		gwHost = net.JoinHostPort(gwURL.Hostname(), map[string]string{"https": "443", "http": "80"}[gwURL.Scheme])
+	}
+	gwAllow, _ := allowlist.New([]string{gwHost})
+	gw := gateway.New(cfg.GatewayURL, cfg.ClientID, secret, gwAllow.HTTPClient(30*time.Second))
+
+	var collectors []collector.Collector
+	if cfg.NBIURL != "" {
+		nbiAuth := ""
+		if cfg.NBISecretFile != "" {
+			if nbiAuth, err = config.ReadSecret(cfg.NBISecretFile); err != nil {
+				log.Error("nbi secret", "err", err)
+				os.Exit(2)
+			}
+		}
+		nbiClient, err := nbi.New(cfg.NBIURL, al.HTTPClient(30*time.Second), nbiAuth)
+		if err != nil {
+			log.Error("nbi", "err", err)
+			os.Exit(2)
+		}
+		collectors = append(collectors, &collector.GenieACS{EdgeID: cfg.EdgeID, ConnectorID: cfg.ConnectorID, Client: nbiClient})
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	ag := &agent.Agent{
+		EdgeID: cfg.EdgeID, TenantID: cfg.TenantID, Version: cfg.Version, GW: gw, Q: q, Collectors: collectors,
+		HeartbeatEvery: cfg.HeartbeatEvery(), CollectEvery: cfg.CollectEvery(), Log: log,
+	}
+	log.Info("fibercore-edge starting", "version", cfg.Version, "edge_id", cfg.EdgeID, "collectors", len(collectors))
+	ag.Run(ctx)
+	log.Info("fibercore-edge stopped")
+}

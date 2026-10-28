@@ -1,7 +1,15 @@
-# Edge Connector Go — Sprint 1 (interface; não implementado)
+# Fibercore Edge (Go)
 
-Implantar `cmd/fibercore-edge/main.go`, `internal/{auth,tunnel,heartbeat,queue,allowlist,connectors/{olt,genieacs,usp},audit,updater}`.
+Agente outbound-only que roda no site do ISP. **Somente leitura** nesta fase.
 
-Contrato: outbound mTLS para Gateway; URL privada GenieACS NBI configurada localmente no site; SQLite persistente; envelope assinado anti-replay; TTL; erros tipados; operações só com adapter/homologação; SNMP e SSH read-only inicialmente. O Edge deve ser independente do ciclo de vida do GenieACS existente.
+- `internal/config` — config JSON local (0600, campos desconhecidos rejeitados, UUIDs, https obrigatório; http só em loopback com `allow_insecure_dev`).
+- `internal/allowlist` — todo destino (NBI) precisa estar na lista LOCAL; sem proxy de ambiente, sem redirects, IPs resolvidos link-local/metadata/multicast recusados.
+- `internal/nbi` — cliente GenieACS NBI só-GET com projeção mínima (sem árvore de parâmetros => sem PSK/PPPoE), limite de 16 MiB.
+- `internal/queue` — store-and-forward SQLite WAL (0600), ordem preservada, dead-letter para rejeição permanente.
+- `internal/gateway` — login por service account `edge_agent`, relogin único em 401, classificação Delivered/Retry/Rejected.
+- `internal/collector` — GenieACS → `cpe_snapshot` (lotes de 5000, não inventa identidade sem serial). Drivers de OLT: PR 7.
+- `cmd/fibercore-edge` — `fibercore-edge -config /etc/fibercore-edge/config.json`.
 
-O diretório está propositalmente sem binário/serviço Go para não anunciar implementação inexistente.
+Teste: `cd agents/edge && go vet ./... && go test ./...`.
+
+Pendências: mTLS (ADR-0011), assinatura/anti-replay de jobs (Sprint 3), SNMP/SSH read-only (PR 7), updater assinado, métricas.

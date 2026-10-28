@@ -1,6 +1,6 @@
 # Implementation status (evidência, não promessa)
 
-Atualizado: 2026-10-27 | Branch: `sprint1/05-inventory-ingestion` | Estado: **Sprint 0 concluída (PR 1–4 mergeados); Sprint 1 em andamento (PR 5)**
+Atualizado: 2026-10-27 | Branch: `sprint1/06-edge-go` | Estado: **Sprint 0 concluída (PR 1–4 mergeados); Sprint 1 em andamento (PR 5)**
 
 | Item Sprint 0 | Status | Prova | Pendência |
 |---|---|---|---|
@@ -22,5 +22,5 @@ Edge-fleet: registro via CLI, `POST /v1/edge/heartbeat` (bearer edge_agent, inte
 | Item | Status | Prova |
 |---|---|---|
 | Schema inventário + ingestão snapshots + leituras com frescor | Feito (PR 5) | 54 testes PASS (RLS, anti-hijack, out-of-order, stale≠offline, binding conflict, outbox) |
-| Edge Go (allowlist, NBI read-only, heartbeat/snapshot) | Não iniciado | PR 6 |
+| Edge Go (allowlist, NBI read-only, heartbeat/snapshot, fila SQLite) | Feito (PR 6) | `go test ./...` PASS; E2E real: Edge Go → API Compose → /v1/edges online + /v1/cpes (NBI **mock**) |
 | Drivers OLT Huawei MA5800 / ZTE (fixtures) | Não iniciado | PR 7 |
