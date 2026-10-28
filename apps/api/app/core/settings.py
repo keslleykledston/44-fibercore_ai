@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     jwt_kid_previous: str = ""
     refresh_ttl_seconds: int = 8 * 3600  # sliding: each rotation issues a fresh window
     refresh_family_ttl_seconds: int = 7 * 24 * 3600  # absolute cap: re-login required after this
+    # A refresh token presented again within this window (a legitimate concurrent request, e.g. two tabs) gets a sibling token
+    # instead of revoking the family; outside it, reuse is treated as a leak.
+    refresh_reuse_grace_seconds: int = 10
     mfa_encryption_key: str = Field(default="", repr=False)  # Fernet key (urlsafe base64, 32 bytes); empty => MFA enrolment disabled
     mfa_issuer: str = "FiberCore"
     trusted_proxy: bool = False  # trust X-Forwarded-For (set only behind our own reverse proxy)

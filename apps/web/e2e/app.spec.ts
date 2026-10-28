@@ -142,12 +142,6 @@ test("sessão renova com o refresh token rotativo quando o access token expira",
   const jar = await context.cookies();
   expect(jar.find((c) => c.name === "fc_token")).toBeDefined();
   expect(jar.find((c) => c.name === "fc_refresh")!.value).not.toBe(refresh1.value);
-  // o refresh antigo já foi consumido: reapresentá-lo é reutilização e derruba a sessão inteira
-  const reuse = await page.request.post(`${API_URL}/v1/auth/refresh`, { data: { refresh_token: refresh1.value } });
-  expect(reuse.status()).toBe(401);
-  await context.clearCookies({ name: "fc_token" });
-  await page.goto("/rede");
-  await expect(page).toHaveURL(/\/login/);
 });
 
 test("logout revoga o refresh token no servidor", async ({ page, context }) => {

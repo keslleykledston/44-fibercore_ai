@@ -33,6 +33,16 @@ class SessionOut(BaseModel):
     expires_in: int
 
 
+def _lock_family(conn, refresh_token: str) -> None:
+    """Serialises refresh and logout on the same family, so a logout can never miss a successor created concurrently.
+    READ COMMITTED: statements after the lock see everything committed before it was granted."""
+    conn.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(f.family_id::text)) FROM "
+             "(SELECT family_id FROM refresh_tokens WHERE token_hash = :h LIMIT 1) f"),
+        {"h": hash_refresh(refresh_token)},
+    )
+
+
 def _revoke_family(conn, family_id: UUID) -> None:
     conn.execute(text("UPDATE refresh_tokens SET revoked_at = now() WHERE family_id = :f AND revoked_at IS NULL"), {"f": family_id})
 
@@ -43,6 +53,7 @@ def refresh(body: RefreshIn, settings: Settings = Depends(get_settings)) -> Sess
     token means it leaked (or a client raced itself): the whole family is revoked and the user must log in again."""
     sess = None
     with scoped_connection(get_engine()) as conn:
+        _lock_family(conn, body.refresh_token)
         row = conn.execute(
             text("SELECT id, family_id, user_id, expires_at, family_expires_at, used_at, revoked_at FROM refresh_tokens "
                  "WHERE token_hash = :h FOR UPDATE"),
@@ -51,15 +62,17 @@ def refresh(body: RefreshIn, settings: Settings = Depends(get_settings)) -> Sess
         now = datetime.now(UTC)
         if row is None or row.revoked_at is not None:
             pass  # unknown or revoked
-        elif row.used_at is not None:
-            # reuse: revoke the family. Committed here; the 401 is raised only after the transaction ends.
-            _revoke_family(conn, row.family_id)
         elif row.expires_at <= now or row.family_expires_at <= now:
             pass  # expired
+        elif row.used_at is not None and (now - row.used_at).total_seconds() > settings.refresh_reuse_grace_seconds:
+            # reuse outside the grace window: treated as a leak. Revoked here; the 401 is raised after the transaction ends.
+            _revoke_family(conn, row.family_id)
         elif not conn.execute(text("SELECT is_active FROM users_global WHERE id = :u"), {"u": row.user_id}).scalar():
             _revoke_family(conn, row.family_id)
         else:
-            conn.execute(text("UPDATE refresh_tokens SET used_at = now() WHERE id = :i"), {"i": row.id})
+            if row.used_at is None:
+                conn.execute(text("UPDATE refresh_tokens SET used_at = now() WHERE id = :i"), {"i": row.id})
+            # else: a legitimate concurrent request (two tabs) within the grace window gets a sibling token; nothing is revoked
             sess = issue_session(conn, settings, row.user_id, family_id=row.family_id, family_expires_at=row.family_expires_at)
     if sess is None:
         raise _unauth()
@@ -70,6 +83,7 @@ def refresh(body: RefreshIn, settings: Settings = Depends(get_settings)) -> Sess
 def logout(body: RefreshIn) -> Response:
     """Revokes the whole family. Idempotent and silent about unknown tokens."""
     with scoped_connection(get_engine()) as conn:
+        _lock_family(conn, body.refresh_token)
         conn.execute(
             text("UPDATE refresh_tokens SET revoked_at = now() WHERE revoked_at IS NULL AND family_id IN "
                  "(SELECT family_id FROM refresh_tokens WHERE token_hash = :h)"),

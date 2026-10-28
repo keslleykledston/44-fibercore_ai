@@ -69,15 +69,30 @@ def issue_token(settings: Settings, *, sub: UUID, kind: str, tenant_id: UUID | N
     return jwt.encode(claims, settings.jwt_secret, algorithm="HS256", headers={"kid": settings.jwt_kid})
 
 
-def _verification_key(settings: Settings, token: str) -> str:
-    """Pick the key by the (unverified) kid header; the signature check afterwards is what authenticates. A token without
-    kid (issued before rotation support) is only tried against the current key. An unknown kid never falls back."""
+def _verification_keys(settings: Settings, token: str) -> list[str]:
+    """Candidate keys chosen by the (unverified) kid header; the signature check afterwards is what authenticates. A token
+    without kid (issued before key rotation existed) is tried against the current key, then the previous one, so rotation
+    does not cut legacy sessions short. An unknown kid never falls back."""
+    previous = settings.jwt_secret_previous
     kid = jwt.get_unverified_header(token).get("kid")
-    if kid is None or kid == settings.jwt_kid:
-        return settings.jwt_secret
-    if settings.jwt_secret_previous and settings.jwt_kid_previous and kid == settings.jwt_kid_previous:
-        return settings.jwt_secret_previous
+    if kid is None:
+        return [settings.jwt_secret] + ([previous] if previous else [])
+    if kid == settings.jwt_kid:
+        return [settings.jwt_secret]
+    if previous and settings.jwt_kid_previous and kid == settings.jwt_kid_previous:
+        return [previous]
     raise ValueError("unknown kid")
+
+
+def _decode(settings: Settings, token: str, *, audience: str) -> dict:
+    last: Exception = ValueError("no key")
+    for key in _verification_keys(settings, token):
+        try:
+            return jwt.decode(token, key, algorithms=["HS256"], audience=audience, issuer=settings.jwt_issuer,
+                              options={"require": ["exp", "iat", "sub", "iss", "aud"]})
+        except jwt.InvalidSignatureError as exc:
+            last = exc  # try the next candidate key; every other failure (expired, audience...) is final
+    raise last
 
 
 CHALLENGE_TTL_SECONDS = 300
@@ -96,8 +111,7 @@ def issue_mfa_challenge(settings: Settings, *, sub: UUID) -> str:
 def decode_mfa_challenge(settings: Settings, token: str) -> UUID:
     if not settings.jwt_secret:
         raise ValueError("auth not configured")
-    data = jwt.decode(token, _verification_key(settings, token), algorithms=["HS256"], audience=f"{settings.jwt_audience}:mfa",
-                      issuer=settings.jwt_issuer, options={"require": ["exp", "iat", "sub", "iss", "aud"]})
+    data = _decode(settings, token, audience=f"{settings.jwt_audience}:mfa")
     if data.get("kind") != "mfa":
         raise ValueError("bad kind")
     return UUID(data["sub"])
@@ -107,14 +121,7 @@ def decode_token(settings: Settings, token: str) -> TokenClaims:
     """Raises jwt.PyJWTError / ValueError on any problem. Algorithm is pinned (no alg=none)."""
     if not settings.jwt_secret:
         raise ValueError("auth not configured")
-    data = jwt.decode(
-        token,
-        _verification_key(settings, token),
-        algorithms=["HS256"],
-        audience=settings.jwt_audience,
-        issuer=settings.jwt_issuer,
-        options={"require": ["exp", "iat", "sub", "iss", "aud"]},
-    )
+    data = _decode(settings, token, audience=settings.jwt_audience)
     kind = data.get("kind")
     if kind not in ("user", "service"):
         raise ValueError("bad kind")

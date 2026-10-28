@@ -54,14 +54,65 @@ def test_login_returns_refresh_and_kid(client, user):
     assert jwt.get_unverified_header(j["access_token"])["kid"] == "k1"
 
 
-def test_refresh_rotates_and_old_token_is_reuse(client, user):
+def test_refresh_rotates_and_old_token_is_reuse(client, user, migrated):
     j = _login(client, user).json()
     r1 = client.post("/v1/auth/refresh", json={"refresh_token": j["refresh_token"]})
     assert r1.status_code == 200 and r1.json()["refresh_token"] != j["refresh_token"]
     assert client.get("/v1/auth/workspaces", headers=_bearer(r1.json()["access_token"])).status_code == 200
-    # replaying the consumed token revokes the whole family, including the legitimately rotated token
+    # replaying the consumed token after the grace window revokes the whole family, including the legitimately rotated token
+    _age_used(migrated, j["refresh_token"])
     assert client.post("/v1/auth/refresh", json={"refresh_token": j["refresh_token"]}).status_code == 401
     assert client.post("/v1/auth/refresh", json={"refresh_token": r1.json()["refresh_token"]}).status_code == 401
+
+
+def _age_used(migrated, refresh_token, seconds=60):
+    from app.core.sessions import hash_refresh
+    with migrated.begin() as c:
+        c.execute(text("UPDATE refresh_tokens SET used_at = now() - make_interval(secs => :s) WHERE token_hash = :h"),
+                  {"s": seconds, "h": hash_refresh(refresh_token)})
+
+
+def test_concurrent_refresh_inside_grace_gets_sibling_not_revocation(client, user):
+    j = _login(client, user).json()
+    a = client.post("/v1/auth/refresh", json={"refresh_token": j["refresh_token"]})
+    b = client.post("/v1/auth/refresh", json={"refresh_token": j["refresh_token"]})  # second tab, same cookie
+    assert a.status_code == b.status_code == 200 and a.json()["refresh_token"] != b.json()["refresh_token"]
+    # both successors stay usable; the family is intact
+    assert client.post("/v1/auth/refresh", json={"refresh_token": a.json()["refresh_token"]}).status_code == 200
+    assert client.post("/v1/auth/refresh", json={"refresh_token": b.json()["refresh_token"]}).status_code == 200
+
+
+def test_logout_revokes_successor_created_by_refresh(client, user):
+    j = _login(client, user).json()
+    r = client.post("/v1/auth/refresh", json={"refresh_token": j["refresh_token"]}).json()
+    # logout with the already-consumed token still kills the successor (same family)
+    assert client.post("/v1/auth/logout", json={"refresh_token": j["refresh_token"]}).status_code == 204
+    assert client.post("/v1/auth/refresh", json={"refresh_token": r["refresh_token"]}).status_code == 401
+
+
+def _post(path, refresh_token):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    TestClient(app).post(path, json={"refresh_token": refresh_token})
+
+
+def test_refresh_and_logout_race_leaves_no_live_session(user, migrated):
+    import threading
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    for _ in range(12):
+        c = TestClient(app)
+        j = _login(c, user).json()
+        t1 = threading.Thread(target=_post, args=("/v1/auth/refresh", j["refresh_token"]))
+        t2 = threading.Thread(target=_post, args=("/v1/auth/logout", j["refresh_token"]))
+        t1.start(); t2.start(); t1.join(); t2.join()
+        with migrated.connect() as cn:
+            live = cn.execute(text("SELECT count(*) FROM refresh_tokens WHERE user_id = :u AND revoked_at IS NULL AND expires_at > now()"),
+                              {"u": user["id"]}).scalar_one()
+        assert live == 0, "a refresh racing a logout must not leave a live token behind"
 
 
 def test_refresh_unknown_expired_and_family_cap(client, user, migrated):
@@ -189,5 +240,13 @@ def test_key_rotation_kid(client, user, monkeypatch):
         monkeypatch.setenv("JWT_SECRET_PREVIOUS", "")
         st.get_settings.cache_clear()
         assert client.get("/v1/auth/workspaces", headers=_bearer(old_tok)).status_code == 401  # previous key retired
+        monkeypatch.setenv("JWT_SECRET_PREVIOUS", JWT_SECRET)
+        st.get_settings.cache_clear()
+        legacy = jwt.encode({"iss": "fibercore-api", "aud": "fibercore", "sub": str(user["id"]), "kind": "user", "iat": int(time.time()),
+                             "exp": int(time.time()) + 60}, JWT_SECRET, algorithm="HS256")  # pre-kid token signed with the old key
+        assert client.get("/v1/auth/workspaces", headers=_bearer(legacy)).status_code == 200  # still valid during the window
+        wrong = jwt.encode({"iss": "fibercore-api", "aud": "fibercore", "sub": str(user["id"]), "kind": "user", "iat": int(time.time()),
+                            "exp": int(time.time()) + 60}, "some-other-secret-with-more-than-32-chars!!", algorithm="HS256")
+        assert client.get("/v1/auth/workspaces", headers=_bearer(wrong)).status_code == 401
     finally:
         monkeypatch.undo(); st.get_settings.cache_clear()
