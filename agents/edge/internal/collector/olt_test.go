@@ -172,3 +172,26 @@ func TestIdentifiedDriverNeverDeclaresAPonComplete(t *testing.T) {
 		t.Fatalf("an identified (synthetic-fixture) driver cannot prove completeness: %s", items[0].Payload)
 	}
 }
+
+type shellLike struct{ olt.Session }
+
+func (shellLike) EndProven() bool { return false }
+
+func TestPonCompleteNeedsObservedDriverAndAProvenEndOfCommand(t *testing.T) {
+	exec := fileSession{t.TempDir()}
+	for _, c := range []struct {
+		name  string
+		level olt.Level
+		sess  olt.Session
+		want  bool
+	}{
+		{"observed + exec", olt.LevelObserved, exec, true},
+		{"observed + shell (end inferred from a device-controlled prompt)", olt.LevelObserved, shellLike{exec}, false},
+		{"identified + exec", olt.LevelIdentified, exec, false},
+		{"identified + shell", olt.LevelIdentified, shellLike{exec}, false},
+	} {
+		if got := ponsComplete(c.level, c.sess); got != c.want {
+			t.Errorf("%s: got %v want %v", c.name, got, c.want)
+		}
+	}
+}

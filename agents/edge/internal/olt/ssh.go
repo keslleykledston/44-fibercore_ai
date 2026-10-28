@@ -28,6 +28,8 @@ type SSHConfig struct {
 	// Shell: run commands in an interactive pty shell (one per session) instead of SSH exec. Needed by firmwares that
 	// ignore exec requests (validated: Huawei MA5608T R015).
 	Shell bool
+	// PromptQuiet: silence required after a candidate prompt in shell mode (default 1s). Not proof of completion.
+	PromptQuiet time.Duration
 	// Legacy: allow ONLY the old algorithm set some OLT firmwares still require (DH group1/group14-SHA1, ssh-rsa, AES-CBC).
 	// A per-OLT, explicit downgrade; the pinned host key stays mandatory, so a downgrade cannot be exploited by a MITM.
 	Legacy bool
@@ -76,6 +78,9 @@ func DialSSH(ctx context.Context, cfg SSHConfig) (*SSHSession, error) {
 	return &SSHSession{client: ssh.NewClient(conn, chans, reqs), cfg: cfg}, nil
 }
 
+// EndProven: SSH exec has an in-band end (EOF + exit status); the shell mode infers it from the prompt and cannot prove it.
+func (s *SSHSession) EndProven() bool { return !s.cfg.Shell }
+
 // Close tears the connection down FIRST, so a Run blocked in openShell or waiting for a prompt is released immediately
 // instead of Close waiting for the command timeout behind s.mu.
 func (s *SSHSession) Close() error {
@@ -93,7 +98,7 @@ func (s *SSHSession) Run(ctx context.Context, cmd string) (string, error) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		if s.sh == nil {
-			sh, err := openShell(ctx, s.client, s.cfg.CommandTimout)
+			sh, err := openShell(ctx, s.client, s.cfg.CommandTimout, s.cfg.PromptQuiet)
 			if err != nil {
 				return "", err
 			}

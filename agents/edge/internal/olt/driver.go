@@ -155,3 +155,16 @@ func (b *Budget) Run(ctx context.Context, cmd string) (string, error) {
 	}
 	return out, nil
 }
+
+// EndProver is implemented by transports whose command end is NOT unambiguous. SSH exec ends with EOF + exit status, but an
+// interactive shell only infers the end from a prompt the device itself controls, and no fixed silence proves nothing more
+// follows. Such transports must never let a PON be declared complete on their own.
+type EndProver interface{ EndProven() bool }
+
+// EndProven reports whether the transport delivers an unambiguous end of command (true for transports that do not say).
+func EndProven(s Session) bool {
+	if p, ok := s.(EndProver); ok {
+		return p.EndProven()
+	}
+	return true
+}

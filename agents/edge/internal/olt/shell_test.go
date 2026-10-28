@@ -181,7 +181,7 @@ func mustEd25519(t *testing.T) ssh.Signer {
 
 func shellCfg(srv *shellServer, legacy bool) SSHConfig {
 	return SSHConfig{Addr: srv.addr, User: "u", Password: "pw", HostKeySHA256: srv.fp, Dial: dialer,
-		Shell: true, Legacy: legacy, CommandTimout: 3 * time.Second}
+		Shell: true, Legacy: legacy, CommandTimout: 3 * time.Second, PromptQuiet: 150 * time.Millisecond}
 }
 
 func TestShellIdentifiesRealHuaweiFormatAndCompletesOptionalParameter(t *testing.T) {
@@ -420,6 +420,27 @@ func TestShellPromptLookalikeInsideOutputFailsClosed(t *testing.T) {
 			t.Fatalf("%s: a shell with ambiguous output must not be reused", cmd)
 		}
 		s.Close()
+	}
+}
+
+func TestShellTransportNeverProvesTheEndOfACommand(t *testing.T) {
+	srv := startShellSSH(t, false)
+	sh, err := DialSSH(context.Background(), shellCfg(srv, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sh.Close()
+	if EndProven(sh) {
+		t.Fatal("an interactive shell must not claim an unambiguous end of command")
+	}
+	ex := startSSH(t, "pw")
+	e, err := DialSSH(context.Background(), SSHConfig{Addr: ex.addr, User: "u", Password: "pw", HostKeySHA256: ex.fp, Dial: dialer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	if !EndProven(e) {
+		t.Fatal("SSH exec ends with EOF + exit status")
 	}
 }
 

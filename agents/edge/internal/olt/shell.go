@@ -19,7 +19,9 @@ var ErrAmbiguousOutput = errors.New("cli output contains a line identical to the
 // ErrInteractive: the CLI asked a question the Edge never answers (confirmation, password, ...). Fail closed.
 var ErrInteractive = errors.New("cli asked an interactive question (fail closed)")
 
-const quietAfterPrompt = 150 * time.Millisecond
+// defaultQuietAfterPrompt: how long the line must stay quiet after a candidate prompt. A heuristic, NOT proof of completion
+// (see EndProver); it only narrows the window in which a mid-output prompt lookalike can be mistaken for the end.
+const defaultQuietAfterPrompt = time.Second
 
 var (
 	ansiRe     = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
@@ -35,6 +37,7 @@ type shell struct {
 	sess    *ssh.Session
 	in      io.WriteCloser
 	timeout time.Duration
+	quiet   time.Duration
 
 	mu     sync.Mutex
 	buf    strings.Builder
@@ -44,7 +47,7 @@ type shell struct {
 	broken bool
 }
 
-func openShell(ctx context.Context, c *ssh.Client, timeout time.Duration) (*shell, error) {
+func openShell(ctx context.Context, c *ssh.Client, timeout, quiet time.Duration) (*shell, error) {
 	sess, err := c.NewSession()
 	if err != nil {
 		return nil, err
@@ -68,7 +71,10 @@ func openShell(ctx context.Context, c *ssh.Client, timeout time.Duration) (*shel
 		sess.Close()
 		return nil, err
 	}
-	sh := &shell{sess: sess, in: in, timeout: timeout, notify: make(chan struct{}, 1)}
+	if quiet <= 0 {
+		quiet = defaultQuietAfterPrompt
+	}
+	sh := &shell{sess: sess, in: in, timeout: timeout, quiet: quiet, notify: make(chan struct{}, 1)}
 	go sh.read(out)
 	// Learn the prompt from the login banner: the last line, which must look like "NAME>" or "NAME#".
 	_, err = sh.wait(ctx, func(t string) (bool, error) {
@@ -150,7 +156,7 @@ func (s *shell) wait(ctx context.Context, cond func(text string) (bool, error)) 
 			select {
 			case <-s.notify:
 				continue
-			case <-time.After(quietAfterPrompt):
+			case <-time.After(s.quiet):
 				return text, nil
 			case <-ctx.Done():
 				return text, ctx.Err()

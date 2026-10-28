@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1834d-45c9-7c60-a7fb-585e3698f6b7).
+[codex] Turn started (01a1834d-4633-7f51-aaab-203a0c4e7a4e).
+[codex] Assistant message captured: Vou comparar o diff com `main` e seguir em especial o protocolo de término do comando, o `tid...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/sh...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/sh... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=35 main...HEAD -- agents/edge/internal/olt/sh...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=35 main...HEAD -- agents/edge/internal/olt/sh... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: o fim do comando ainda depende de um interv...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: o fim do comando ainda depende de um intervalo fixo de silêncio, então uma saída atrasada pode ser truncada e aceita como completa. A recusa de rejeitar ecos duplicados está correta para a captura MA5608T: o bloco `Command:` contém o comando como payload, e o eco repetido não resolve a ambiguidade do prompt final.
+
+Findings:
+- [high] Silêncio de 150 ms pode aceitar um prompt intermediário como fim (agents/edge/internal/olt/shell.go:149-154)
+  `wait` aceita a saída assim que a condição de término permanece satisfeita por 150 ms. Se o CLI emitir uma linha igual ao prompt e só depois continuar a saída, com atraso maior que esse intervalo, `finished` verá o prompt como última linha e `Run` retornará silenciosamente um resultado truncado. O teste cobre continuação após 60 ms, mas não há garantia no protocolo de que o atraso máximo seja 150 ms; a checagem de linha-prompt intermediária só ajuda se a continuação chegar antes da aceitação.
+  Recommendation: Não use silêncio fixo como prova de conclusão. Exija um marcador de término inequívoco do CLI ou limite estritamente quais comandos podem usar esse protocolo; se isso não existir, falhe fechado quando a saída não puder ser distinguida de um prompt intermediário.
+
+Next steps:
+- Substituir ou restringir a heurística de silêncio antes de confiar nessa sessão para coleta de dados.
