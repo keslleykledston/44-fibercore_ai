@@ -13,7 +13,7 @@ trap cleanup EXIT
 "${COMPOSE[@]}" down -v >/dev/null 2>&1 || true
 "${COMPOSE[@]}" up -d --build >/dev/null
 for _ in $(seq 60); do curl -fs "http://127.0.0.1:${FIBERCORE_API_PORT:-18420}/livez" >/dev/null 2>&1 && break; sleep 1; done
-"$VENV_PY" scripts/seed_demo.py >/dev/null
+API_URL="http://127.0.0.1:${FIBERCORE_API_PORT:-18420}" "$VENV_PY" scripts/seed_demo.py >/dev/null
 cd apps/web
 npm ci --no-audit --no-fund >/dev/null
 npx next build >/dev/null

@@ -8,7 +8,7 @@ const config: Config = {
     extend: {
       colors: {
         bg: "var(--bg)", surface: "var(--surface)", text: "var(--text)", muted: "var(--muted)", line: "var(--border)",
-        accent: "var(--accent)", ok: "var(--ok)", warn: "var(--warn)", danger: "var(--danger)",
+        accent: "var(--accent)", "surface-2": "var(--surface-2)", "accent-soft": "var(--accent-soft)", "ok-soft": "var(--ok-soft)", "warn-soft": "var(--warn-soft)", "danger-soft": "var(--danger-soft)", "stale-soft": "var(--stale-soft)", ok: "var(--ok)", warn: "var(--warn)", danger: "var(--danger)",
       },
       borderRadius: { btn: "10px", card: "14px", modal: "16px" },
       fontFamily: { sans: ["-apple-system", "BlinkMacSystemFont", "Inter", "Segoe UI", "sans-serif"] },

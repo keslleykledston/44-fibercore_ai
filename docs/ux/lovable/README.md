@@ -11,6 +11,14 @@
 | Ordenação da fila NOC por (não reconhecido, severidade, impacto); edge silencioso nunca acima de queda crítica | **Adotado** em `apps/web/src/app/noc/page.tsx` |
 | Edge silencioso ≠ offline; "último estado conhecido" | Já implementado (E2E cobre) |
 | Escrita sempre bloqueada com motivo visível | Adotar nas telas de Operações/ONU 360 (W8) |
-| ⌘/Ctrl+K busca global | Pendente (W10: atalho; hoje a busca da topbar é por serial) |
+| ⌘/Ctrl+K busca global | **Adotado** (`CommandPalette`: telas + atalho "Buscar ONU" → `/rede?serial=`; sem chamada de API própria; `<dialog>` nativo com foco preso e Esc) |
 | ONU 360, Assinantes, Operações, Login multi-passo | Pendentes (W8); usar a proposta como referência visual |
 | Seletor de estado DEMO | Não adotar em produção (somente fixture de teste) |
+
+## Revisão visual aplicada (2026-10-28, branch `web/17-visual-review`)
+Adotado da proposta, adaptado aos tokens já validados por axe (os valores de `muted`/`accent` do repositório foram mantidos por contraste; os do Lovable não foram medidos por eles):
+- Tokens de severidade suave (`ok/warn/danger/stale/accent-soft`), `surface-2`, sombra de card, transição de 180 ms com `prefers-reduced-motion` respeitado.
+- `StatusPill` em pílula com fundo suave — texto e símbolo continuam (cor nunca é o único indicador).
+- `Kpi` sem caixa-alta, números tabulares.
+- `AppShell`: ícones, item ativo em `accent-soft`, barra superior fixa, menu mobile em gaveta (`MobileMenu`), alternância manual de tema claro/escuro persistida em `localStorage` (convenience; sem ela vale `prefers-color-scheme`).
+- Não adotado ainda: ONU 360, Login multi-passo, `EntityDetailDrawer`, grade virtualizada (dependem de API/telas novas — W8).

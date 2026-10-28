@@ -15,16 +15,16 @@ function ago_(iso: string) {
 }
 
 const pill: Record<string, [string, string]> = {
-  online: ["Online", "text-ok"], offline: ["Offline", "text-danger"], los: ["LOS", "text-danger"], dying_gasp: ["Falta de energia", "text-warn"],
-  unknown: ["Desconhecido", "text-muted"], open: ["Aberto", "text-danger"], resolved: ["Resolvido", "text-ok"],
-  healthy: ["Saudável", "text-ok"], degraded: ["Degradado", "text-warn"], unhealthy: ["Indisponível", "text-danger"],
-  disabled: ["Desativado", "text-muted"], identified: ["Identificado", "text-muted"], observed: ["Observado", "text-text"], certified: ["Certificado", "text-ok"],
+  online: ["Online", "bg-ok-soft text-ok"], offline: ["Offline", "bg-danger-soft text-danger"], los: ["LOS", "bg-danger-soft text-danger"], dying_gasp: ["Falta de energia", "bg-warn-soft text-warn"],
+  unknown: ["Desconhecido", "bg-stale-soft text-muted"], open: ["Aberto", "bg-danger-soft text-danger"], resolved: ["Resolvido", "bg-ok-soft text-ok"],
+  healthy: ["Saudável", "bg-ok-soft text-ok"], degraded: ["Degradado", "bg-warn-soft text-warn"], unhealthy: ["Indisponível", "bg-danger-soft text-danger"],
+  disabled: ["Desativado", "bg-stale-soft text-muted"], identified: ["Identificado", "bg-stale-soft text-muted"], observed: ["Observado", "bg-accent-soft text-text"], certified: ["Certificado", "bg-ok-soft text-ok"],
 };
 /** Texto + símbolo: a cor nunca é o único indicador (WCAG). */
 export function StatusPill({ value }: { value: string }) {
-  const [label, cls] = pill[value] ?? [value, "text-muted"];
+  const [label, cls] = pill[value] ?? [value, "bg-stale-soft text-muted"];
   const dot = ["online", "healthy", "resolved", "certified"].includes(value) ? "●" : ["offline", "los", "unhealthy", "open"].includes(value) ? "▲" : "○";
-  return <span className={`inline-flex items-center gap-1.5 text-sm ${cls}`}><span aria-hidden>{dot}</span>{label}</span>;
+  return <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${cls}`}><span aria-hidden>{dot}</span>{label}</span>;
 }
 
 export function PageHeader({ title, subtitle, helpSlug, children }: { title: string; subtitle?: string; helpSlug: string; children?: ReactNode }) {
@@ -44,11 +44,11 @@ export function HelpContextLink({ slug }: { slug: string }) {
 }
 
 export function EmptyState({ title, hint }: { title: string; hint?: string }) {
-  return <div className="panel p-8 text-center" data-testid="empty-state"><p className="font-medium">{title}</p>{hint && <p className="mt-1 text-sm text-muted">{hint}</p>}</div>;
+  return <div className="panel px-6 py-12 text-center" data-testid="empty-state"><p className="font-medium">{title}</p>{hint && <p className="mt-1 text-sm text-muted">{hint}</p>}</div>;
 }
 export function ErrorState({ title, hint }: { title: string; hint?: string }) {
   return <div role="alert" className="panel border-danger p-6" data-testid="error-state"><p className="font-medium text-danger">{title}</p>{hint && <p className="mt-1 text-sm text-muted">{hint}</p>}</div>;
 }
 export function Kpi({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
-  return <div className="panel p-4"><div className="text-xs uppercase tracking-wide text-muted">{label}</div><div className="mt-1 text-3xl font-semibold" data-testid={`kpi-${label}`}>{value}</div>{hint && <div className="mt-1 text-xs text-muted">{hint}</div>}</div>;
+  return <div className="panel p-4"><div className="text-xs text-muted">{label}</div><div className="tabular mt-1 text-3xl font-semibold" data-testid={`kpi-${label}`}>{value}</div>{hint && <div className="mt-1 text-xs text-muted">{hint}</div>}</div>;
 }
