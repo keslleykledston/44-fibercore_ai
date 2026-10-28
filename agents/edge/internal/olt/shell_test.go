@@ -22,12 +22,13 @@ const testPrompt = "OLT-TEST-1>"
 // shellServer imitates the interactive CLI observed on a Huawei MA5608T (R015): no exec support, pty + shell,
 // `display version` waits for an Enter (optional-parameter prompt), the pager and confirmations stop the session.
 type shellServer struct {
-	addr string
-	fp   string
-	mu   sync.Mutex
-	cmds []string
-	crs  int
-	exec int
+	addr          string
+	fp            string
+	mu            sync.Mutex
+	cmds          []string
+	crs           int
+	exec          int
+	spaces, stray int // keys received while the device sat at its pager
 }
 
 func startShellSSH(t *testing.T, legacyOnly bool) *shellServer {
@@ -102,6 +103,30 @@ func (srv *shellServer) cli(ch ssh.Channel) {
 		l, err := rd.ReadString('\r')
 		return strings.TrimSpace(l), err == nil
 	}
+	mode := 0 // 0 user, 1 enable, 2 config, 3 interface gpon 0/0
+	pr := func() string {
+		return "OLT-TEST-1" + []string{">", "#", "(config)#", "(config-if-gpon-0/0)#"}[mode]
+	}
+	fixture := func(name string) string {
+		b, err := os.ReadFile("testdata/huawei_ma5608t/MA5600V800R015C00/" + name)
+		if err != nil {
+			panic(err)
+		}
+		t := string(b)
+		return t[strings.Index(t, "\n")+1:] // the device echoes the command itself; drop the captured echo line
+	}
+	pageKey := func() {
+		c, err := rd.ReadByte()
+		srv.mu.Lock()
+		defer srv.mu.Unlock()
+		switch {
+		case err != nil: // connection closed: not a key
+		case c == ' ':
+			srv.spaces++
+		default:
+			srv.stray++
+		}
+	}
 	for {
 		line, ok := readLine()
 		if !ok {
@@ -149,6 +174,36 @@ func (srv *shellServer) cli(ch ssh.Channel) {
 			srv.mu.Unlock()
 			ch.Write([]byte("\r\n{ <cr>|frameid<S> }:"))
 			select {}
+		case line == "enable":
+			mode = 1
+			ch.Write([]byte("\r\n" + pr()))
+		case line == "config":
+			mode = 2
+			ch.Write([]byte("\r\n" + pr()))
+		case line == "interface gpon 0/0":
+			mode = 3
+			ch.Write([]byte("\r\n" + pr()))
+		case line == "quit":
+			mode--
+			ch.Write([]byte("\r\n" + pr()))
+		case line == "display ont optical-info 14 all":
+			ch.Write([]byte(fixture("ont_optical_info_14_all.txt")))
+		case line == "display ont info 14 all": // real capture: page 1, pager, then the device erases it and prints page 2
+			b := fixture("ont_info_14_all_paged.txt")
+			i := strings.Index(b, "\x1b[37D")
+			ch.Write([]byte(b[:i]))
+			pageKey()
+			ch.Write([]byte(b[i:]))
+		case line == "display endless":
+			for {
+				ch.Write([]byte("  row\r\n---- More ( Press 'Q' to break ) ----"))
+				pageKey()
+				ch.Write([]byte("\x1b[37D" + strings.Repeat(" ", 37) + "\x1b[37D"))
+			}
+		case line == "display noerase": // pager that the device does not erase: its text would pollute the payload
+			ch.Write([]byte("  row1\r\n---- More ( Press 'Q' to break ) ----"))
+			pageKey()
+			ch.Write([]byte("\r\n  row2\r\n" + pr()))
 		case line == "display mimic": // payload fakes the prompt before the real end
 			ch.Write([]byte("  part one\r\n" + testPrompt + "\r\n  part two (would be lost)\r\n" + testPrompt))
 		case line == "display late": // prompt, then more output after a short pause

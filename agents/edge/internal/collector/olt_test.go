@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -180,18 +182,81 @@ func (shellLike) EndProven() bool { return false }
 func TestPonCompleteNeedsObservedDriverAndAProvenEndOfCommand(t *testing.T) {
 	exec := fileSession{t.TempDir()}
 	for _, c := range []struct {
-		name  string
-		level olt.Level
-		sess  olt.Session
-		want  bool
+		name     string
+		level    olt.Level
+		sess     olt.Session
+		verified bool
+		want     bool
 	}{
-		{"observed + exec", olt.LevelObserved, exec, true},
-		{"observed + shell (end inferred from a device-controlled prompt)", olt.LevelObserved, shellLike{exec}, false},
-		{"identified + exec", olt.LevelIdentified, exec, false},
-		{"identified + shell", olt.LevelIdentified, shellLike{exec}, false},
+		{"observed + exec", olt.LevelObserved, exec, false, true},
+		{"observed + shell, end inferred from a device-controlled prompt", olt.LevelObserved, shellLike{exec}, false, false},
+		{"observed + shell, listing proven complete in band", olt.LevelObserved, shellLike{exec}, true, true},
+		{"identified + exec", olt.LevelIdentified, exec, false, false},
+		{"identified + shell, even if the driver says verified", olt.LevelIdentified, shellLike{exec}, true, false},
 	} {
-		if got := ponsComplete(c.level, c.sess); got != c.want {
+		if got := ponComplete(c.level, c.sess, olt.PON{Verified: c.verified}); got != c.want {
 			t.Errorf("%s: got %v want %v", c.name, got, c.want)
 		}
+	}
+}
+
+// r015Session replays the REAL MA5608T R015 captures through the same command sequence the R015 profile sends.
+type r015Session struct{ dropRow bool }
+
+var (
+	r015Erased = regexp.MustCompile(`-{2,}\s*More\s*\(\s*Press\s+'?Q'?\s+to\s+break\s*\)\s*-{2,}\x1b\[\d+D *\x1b\[\d+D`)
+	r015Esc    = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+)
+
+func (r r015Session) Run(_ context.Context, cmd string) (string, error) {
+	files := map[string]string{
+		"display version": "display_version.txt", "display ont info 14 all": "ont_info_14_all_paged.txt",
+		"display ont optical-info 14 all": "ont_optical_info_14_all.txt",
+	}
+	switch cmd {
+	case "enable", "config", "quit", "interface gpon 0/0":
+		return "", nil
+	}
+	n, ok := files[cmd]
+	if !ok {
+		return "", errors.New("unexpected " + cmd)
+	}
+	b, err := os.ReadFile(filepath.Join("..", "olt", "testdata", "huawei_ma5608t", "MA5600V800R015C00", n))
+	out := strings.ReplaceAll(r015Esc.ReplaceAllString(r015Erased.ReplaceAllString(string(b), ""), ""), "\r", "")
+	if r.dropRow && n == "ont_info_14_all_paged.txt" {
+		out = regexp.MustCompile(`(?m)^ *0/ 0/14 +3 .*\n`).ReplaceAllString(out, "")
+	}
+	return out, err
+}
+
+func r015Payload(t *testing.T, sess olt.Session) (level string, complete bool, onus int) {
+	t.Helper()
+	s := OLTSource{Name: "OLT-R015", Driver: olt.HuaweiR015{}, Ports: []string{"0/0/14"},
+		Open: func(context.Context) (olt.Session, func(), error) { return sess, func() {}, nil }}
+	items, err := (&OLT{EdgeID: "e", Sources: []OLTSource{s}}).Collect(context.Background())
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items=%d err=%v", len(items), err)
+	}
+	var p struct {
+		Level string `json:"driver_level"`
+		PONs  []struct {
+			Complete bool `json:"complete"`
+		} `json:"pons"`
+		ONUs []json.RawMessage `json:"onus"`
+	}
+	if err := json.Unmarshal(items[0].Payload, &p); err != nil || len(p.PONs) != 1 {
+		t.Fatalf("payload: %v %s", err, items[0].Payload)
+	}
+	return p.Level, p.PONs[0].Complete, len(p.ONUs)
+}
+
+func TestR015ShellListingIsCompleteOnlyWhenTheCLIsOwnTotalMatches(t *testing.T) {
+	lvl, complete, n := r015Payload(t, shellLike{r015Session{}})
+	if lvl != "observed" || !complete || n != 12 {
+		t.Fatalf("full listing over a shell: level=%s complete=%v onus=%d", lvl, complete, n)
+	}
+	_, complete, n = r015Payload(t, shellLike{r015Session{dropRow: true}})
+	if complete || n != 11 {
+		t.Fatalf("a listing cut short must not be complete: complete=%v onus=%d", complete, n)
 	}
 }

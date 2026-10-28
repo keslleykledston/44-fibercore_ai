@@ -84,6 +84,9 @@ func main() {
 			if o.Vendor == "zte" {
 				drv = olt.ZTE{}
 			}
+			if o.Profile == "huawei_ma56_r015" {
+				drv = olt.HuaweiR015{}
+			}
 			oc.Sources = append(oc.Sources, collector.OLTSource{
 				Name: o.Name, Driver: drv, Ports: o.PonPorts, AllowUnverified: o.AllowUnverifiedFirmware,
 				Open: func(ctx context.Context) (olt.Session, func(), error) {
@@ -93,7 +96,7 @@ func main() {
 					}
 					s, err := olt.DialSSH(ctx, olt.SSHConfig{Addr: o.Address, User: o.Username, Password: pw,
 						HostKeySHA256: o.HostKeySHA256, Dial: al.DialContext,
-						Shell: o.SSHMode == "shell", Legacy: o.LegacySSH})
+						Shell: o.SSHMode == "shell", Legacy: o.LegacySSH, PagerSpace: o.SSHPagerSpace})
 					if err != nil {
 						return nil, nil, err
 					}

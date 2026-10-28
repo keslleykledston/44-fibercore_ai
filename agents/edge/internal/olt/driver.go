@@ -37,6 +37,10 @@ type Identity struct {
 type PON struct {
 	Path   string
 	Status string // up|down|unknown
+	// Verified: the driver proved IN BAND that the listing is complete (the CLI itself declared how many ONTs the port has and
+	// exactly that many rows were parsed). It is what lets an interactive-shell transport, which cannot prove where a command
+	// ends, still report a complete PON.
+	Verified bool
 }
 
 type ONU struct {
@@ -78,6 +82,8 @@ type Homologation struct {
 // Registry of firmware families whose output format is covered by a fixture set.
 var Registry = []Homologation{
 	{"huawei", "MA5800", "R018", LevelIdentified, "synthetic fixtures only (testdata/huawei_ma5800/R018); NOT captured from a device"},
+	{"huawei", "MA5608T", "MA5600V800R015", LevelObserved,
+		"real capture 2026-10-28 (testdata/huawei_ma5608t/MA5600V800R015C00): display version, board, ont info <port> all (paged, with total footer), ont optical-info <port> all; one PON, states online/offline only"},
 	{"zte", "C300", "V2.1", LevelIdentified, "synthetic fixtures only (testdata/zte_c300/V2.1); NOT captured from a device"},
 }
 

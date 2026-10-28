@@ -30,6 +30,9 @@ type SSHConfig struct {
 	Shell bool
 	// PromptQuiet: silence required after a candidate prompt in shell mode (default 1s). Not proof of completion.
 	PromptQuiet time.Duration
+	// PagerSpace: in shell mode answer the VRP "---- More ----" pager with a single Space (read-only: it only shows the next
+	// page). Bounded by 64 pages; any other pager form, or one the device did not erase, still fails closed.
+	PagerSpace bool
 	// Legacy: allow ONLY the old algorithm set some OLT firmwares still require (DH group1/group14-SHA1, ssh-rsa, AES-CBC).
 	// A per-OLT, explicit downgrade; the pinned host key stays mandatory, so a downgrade cannot be exploited by a MITM.
 	Legacy bool
@@ -98,7 +101,7 @@ func (s *SSHSession) Run(ctx context.Context, cmd string) (string, error) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		if s.sh == nil {
-			sh, err := openShell(ctx, s.client, s.cfg.CommandTimout, s.cfg.PromptQuiet)
+			sh, err := openShell(ctx, s.client, s.cfg.CommandTimout, s.cfg.PromptQuiet, s.cfg.PagerSpace)
 			if err != nil {
 				return "", err
 			}

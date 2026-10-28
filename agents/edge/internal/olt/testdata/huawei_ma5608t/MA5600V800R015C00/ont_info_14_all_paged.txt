@@ -1,0 +1,36 @@
+display ont info 14 all
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 0/14   0  485754431000A000  active      offline  initial  initial  no 
+  0/ 0/14   1  485754431000A001  active      offline  initial  initial  no 
+  0/ 0/14   2  485754431000A002  active      offline  initial  initial  no 
+  0/ 0/14   3  485754431000A003  active      offline  initial  initial  no 
+  0/ 0/14   4  485754431000A004  active      offline  initial  initial  no 
+  0/ 0/14   5  485754431000A005  active      offline  initial  initial  no 
+  0/ 0/14   6  485754431000A006  active      offline  initial  initial  no 
+  0/ 0/14   7  485754431000A007  active      online   normal   match    no 
+  0/ 0/14   8  485754431000A008  active      offline  initial  initial  no 
+  0/ 0/14   9  485754431000A009  active      offline  initial  initial  no 
+  0/ 0/14  10  485754431000A00A  active      online   normal   match    no 
+  0/ 0/14  11  485754431000A00B  active      online   normal   match    no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 0/14      0   100
+  0/ 0/14      1   5
+  0/ 0/14      2   5
+  0/ 0/14      3   5
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  0/ 0/14      4   5
+  0/ 0/14      5   100
+  0/ 0/14      6   100
+  0/ 0/14      7   5
+  0/ 0/14      8   2
+  0/ 0/14      9   2
+  0/ 0/14     10   5
+  0/ 0/14     11   5
+  -----------------------------------------------------------------------------
+  In port 0/ 0/14, the total of ONTs are: 12, online: 3
+
+OLT-TEST-1(config-if-gpon-0/0)#

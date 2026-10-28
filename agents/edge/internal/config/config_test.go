@@ -113,3 +113,30 @@ func TestOLTSSHModeAndLegacyOptIn(t *testing.T) {
 		}
 	}
 }
+
+func TestOLTProfileAndPagerSpaceValidation(t *testing.T) {
+	olt := func(vendor, extra string) string {
+		return `,"allowlist":["10.0.0.9:22"],"olts":[{"name":"A","vendor":"` + vendor + `","address":"10.0.0.9:22","username":"ro","secret_file":"/s","host_key_sha256":"SHA256:abc","pon_ports":["0/0/14"]` + extra + `}]`
+	}
+	ok := `,"ssh_mode":"shell","ssh_pager_space":true,"legacy_ssh":true,"profile":"huawei_ma56_r015"`
+	cfg, err := Load(write(t, 0o600, good(olt("huawei", ok))), "v")
+	if err != nil {
+		t.Fatalf("valid R015 config rejected: %v", err)
+	}
+	if o := cfg.OLTs[0]; o.Profile != "huawei_ma56_r015" || !o.SSHPagerSpace {
+		t.Fatalf("fields not loaded: %+v", o)
+	}
+	for name, body := range map[string]string{
+		"unknown profile":       olt("huawei", `,"profile":"huawei_ma56_r016"`),
+		"profile on zte":        olt("zte", `,"profile":"huawei_ma56_r015"`),
+		"pager space w/o shell": olt("huawei", `,"ssh_pager_space":true`),
+		"pager space on exec":   olt("huawei", `,"ssh_mode":"exec","ssh_pager_space":true`),
+	} {
+		if _, err := Load(write(t, 0o600, good(body)), "v"); err == nil {
+			t.Errorf("%s: must be rejected", name)
+		}
+	}
+	if cfg, _ := Load(write(t, 0o600, good(olt("huawei", ""))), "v"); cfg.OLTs[0].SSHPagerSpace || cfg.OLTs[0].Profile != "" {
+		t.Fatal("pager key and profile must be off unless explicitly enabled")
+	}
+}

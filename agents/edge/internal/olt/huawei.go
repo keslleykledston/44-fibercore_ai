@@ -22,7 +22,9 @@ var (
 	hwOpticalRx = regexp.MustCompile(`^\s*(\d+)\s+(-?\d+(?:\.\d+)?|-)\s+(?:-?\d+(?:\.\d+)?|-)\s+(?:-?\d+(?:\.\d+)?|-)\s*$`)
 )
 
-func HuaweiAllowed(cmd string) bool { return hwAllowed.MatchString(cmd) }
+func HuaweiAllowed(cmd string) bool {
+	return hwAllowed.MatchString(cmd)
+}
 
 func (h Huawei) Identify(ctx context.Context, s Session) (Identity, error) {
 	out, err := s.Run(ctx, "display version")
@@ -46,6 +48,9 @@ func (h Huawei) Snapshot(ctx context.Context, s Session, ports []string) (Snapsh
 	id, err := h.Identify(ctx, s)
 	if err != nil {
 		return Snapshot{}, err
+	}
+	if isMA56(id) { // the MA5600 family needs the CLI-mode profile; never guess commands for it
+		return Snapshot{}, fmt.Errorf("huawei: %s %s needs profile huawei_ma56_r015", id.Model, id.Firmware)
 	}
 	snap := Snapshot{Identity: id}
 	for _, p := range ports {

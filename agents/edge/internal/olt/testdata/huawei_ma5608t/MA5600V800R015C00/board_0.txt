@@ -1,0 +1,13 @@
+display board 0
+  -------------------------------------------------------------------------
+  SlotID  BoardName  Status          SubType0 SubType1    Online/Offline
+  -------------------------------------------------------------------------
+  0       H805GPFD   Normal                           
+  1       H805GPFD   Normal                           
+  2       H801MCUD1  Active_normal   CPCB             
+  3     
+  4       H801MPWE   Normal                           
+  5       H801MPWE   Normal                           
+  -------------------------------------------------------------------------
+
+OLT-TEST-1#

@@ -13,3 +13,11 @@ Agente outbound-only que roda no site do ISP. **Somente leitura** nesta fase.
 Teste: `cd agents/edge && go vet ./... && go test ./...`.
 
 Pendências: mTLS (ADR-0011), assinatura/anti-replay de jobs (Sprint 3), SNMP/SSH read-only (PR 7), updater assinado, métricas.
+
+## Exemplo: OLT Huawei MA5608T R015 (valores fictícios; segredo em arquivo 0600, host key fixada)
+```json
+{"name":"olt-exemplo","vendor":"huawei","profile":"huawei_ma56_r015","address":"192.0.2.10:22","username":"leitura",
+ "secret_file":"/etc/fibercore-edge/olt-exemplo.secret","host_key_sha256":"SHA256:...","pon_ports":["0/0/14"],
+ "ssh_mode":"shell","ssh_pager_space":true,"legacy_ssh":true}
+```
+`legacy_ssh` habilita DH group1/14-SHA1, `ssh-rsa` e AES-CBC **só para esta OLT** (a MA5608T R015 não oferece mais nada); a host key fixada continua obrigatória.

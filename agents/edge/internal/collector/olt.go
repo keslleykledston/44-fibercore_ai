@@ -24,13 +24,13 @@ const (
 	maxBytesPerOLT = 32 << 20
 )
 
-// commandBudget: worst case is 3 commands per PON (ZTE) plus Identify twice (collector + driver Snapshot) and slack.
-// ponsComplete: a PON is complete only when the driver is observed AND the transport proves where each command ends.
-func ponsComplete(level olt.Level, raw olt.Session) bool {
-	return level == olt.LevelObserved && olt.EndProven(raw)
+// ponComplete: a PON is complete only when the driver is observed AND either the transport proves where each command ends
+// or the driver proved the listing complete in band (the CLI's own total matched the parsed rows).
+func ponComplete(level olt.Level, raw olt.Session, p olt.PON) bool {
+	return level == olt.LevelObserved && (olt.EndProven(raw) || p.Verified)
 }
 
-func commandBudget(ports int) int { return 3*ports + 8 }
+func commandBudget(ports int) int { return 4*ports + 8 }
 
 type OLT struct {
 	EdgeID  string
@@ -111,9 +111,8 @@ func (o *OLT) collectOne(ctx context.Context, src OLTSource, observed string) ([
 	// Completeness drives mass-outage incident correlation, so it is only asserted for drivers whose parsers were validated
 	// against real captures (observed). Synthetic-fixture drivers cannot tell a full listing from one cut without a pager
 	// prompt, so their PONs are reported as not complete and can neither open nor close an incident.
-	complete := ponsComplete(level, raw)
 	for _, p := range snap.PONs {
-		head.PONs = append(head.PONs, ponJSON{Path: p.Path, Status: p.Status, Complete: complete})
+		head.PONs = append(head.PONs, ponJSON{Path: p.Path, Status: p.Status, Complete: ponComplete(level, raw, p)})
 	}
 	var items []Item
 	cur := head

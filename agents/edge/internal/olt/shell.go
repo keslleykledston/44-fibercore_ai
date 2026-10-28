@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,7 +29,25 @@ var (
 	promptRe   = regexp.MustCompile(`^[^\s>#]{1,128}[>#]$`)
 	optParamRe = regexp.MustCompile(`\{\s*<cr>[^}]*\}\s*:\s*$`) // Huawei: optional parameters, "<cr>" ends the command
 	questionRe = regexp.MustCompile(`(?i)\(\s*y\s*/\s*n\s*\)|\[\s*y\s*/\s*n\s*\]|are you sure|confirm|password\s*:\s*$`)
+	// VRP pager: the prompt, then (once a key is pressed) "ESC[<n>D", n blanks and "ESC[<n>D" which overwrite it with the next page.
+	moreTailRe   = regexp.MustCompile(`(?i)-{2,}\s*More\s*\(\s*Press\s+'?Q'?\s+to\s+break\s*\)\s*-{2,}$`)
+	moreErasedRe = regexp.MustCompile(`(?i)(-{2,}\s*More\s*\(\s*Press\s+'?Q'?\s+to\s+break\s*\)\s*-{2,})\x1b\[(\d+)D( *)\x1b\[(\d+)D`)
 )
+
+const defaultMaxPages = 64
+
+// eraseMarkers removes pager prompts the device itself has already overwritten (cursor back by exactly the prompt length,
+// blanks, cursor back again). A pager prompt that is NOT erased this way stays in the text and fails closed.
+func eraseMarkers(t string) string {
+	return moreErasedRe.ReplaceAllStringFunc(t, func(m string) string {
+		g := moreErasedRe.FindStringSubmatch(m)
+		n := strconv.Itoa(len(g[1]))
+		if g[2] == n && g[4] == n && len(g[3]) == len(g[1]) {
+			return ""
+		}
+		return m
+	})
+}
 
 // shell drives ONE interactive CLI session (pty + shell). Some OLT firmwares (e.g. Huawei MA5608T R015) do not answer SSH
 // exec requests, so commands must go through the shell. Everything sent here has already passed ReadOnlySession's exact
@@ -38,16 +57,19 @@ type shell struct {
 	in      io.WriteCloser
 	timeout time.Duration
 	quiet   time.Duration
+	pager   bool // press Space (and nothing else) at a VRP "More" prompt
+	maxPage int
 
 	mu     sync.Mutex
 	buf    strings.Builder
 	rerr   error
 	notify chan struct{}
-	prompt string
+	prompt string         // the prompt the last command ended on; it changes with the CLI mode
+	pr     *regexp.Regexp // every valid prompt form of this device: <base>[(<mode>)]>|#
 	broken bool
 }
 
-func openShell(ctx context.Context, c *ssh.Client, timeout, quiet time.Duration) (*shell, error) {
+func openShell(ctx context.Context, c *ssh.Client, timeout, quiet time.Duration, pager bool) (*shell, error) {
 	sess, err := c.NewSession()
 	if err != nil {
 		return nil, err
@@ -74,7 +96,7 @@ func openShell(ctx context.Context, c *ssh.Client, timeout, quiet time.Duration)
 	if quiet <= 0 {
 		quiet = defaultQuietAfterPrompt
 	}
-	sh := &shell{sess: sess, in: in, timeout: timeout, quiet: quiet, notify: make(chan struct{}, 1)}
+	sh := &shell{sess: sess, in: in, timeout: timeout, quiet: quiet, pager: pager, maxPage: defaultMaxPages, notify: make(chan struct{}, 1)}
 	go sh.read(out)
 	// Learn the prompt from the login banner: the last line, which must look like "NAME>" or "NAME#".
 	_, err = sh.wait(ctx, func(t string) (bool, error) {
@@ -82,7 +104,15 @@ func openShell(ctx context.Context, c *ssh.Client, timeout, quiet time.Duration)
 			return false, ErrPaginated
 		}
 		if last := lastLine(t); promptRe.MatchString(last) {
+			base := strings.TrimRight(last, "># ")
+			if i := strings.IndexByte(base, '('); i >= 0 {
+				base = base[:i]
+			}
+			if base == "" {
+				return false, nil
+			}
 			sh.prompt = last
+			sh.pr = regexp.MustCompile("^" + regexp.QuoteMeta(base) + `(?:\([^()\s]{1,64}\))?[>#]$`)
 			return true, nil
 		}
 		return false, nil
@@ -191,12 +221,25 @@ func (s *shell) Run(ctx context.Context, cmd string) (string, error) {
 		return "", err
 	}
 	crSent, crAt := false, 0
+	pages, spaceAt := 0, 0
+	var final string
 	text, err := s.wait(ctx, func(t string) (bool, error) {
-		c := stripCtl(t)
+		c := stripCtl(eraseMarkers(t))
+		tail := strings.TrimRight(c, " \t\n")
+		if s.pager && moreTailRe.MatchString(tail) {
+			if pages >= s.maxPage {
+				return false, ErrPaginated
+			}
+			if len(t) > spaceAt { // new output since the last key: one Space per pager prompt, never anything else
+				spaceAt, pages = len(t), pages+1
+				_, err := io.WriteString(s.in, " ")
+				return false, err
+			}
+			return false, nil
+		}
 		if Paginated(c) {
 			return false, ErrPaginated
 		}
-		tail := strings.TrimRight(c, " \t\n")
 		if optParamRe.MatchString(tail) {
 			if !crSent {
 				crSent, crAt = true, len(tail)
@@ -211,37 +254,42 @@ func (s *shell) Run(ctx context.Context, cmd string) (string, error) {
 		if questionRe.MatchString(lastLine(c)) {
 			return false, ErrInteractive
 		}
-		return finished(c, cmd, s.prompt)
+		f, done, err := finished(c, cmd, s.pr)
+		final = f
+		return done, err
 	})
 	if err != nil {
 		s.broken = true // never reuse a shell in an unknown state
 		s.close()
 		return "", err
 	}
-	return tidy(text, cmd, s.prompt), nil
+	s.prompt = final
+	return tidy(eraseMarkers(text), cmd, final), nil
 }
 
 // finished reports whether the command output is complete. The prompt is text the device controls, so the end is only
-// accepted when the first non-empty line is exactly the echoed command, the LAST line is exactly the learned prompt, and no
-// other line equals the prompt; anything else that looks like a prompt inside the output is ambiguous and fails closed.
-func finished(c, cmd, prompt string) (bool, error) {
+// accepted when the first non-empty line is exactly the echoed command, the LAST line is a valid prompt of this device
+// (the CLI mode, hence the prompt, may change with the command), and no other line looks like a prompt at all; anything
+// else that resembles a prompt inside the output is ambiguous and fails closed.
+func finished(c, cmd string, pr *regexp.Regexp) (final string, done bool, err error) {
 	lines := strings.Split(strings.TrimRight(c, " \t\n"), "\n")
 	first := 0
 	for first < len(lines) && strings.TrimSpace(lines[first]) == "" {
 		first++
 	}
 	if first >= len(lines)-1 || strings.TrimSpace(lines[first]) != cmd {
-		return false, nil
+		return "", false, nil
 	}
-	if strings.TrimSpace(lines[len(lines)-1]) != prompt {
-		return false, nil
+	final = strings.TrimSpace(lines[len(lines)-1])
+	if !pr.MatchString(final) {
+		return "", false, nil
 	}
 	for _, l := range lines[first : len(lines)-1] {
-		if strings.TrimSpace(l) == prompt {
-			return false, ErrAmbiguousOutput
+		if pr.MatchString(strings.TrimSpace(l)) {
+			return "", false, ErrAmbiguousOutput
 		}
 	}
-	return true, nil
+	return final, true, nil
 }
 
 // tidy drops ONLY the initial command echo, the optional-parameter prompt that follows it and the trailing prompt; every

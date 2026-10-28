@@ -55,7 +55,7 @@ func TestHuaweiSnapshotGolden(t *testing.T) {
 	if snap.Identity != (Identity{Vendor: "huawei", Model: "MA5800-X7", Firmware: "R018"}) {
 		t.Fatalf("identity=%+v", snap.Identity)
 	}
-	if len(snap.PONs) != 1 || snap.PONs[0] != (PON{"0/1/0", "up"}) || len(snap.ONUs) != 3 {
+	if len(snap.PONs) != 1 || snap.PONs[0] != (PON{Path: "0/1/0", Status: "up"}) || len(snap.ONUs) != 3 {
 		t.Fatalf("snap=%+v", snap)
 	}
 	want := []ONU{
