@@ -47,5 +47,5 @@ Edge-fleet: registro via CLI, `POST /v1/edge/heartbeat` (bearer edge_agent, inte
 | DNS/TLS/publicação em `fibercore.devops.k3gsolutions.com.br` | **NÃO realizado** (depende de infra e gate) | — |
 | Frontend `apps/web` (Next.js 15, BFF HttpOnly, tokens, 5 telas: Visão Geral/Rede/NOC/Módulos/Ajuda), Central de Ajuda, Playwright | Feito (PR 12; W1–W7) | `scripts/e2e.sh` 20/20 PASS (funcional, CSRF, cookie, a11y axe claro/escuro, capturas); 5 How-to `published` com capturas REAIS |
 | Telas Assinantes + Operações (W8) | Feito (PR 14) | `scripts/e2e.sh` 27/27 PASS (aprovação com confirmação, ambíguo bloqueado, importação sem eco de valores, escrita bloqueada); 7 How-to published |
-| Hardening de publicação (W9): lockout de login feito; MFA, refresh, CSP, HSTS, DNS/TLS | Parcial | pytest 113 |
+| Hardening de publicação (W9): lockout de login feito; MFA, refresh, CSP, HSTS, DNS/TLS | Parcial | pytest 114 (ver TEST_EVIDENCE: verificação final) |
 | Proposta UX do Lovable | Solicitada (projeto Lovable criado); **não integrada** — UI atual segue os tokens do design system, revisão visual Lovable pendente | — |
