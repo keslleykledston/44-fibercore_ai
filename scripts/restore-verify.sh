@@ -18,7 +18,9 @@ if [[ "$DUMP" == *.gpg ]]; then   # backup cifrado: decifra para temporário 060
   echo "$BASE: OK (decifrado)"
   DUMP="$CLEAR"
 else
-  sha256sum -c "$DUMP.sha256"
+  [[ -f "$DUMP.sha256" ]] || { echo "checksum $DUMP.sha256 ausente" >&2; exit 1; }
+  [[ "$(sha256sum "$DUMP" | cut -d' ' -f1)" == "$(cut -d' ' -f1 "$DUMP.sha256")" ]] || { echo "checksum do dump NÃO confere" >&2; exit 1; }
+  echo "$DUMP: OK"
 fi
 COMPOSE=(docker compose --env-file "${ENV_FILE:-.env.dev}" -f infra/compose/compose.yaml)
 PSQL=("${COMPOSE[@]}" exec -T postgres psql -U fibercore -v ON_ERROR_STOP=1 -At)
