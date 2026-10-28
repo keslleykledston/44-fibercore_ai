@@ -44,7 +44,7 @@ type onuJSON struct {
 type ponJSON struct {
 	Path     string `json:"pon_path"`
 	Status   string `json:"status"`
-	Complete bool   `json:"complete"` // the driver reads the whole PON port summary => every ONU of the port is listed
+	Complete bool   `json:"complete"` // every ONU of the port is listed AND the driver can prove it (observed level only)
 }
 type oltSnapshotJSON struct {
 	EdgeID      string    `json:"edge_id"`
@@ -103,8 +103,12 @@ func (o *OLT) collectOne(ctx context.Context, src OLTSource, observed string) ([
 		EdgeID: o.EdgeID, ObservedAt: observed, Name: src.Name, Vendor: id.Vendor, Model: id.Model, Firmware: id.Firmware,
 		DriverLevel: string(level), PONs: []ponJSON{}, ONUs: []onuJSON{},
 	}
+	// Completeness drives mass-outage incident correlation, so it is only asserted for drivers whose parsers were validated
+	// against real captures (observed). Synthetic-fixture drivers cannot tell a full listing from one cut without a pager
+	// prompt, so their PONs are reported as not complete and can neither open nor close an incident.
+	complete := level == olt.LevelObserved
 	for _, p := range snap.PONs {
-		head.PONs = append(head.PONs, ponJSON{Path: p.Path, Status: p.Status, Complete: true})
+		head.PONs = append(head.PONs, ponJSON{Path: p.Path, Status: p.Status, Complete: complete})
 	}
 	var items []Item
 	cur := head

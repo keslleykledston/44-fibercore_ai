@@ -35,3 +35,6 @@ Para cada firmware coletar arquivos sanitizados: `device_identity.json`, `invent
 - `identified`: família conhecida, **sem garantia de leitura**;
 - `observed`: leitura comprovada em fixture/lab, sem write;
 - `certified`: operação definida e ensaiada por firmware e transport, com evidência de aceite; somente então pode ser habilitada com política do tenant.
+
+## Completude da leitura (obrigatório para `observed`)
+`complete=true` numa PON alimenta a correlação de incidentes em massa. O Edge só o declara para drivers `observed`. Para promover um driver, a fixture real deve mostrar como a CLI sinaliza que a listagem terminou (rodapé, total de ONTs, prompt de volta) e o parser deve validar esse sinal: saída sem ele, ou com contagem divergente, é erro, não lista parcial. Saída com prompt de paginação já é rejeitada (`ErrPaginated`), mas truncamento sem marcador só é detectável com o sinal de término real de cada fabricante/firmware.

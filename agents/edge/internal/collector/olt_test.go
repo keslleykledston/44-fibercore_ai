@@ -156,3 +156,19 @@ func TestPaginatedOLTOutputYieldsNoSnapshotAndNeverACompletePON(t *testing.T) {
 		t.Fatalf("truncated output must not produce a snapshot (it would be sent with complete=true): items=%v err=%v", items, err)
 	}
 }
+
+func TestIdentifiedDriverNeverDeclaresAPonComplete(t *testing.T) {
+	items, err := (&OLT{EdgeID: "e", Sources: []OLTSource{src("OLT-C", "huawei_ma5800/R018", false)}}).Collect(context.Background())
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items=%v err=%v", items, err)
+	}
+	var p struct {
+		PONs []struct {
+			Complete bool `json:"complete"`
+		} `json:"pons"`
+	}
+	_ = json.Unmarshal(items[0].Payload, &p)
+	if len(p.PONs) != 1 || p.PONs[0].Complete {
+		t.Fatalf("an identified (synthetic-fixture) driver cannot prove completeness: %s", items[0].Payload)
+	}
+}
