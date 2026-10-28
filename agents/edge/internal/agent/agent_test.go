@@ -72,7 +72,7 @@ func TestStoreAndForwardKeepsOrderAcrossOutage(t *testing.T) {
 	ctx := context.Background()
 	cl := &cloud{status: 503}
 	a := setup(t, cl, fixedCollector{[]string{`{"n":1}`, `{"n":2}`, `{"n":3}`}})
-	a.CollectOnce(ctx)
+	_ = a.CollectOnce(ctx)
 	a.Flush(ctx) // cloud down: nothing lost, nothing delivered
 	if p, _, _ := a.Q.Counts(ctx); p != 3 || len(cl.received) != 0 {
 		t.Fatalf("pending=%d received=%d", p, len(cl.received))
@@ -93,7 +93,7 @@ func TestPermanentRejectionIsDeadLetteredAndDoesNotBlockQueue(t *testing.T) {
 	ctx := context.Background()
 	cl := &cloud{status: 422}
 	a := setup(t, cl, fixedCollector{[]string{`{"bad":1}`}})
-	a.CollectOnce(ctx)
+	_ = a.CollectOnce(ctx)
 	a.Flush(ctx)
 	p, d, _ := a.Q.Counts(ctx)
 	if p != 0 || d != 1 {
@@ -105,9 +105,20 @@ func TestFailingCollectorDoesNotStopOthers(t *testing.T) {
 	ctx := context.Background()
 	cl := &cloud{status: 202}
 	a := setup(t, cl, failingCollector{}, fixedCollector{[]string{`{"ok":1}`}})
-	a.CollectOnce(ctx)
+	if err := a.CollectOnce(ctx); err == nil {
+		t.Fatal("round with a failing collector must be reported incomplete")
+	}
 	a.Flush(ctx)
 	if len(cl.received) != 1 {
 		t.Fatalf("received=%v", cl.received)
+	}
+}
+
+func TestEnqueueFailureMarksRoundIncomplete(t *testing.T) {
+	cl := &cloud{status: 202}
+	a := setup(t, cl, fixedCollector{[]string{`{"n":1}`}})
+	a.Q.Close() // simulate disk/SQLite failure
+	if err := a.CollectOnce(context.Background()); err == nil {
+		t.Fatal("persistence failure must surface as an incomplete round")
 	}
 }

@@ -65,3 +65,49 @@ func TestDeadLetterAfterMaxAttemptsAndOnReject(t *testing.T) {
 		t.Fatalf("pending=%d dead=%d", p, d)
 	}
 }
+
+func TestBackpressureDropsOldestAndRespectsLimits(t *testing.T) {
+	ctx := context.Background()
+	q, _ := Open(filepath.Join(t.TempDir(), "q.db"))
+	defer q.Close()
+	q.MaxPending = 3
+	for _, p := range []string{"1", "2", "3", "4", "5"} {
+		if err := q.Enqueue(ctx, "k", []byte(p)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	items, _ := q.Next(ctx, 10)
+	if len(items) != 3 || string(items[0].Payload) != "3" || string(items[2].Payload) != "5" || q.Dropped != 2 {
+		t.Fatalf("items=%v dropped=%d", items, q.Dropped)
+	}
+	q.MaxBytes = 10
+	if err := q.Enqueue(ctx, "k", make([]byte, 11)); err == nil {
+		t.Fatal("oversized payload must be refused")
+	}
+	for i := 0; i < 5; i++ {
+		_ = q.Enqueue(ctx, "k", make([]byte, 4))
+	}
+	var total int
+	items, _ = q.Next(ctx, 100)
+	for _, it := range items {
+		total += len(it.Payload)
+	}
+	if total > 10 || len(items) == 0 {
+		t.Fatalf("byte limit violated: total=%d items=%d", total, len(items))
+	}
+}
+
+func TestDeadLetterRetention(t *testing.T) {
+	ctx := context.Background()
+	q, _ := Open(filepath.Join(t.TempDir(), "q.db"))
+	defer q.Close()
+	q.MaxDead = 2
+	for i := 0; i < 5; i++ {
+		_ = q.Enqueue(ctx, "k", []byte{byte(i)})
+		items, _ := q.Next(ctx, 1)
+		_ = q.Dead(ctx, items[0], "r")
+	}
+	if _, d, _ := q.Counts(ctx); d != 2 {
+		t.Fatalf("dead=%d want 2", d)
+	}
+}

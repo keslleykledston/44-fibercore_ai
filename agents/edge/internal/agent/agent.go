@@ -3,6 +3,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -22,20 +23,29 @@ type Agent struct {
 }
 
 // CollectOnce runs every collector and persists results BEFORE any network delivery (store-and-forward).
-// A failing collector is logged and never blocks the others or the Edge.
-func (a *Agent) CollectOnce(ctx context.Context) {
+// A failing collector is logged and never blocks the others. Returns an error when the round was incomplete
+// (collector or persistence failure) so the caller can retry sooner than the regular interval.
+func (a *Agent) CollectOnce(ctx context.Context) error {
+	var errs []error
 	for _, c := range a.Collectors {
 		items, err := c.Collect(ctx)
 		if err != nil {
 			a.Log.Warn("collector failed", "collector", c.Name(), "err", err)
+			errs = append(errs, err)
 			continue
 		}
-		for _, it := range items {
+		for i, it := range items {
 			if err := a.Q.Enqueue(ctx, it.Kind, it.Payload); err != nil {
-				a.Log.Error("enqueue failed", "err", err)
+				a.Log.Error("enqueue failed; round incomplete", "collector", c.Name(), "unsaved_items", len(items)-i, "err", err)
+				errs = append(errs, err)
+				break // remaining items of this collector stay un-persisted => round marked incomplete
 			}
 		}
 	}
+	if d := a.Q.Dropped; d > 0 {
+		a.Log.Warn("queue backpressure dropped oldest snapshots", "total_dropped", d)
+	}
+	return errors.Join(errs...)
 }
 
 // Flush delivers queued items oldest-first. It stops at the first transient failure to preserve order.
@@ -49,7 +59,12 @@ func (a *Agent) Flush(ctx context.Context) {
 			out, derr := a.GW.Deliver(ctx, it.Kind, it.Payload)
 			switch out {
 			case gateway.Delivered:
-				_ = a.Q.Ack(ctx, it.ID)
+				// If the ack fails the item is redelivered; snapshots are idempotent in the Cloud
+				// (upsert guarded by observed_at), so a duplicate is harmless.
+				if err := a.Q.Ack(ctx, it.ID); err != nil {
+					a.Log.Error("ack failed; item will be redelivered (idempotent)", "id", it.ID, "err", err)
+					return
+				}
 			case gateway.Rejected:
 				a.Log.Error("payload rejected by cloud; dead-lettered", "id", it.ID, "err", derr)
 				_ = a.Q.Dead(ctx, it, derr.Error())
@@ -76,8 +91,16 @@ func (a *Agent) Run(ctx context.Context) {
 	col := time.NewTicker(a.CollectEvery)
 	defer hb.Stop()
 	defer col.Stop()
-	a.CollectOnce(ctx)
-	a.Flush(ctx)
+	retry := time.NewTimer(time.Hour)
+	retry.Stop()
+	defer retry.Stop()
+	collect := func() {
+		if err := a.CollectOnce(ctx); err != nil {
+			retry.Reset(30 * time.Second) // incomplete round: try again soon instead of waiting a full interval
+		}
+		a.Flush(ctx)
+	}
+	collect()
 	for {
 		select {
 		case <-ctx.Done():
@@ -87,8 +110,9 @@ func (a *Agent) Run(ctx context.Context) {
 				a.Log.Warn("heartbeat failed", "err", err)
 			}
 		case <-col.C:
-			a.CollectOnce(ctx)
-			a.Flush(ctx)
+			collect()
+		case <-retry.C:
+			collect()
 		}
 	}
 }
