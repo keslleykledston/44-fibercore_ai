@@ -1,0 +1,132 @@
+display ont info 5 all
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 0/5    0  4857544320000000  active      offline  initial  initial  no 
+  0/ 0/5    1  4857544320000001  active      online   normal   match    no 
+  0/ 0/5    2  4857544320000002  active      online   normal   mismatch no 
+  0/ 0/5    3  4857544320000003  active      offline  initial  initial  no 
+  0/ 0/5    4  4857544320000004  active      online   normal   mismatch no 
+  0/ 0/5    5  4857544320000005  active      offline  initial  initial  no 
+  0/ 0/5    6  4857544320000006  active      offline  initial  initial  no 
+  0/ 0/5    7  4857544320000007  active      offline  initial  initial  no 
+  0/ 0/5    8  4857544320000008  active      offline  initial  initial  no 
+  0/ 0/5    9  4857544320000009  active      offline  initial  initial  no 
+  0/ 0/5   10  485754432000000A  active      offline  initial  initial  no 
+  0/ 0/5   11  485754432000000B  active      online   normal   match    no 
+  0/ 0/5   12  485754432000000C  active      online   normal   match    no 
+  0/ 0/5   13  485754432000000D  active      online   normal   match    no 
+  0/ 0/5   14  485754432000000E  active      offline  initial  initial  no 
+  0/ 0/5   15  485754432000000F  active      offline  initial  initial  no 
+  0/ 0/5   16  4857544320000010  active      online   normal   mismatch no 
+  0/ 0/5   17  4857544320000011  active      offline  initial  initial  no 
+  0/ 0/5   18  4857544320000012  active      offline  initial  initial  no 
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  0/ 0/5   19  4857544320000013  active      offline  initial  initial  no 
+  0/ 0/5   20  4857544320000014  active      online   normal   match    no 
+  0/ 0/5   21  4857544320000015  active      online   normal   mismatch no 
+  0/ 0/5   22  4857544320000016  active      online   normal   mismatch no 
+  0/ 0/5   23  4857544320000017  active      offline  initial  initial  no 
+  0/ 0/5   24  4857544320000018  active      offline  initial  initial  no 
+  0/ 0/5   25  4857544320000019  active      offline  initial  initial  no 
+  0/ 0/5   26  485754432000001A  active      offline  initial  initial  no 
+  0/ 0/5   27  485754432000001B  active      offline  initial  initial  no 
+  0/ 0/5   29  485754432000001C  active      offline  initial  initial  no 
+  0/ 0/5   30  485754432000001D  active      online   normal   match    no 
+  0/ 0/5   31  485754432000001E  active      offline  initial  initial  no 
+  0/ 0/5   32  485754432000001F  active      offline  initial  initial  no 
+  0/ 0/5   33  4857544320000020  active      offline  initial  initial  no 
+  0/ 0/5   35  4857544320000021  active      offline  initial  initial  no 
+  0/ 0/5   36  4857544320000022  active      offline  initial  initial  no 
+  0/ 0/5   37  4857544320000023  active      online   normal   match    no 
+  0/ 0/5   38  4857544320000024  active      offline  initial  initial  no 
+  0/ 0/5   39  4857544320000025  active      online   normal   match    no 
+  0/ 0/5   40  4857544320000026  active      online   normal   match    no 
+  0/ 0/5   41  4857544320000027  active      offline  initial  initial  no 
+  0/ 0/5   42  4857544320000028  active      online   normal   match    no 
+  0/ 0/5   43  4857544320000029  active      online   normal   match    no 
+  0/ 0/5   44  485754432000002A  active      online   normal   match    no 
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  0/ 0/5   45  485754432000002B  active      online   normal   mismatch no 
+  0/ 0/5   46  485754432000002C  active      offline  initial  initial  no 
+  0/ 0/5   47  485754432000002D  active      offline  initial  initial  no 
+  0/ 0/5   48  485754432000002E  active      offline  initial  initial  no 
+  0/ 0/5   49  485754432000002F  active      online   normal   match    no 
+  0/ 0/5   50  4857544320000030  active      online   normal   match    no 
+  0/ 0/5   51  4857544320000031  active      offline  initial  initial  no 
+  0/ 0/5   52  4857544320000032  active      online   normal   match    no 
+  0/ 0/5   53  4857544320000033  active      offline  initial  initial  no 
+  0/ 0/5   54  4857544320000034  active      online   normal   match    no 
+  0/ 0/5   56  4857544320000035  active      offline  initial  initial  no 
+  0/ 0/5   57  4857544320000036  active      online   normal   match    no 
+  0/ 0/5   58  4857544320000037  active      offline  initial  initial  no 
+  0/ 0/5   59  4857544320000038  active      offline  initial  initial  no 
+  0/ 0/5   60  4857544320000039  active      online   normal   match    no 
+  0/ 0/5   61  485754432000003A  active      online   normal   mismatch no 
+  0/ 0/5   63  485754432000003B  active      online   normal   mismatch no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 0/5       0   100
+  0/ 0/5       1   100
+  0/ 0/5       2   100
+  0/ 0/5       3   100
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  0/ 0/5       4   100
+  0/ 0/5       5   100
+  0/ 0/5       6   100
+  0/ 0/5       7   100
+  0/ 0/5       8   100
+  0/ 0/5       9   100
+  0/ 0/5      10   100
+  0/ 0/5      11   100
+  0/ 0/5      12   100
+  0/ 0/5      13   100
+  0/ 0/5      14   100
+  0/ 0/5      15   100
+  0/ 0/5      16   100
+  0/ 0/5      17   100
+  0/ 0/5      18   100
+  0/ 0/5      19   100
+  0/ 0/5      20   100
+  0/ 0/5      21   100
+  0/ 0/5      22   100
+  0/ 0/5      23   100
+  0/ 0/5      24   100
+  0/ 0/5      25   100
+  0/ 0/5      26   100
+  0/ 0/5      27   100
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  0/ 0/5      29   100
+  0/ 0/5      30   100
+  0/ 0/5      31   100
+  0/ 0/5      32   100
+  0/ 0/5      33   100
+  0/ 0/5      35   100
+  0/ 0/5      36   100
+  0/ 0/5      37   100
+  0/ 0/5      38   100
+  0/ 0/5      39   100
+  0/ 0/5      40   100
+  0/ 0/5      41   100
+  0/ 0/5      42   100
+  0/ 0/5      43   100
+  0/ 0/5      44   100
+  0/ 0/5      45   100
+  0/ 0/5      46   100
+  0/ 0/5      47   100
+  0/ 0/5      48   100
+  0/ 0/5      49   100
+  0/ 0/5      50   100
+  0/ 0/5      51   100
+  0/ 0/5      52   100
+  0/ 0/5      53   100
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  0/ 0/5      54   100
+  0/ 0/5      56   100
+  0/ 0/5      57   100
+  0/ 0/5      58   100
+  0/ 0/5      59   100
+  0/ 0/5      60   100
+  0/ 0/5      61   100
+  0/ 0/5      63   100
+  -----------------------------------------------------------------------------
+  In port 0/ 0/5 , the total of ONTs are: 60, online: 26
+
+OLT-TEST-1(config-if-gpon-0/0)#

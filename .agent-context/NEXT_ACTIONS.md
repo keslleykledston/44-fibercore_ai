@@ -31,3 +31,7 @@
 - Feito: perfil `huawei_ma56_r015` (modo de CLI, pager por Espaço, prova de completude pelo rodapé da OLT), MA5608T R015 mantido `identified` (1 PON não sustenta observed; checklist de promoção no DRIVER_SDK_INTERFACE), capturas reais sanitizadas.
 - Pendente: `display ont register-info` (causas de queda LOS/dying-gasp) e mais PONs/OLTs para ampliar a homologação; SNMP (`snmpwalk` de leitura + credencial no `.env`).
 - Pendente do dono: restringir SSH do host do GenieACS; credencial SNMP de leitura.
+
+## Atualização 2026-10-28 (cobertura ampla + SNMP)
+- BLOQUEIO p/ promover R015 a `observed`: a regra de `pon_mass_outage` (noc.py) abriria incidente falso permanente em 2/32 PONs (37% das ONTs são offline crônicas). Redesenhar a correlação (transições recentes + causa + linha de base por ONT) antes de qualquer `complete=true`.
+- Próximos: ler `register-info` só das ONTs que mudaram de estado (causa da queda), driver SNMP (OIDs em DRIVER_SDK_INTERFACE.md, SNMPv3), restringir SSH do host do GenieACS.

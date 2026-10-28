@@ -16,3 +16,8 @@
 - Ajuda do equipamento: `display ont info ?` (contexto gpon) lista só `portid<0,15>`; `display ont info 14 ?` lista `all` e `ontid<0,127>`.
 - Sanitização: prompt → `OLT-TEST-1`; 12 SNs trocados por SNs fictícios de mesmo formato (mapeamento consistente); descrições (2ª tabela) com um valor trocado; sem IPs.
 - Erros do operador/ferramenta durante a coleta (registrados): (1) a primeira tentativa usou a forma global `0/0/14` do driver MA5800 e foi rejeitada pela OLT; (2) uma sonda enviou `quit` com o pager ativo (o `q` interrompeu a paginação; o restante virou comando inválido rejeitado), sem efeito na configuração.
+
+## Sessão de 2026-10-28 (cobertura ampla): 32 PONs das placas 0 e 1 + `register-info`
+- Autorizado pelo dono: ler todas as PONs (`display ont info <0..15> all`) das placas 0 e 1 e `display ont register-info 14 <0|7>`; Espaço como única tecla no pager (até 5 páginas).
+- Novas fixtures sanitizadas: `ont_info_5_all_paged.txt` (60 ONTs, 5 páginas), `ont_info_12_all.txt` (6 ONTs, sem pager), `ont_info_s1_4_all_paged.txt` (2ª placa, 53 ONTs, 4 páginas), `register_info_14_0_offline_dying_gasp.txt`, `register_info_14_7_online.txt`.
+- Sanitização: SNs trocados (mapa consistente, 119), prompt → `OLT-TEST-1`, **coluna Description neutralizada** (texto livre que identifica assinantes), datas do `register-info` trocadas por datas fictícias, vendor-id do SN trocado.

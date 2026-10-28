@@ -1,0 +1,24 @@
+display ont info 12 all
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 0/12   0  485754432000003C  active      online   normal   match    no 
+  0/ 0/12   1  485754432000003D  active      online   normal   match    no 
+  0/ 0/12   2  485754432000003E  active      offline  initial  initial  no 
+  0/ 0/12   3  485754432000003F  active      online   normal   mismatch no 
+  0/ 0/12   4  4857544320000040  active      online   normal   mismatch no 
+  0/ 0/12   5  4857544320000041  active      online   normal   match    no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 0/12      0   100
+  0/ 0/12      1   100
+  0/ 0/12      2   100
+  0/ 0/12      3   100
+  0/ 0/12      4   100
+  0/ 0/12      5   100
+  -----------------------------------------------------------------------------
+  In port 0/ 0/12, the total of ONTs are: 6, online: 5
+
+OLT-TEST-1(config-if-gpon-0/0)#

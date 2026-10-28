@@ -1,0 +1,118 @@
+display ont info 4 all
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 1/4    0  4857544320000042  active      offline  initial  initial  no 
+  0/ 1/4    1  4857544320000043  active      online   normal   mismatch no 
+  0/ 1/4    2  4857544320000044  active      offline  initial  initial  no 
+  0/ 1/4    3  4857544320000045  active      offline  initial  initial  no 
+  0/ 1/4    4  4857544320000046  active      offline  initial  initial  no 
+  0/ 1/4    5  4857544320000047  active      online   normal   match    no 
+  0/ 1/4    6  4857544320000048  active      offline  initial  initial  no 
+  0/ 1/4    7  4857544320000049  active      online   normal   mismatch no 
+  0/ 1/4    8  485754432000004A  active      online   normal   mismatch no 
+  0/ 1/4    9  485754432000004B  active      offline  initial  initial  no 
+  0/ 1/4   10  485754432000004C  active      online   normal   match    no 
+  0/ 1/4   11  485754432000004D  active      online   normal   match    no 
+  0/ 1/4   12  485754432000004E  active      online   normal   match    no 
+  0/ 1/4   13  485754432000004F  active      online   normal   mismatch no 
+  0/ 1/4   14  4857544320000050  active      offline  initial  initial  no 
+  0/ 1/4   15  4857544320000051  active      online   normal   match    no 
+  0/ 1/4   16  4857544320000052  active      offline  initial  initial  no 
+  0/ 1/4   17  4857544320000053  active      online   normal   match    no 
+  0/ 1/4   18  4857544320000054  active      online   normal   match    no 
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  0/ 1/4   19  4857544320000055  active      online   normal   match    no 
+  0/ 1/4   20  4857544320000056  active      online   normal   match    no 
+  0/ 1/4   21  4857544320000057  active      online   normal   mismatch no 
+  0/ 1/4   22  4857544320000058  active      offline  initial  initial  no 
+  0/ 1/4   23  4857544320000059  active      online   normal   match    no 
+  0/ 1/4   24  485754432000005A  active      online   normal   match    no 
+  0/ 1/4   25  485754432000005B  active      offline  initial  initial  no 
+  0/ 1/4   26  485754432000005C  active      online   normal   match    no 
+  0/ 1/4   27  485754432000005D  active      offline  initial  initial  no 
+  0/ 1/4   28  485754432000005E  active      online   normal   match    no 
+  0/ 1/4   29  485754432000005F  active      online   normal   match    no 
+  0/ 1/4   30  4857544320000060  active      offline  initial  initial  no 
+  0/ 1/4   31  4857544320000061  active      online   normal   match    no 
+  0/ 1/4   32  4857544320000062  active      online   normal   match    no 
+  0/ 1/4   33  4857544320000063  active      online   normal   match    no 
+  0/ 1/4   34  4857544320000064  active      offline  initial  initial  no 
+  0/ 1/4   35  4857544320000065  active      online   normal   match    no 
+  0/ 1/4   36  4857544320000066  active      online   normal   match    no 
+  0/ 1/4   37  4857544320000067  active      offline  initial  initial  no 
+  0/ 1/4   38  4857544320000068  active      online   normal   mismatch no 
+  0/ 1/4   39  4857544320000069  active      online   normal   match    no 
+  0/ 1/4   40  485754432000006A  active      online   normal   match    no 
+  0/ 1/4   41  485754432000006B  active      online   normal   match    no 
+  0/ 1/4   42  485754432000006C  active      offline  initial  initial  no 
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  0/ 1/4   43  485754432000006D  active      online   normal   match    no 
+  0/ 1/4   44  485754432000006E  active      offline  initial  initial  no 
+  0/ 1/4   45  485754432000006F  active      online   normal   mismatch no 
+  0/ 1/4   46  4857544320000070  active      online   normal   mismatch no 
+  0/ 1/4   47  4857544320000071  active      online   normal   match    no 
+  0/ 1/4   48  4857544320000072  active      offline  initial  initial  no 
+  0/ 1/4   49  4857544320000073  active      online   normal   match    no 
+  0/ 1/4   50  4857544320000074  active      online   normal   match    no 
+  0/ 1/4   51  4857544320000075  active      online   normal   match    no 
+  0/ 1/4   52  4857544320000076  active      online   normal   match    no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 1/4       0   100
+  0/ 1/4       1   100
+  0/ 1/4       2   100
+  0/ 1/4       3   100
+  0/ 1/4       4   100
+  0/ 1/4       5   100
+  0/ 1/4       6   100
+  0/ 1/4       7   100
+  0/ 1/4       8   100
+  0/ 1/4       9   100
+  0/ 1/4      10   100
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  0/ 1/4      11   100
+  0/ 1/4      12   100
+  0/ 1/4      13   100
+  0/ 1/4      14   100
+  0/ 1/4      15   100
+  0/ 1/4      16   100
+  0/ 1/4      17   100
+  0/ 1/4      18   100
+  0/ 1/4      19   100
+  0/ 1/4      20   100
+  0/ 1/4      21   100
+  0/ 1/4      22   100
+  0/ 1/4      23   100
+  0/ 1/4      24   100
+  0/ 1/4      25   100
+  0/ 1/4      26   100
+  0/ 1/4      27   100
+  0/ 1/4      28   100
+  0/ 1/4      29   100
+  0/ 1/4      30   100
+  0/ 1/4      31   100
+  0/ 1/4      32   100
+  0/ 1/4      33   100
+  0/ 1/4      34   100
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  0/ 1/4      35   100
+  0/ 1/4      36   100
+  0/ 1/4      37   100
+  0/ 1/4      38   100
+  0/ 1/4      39   100
+  0/ 1/4      40   100
+  0/ 1/4      41   100
+  0/ 1/4      42   100
+  0/ 1/4      43   100
+  0/ 1/4      44   100
+  0/ 1/4      45   100
+  0/ 1/4      46   100
+  0/ 1/4      47   100
+  0/ 1/4      48   100
+  0/ 1/4      49   100
+  0/ 1/4      50   100
+  0/ 1/4      51   100
+  0/ 1/4      52   100
+  -----------------------------------------------------------------------------
+  In port 0/ 1/4 , the total of ONTs are: 53, online: 36
+
+OLT-TEST-1(config-if-gpon-0/1)#

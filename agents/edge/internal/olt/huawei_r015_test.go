@@ -234,3 +234,55 @@ func TestEraseMarkersOnlyRemovesWhatTheDeviceErased(t *testing.T) {
 		}
 	}
 }
+
+func TestR015LargeRealPonsParseAndAreProvenComplete(t *testing.T) {
+	for _, c := range []struct {
+		file, path   string
+		rows, online int
+	}{
+		{"ont_info_5_all_paged.txt", "0/0/5", 60, 26},    // 5 pager pages
+		{"ont_info_12_all.txt", "0/0/12", 6, 5},          // fits one screen, no pager
+		{"ont_info_s1_4_all_paged.txt", "0/1/4", 53, 36}, // second board, 4 pager pages
+	} {
+		f := strings.Split(c.path, "/")
+		onus, pon := parseR015Port(r015Port{path: c.path, f: f[0], s: f[1], p: f[2]}, r015Text(t, c.file), "")
+		on := 0
+		for _, u := range onus {
+			if u.Status == "online" {
+				on++
+			}
+		}
+		if len(onus) != c.rows || on != c.online || !pon.Verified {
+			t.Errorf("%s: rows=%d online=%d verified=%v, want %d/%d verified", c.file, len(onus), on, pon.Verified, c.rows, c.online)
+		}
+		if Paginated(r015Text(t, c.file)) {
+			t.Errorf("%s: pager text survived the erase", c.file)
+		}
+	}
+}
+
+func TestR015MultiPageRealPonsThroughRealShell(t *testing.T) {
+	srv := startShellSSH(t, false)
+	cfg := shellCfg(srv, false)
+	cfg.PagerSpace = true
+	s, err := DialSSH(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ro := ReadOnlySession{Inner: s, Allowed: HuaweiR015{}.Allowed}
+	snap, err := HuaweiR015{}.Snapshot(context.Background(), ro, []string{"0/0/5", "0/0/12"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snap.ONUs) != 66 || len(snap.PONs) != 2 || !snap.PONs[0].Verified || !snap.PONs[1].Verified {
+		t.Fatalf("onus=%d pons=%+v", len(snap.ONUs), snap.PONs)
+	}
+	b, _ := os.ReadFile(r015Dir + "ont_info_5_all_paged.txt")
+	want := strings.Count(string(b), "More (")
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	if want != 5 || srv.spaces != want || srv.stray != 0 {
+		t.Fatalf("pager pages in capture=%d, Spaces sent=%d, stray keys=%d", want, srv.spaces, srv.stray)
+	}
+}

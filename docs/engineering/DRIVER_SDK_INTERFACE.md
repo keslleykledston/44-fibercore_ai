@@ -61,3 +61,23 @@ Capturas reais sanitizadas em `agents/edge/internal/olt/testdata/huawei_ma5608t/
 - **`complete`** no coletor = driver `observed` **E** (transporte com fim comprovado **OU** `PON.Verified`). Um shell sozinho nunca basta; a contagem da própria OLT é a prova. Isso fecha o achado do Codex sobre prompts forjados no meio da saída: uma saída truncada não bate com o total do rodapé.
 - **Limites desta homologação**: 1 PON, 12 ONTs, só estados `online`/`offline`. Causas de queda (LOS, dying-gasp) **não** aparecem nesta tabela (estão em `display ont register-info`, ainda não capturado). Descrições (2ª tabela) são ignoradas. Rx = coluna `Rx power` (lado ONT); `OLT Rx ONT power`, temperatura, tensão e corrente não são enviados ainda.
 - **SNMP**: alternativa preferível para volume (sem pager/login, fim do walk inequívoco). OIDs e escalas da `HUAWEI-XPON-MIB` precisam ser confirmados com `snmpwalk` nesta release antes de qualquer driver.
+
+### Cobertura real do perfil R015 (2026-10-28): 32 PONs, 775 ONTs
+Leitura das 32 PONs das placas 0 e 1 (`display ont info <porta> all`, Espaço no pager): 6 a 60 ONTs por PON, 0 a 5 páginas de pager. Em **todas** o total do rodapé = linhas lidas e só aparecem os estados `online`/`offline`; o parser verifica 32/32. Fixtures sanitizadas: PON de 5 páginas (60 ONTs), PON de 6 ONTs sem pager, PON da 2ª placa com 4 páginas (53 ONTs) e `register-info`. A coluna `Description` da 2ª tabela contém texto livre que **identifica assinantes**: nunca vai para fixture, log ou payload (as fixtures a trazem neutralizada).
+Não coberto: PON sem ONT (formato do rodapé desconhecido → `Verified=false`, fail-safe) e a **causa da queda**, que não está nessa tabela (está em `display ont register-info <porta> <ont>`: `DownCause: ONT dying-gasp`, `ONT link-down`, ...; fixtures `register_info_*`).
+
+### Achado: a regra de incidente em massa não serve para este parque (por isso o nível segue `identified`)
+`apps/api/app/api/noc.py` abre `pon_mass_outage` quando uma PON **completa** tem ≥5 ONTs e ≥80% em `offline|los|dying_gasp`. Nesta OLT 290 de 775 ONTs (37%) estão offline de forma crônica (cadastros antigos/sem uso). Com `complete=true` a regra abriria incidente **permanente e falso** em 2 das 32 PONs (0/0/9: 33 de 38 offline; 0/1/5: 5 de 6), sem queda alguma. Promover o driver a `observed` antes de mudar a correlação criaria alarme falso. A correlação precisa usar **transições recentes** (online→offline numa janela), a causa da queda e uma linha de base por ONT, não a razão absoluta de offline.
+
+### SNMP (v2c) validado na MA5608T R015 — leitura
+Alcance: UDP/161 da OLT (a OLT só é alcançável a partir da rede do host do GenieACS). A community não é registrada no repositório; recomendar SNMPv3 `authPriv` e ACL por origem (v2c trafega a community em claro). O agente SNMP da OLT é lento: respondeu a `snmpget` com várias colunas por pacote, e uma varredura com muitos pedidos curtos seguidos gerou timeouts. Preferir GET com muitos OIDs por PDU, pausa entre pacotes e nunca varrer a tabela inteira.
+`ifIndex` GPON = `0xFA000000 + slot·8192 + porta·256` (PON 0/0/14 = 4194307584). Índice da ONT = `<ifIndex>.<ont-id>`. Base `1.3.6.1.4.1.2011.6.128.1.1.2`:
+| Tabela.coluna | Conteúdo | Validação vs CLI |
+|---|---|---|
+| `43.1.3` | SN (OCTET STRING 8 bytes) | 12/12 iguais |
+| `43.1.9` | descrição (texto livre; dado de assinante) | confere nas amostras |
+| `46.1.15` | estado de execução: 1 online, 2 offline | 12/12 iguais |
+| `46.1.24` | código da última queda (offline): 13 = dying-gasp (confirmado por `register-info`); 1 e 2 sem confirmação | parcial |
+| `45.1.2` | vendor-id da ONT (inteiro = 4 letras ASCII) | confere com `register-info` |
+| `51.1.1..5` | temperatura °C, corrente mA, Tx ×0,01 dBm, Rx ×0,01 dBm, tensão mV (`2147483647` = sem leitura) | Rx igual ao CLI (−13,28) |
+Não confirmados: `51.1.6` (valor ≈ distância em m, hipótese) e a origem do `OLT Rx ONT power`. SNMP dá fim de tabela inequívoco (o walk termina), o que dispensa pager e prompt, mas só vira driver depois de nova validação e revisão.

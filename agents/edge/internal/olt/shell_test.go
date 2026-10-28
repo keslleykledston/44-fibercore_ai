@@ -188,12 +188,22 @@ func (srv *shellServer) cli(ch ssh.Channel) {
 			ch.Write([]byte("\r\n" + pr()))
 		case line == "display ont optical-info 14 all":
 			ch.Write([]byte(fixture("ont_optical_info_14_all.txt")))
-		case line == "display ont info 14 all": // real capture: page 1, pager, then the device erases it and prints page 2
-			b := fixture("ont_info_14_all_paged.txt")
-			i := strings.Index(b, "\x1b[37D")
-			ch.Write([]byte(b[:i]))
-			pageKey()
-			ch.Write([]byte(b[i:]))
+		case strings.HasPrefix(line, "display ont optical-info ") && strings.HasSuffix(line, " all"): // no online reading captured for this port
+			ch.Write([]byte("  -----------------------------------------------------------------------------\r\n  ONT  Rx power    Tx power    OLT Rx ONT  Temperature  Voltage     Current\r\n  ID   (dBm)       (dBm)       power(dBm)  (C)          (V)         (mA) \r\n  -----------------------------------------------------------------------------\r\n  -----------------------------------------------------------------------------\r\n\r\n" + pr()))
+		case strings.HasPrefix(line, "display ont info ") && strings.HasSuffix(line, " all"):
+			// real captures: every page ends in the pager; the device erases it (ESC[37D, 37 blanks, ESC[37D) once a key arrives
+			b := fixture(map[string]string{"14": "ont_info_14_all_paged.txt", "5": "ont_info_5_all_paged.txt", "12": "ont_info_12_all.txt"}[strings.Fields(line)[3]])
+			for {
+				i := strings.Index(b, "\x1b[37D")
+				if i < 0 {
+					ch.Write([]byte(b))
+					break
+				}
+				ch.Write([]byte(b[:i]))
+				pageKey()
+				ch.Write([]byte(b[i : i+47]))
+				b = b[i+47:]
+			}
 		case line == "display endless":
 			for {
 				ch.Write([]byte("  row\r\n---- More ( Press 'Q' to break ) ----"))
