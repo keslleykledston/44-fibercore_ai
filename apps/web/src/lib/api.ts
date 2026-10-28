@@ -27,9 +27,10 @@ export async function apiSafe<T>(path: string): Promise<{ data: T | null; status
   catch (e) { if (e instanceof ApiError) return { data: null, status: e.status }; throw e; }
 }
 
-export async function apiLogin(email: string, password: string): Promise<{ token: string | null; status: number }> {
+export async function apiLogin(email: string, password: string, clientIp?: string): Promise<{ token: string | null; status: number }> {
   const res = await fetch(`${API}/v1/auth/token`, {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }), cache: "no-store",
+    method: "POST", // o IP do cliente vem do proxy de borda (Caddy) e é repassado para o throttle por origem da API
+    headers: { "content-type": "application/json", ...(clientIp ? { "x-forwarded-for": clientIp } : {}) }, body: JSON.stringify({ email, password }), cache: "no-store",
   });
   if (!res.ok) return { token: null, status: res.status };
   return { token: ((await res.json()) as { access_token: string }).access_token, status: 200 };
