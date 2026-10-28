@@ -1,6 +1,6 @@
 # Implementation status (evidência, não promessa)
 
-Atualizado: 2026-10-27 | Branch: `addendum/11-v2.1-foundation` | Estado: **Sprint 0 concluída (PR 1–4 mergeados); Sprint 1 em andamento (PR 5)**
+Atualizado: 2026-10-27 | Branch: `web/12-scaffold` | Estado: **Sprint 0 concluída (PR 1–4 mergeados); Sprint 1 em andamento (PR 5)**
 
 | Item Sprint 0 | Status | Prova | Pendência |
 |---|---|---|---|
@@ -45,4 +45,6 @@ Edge-fleet: registro via CLI, `POST /v1/edge/heartbeat` (bearer edge_agent, inte
 | Kit v2.1 importado sem sobrescrever arquivos modificados (merge manual de modules.yaml/OpenAPI/Makefile/.env.example) | Feito | `validate_kit.py` PASS (15 módulos), `validate_help.py` PASS (3 artigos `draft`) |
 | `/api/v1` + proxy Caddy (profile `public`), rotas internas bloqueadas | Feito (dev, HTTP loopback) | `scripts/test-proxy.sh` 10/10 PASS |
 | DNS/TLS/publicação em `fibercore.devops.k3gsolutions.com.br` | **NÃO realizado** (depende de infra e gate) | — |
-| Frontend `apps/web`, design system, Playwright, Central de Ajuda | **Não iniciado** (W1–W9) | — |
+| Frontend `apps/web` (Next.js 15, BFF HttpOnly, tokens, 5 telas: Visão Geral/Rede/NOC/Módulos/Ajuda), Central de Ajuda, Playwright | Feito (PR 12; W1–W7) | `scripts/e2e.sh` 20/20 PASS (funcional, CSRF, cookie, a11y axe claro/escuro, capturas); 5 How-to `published` com capturas REAIS |
+| Telas ERP/Jobs/Login multi-workspace avançado (W8), hardening de publicação (W9) | Pendente | — |
+| Proposta UX do Lovable | Solicitada (projeto Lovable criado); **não integrada** — UI atual segue os tokens do design system, revisão visual Lovable pendente | — |

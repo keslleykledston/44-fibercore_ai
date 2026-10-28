@@ -4,7 +4,8 @@ import json
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import jwt
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import Connection, text
 
@@ -12,7 +13,7 @@ from app import __version__
 from app.api.deps import Principal, get_principal, require, tenant_conn
 from app.core.db import get_engine, scoped_connection
 from app.core.modules import Infra, evaluate, load_manifest, probe_nats, probe_postgres
-from app.core.security import issue_token, verify_secret
+from app.core.security import decode_token, issue_token, verify_secret
 from app.core.settings import Settings, get_settings
 
 router = APIRouter()
@@ -96,6 +97,28 @@ def service_login(body: ServiceLoginIn, settings: Settings = Depends(get_setting
         access_token=issue_token(settings, sub=row.id, kind="service", tenant_id=row.tenant_id),
         expires_in=settings.jwt_ttl_seconds,
     )
+
+
+@router.get("/v1/auth/workspaces")
+def my_workspaces(
+    request: Request, authorization: str | None = Header(default=None), settings: Settings = Depends(get_settings)
+) -> list[dict]:
+    """Workspaces (tenants) the authenticated USER belongs to; needs no tenant selection. Service tokens: not applicable."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(401, "invalid or missing credentials", headers={"WWW-Authenticate": "Bearer"})
+    try:
+        claims = decode_token(settings, authorization[7:].strip())
+    except (jwt.PyJWTError, ValueError) as exc:
+        raise HTTPException(401, "invalid or missing credentials", headers={"WWW-Authenticate": "Bearer"}) from exc
+    if claims.kind != "user":
+        raise HTTPException(403, "users only")
+    with scoped_connection(get_engine(), user_id=claims.sub) as conn:
+        rows = conn.execute(
+            text("SELECT t.id, t.name, m.role FROM tenant_memberships m JOIN tenants t ON t.id = m.tenant_id "
+                 "WHERE m.user_id = :u AND t.status = 'active' ORDER BY t.name"),
+            {"u": claims.sub},
+        )
+        return [{"tenant_id": str(r.id), "name": r.name, "role": r.role} for r in rows]
 
 
 @router.get("/v1/auth/me")

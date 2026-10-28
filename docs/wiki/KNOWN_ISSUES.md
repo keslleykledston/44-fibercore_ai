@@ -15,3 +15,6 @@
 - Ingestão: limite 5000 ONU/CPE por snapshot e 8 MiB por corpo; ainda sem rate-limit por agente (a implementar no Gateway/proxy ou middleware com Redis/NATS KV). Chunked upload recusado (411).
 - Drivers OLT: fixtures sintéticas; comandos/colunas reais por firmware NÃO validados. Transporte SSH usa canal `exec`; CLIs que exigem shell interativo precisam de adapter com prompt (homologar em lab). SNMP ainda não implementado. Senha de OLT em arquivo 0600 no Edge (sem cofre).
 - Job gate: sem sweeper periódico (varredura oportunista no `next`); sem rotação de chave de assinatura (kid) ainda; `JOB_SIGNING_KEY` vem de env — usar secret manager antes de piloto.
+- Web: `npm audit` reporta postcss (dependência interna do Next 15.5.28, só em build; CSS é nosso). Corrigir ao migrar para Next >=16.4 (breaking) — pendente. Sem CSP ainda (Next exige nonces); HSTS só após TLS real.
+- Web: `/v1/auth/workspaces` + seletor de workspace implementados; MFA/refresh/rate-limit ainda ausentes (bloqueiam publicação).
+- Capturas: tempos relativos são mascarados (cinza) nas imagens; seed recria dados a cada execução.

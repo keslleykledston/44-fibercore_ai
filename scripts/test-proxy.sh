@@ -6,17 +6,20 @@ make env-dev >/dev/null
 COMPOSE=(docker compose --env-file .env.dev -f infra/compose/compose.yaml --profile public)
 PORT="${FIBERCORE_PROXY_HTTP_PORT:-18480}"
 trap '"${COMPOSE[@]}" down -v >/dev/null 2>&1 || true' EXIT
-"${COMPOSE[@]}" up -d --build postgres nats migrate api-core proxy >/dev/null
-for _ in $(seq 40); do curl -fs "http://127.0.0.1:$PORT/api/v1/auth/me" -o /dev/null -w '%{http_code}' 2>/dev/null | grep -q 401 && break; sleep 1; done
+"${COMPOSE[@]}" up -d --build postgres nats migrate api-core web proxy >/dev/null
+for _ in $(seq 90); do curl -fs "http://127.0.0.1:$PORT/api/v1/auth/me" -o /dev/null -w '%{http_code}' 2>/dev/null | grep -q 401 && break; sleep 1; done
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 fail=0
 check() { [[ "$2" == "$3" ]] && echo "PASS $1 ($2)" || { echo "FAIL $1: got $2 want $3"; fail=1; }; }
 check "api via proxy exige auth (401)"           "$(code "http://127.0.0.1:$PORT/api/v1/auth/me")" 401
 check "login inválido via proxy (401)"            "$(code -X POST -H 'content-type: application/json' -d '{"email":"x@example.com","password":"x"}' "http://127.0.0.1:$PORT/api/v1/auth/token")" 401
 check "/api/v1 sem rota => 404 da API"            "$(code "http://127.0.0.1:$PORT/api/v1/nao-existe")" 404
-check "/v1 direto no proxy NÃO alcança a API (só /api/v1)" "$(code "http://127.0.0.1:$PORT/v1/auth/me")" 503
-check "raiz: frontend ausente => 503 explícito (W1 pendente)" "$(code "http://127.0.0.1:$PORT/")" 503
-check "/ajuda: idem até existir a Central de Ajuda"        "$(code "http://127.0.0.1:$PORT/ajuda")" 503
+check "/v1 direto no proxy NÃO alcança a API (só /api/v1)" "$(code "http://127.0.0.1:$PORT/v1/auth/me")" 404
+check "frontend: /login via proxy (200)"          "$(code "http://127.0.0.1:$PORT/login")" 200
+check "frontend: / sem sessão redireciona (307)"   "$(code "http://127.0.0.1:$PORT/")" 307
+check "/ajuda exige sessão (307 -> login)"         "$(code "http://127.0.0.1:$PORT/ajuda")" 307
+check "cabeçalho X-Frame-Options presente"         "$(curl -sI "http://127.0.0.1:$PORT/login" | grep -ci '^x-frame-options: deny')" 1
+check "BFF aceita same-origin e rejeita credencial inválida" "$(curl -s -D - -o /dev/null -X POST -H "origin: http://127.0.0.1:$PORT" -H "host: 127.0.0.1:$PORT" -F email=x@example.com -F password=x "http://127.0.0.1:$PORT/bff/login" | grep -ci 'location: .*login?erro=1')" 1
 for p in /livez /readyz /metrics /internal/x /docs /openapi.json; do check "interno bloqueado $p" "$(code "http://127.0.0.1:$PORT$p")" 404; done
 echo "--- portas publicadas:"; docker ps --filter "name=fibercore-dev" --format '{{.Names}} {{.Ports}}' | grep -E '0\.0\.0\.0|\[::\]' && { echo "FAIL: porta pública inesperada"; fail=1; } || echo "nenhuma em 0.0.0.0 (apenas 127.0.0.1)"
 exit $fail

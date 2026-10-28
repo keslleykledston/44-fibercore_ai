@@ -3,11 +3,18 @@ import json
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-YAMLS = list(ROOT.rglob("*.yaml")) + list(ROOT.rglob("*.yml"))
+SKIP = {"node_modules", ".next", ".venv", "build", ".git"}  # artefatos de build/dependências não são parte do kit
+
+
+def _files(pattern):
+    return [p for p in ROOT.rglob(pattern) if not SKIP & set(p.relative_to(ROOT).parts)]
+
+
+YAMLS = _files("*.yaml") + _files("*.yml")
 for path in YAMLS:
     with path.open(encoding="utf-8") as f:
         yaml.safe_load(f)
-for path in ROOT.rglob("*.json"):
+for path in _files("*.json"):
     with path.open(encoding="utf-8") as f:
         json.load(f)
 manifest = yaml.safe_load((ROOT / "configs/modules.yaml").read_text(encoding="utf-8"))

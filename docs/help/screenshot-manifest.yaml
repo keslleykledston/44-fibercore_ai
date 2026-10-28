@@ -1,18 +1,46 @@
 version: 1
-# Estes documentos são draft e NÃO representam telas já implementadas.
+# Capturas REAIS geradas por apps/web/e2e/help-screenshots.spec.ts (scripts/e2e.sh) com dados sintéticos.
+version: 1
 articles:
-  - slug: rede/consultar-onu
-    ui_route: /rede/onus
-    status: draft
-    images: []
-    e2e_test: null
-  - slug: noc/acompanhar-incidente
-    ui_route: /noc
-    status: draft
-    images: []
-    e2e_test: null
-  - slug: administracao/saude-modulos
-    ui_route: /administracao/modulos
-    status: draft
-    images: []
-    e2e_test: null
+- slug: visao-geral/visao-geral
+  ui_route: /
+  status: published
+  images:
+  - assets/visao-geral/visao-geral/desktop.png
+  - assets/visao-geral/visao-geral/mobile.png
+  e2e_test: help-screenshots.spec.ts › visao-geral/visao-geral
+  last_verified: '2026-10-28'
+- slug: rede/consultar-onu
+  ui_route: /rede
+  status: published
+  images:
+  - assets/rede/consultar-onu/desktop.png
+  - assets/rede/consultar-onu/mobile.png
+  e2e_test: help-screenshots.spec.ts › rede/consultar-onu; app.spec.ts › busca por
+    serial
+  last_verified: '2026-10-28'
+- slug: noc/acompanhar-incidente
+  ui_route: /noc
+  status: published
+  images:
+  - assets/noc/acompanhar-incidente/desktop.png
+  - assets/noc/acompanhar-incidente/mobile.png
+  e2e_test: help-screenshots.spec.ts › noc/acompanhar-incidente; app.spec.ts › dados
+    defasados
+  last_verified: '2026-10-28'
+- slug: administracao/saude-modulos
+  ui_route: /administracao/modulos
+  status: published
+  images:
+  - assets/administracao/saude-modulos/desktop.png
+  - assets/administracao/saude-modulos/mobile.png
+  e2e_test: help-screenshots.spec.ts › administracao/saude-modulos
+  last_verified: '2026-10-28'
+- slug: ajuda/central-de-ajuda
+  ui_route: /ajuda
+  status: published
+  images:
+  - assets/ajuda/central-de-ajuda/desktop.png
+  - assets/ajuda/central-de-ajuda/mobile.png
+  e2e_test: help-screenshots.spec.ts › ajuda/central-de-ajuda
+  last_verified: '2026-10-28'

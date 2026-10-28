@@ -107,6 +107,28 @@ services:
     restart: unless-stopped
     security_opt: [no-new-privileges:true]
     read_only: true
+  web:
+    # Frontend Next.js (profile "public"). Fala com a API pela rede interna; o token fica em cookie HttpOnly (ADR-0014).
+    profiles: [public]
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    environment:
+      API_INTERNAL_URL: http://api-core:8000
+      FIBERCORE_INSECURE_COOKIES: ${FIBERCORE_INSECURE_COOKIES:-0}
+    depends_on:
+      api-core: {condition: service_healthy}
+    networks: [control]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/login"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp, /app/.next/cache]
   proxy:
     # Profile "public": reverse proxy do frontend/API (ADR-0012). NÃO sobe por padrão. Só o proxy é publicável.
     profiles: [public]
@@ -119,6 +141,7 @@ services:
       - "127.0.0.1:${FIBERCORE_PROXY_HTTP_PORT:-18480}:80"
     depends_on:
       api-core: {condition: service_healthy}
+      web: {condition: service_healthy}
     networks: [control]
     restart: unless-stopped
     security_opt: [no-new-privileges:true]

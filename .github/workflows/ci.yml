@@ -20,6 +20,7 @@ jobs:
         with: {python-version: '3.12'}
       - run: pip install -e 'apps/api[dev]' && pip install pyyaml
       - run: python tests/validate_kit.py
+      - run: python tests/validate_help.py
       - run: ruff check apps/api
       - run: cd apps/api && python -m pytest -q
         env:
@@ -58,3 +59,20 @@ jobs:
       - uses: actions/setup-go@v5
         with: {go-version: '1.22'}
       - run: cd agents/edge && go vet ./... && go test -race ./...
+  web-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: python -m venv .venv && .venv/bin/pip install -q httpx
+      - run: cd apps/web && npm ci --no-audit --no-fund && npx tsc --noEmit && npx playwright install --with-deps chromium
+      - name: E2E (funcional + a11y + capturas) contra a stack real
+        run: VENV_PY=.venv/bin/python scripts/e2e.sh
+      - name: Capturas versionadas devem estar atualizadas
+        run: git diff --stat --exit-code -- docs/help/assets || echo "::warning::capturas mudaram; revisar visualmente e commitar no PR"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: help-screenshots, path: docs/help/assets}

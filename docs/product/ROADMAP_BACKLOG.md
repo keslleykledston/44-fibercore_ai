@@ -76,13 +76,13 @@ Inventário em 2026-10-28: backend/Edge/jobs/ERP/NOC prontos e testados; **nenhu
 
 - [x] ADR-0012 domínio/proxy/`/api/v1` · ADR-0013 design system+ajuda · ADR-0014 sessão BFF (Proposed).
 - [x] OpenAPI `servers: /api/v1`; proxy Caddy (profile `public`) com E2E `scripts/test-proxy.sh`; `validate_help.py` no gate.
-- [ ] W1 `apps/web` scaffold Next.js/TS/Tailwind + tokens + AppShell + tema claro/escuro (proposta Lovable → integração).
-- [ ] W2 BFF de sessão (login/logout/workspace) + testes de segurança.
-- [ ] W3 Pipeline Playwright (`apps/web/e2e/help-screenshots.spec.ts`) + fixtures sintéticas + `HelpContextLink`.
-- [ ] W4 Central de Ajuda `/ajuda` (busca, deep link, só `docs/help`).
-- [ ] W5 Tela Rede: OLT/PON/ONU (frescor, `support_level`) + How-to `rede/consultar-onu`.
-- [ ] W6 Tela NOC: fila de incidentes (silêncio de Edge ≠ offline) + How-to `noc/acompanhar-incidente`.
-- [ ] W7 Tela Administração/Módulos + How-to `administracao/saude-modulos`.
-- [ ] W8 Telas ERP (importar CSV, revisar associações) e Jobs (preview/aprovação; escrita bloqueada visível) com How-to.
+- [x] W1 `apps/web` scaffold Next.js/TS/Tailwind + tokens + AppShell + tema claro/escuro (proposta Lovable → integração).
+- [x] W2 BFF de sessão (login/logout/workspace) + testes de segurança.
+- [x] W3 Pipeline Playwright (`apps/web/e2e/help-screenshots.spec.ts`) + fixtures sintéticas + `HelpContextLink`.
+- [x] W4 Central de Ajuda `/ajuda` (busca, deep link, só `docs/help`).
+- [x] W5 Tela Rede: OLT/PON/ONU (frescor, `support_level`) + How-to `rede/consultar-onu`.
+- [x] W6 Tela NOC: fila de incidentes (silêncio de Edge ≠ offline) + How-to `noc/acompanhar-incidente`.
+- [x] W7 Tela Administração/Módulos + How-to `administracao/saude-modulos`.
+- [ ] W8 Telas ERP (pendente; API pronta) (importar CSV, revisar associações) e Jobs (preview/aprovação; escrita bloqueada visível) com How-to.
 - [ ] W9 Hardening de publicação: MFA/refresh/rate-limit, CSP, HSTS (só após TLS real), DNS/TLS/ACME reais, Codex PASS.
 

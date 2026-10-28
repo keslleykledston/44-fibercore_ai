@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #F6F7F9; --surface: #FFFFFF; --text: #17202B; --muted: #4F5B68; --border: #DCE2E9; --accent: #1F63B5;
+  --ok: #1B7F4B; --warn: #8A5200; --danger: #B3261E; --on-accent: #FFFFFF;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1118; --surface: #171C25; --text: #F3F6FA; --muted: #AAB4C1; --border: #2E3745; --accent: #6AAFFF;
+    --ok: #5ED08E; --warn: #F2B35B; --danger: #FF8A80; --on-accent: #0E1118; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1118; --surface: #171C25; --text: #F3F6FA; --muted: #AAB4C1; --border: #2E3745; --accent: #6AAFFF;
+  --ok: #5ED08E; --warn: #F2B35B; --danger: #FF8A80; --on-accent: #0E1118; color-scheme: dark;
+}
+html { font-family: -apple-system, BlinkMacSystemFont, Inter, "Segoe UI", sans-serif; }
+body { background: var(--bg); color: var(--text); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }

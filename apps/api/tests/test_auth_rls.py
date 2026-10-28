@@ -103,3 +103,27 @@ def test_access_is_audited(client, seed):
     actions = [a["action"] for a in client.get("/v1/audit", headers=h).json()]
     assert "tenant.read" in actions
 
+
+
+def test_workspaces_lists_only_own_memberships(client, seed):
+    carol = client.get("/v1/auth/workspaces", headers=login(client, "carol")).json()
+    assert {w["name"] for w in carol} == {"Tenant A", "Tenant B"} and {w["role"] for w in carol} == {"auditor", "engineer"}
+    alice = client.get("/v1/auth/workspaces", headers=login(client, "alice")).json()
+    assert [w["name"] for w in alice] == ["Tenant A"]
+    assert client.get("/v1/auth/workspaces").status_code == 401
+
+
+def test_service_token_cannot_list_workspaces(client, seed):
+    r = client.post("/v1/auth/service-token", json={"client_id": str(seed["sa"]), "client_secret": seed["sa_secret"]})
+    assert client.get("/v1/auth/workspaces", headers={"Authorization": f"Bearer {r.json()['access_token']}"}).status_code == 403
+
+
+def test_tenant_names_not_visible_without_membership(seed, app_url):
+    from sqlalchemy import text as t
+
+    from app.core.db import make_engine, scoped_connection
+    eng = make_engine(app_url)
+    with scoped_connection(eng, user_id=seed["dave"]) as c:  # dave belongs only to A
+        assert {r.name for r in c.execute(t("SELECT name FROM tenants"))} == {"Tenant A"}
+    with scoped_connection(eng) as c:
+        assert c.execute(t("SELECT count(*) FROM tenants")).scalar() == 0

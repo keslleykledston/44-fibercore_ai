@@ -1,21 +1,48 @@
 ---
-title: Consultar o diagnóstico de uma ONU
-slug: rede/consultar-onu
-status: draft
-ui_route: /rede/onus
-role: [noc_n1, noc_n2, isp_admin]
+title: "Como consultar uma ONU"
+slug: "rede/consultar-onu"
+role: [isp_admin, engineer, noc_n2, noc_n1, support]
+status: published
+product_version: "0.1.0"
+last_verified: "2026-10-28"
+help_owner: "Plataforma FiberCore"
+ui_route: "/rede"
 ---
 
-# Consultar o diagnóstico de uma ONU
+# Como consultar uma ONU
 
-**Rascunho de fluxo:** aguarda tela funcional no `apps/web` e captura E2E real.
+**Objetivo:** localizar uma ONU, ver seu estado, a PON, o nível óptico e a idade do dado.
 
-1. Abra **Rede > ONUs**.
-2. Pesquise por serial, contrato ou cliente (conforme suas permissões).
-3. Selecione a ONU e confira status, origem dos dados e última coleta.
-4. Abra **Óptica** para potência e histórico, quando a OLT suportar.
-5. Para ação corretiva, use **Ações** somente se sua permissão e a homologação permitirem.
+**Antes de começar:** Permissão `inventory:read`. Os dados vêm do Edge do provedor; a tela mostra de quando é cada informação.
 
-**Resultado:** informação consistente e identificada como atual, defasada ou indisponível. Não confundir `queued` com execução.
+## Passo a passo
 
-**Capturas:** pendentes de tela real; o artigo só poderá ser publicado após registrar `desktop.png` e `mobile.png` no manifesto.
+1. Acesse **Rede** no menu lateral.
+2. Digite o serial na caixa **Buscar ONU por serial** e pressione Enter (ex.: DEMOA0001).
+3. Confira **Status**, **Rx (dBm)** e a coluna **Dado** (idade da informação).
+4. Na lista de OLTs, confira o **nível de suporte** do driver: Identificado, Observado ou Certificado.
+
+![Tela em desktop 1440×900 — Como consultar uma ONU](../../assets/rede/consultar-onu/desktop.png)
+
+![Tela em mobile 390×844 — Como consultar uma ONU](../../assets/rede/consultar-onu/mobile.png)
+
+## Resultado esperado
+
+A tabela mostra uma linha por ONU com status em texto e símbolo (a cor não é o único indicador). **Dados defasados** indicam último estado conhecido.
+
+## Permissões necessárias
+
+`inventory:read` (isp_admin, engineer, noc_n1, noc_n2, support).
+
+## Se algo não funcionar
+
+- **Nenhuma ONU encontrada:** confira o serial; se a OLT nunca foi coletada, aguarde a primeira coleta do Edge.
+- **Dados defasados:** não conclua que a ONU caiu; verifique o Edge em Administração.
+- **Sem permissão:** seu papel não permite ver o inventário.
+
+## Evidências de documentação
+
+- Build/commit: 1d9fb94 (árvore de trabalho do PR)
+- Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844
+- Caso de teste E2E: help-screenshots.spec.ts › rede/consultar-onu; app.spec.ts › busca por serial
+- Dados: fictícios (seed `scripts/seed_demo.py`); sem informações reais de clientes
