@@ -172,3 +172,15 @@ func TestFirmwareGate(t *testing.T) {
 		}
 	}
 }
+
+func TestBudgetStopsRunawayCollection(t *testing.T) {
+	raw := huaweiFixture()
+	b := NewBudget(ReadOnlySession{Inner: raw, Allowed: Huawei{}.Allowed}, 2, 1<<20)
+	if _, err := (Huawei{}).Snapshot(context.Background(), b, []string{"0/1/0"}); !errors.Is(err, ErrBudget) {
+		t.Fatalf("command budget not enforced: %v", err)
+	}
+	b = NewBudget(ReadOnlySession{Inner: huaweiFixture(), Allowed: Huawei{}.Allowed}, 100, 50)
+	if _, err := (Huawei{}).Snapshot(context.Background(), b, []string{"0/1/0"}); !errors.Is(err, ErrBudget) {
+		t.Fatalf("byte budget not enforced: %v", err)
+	}
+}

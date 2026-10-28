@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/collector"
@@ -111,11 +112,25 @@ func (a *Agent) Run(ctx context.Context) {
 	retry := time.NewTimer(time.Hour)
 	retry.Stop()
 	defer retry.Stop()
+	// Collection runs OFF the main loop so a slow OLT never delays heartbeats; at most one round at a time.
+	var running atomic.Bool
+	retryCh := make(chan struct{}, 1)
 	collect := func() {
-		if err := a.CollectOnce(ctx); err != nil {
-			retry.Reset(30 * time.Second) // incomplete round: try again soon instead of waiting a full interval
+		if !running.CompareAndSwap(false, true) {
+			return // previous round still running: skip, do not pile up
 		}
-		a.Flush(ctx)
+		go func() {
+			defer running.Store(false)
+			cctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+			defer cancel()
+			if err := a.CollectOnce(cctx); err != nil {
+				select { // incomplete round: schedule a sooner retry
+				case retryCh <- struct{}{}:
+				default:
+				}
+			}
+			a.Flush(ctx)
+		}()
 	}
 	collect()
 	for {
@@ -128,6 +143,8 @@ func (a *Agent) Run(ctx context.Context) {
 			}
 		case <-col.C:
 			collect()
+		case <-retryCh:
+			retry.Reset(30 * time.Second)
 		case <-retry.C:
 			collect()
 		}

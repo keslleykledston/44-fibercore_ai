@@ -19,6 +19,12 @@ type OLTSource struct {
 	Open            func(ctx context.Context) (olt.Session, func(), error)
 }
 
+const (
+	oltTimeout        = 5 * time.Minute
+	maxCommandsPerOLT = 3*256 + 1
+	maxBytesPerOLT    = 32 << 20
+)
+
 type OLT struct {
 	EdgeID  string
 	Sources []OLTSource
@@ -74,7 +80,10 @@ func (o *OLT) collectOne(ctx context.Context, src OLTSource, observed string) ([
 		return nil, err
 	}
 	defer closeFn()
-	sess := olt.ReadOnlySession{Inner: raw, Allowed: src.Driver.Allowed}
+	// Per-OLT limits: wall-clock, commands and total bytes (worst case stays bounded regardless of port count).
+	ctx, cancel := context.WithTimeout(ctx, oltTimeout)
+	defer cancel()
+	sess := olt.NewBudget(olt.ReadOnlySession{Inner: raw, Allowed: src.Driver.Allowed}, maxCommandsPerOLT, maxBytesPerOLT)
 	id, err := src.Driver.Identify(ctx, sess)
 	if err != nil {
 		return nil, err

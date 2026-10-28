@@ -106,3 +106,34 @@ func SafeCommand(cmd string) bool {
 	}
 	return cmd == strings.TrimSpace(cmd)
 }
+
+// Budget bounds one OLT collection: total commands and bytes across ALL commands (the per-command output cap alone
+// would still allow tens of GiB over hundreds of ports). Wrap the session innermost-last: Budget -> ReadOnly -> SSH.
+type Budget struct {
+	Inner       Session
+	MaxCommands int
+	MaxBytes    int
+	cmds, bytes int
+}
+
+var ErrBudget = errors.New("collection budget exhausted")
+
+func NewBudget(inner Session, maxCommands, maxBytes int) *Budget {
+	return &Budget{Inner: inner, MaxCommands: maxCommands, MaxBytes: maxBytes}
+}
+
+func (b *Budget) Run(ctx context.Context, cmd string) (string, error) {
+	if b.cmds >= b.MaxCommands {
+		return "", fmt.Errorf("%w: more than %d commands", ErrBudget, b.MaxCommands)
+	}
+	b.cmds++
+	out, err := b.Inner.Run(ctx, cmd)
+	if err != nil {
+		return "", err
+	}
+	b.bytes += len(out)
+	if b.bytes > b.MaxBytes {
+		return "", fmt.Errorf("%w: more than %d bytes", ErrBudget, b.MaxBytes)
+	}
+	return out, nil
+}

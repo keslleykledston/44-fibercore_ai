@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/collector"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/gateway"
@@ -120,5 +121,54 @@ func TestEnqueueFailureMarksRoundIncomplete(t *testing.T) {
 	a.Q.Close() // simulate disk/SQLite failure
 	if err := a.CollectOnce(context.Background()); err == nil {
 		t.Fatal("persistence failure must surface as an incomplete round")
+	}
+}
+
+type slowCollector struct{ release chan struct{} }
+
+func (s slowCollector) Name() string { return "slow" }
+func (s slowCollector) Collect(ctx context.Context) ([]collector.Item, error) {
+	select {
+	case <-s.release:
+	case <-ctx.Done():
+	}
+	return nil, nil
+}
+
+func TestHeartbeatContinuesWhileCollectorIsSlow(t *testing.T) {
+	var mu sync.Mutex
+	hb := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/auth/service-token":
+			json.NewEncoder(w).Encode(map[string]string{"access_token": "t"})
+		case "/v1/edge/heartbeat":
+			mu.Lock()
+			hb++
+			mu.Unlock()
+			w.WriteHeader(204)
+		default:
+			w.WriteHeader(202)
+		}
+	}))
+	defer srv.Close()
+	q, _ := queue.Open(filepath.Join(t.TempDir(), "q.db"))
+	defer q.Close()
+	release := make(chan struct{})
+	a := &Agent{EdgeID: "e", TenantID: "t", Version: "v", GW: gateway.New(srv.URL, "c", "s", srv.Client()), Q: q,
+		Collectors: []collector.Collector{slowCollector{release}}, HeartbeatEvery: 50 * time.Millisecond, CollectEvery: time.Hour,
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { a.Run(ctx); close(done) }()
+	time.Sleep(400 * time.Millisecond) // collector is blocked the whole time
+	mu.Lock()
+	got := hb
+	mu.Unlock()
+	close(release)
+	cancel()
+	<-done
+	if got < 3 {
+		t.Fatalf("heartbeats while collector blocked = %d, want >= 3", got)
 	}
 }
