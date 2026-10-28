@@ -160,3 +160,17 @@ def test_concurrent_approvals_of_same_onu_yield_one_winner_no_500(client, seed, 
     [t.start() for t in ts]
     [t.join() for t in ts]
     assert sorted(codes) == [200, 409], codes  # exactly one winner, the loser gets a controlled conflict
+
+
+def test_associations_pagination_reaches_every_item_without_overlap(client, seed, onus_ready):
+    ha = hdr(client, "alice", seed, "A")
+    allr = client.get("/v1/associations?status=suggested&limit=1000", headers=ha).json()
+    pages, off = [], 0
+    while True:
+        page = client.get(f"/v1/associations?status=suggested&limit=2&offset={off}", headers=ha).json()
+        if not page:
+            break
+        pages += [a["id"] for a in page]
+        off += 2
+    assert pages == [a["id"] for a in allr] and len(set(pages)) == len(pages)
+    assert client.get("/v1/associations?offset=-1", headers=ha).status_code == 422

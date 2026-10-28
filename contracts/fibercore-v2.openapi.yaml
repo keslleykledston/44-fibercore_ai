@@ -126,6 +126,7 @@ paths:
       parameters:
         - {$ref: '#/components/parameters/WorkspaceOptional'}
         - {$ref: '#/components/parameters/Limit'}
+        - {name: offset, in: query, required: false, schema: {type: integer, minimum: 0, default: 0}}
         - {name: status, in: query, required: false, schema: {type: string, enum: [suggested, approved, rejected]}}
       responses:
         '200': {description: Associações ONU<->cliente com evidência, content: {application/json: {schema: {type: array, items: {type: object}}}}}

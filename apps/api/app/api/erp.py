@@ -209,6 +209,7 @@ def list_customers(
 def list_associations(
     status: Literal["suggested", "approved", "rejected"] | None = None,
     limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0, le=1_000_000),
     p: Principal = Depends(require("customers:read")),
     conn: Connection = Depends(tenant_conn),
 ) -> list[dict]:
@@ -217,9 +218,9 @@ def list_associations(
             "SELECT a.id, a.status, a.score, a.evidence, a.created_at, a.onu_id, u.serial, a.customer_id, c.display_name "
             "FROM associations a JOIN onus u ON u.id = a.onu_id AND u.tenant_id = a.tenant_id "
             "JOIN customers c ON c.id = a.customer_id AND c.tenant_id = a.tenant_id "
-            "WHERE (CAST(:s AS text) IS NULL OR a.status = :s) ORDER BY a.created_at DESC, a.id LIMIT :l"
+            "WHERE (CAST(:s AS text) IS NULL OR a.status = :s) ORDER BY a.created_at DESC, a.id LIMIT :l OFFSET :o"
         ),
-        {"s": status, "l": limit},
+        {"s": status, "l": limit, "o": offset},
     )
     return [{"id": str(r.id), "status": r.status, "score": float(r.score), "evidence": r.evidence,
              "onu_id": str(r.onu_id), "onu_serial": r.serial, "customer_id": str(r.customer_id),

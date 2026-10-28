@@ -7,9 +7,13 @@ const n = (v: string | undefined) => (v && /^\d{1,5}$/.test(v) ? v : "0");
 
 export default async function Assinantes({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const q = await searchParams;
-  const r = await apiSafe<Association[]>("/v1/associations?status=suggested&limit=200");
+  const PAGE = 50;
+  const page = Math.max(1, Math.min(10_000, Number(/^\d{1,5}$/.test(q.p ?? "") ? q.p : 1)));
+  // pede 1 item a mais para saber se há próxima página (nenhum vínculo fica inacessível)
+  const r = await apiSafe<Association[]>(`/v1/associations?status=suggested&limit=${PAGE + 1}&offset=${(page - 1) * PAGE}`);
   if (r.status === 403) return <AppShell active="/assinantes" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver assinantes." /></AppShell>;
-  const list = r.data ?? [];
+  const hasMore = (r.data ?? []).length > PAGE;
+  const list = (r.data ?? []).slice(0, PAGE);
   return (
     <AppShell active="/assinantes" user="1">
       <PageHeader title="Assinantes" subtitle="Importe clientes e revise os vínculos sugeridos entre ONU e cliente" helpSlug="assinantes/importar-e-revisar-vinculos" />
@@ -61,6 +65,13 @@ export default async function Assinantes({ searchParams }: { searchParams: Promi
                 );
               })}
             </ul>
+          )}
+          {(page > 1 || hasMore) && (
+            <nav aria-label="Paginação" className="mt-3 flex items-center justify-between text-sm" data-testid="pagination">
+              {page > 1 ? <a className="min-h-touch rounded-btn border border-line px-3 py-2" href={`/assinantes?p=${page - 1}`}>← Anteriores</a> : <span />}
+              <span className="text-muted">Página {page}{hasMore ? " · há mais sugestões" : ""}</span>
+              {hasMore ? <a className="min-h-touch rounded-btn border border-line px-3 py-2" href={`/assinantes?p=${page + 1}`}>Próximas →</a> : <span />}
+            </nav>
           )}
         </section>
       </div>
