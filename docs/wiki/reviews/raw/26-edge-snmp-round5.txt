@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a183e6-6cf4-75d0-8c58-e6847f56f7fb).
+[codex] Turn started (01a183e6-6d2d-7b81-81d0-4868e00b728f).
+[codex] Assistant message captured: Vou inspecionar o diff completo contra `main`, concentrando a revisão em falhas residuais de ...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- agents/edg...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- agents/edg... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/huawei_snmp.go | sed -n '55,190p'; nl -ba agen...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/huawei_snmp.go | sed -n '55,190p'; nl -ba agen... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"No ship: the per-OLT lock and cooldown use the config...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+No ship: the per-OLT lock and cooldown use the configured name, so two names for one physical OLT can still generate overlapping SNMP traffic and evade its cooldown.
+
+Findings:
+- [high] SNMP protection is keyed by alias, not device (agents/edge/internal/collector/olt.go:137-160)
+  `busy` and `cool` are indexed by `src.Name`. Config validation requires names to be unique, but does not require SNMP addresses to be unique. The same OLT can therefore be configured under two names; concurrent collection runs can reserve each entry independently and send requests to the same rate-limited agent. If one alias enters cooldown, the other can continue querying it. This defeats the device-level serialization and failure protection, risking another agent mute period and disruption to other monitoring clients.
+  Recommendation: Key the reservation and cooldown by a canonical device identity, such as normalized SNMP address, and reject duplicate SNMP endpoints at config validation.

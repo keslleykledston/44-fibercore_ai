@@ -124,6 +124,7 @@ func (c *Config) Validate() error {
 	if len(c.OLTs) > 64 {
 		errs = append(errs, errors.New("too many olts (max 64)"))
 	}
+	snmpSeen := map[string]bool{}
 	for i, o := range c.OLTs {
 		p := fmt.Sprintf("olts[%d]", i)
 		if o.Name == "" || len(o.Name) > 128 || seen[o.Name] {
@@ -159,9 +160,16 @@ func (c *Config) Validate() error {
 				errs = append(errs, fmt.Errorf("%s: snmp_* fields require transport snmp", p))
 			}
 		case "snmp":
-			h, _, err := net.SplitHostPort(o.SNMPAddress)
+			h, port, err := net.SplitHostPort(o.SNMPAddress)
 			if err != nil || net.ParseIP(h) == nil || !allowed[strings.ToLower(o.SNMPAddress)] {
 				errs = append(errs, fmt.Errorf("%s: snmp_address must be ip:port (IP literal) AND listed in allowlist", p))
+			} else {
+				// One physical agent must not be reachable under two names: the per-device lock and cooldown would be bypassed.
+				key := net.JoinHostPort(net.ParseIP(h).String(), port)
+				if snmpSeen[key] {
+					errs = append(errs, fmt.Errorf("%s: snmp_address %s is already used by another olt", p, o.SNMPAddress))
+				}
+				snmpSeen[key] = true
 			}
 			if o.Vendor != "huawei" {
 				errs = append(errs, fmt.Errorf("%s: snmp transport is implemented for huawei only", p))

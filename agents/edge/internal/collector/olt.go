@@ -21,6 +21,9 @@ type OLTSource struct {
 	// SNMP transport (alternative to Open): when OpenSNMP is set the OLT is read by SNMPDriver and Open/Driver are unused.
 	OpenSNMP   func(ctx context.Context) (olt.SNMPReader, func(), error)
 	SNMPDriver olt.SNMPDriver
+	// SNMPKey identifies the PHYSICAL agent (canonical ip:port). The per-device lock and cooldown are keyed by it, so two
+	// configured names for one agent cannot evade them. Empty falls back to Name.
+	SNMPKey string
 }
 
 const (
@@ -134,30 +137,34 @@ func (o *OLT) now() time.Time {
 // periodic worker and a job cannot both talk to the agent) and none during the cooldown that follows a failure. While
 // reserved or cooling, nothing is sent to the device.
 func (o *OLT) collectSNMPCooled(ctx context.Context, src OLTSource, observed string) ([]Item, error) {
+	key := src.SNMPKey
+	if key == "" {
+		key = src.Name
+	}
 	o.mu.Lock()
-	if o.busy[src.Name] {
+	if o.busy[key] {
 		o.mu.Unlock()
 		return nil, errors.New("snmp collection already running for this olt")
 	}
-	if now, until := o.now(), o.cool[src.Name]; now.Before(until) {
+	if now, until := o.now(), o.cool[key]; now.Before(until) {
 		o.mu.Unlock()
 		return nil, fmt.Errorf("snmp cooling down after a failure (%s left)", until.Sub(now).Round(time.Second))
 	}
 	if o.busy == nil {
 		o.busy = map[string]bool{}
 	}
-	o.busy[src.Name] = true
+	o.busy[key] = true
 	o.mu.Unlock()
 
 	items, err := o.collectSNMP(ctx, src, observed)
 
 	o.mu.Lock()
-	delete(o.busy, src.Name)
+	delete(o.busy, key)
 	if err != nil {
 		if o.cool == nil {
 			o.cool = map[string]time.Time{}
 		}
-		o.cool[src.Name] = o.now().Add(snmpCooldown)
+		o.cool[key] = o.now().Add(snmpCooldown)
 	}
 	o.mu.Unlock()
 	return items, err

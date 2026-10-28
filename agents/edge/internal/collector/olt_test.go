@@ -443,3 +443,17 @@ func TestOnlyOneSNMPCollectionPerOLTRunsAtATime(t *testing.T) {
 		t.Fatalf("after the first one finished: %v", err)
 	}
 }
+
+func TestTwoAliasesOfOneAgentShareTheLockAndTheCooldown(t *testing.T) {
+	opens := 0
+	clock := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	mk := func(name string) OLTSource {
+		return OLTSource{Name: name, SNMPKey: "192.0.2.10:161", Ports: []string{"0/0/14"}, SNMPDriver: olt.HuaweiSNMP{},
+			OpenSNMP: func(context.Context) (olt.SNMPReader, func(), error) { opens++; return failingSNMP{}, func() {}, nil }}
+	}
+	o := &OLT{EdgeID: "e", Sources: []OLTSource{mk("alias-1"), mk("alias-2")}, Now: func() time.Time { return clock }}
+	_, err := o.Collect(context.Background())
+	if err == nil || opens != 1 || !strings.Contains(err.Error(), "cooling down") {
+		t.Fatalf("the failure of one alias must cool the whole agent: err=%v opens=%d", err, opens)
+	}
+}

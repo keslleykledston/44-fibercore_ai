@@ -141,6 +141,26 @@ func TestOLTProfileAndPagerSpaceValidation(t *testing.T) {
 	}
 }
 
+func TestTwoOLTNamesCannotShareOneSNMPAgent(t *testing.T) {
+	both := func(a, b string) string {
+		mk := func(name, addr string) string {
+			return `{"name":"` + name + `","vendor":"huawei","pon_ports":["0/0/14"],"transport":"snmp","snmp_address":"` + addr + `","snmp_community_file":"/c"}`
+		}
+		return `,"allowlist":["192.0.2.10:161","192.0.2.11:161","[2001:db8::1]:161","[2001:0db8:0:0:0:0:0:1]:161"],"olts":[` + mk("A", a) + `,` + mk("B", b) + `]`
+	}
+	if _, err := Load(write(t, 0o600, good(both("192.0.2.10:161", "192.0.2.11:161"))), "v"); err != nil {
+		t.Fatalf("two different agents must be accepted: %v", err)
+	}
+	for name, body := range map[string]string{
+		"same address":                  both("192.0.2.10:161", "192.0.2.10:161"),
+		"same IPv6, different spelling": both("[2001:db8::1]:161", "[2001:0db8:0:0:0:0:0:1]:161"),
+	} {
+		if _, err := Load(write(t, 0o600, good(body)), "v"); err == nil {
+			t.Errorf("%s: two names for one agent must be rejected", name)
+		}
+	}
+}
+
 func TestOLTSNMPTransportValidation(t *testing.T) {
 	olt := func(extra string) string {
 		return `,"allowlist":["192.0.2.10:161","olt.example:161","192.0.2.10:22"],"olts":[{"name":"A","vendor":"huawei","pon_ports":["0/0/14"]` + extra + `}]`
