@@ -8,9 +8,9 @@ export async function POST(req: Request) {
   const form = await req.formData();
   const email = String(form.get("email") ?? "");
   const password = String(form.get("password") ?? "");
-  const token = email && password ? await apiLogin(email, password) : null;
+  const { token, status } = email && password ? await apiLogin(email, password) : { token: null, status: 401 };
   const base = req.headers.get("x-forwarded-host") ? `${req.headers.get("x-forwarded-proto") ?? "https"}://${req.headers.get("x-forwarded-host")}` : new URL(req.url).origin;
-  if (!token) return NextResponse.redirect(new URL("/login?erro=1", base), 303);
+  if (!token) return NextResponse.redirect(new URL(status === 429 ? "/login?erro=429" : "/login?erro=1", base), 303);
   const res = NextResponse.redirect(new URL("/", base), 303);
   res.cookies.set(TOKEN_COOKIE, token, cookieOpts(15 * 60)); // mesmo TTL do token da API
   res.cookies.delete(WS_COOKIE);

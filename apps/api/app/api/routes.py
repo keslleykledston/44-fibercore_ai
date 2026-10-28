@@ -54,6 +54,30 @@ def version(settings: Settings = Depends(get_settings)) -> dict:
 
 
 # ---- auth ------------------------------------------------------------------------------------
+MAX_FAILURES = 5
+LOCK_WINDOW = "15 minutes"
+
+
+def _locked(conn: Connection, key: str) -> bool:
+    """Lock after MAX_FAILURES failures since the last success within LOCK_WINDOW (applies even if the next password is right)."""
+    n = conn.execute(
+        text(
+            "SELECT count(*) FROM login_attempts WHERE key = :k AND NOT success AND created_at > now() - CAST(:w AS interval) "
+            "AND created_at > COALESCE((SELECT max(created_at) FROM login_attempts WHERE key = :k AND success), '-infinity')"
+        ),
+        {"k": key, "w": LOCK_WINDOW},
+    ).scalar_one()
+    return n >= MAX_FAILURES
+
+
+def _record(key: str, success: bool) -> None:
+    with scoped_connection(get_engine()) as conn:  # own transaction: failures must persist even when the request errors out
+        conn.execute(text("INSERT INTO login_attempts (key, success) VALUES (:k, :s)"), {"k": key, "s": success})
+
+
+def _throttled() -> HTTPException:
+    return HTTPException(429, "too many failed attempts; try again later", headers={"Retry-After": "900"})
+
 class LoginIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=256)
@@ -72,27 +96,37 @@ class TokenOut(BaseModel):
 
 @router.post("/v1/auth/token", response_model=TokenOut)
 def login(body: LoginIn, settings: Settings = Depends(get_settings)) -> TokenOut:
+    key = body.email.lower()
     with scoped_connection(get_engine()) as conn:
+        if _locked(conn, key):
+            raise _throttled()
         row = conn.execute(
             text("SELECT id, password_hash, is_active FROM users_global WHERE lower(email) = lower(:e)"),
             {"e": body.email},
         ).first()
     ok = verify_secret(row.password_hash if row else None, body.password)
     if not (row and row.is_active and ok):
+        _record(key, False)  # unknown accounts are recorded too: no user enumeration through lockout behaviour
         raise HTTPException(401, "invalid credentials")
+    _record(key, True)
     return TokenOut(access_token=issue_token(settings, sub=row.id, kind="user"), expires_in=settings.jwt_ttl_seconds)
 
 
 @router.post("/v1/auth/service-token", response_model=TokenOut)
 def service_login(body: ServiceLoginIn, settings: Settings = Depends(get_settings)) -> TokenOut:
+    key = f"svc:{body.client_id}"
     with scoped_connection(get_engine(), user_id=body.client_id) as conn:
+        if _locked(conn, key):
+            raise _throttled()
         row = conn.execute(
             text("SELECT id, tenant_id, secret_hash, is_active FROM service_accounts WHERE id = :i"),
             {"i": body.client_id},
         ).first()
     ok = verify_secret(row.secret_hash if row else None, body.client_secret)
     if not (row and row.is_active and ok):
+        _record(key, False)
         raise HTTPException(401, "invalid credentials")
+    _record(key, True)
     return TokenOut(
         access_token=issue_token(settings, sub=row.id, kind="service", tenant_id=row.tenant_id),
         expires_in=settings.jwt_ttl_seconds,

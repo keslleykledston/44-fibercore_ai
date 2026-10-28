@@ -139,3 +139,55 @@ def test_deactivated_user_loses_workspaces_with_a_still_valid_token(client, seed
     finally:
         with migrated.begin() as c:
             c.execute(text("UPDATE users_global SET is_active = true WHERE id = :u"), {"u": seed["dave"]})
+
+
+def test_account_locks_after_repeated_failures_even_with_correct_password(client, seed, migrated):
+    email = "dave@example.com"
+    with migrated.begin() as c:
+        c.execute(text("DELETE FROM login_attempts"))
+    bad = {"email": email, "password": "wrong-password-xx"}
+    codes = [client.post("/v1/auth/token", json=bad).status_code for _ in range(5)]
+    assert codes == [401] * 5
+    locked = client.post("/v1/auth/token", json={"email": email, "password": "correct horse battery"})
+    assert locked.status_code == 429 and locked.headers["retry-after"] == "900"   # right password, still locked
+    # another account is unaffected; unknown accounts are throttled the same way (no enumeration)
+    assert client.post("/v1/auth/token", json={"email": "alice@example.com", "password": "correct horse battery"}).status_code == 200
+    for _ in range(5):
+        client.post("/v1/auth/token", json={"email": "ghost@example.com", "password": "x" * 12})
+    assert client.post("/v1/auth/token", json={"email": "ghost@example.com", "password": "x" * 12}).status_code == 429
+    with migrated.begin() as c:  # window expiry unlocks
+        c.execute(text("UPDATE login_attempts SET created_at = now() - interval '16 minutes'"))
+    assert client.post("/v1/auth/token", json={"email": email, "password": "correct horse battery"}).status_code == 200
+
+
+def test_successful_login_resets_failure_count(client, seed, migrated):
+    with migrated.begin() as c:
+        c.execute(text("DELETE FROM login_attempts"))
+    for _ in range(4):
+        client.post("/v1/auth/token", json={"email": "bob@example.com", "password": "wrong-password-xx"})
+    assert client.post("/v1/auth/token", json={"email": "bob@example.com", "password": "correct horse battery"}).status_code == 200
+    for _ in range(4):
+        client.post("/v1/auth/token", json={"email": "bob@example.com", "password": "wrong-password-xx"})
+    assert client.post("/v1/auth/token", json={"email": "bob@example.com", "password": "correct horse battery"}).status_code == 200
+
+
+def test_service_account_lockout(client, seed, migrated):
+    with migrated.begin() as c:
+        c.execute(text("DELETE FROM login_attempts"))
+    for _ in range(5):
+        assert client.post("/v1/auth/service-token", json={"client_id": str(seed["sa"]), "client_secret": "nope"}).status_code == 401
+    r = client.post("/v1/auth/service-token", json={"client_id": str(seed["sa"]), "client_secret": seed["sa_secret"]})
+    assert r.status_code == 429
+    with migrated.begin() as c:
+        c.execute(text("DELETE FROM login_attempts"))
+
+
+def test_login_attempt_ledger_cannot_be_rewritten_by_runtime(app_url):
+    import pytest
+    from sqlalchemy.exc import DBAPIError
+
+    from app.core.db import make_engine, scoped_connection
+    eng = make_engine(app_url)
+    for stmt in ("DELETE FROM login_attempts", "UPDATE login_attempts SET success = true"):
+        with pytest.raises(DBAPIError), scoped_connection(eng) as c:
+            c.execute(text(stmt))

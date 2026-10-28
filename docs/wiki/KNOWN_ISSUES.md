@@ -6,7 +6,7 @@
 - API e docker bootstrap são scaffolding, não aplicação pronta; o P0 de segurança ainda é atividade de Sprint 0.
 
 - `users_global.password_hash` legível pelo role runtime (sem RLS). Mitigar com função SECURITY DEFINER.
-- Sem rate-limit/lockout no login, sem MFA, sem refresh token, sem revogação de token antes do `exp` (TTL 15 min).
+- Login: lockout por conta após 5 falhas/15 min (tabela `login_attempts`, `Retry-After: 900`; aceita o risco de bloqueio malicioso de uma conta). **Ainda sem** rate-limit por IP, MFA, refresh token ou revogação de token antes do `exp` (TTL 15 min).
 - Header `X-Workspace-ID` opcional para usuário com 1 membership (contrato original: obrigatório).
 - NATS em dev sem TLS/ACL. Imagens Docker por tag, não digest.
 - `/livez` `/readyz` `/version` estão na raiz (fora de `/v1`); contrato OpenAPI ainda não os descreve.
