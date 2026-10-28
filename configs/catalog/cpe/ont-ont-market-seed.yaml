@@ -1,0 +1,12 @@
+catalog_version: 1
+note: "Perfis de família para descoberta: NÃO pressupor TR-069/TR-369 nem suporte Wi-Fi de todos os modelos."
+profiles:
+  - {id: huawei-echolife, vendor: Huawei, family: EchoLife/OptiXstar, protocol_candidates: [tr069, tr369], status: identified}
+  - {id: zte-zxhn, vendor: ZTE, family: ZXHN-F-series, protocol_candidates: [tr069, tr369], status: identified}
+  - {id: fiberhome-an5506, vendor: FiberHome, family: AN5506/HG, protocol_candidates: [tr069, tr369], status: identified}
+  - {id: nokia-gpon, vendor: Nokia, family: G-010G/G-140W, protocol_candidates: [tr069, tr369], status: identified}
+  - {id: intelbras-wifiber, vendor: Intelbras, family: WiFiber, protocol_candidates: [tr069, tr369], status: identified}
+  - {id: tplink-aginet, vendor: TP-Link, family: Aginet/XN, protocol_candidates: [tr069, tr369], status: identified}
+  - {id: vsol-v280x, vendor: V-SOL, family: V280x, protocol_candidates: [tr069, tr369], status: identified}
+  - {id: cdata-ont, vendor: C-DATA, family: ONU/ONT-GPON, protocol_candidates: [tr069, tr369], status: identified}
+  - {id: datacom-ont, vendor: Datacom, family: ONT, protocol_candidates: [tr069, tr369], status: identified}

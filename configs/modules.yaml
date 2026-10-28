@@ -1,0 +1,129 @@
+manifest_version: 1
+platform: fibercore-ai
+modules:
+  - id: identity-access
+    kind: core
+    version: 0.1.0
+    critical: true
+    requires: [postgres]
+    optional_dependencies: []
+    capabilities: [auth, tenant, rbac, audit]
+    failure_mode: fail_closed
+    feature_flag: true
+  - id: edge-fleet
+    kind: core
+    version: 0.1.0
+    critical: true
+    requires: [identity-access, postgres]
+    optional_dependencies: [nats]
+    capabilities: [register_edge, heartbeat, edge_version]
+    failure_mode: queue_for_later
+    feature_flag: true
+  - id: olt-inventory
+    kind: core
+    version: 0.1.0
+    critical: false
+    requires: [postgres, identity-access]
+    optional_dependencies: [edge-fleet, nats]
+    capabilities: [list_olt, list_pon, list_onu, read_optical]
+    failure_mode: stale_snapshot
+    feature_flag: true
+  - id: acs-cwmp
+    kind: optional
+    version: 0.1.0
+    critical: false
+    requires: [identity-access]
+    optional_dependencies: [edge-fleet]
+    capabilities: [list_cpe, read_tr069, enqueue_tr069]
+    failure_mode: stale_snapshot
+    feature_flag: false
+  - id: usp-tr369
+    kind: optional
+    version: 0.1.0
+    critical: false
+    requires: [identity-access]
+    optional_dependencies: [edge-fleet]
+    capabilities: [read_usp, usp_task]
+    failure_mode: isolated
+    feature_flag: false
+  - id: cpe-unified
+    kind: core
+    version: 0.1.0
+    critical: false
+    requires: [postgres, identity-access]
+    optional_dependencies: [acs-cwmp, usp-tr369]
+    capabilities: [cpe_identity, protocol_bindings, normalized_parameters]
+    failure_mode: stale_snapshot
+    feature_flag: true
+  - id: service-association
+    kind: core
+    version: 0.1.0
+    critical: false
+    requires: [postgres, identity-access]
+    optional_dependencies: [cpe-unified, olt-inventory, erp-hub]
+    capabilities: [suggest, conflict, approve_association]
+    failure_mode: read_only
+    feature_flag: false
+  - id: template-catalog
+    kind: core
+    version: 0.1.0
+    critical: false
+    requires: [postgres]
+    optional_dependencies: []
+    capabilities: [identify_profile, service_intent, compatibility_matrix]
+    failure_mode: disable_writes
+    feature_flag: true
+  - id: field-ops
+    kind: optional
+    version: 0.1.0
+    critical: false
+    requires: [identity-access]
+    optional_dependencies: [olt-inventory, erp-hub, noc-events]
+    capabilities: [cto, field_ticket, logical_topology]
+    failure_mode: isolated
+    feature_flag: false
+  - id: erp-hub
+    kind: optional
+    version: 0.1.0
+    critical: false
+    requires: [postgres, identity-access]
+    optional_dependencies: [nats]
+    capabilities: [import_csv, generic_rest, list_contracts]
+    failure_mode: stale_snapshot
+    feature_flag: false
+  - id: noc-events
+    kind: optional
+    version: 0.1.0
+    critical: false
+    requires: [postgres]
+    optional_dependencies: [edge-fleet, nats]
+    capabilities: [alarm, incident, dedupe]
+    failure_mode: buffer_and_degrade
+    feature_flag: false
+  - id: automation-jobs
+    kind: optional
+    version: 0.1.0
+    critical: false
+    requires: [identity-access, postgres]
+    optional_dependencies: [nats, edge-fleet]
+    capabilities: [preview, approve, dispatch, postcheck]
+    failure_mode: deny_writes
+    feature_flag: false
+  - id: platform-manager
+    kind: core
+    version: 0.1.0
+    critical: false
+    requires: [postgres]
+    optional_dependencies: [edge-fleet]
+    capabilities: [module_registry, health, versions, changelog]
+    failure_mode: read_only
+    feature_flag: true
+  - id: copilot
+    kind: optional
+    version: 0.1.0
+    critical: false
+    requires: [identity-access]
+    optional_dependencies: [erp-hub, noc-events]
+    capabilities: [explain, summarize, suggest]
+    failure_mode: disable_without_core_impact
+    feature_flag: false

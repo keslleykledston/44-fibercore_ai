@@ -1,0 +1,23 @@
+# Exemplo para agente preencher com evidências do laboratório; não habilitar produção.
+profile_id: huawei-ma5800-example
+vendor: Huawei
+model: MA5800-X2
+firmware: UNVERIFIED
+transport: ssh
+status: identified
+capabilities:
+  - name: onu.inventory.read
+    status: unknown
+    certification: identified
+    evidence_id: null
+    command_template: null
+    parser_fixture_id: null
+    last_verified_at: null
+  - name: onu.reboot
+    status: unknown
+    certification: identified
+    evidence_id: null
+    command_template: null
+    postcheck: null
+    last_verified_at: null
+release_gate: deny_all_writes

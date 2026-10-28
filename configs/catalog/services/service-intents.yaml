@@ -1,0 +1,62 @@
+version: 1
+profiles:
+  - id: service.internet.bridge.v1
+    name: Internet Bridge
+    parameters: {outer_vlan: integer, customer_vlan: integer, line_profile_id: string, service_profile_id: string}
+    approval_risk: R2
+    allowed_actions: []
+    implementation_state: intent_only
+  - id: service.internet.pppoe.v1
+    name: Router PPPoE
+    parameters: {wan_vlan: integer, ipv6_mode: string, qos_profile: string, auth_ref: secret_ref}
+    approval_risk: R2
+    allowed_actions: []
+    implementation_state: intent_only
+  - id: service.internet.ipoe.v1
+    name: IPoE DHCP
+    parameters: {wan_vlan: integer, ipv6_mode: string, qos_profile: string}
+    approval_risk: R2
+    allowed_actions: []
+    implementation_state: intent_only
+  - id: service.internet.dualstack.v1
+    name: IPv4 + IPv6
+    parameters: {ipv4_mode: string, ipv6_mode: string, prefix_delegation: boolean}
+    approval_risk: R2
+    allowed_actions: []
+    implementation_state: intent_only
+  - id: service.bundle.voip.v1
+    name: Internet + VoIP
+    parameters: {sip_profile_ref: secret_ref, voice_vlan: integer}
+    approval_risk: R2
+    allowed_actions: []
+    implementation_state: intent_only
+  - id: service.bundle.iptv.v1
+    name: Internet + IPTV
+    parameters: {multicast_vlan: integer, igmp_profile: string}
+    approval_risk: R2
+    allowed_actions: []
+    implementation_state: intent_only
+  - id: service.bundle.catv.v1
+    name: Internet + CATV
+    parameters: {catv_enabled: boolean}
+    approval_risk: R2
+    allowed_actions: []
+    implementation_state: intent_only
+  - id: service.enterprise.vlan.v1
+    name: Corporativo VLAN/QinQ
+    parameters: {s_vlan: integer, c_vlan: integer, qos_profile: string}
+    approval_risk: R3
+    allowed_actions: []
+    implementation_state: intent_only
+  - id: service.wifi.basic.v1
+    name: WiFi SSID e segurança
+    parameters: {ssid: string, passphrase_ref: secret_ref, security_mode: string, band: string}
+    approval_risk: R2
+    allowed_actions: []
+    implementation_state: intent_only
+  - id: service.firmware.canary.v1
+    name: Firmware staged rollout
+    parameters: {artifact_sha256: string, compatibility_matrix_id: string, maintenance_window_id: string}
+    approval_risk: R3
+    allowed_actions: []
+    implementation_state: disabled

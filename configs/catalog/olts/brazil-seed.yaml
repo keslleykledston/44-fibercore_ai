@@ -1,0 +1,15 @@
+catalog_version: 1
+note: "Famílias identificadas no mercado; nenhum driver de escrita está homologado por este catálogo."
+profiles:
+  - {id: huawei-ma5800, vendor: Huawei, models: [MA5800-X2, MA5800-X7, MA5800-X15, MA5800-X17], discovery: [ssh, snmp], certified_operations: [], status: identified, priority: P0}
+  - {id: huawei-ma56xx, vendor: Huawei, models: [MA5608T, MA5680T, MA5683T], discovery: [ssh, snmp], certified_operations: [], status: identified, priority: P1}
+  - {id: zte-zxa10-c3xx, vendor: ZTE, models: [C300, C320], discovery: [ssh, snmp], certified_operations: [], status: identified, priority: P0}
+  - {id: zte-zxa10-c6xx, vendor: ZTE, models: [C600, C610, C650], discovery: [ssh, snmp], certified_operations: [], status: identified, priority: P1}
+  - {id: fiberhome-an5516, vendor: FiberHome, models: [AN5516-01, AN5516-04, AN5516-06], discovery: [ssh, snmp], certified_operations: [], status: identified, priority: P1}
+  - {id: fiberhome-an6000, vendor: FiberHome, models: [AN6000-2, AN6000-7, AN6000-15], discovery: [ssh, snmp], certified_operations: [], status: identified, priority: P1}
+  - {id: datacom-dm46xx, vendor: Datacom, models: [DM4610, DM4611, DM4612, DM4615, DM4616, DM4618], discovery: [ssh, snmp], certified_operations: [], status: identified, priority: P1}
+  - {id: nokia-isam, vendor: Nokia, models: ["7360 ISAM FX"], discovery: [ssh, snmp], certified_operations: [], status: identified, priority: P1}
+  - {id: vsol-v1600, vendor: V-SOL, models: [V1600G1, V1600G2, V1600D4], discovery: [ssh, snmp], certified_operations: [], status: identified, priority: P2}
+  - {id: cdata-fd16xx, vendor: C-DATA, models: [FD1604S, FD1608S, FD1616S], discovery: [ssh, snmp], certified_operations: [], status: identified, priority: P2}
+  - {id: tplink-p1200, vendor: TP-Link, models: [P1200-08, P1201-08, P1201-16], discovery: [ssh, snmp], certified_operations: [], status: identified, priority: P3}
+  - {id: cianet-g8psx, vendor: Cianet, models: [G8PSX], discovery: [ssh, snmp], certified_operations: [], status: identified, priority: P3}

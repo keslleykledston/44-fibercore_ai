@@ -1,0 +1,327 @@
+openapi: 3.1.0
+info:
+  title: FiberCore AI Public/Operator API
+  version: 0.2.0-draft
+  description: >-
+    Contrato evolutivo orientado a multi-tenancy; implementação segura é obrigatória
+    antes de tráfego real. Tenant é derivado de claims autenticadas e validação de memberships.
+servers:
+  - url: /v1
+tags:
+  - name: Platform
+  - name: Network
+  - name: CPE
+  - name: ERP
+  - name: Jobs
+  - name: Copilot
+  - name: Edge
+security:
+  - bearerAuth: []
+paths:
+  /platform/modules:
+    get:
+      tags: [Platform]
+      operationId: listModuleHealth
+      summary: Consultar saúde dos módulos, dependências e capacidades
+      responses:
+        '200':
+          description: Lista módulos
+          content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ModuleHealth'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /platform/versions:
+    get:
+      tags: [Platform]
+      operationId: listVersionInventory
+      responses:
+        '200':
+          description: Versões da plataforma, Edge e adapters
+          content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/VersionInfo'}}}}
+  /olts:
+    get:
+      tags: [Network]
+      operationId: listOlts
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200':
+          description: Inventário OLT
+          content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Olt'}}}}
+  /onus:
+    get:
+      tags: [Network]
+      operationId: listOnus
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {$ref: '#/components/parameters/Limit'}, {name: serial, in: query, required: false, schema: {type: string}}]
+      responses:
+        '200':
+          description: Inventário ONU
+          content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Onu'}}}}
+  /cpes:
+    get:
+      tags: [CPE]
+      operationId: listCpes
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200':
+          description: Inventário CPE com fontes CWMP/USP
+          content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Cpe'}}}}
+  /cpes/{cpeId}/capabilities:
+    get:
+      tags: [CPE]
+      operationId: getCpeCapabilities
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: cpeId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200':
+          description: Capacidades por protocolo/firmware e homologação
+          content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Capability'}}}}
+  /integrations/erp:
+    get:
+      tags: [ERP]
+      operationId: listErpIntegrations
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      responses:
+        '200':
+          description: Integrações disponíveis
+          content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ErpIntegration'}}}}
+    post:
+      tags: [ERP]
+      operationId: createErpIntegration
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/NewErpIntegration'}}}}
+      responses:
+        '201':
+          description: Integração criada
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErpIntegration'}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /integrations/erp/{erpId}/sync:
+    post:
+      tags: [ERP]
+      operationId: startErpSync
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: erpId, in: path, required: true, schema: {type: string, format: uuid}}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      responses:
+        '202':
+          description: Sync assíncrono iniciado (não concluído)
+          content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}
+  /jobs/preview:
+    post:
+      tags: [Jobs]
+      operationId: previewJob
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/JobIntent'}}}}
+      responses:
+        '200':
+          description: Preview de risco e diff sem executar
+          content: {application/json: {schema: {$ref: '#/components/schemas/JobPreview'}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /jobs:
+    post:
+      tags: [Jobs]
+      operationId: createJob
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/JobIntent'}}}}
+      responses:
+        '202':
+          description: Job criado; pode exigir aprovação
+          content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}
+    get:
+      tags: [Jobs]
+      operationId: listJobs
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200':
+          description: Lista jobs
+          content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Job'}}}}
+  /jobs/{jobId}:
+    get:
+      tags: [Jobs]
+      operationId: getJob
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: jobId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200':
+          description: Estado de job com verificação externa
+          content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}
+  /jobs/{jobId}/approve:
+    post:
+      tags: [Jobs]
+      operationId: approveJob
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: jobId, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Approval'}}}}
+      responses:
+        '200':
+          description: Autorização registrada, não implica execução
+          content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /copilot/suggestions:
+    post:
+      tags: [Copilot]
+      operationId: requestSuggestion
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CopilotRequest'}}}}
+      responses:
+        '200':
+          description: Sugestão e fontes, sem comandos de escrita
+          content: {application/json: {schema: {$ref: '#/components/schemas/CopilotSuggestion'}}}
+        '503': {description: Copiloto opcional indisponível; core permanece operacional}
+  /edge/heartbeat:
+    post:
+      tags: [Edge]
+      operationId: sendEdgeHeartbeat
+      description: >-
+        Contrato lógico: implementação transport deve exigir identidade mTLS de agente, não bearer de usuário.
+      security: []
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/EdgeHeartbeat'}}}}
+      responses:
+        '204': {description: Heartbeat recebido com identidade de Edge validada}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    TenantId:
+      name: X-Workspace-ID
+      in: header
+      required: true
+      description: >-
+        Contexto pedido pelo usuário; deve ser comparado à membership validada do token no servidor.
+      schema: {type: string, format: uuid}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 8, maxLength: 128}}
+    Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000, default: 100}}
+  responses:
+    Unauthorized: {description: Autenticação exigida}
+    Forbidden: {description: Usuário sem permissão sobre tenant ou capacidade}
+    Conflict: {description: Operação concorrente ou estado incompatível}
+  schemas:
+    SourceMetadata:
+      type: object
+      additionalProperties: false
+      required: [origin, observed_at, ingested_at, quality]
+      properties:
+        origin: {type: string, enum: [olt, genieacs, usp, erp, manual, simulator]}
+        observed_at: {type: string, format: date-time}
+        ingested_at: {type: string, format: date-time}
+        quality: {type: string, enum: [fresh, stale, unknown, conflict]}
+        confidence: {type: number, minimum: 0, maximum: 1}
+    ModuleHealth:
+      type: object
+      additionalProperties: false
+      required: [id, version, status, capabilities, checked_at]
+      properties:
+        id: {type: string}
+        version: {type: string}
+        status: {type: string, enum: [healthy, degraded, unhealthy, disabled, unknown, starting, maintenance]}
+        capabilities: {type: array, items: {type: string}}
+        checked_at: {type: string, format: date-time}
+        reason: {type: [string, 'null']}
+    VersionInfo:
+      type: object
+      required: [module, version]
+      properties: {module: {type: string}, version: {type: string}, changelog_url: {type: string}, approved_for_tenant: {type: boolean}}
+    Olt:
+      type: object
+      required: [id, tenant_id, hostname, vendor, status, source]
+      properties:
+        id: {type: string, format: uuid}
+        tenant_id: {type: string, format: uuid}
+        hostname: {type: string}
+        vendor: {type: string}
+        model: {type: [string, 'null']}
+        firmware: {type: [string, 'null']}
+        status: {type: string, enum: [online, offline, stale, unknown]}
+        source: {$ref: '#/components/schemas/SourceMetadata'}
+    Onu:
+      type: object
+      required: [id, tenant_id, serial, olt_id, status, source]
+      properties:
+        id: {type: string, format: uuid}
+        tenant_id: {type: string, format: uuid}
+        olt_id: {type: string, format: uuid}
+        serial: {type: string}
+        pon_path: {type: [string, 'null']}
+        rx_dbm: {type: [number, 'null']}
+        status: {type: string, enum: [online, offline, stale, unknown]}
+        source: {$ref: '#/components/schemas/SourceMetadata'}
+    Cpe:
+      type: object
+      required: [id, tenant_id, identifiers, protocol_bindings, source]
+      properties:
+        id: {type: string, format: uuid}
+        tenant_id: {type: string, format: uuid}
+        identifiers: {type: object, additionalProperties: {type: string}}
+        protocol_bindings: {type: array, items: {type: string, enum: [tr069, tr369]}}
+        source: {$ref: '#/components/schemas/SourceMetadata'}
+    Capability:
+      type: object
+      required: [name, status, protocol, certification]
+      properties:
+        name: {type: string}
+        status: {type: string, enum: [supported, unsupported, unknown]}
+        protocol: {type: string, enum: [tr069, tr369, olt]}
+        certification: {type: string, enum: [identified, observed, certified]}
+        model: {type: [string, 'null']}
+        firmware: {type: [string, 'null']}
+    NewErpIntegration:
+      type: object
+      required: [provider, name, secret_ref]
+      properties:
+        provider: {type: string, enum: [csv, generic_rest, ixc, sgp, mk_solutions, hubsoft, voalle, radiusnet, topsapp]}
+        name: {type: string}
+        secret_ref: {type: string, description: Identifier of secret, not raw credentials}
+    ErpIntegration:
+      allOf:
+        - {$ref: '#/components/schemas/NewErpIntegration'}
+        - {type: object, required: [id, status], properties: {id: {type: string, format: uuid}, status: {type: string, enum: [healthy, degraded, disabled, unknown]}}}
+    JobIntent:
+      type: object
+      required: [target_id, operation, parameters, expires_at]
+      properties:
+        target_id: {type: string, format: uuid}
+        operation: {type: string, enum: [collect, refresh, reboot_cpe, set_wifi_ssid, provision_onu, change_plan, firmware_rollout]}
+        parameters: {type: object, description: Typed and validated against operation-specific JSON schema; no arbitrary shell command}
+        expires_at: {type: string, format: date-time}
+        justification: {type: string}
+    JobPreview:
+      type: object
+      required: [risk, requires_approval, certified, redacted_diff]
+      properties:
+        risk: {type: string, enum: [R0, R1, R2, R3]}
+        requires_approval: {type: boolean}
+        certified: {type: boolean}
+        redacted_diff: {type: object}
+        warnings: {type: array, items: {type: string}}
+    Job:
+      type: object
+      required: [id, state, operation, target_id, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        operation: {type: string}
+        target_id: {type: string, format: uuid}
+        state: {type: string, enum: [draft, previewed, pending_approval, approved, dispatched, accepted, device_pending, verifying, succeeded, failed, expired, unknown, cancelled]}
+        external_task_id: {type: [string, 'null']}
+        created_at: {type: string, format: date-time}
+        verified_at: {type: [string, 'null'], format: date-time}
+    Approval:
+      type: object
+      required: [reason]
+      properties: {reason: {type: string, minLength: 10}, approval_window: {type: [string, 'null']}}
+    CopilotRequest:
+      type: object
+      required: [mode, subject_id]
+      properties:
+        mode: {type: string, enum: [noc, support, field, engineering]}
+        subject_id: {type: string, format: uuid}
+        question: {type: [string, 'null']}
+    CopilotSuggestion:
+      type: object
+      required: [summary, evidence, confidence]
+      properties:
+        summary: {type: string}
+        evidence: {type: array, items: {type: object, properties: {ref: {type: string}, observed_at: {type: string, format: date-time}}}}
+        confidence: {type: string, enum: [high, medium, low, unknown]}
+        proposed_job_intent: {type: [object, 'null']}
+    EdgeHeartbeat:
+      type: object
+      required: [edge_id, tenant_id, version, sent_at]
+      properties:
+        edge_id: {type: string, format: uuid}
+        tenant_id: {type: string, format: uuid}
+        version: {type: string}
+        sent_at: {type: string, format: date-time}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.fibercore.local/job-envelope.v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "job_id", "tenant_id", "edge_id", "target_id", "operation", "idempotency_key", "issued_at", "expires_at", "nonce", "intent_sha256", "policy_version", "signature"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "job_id": {"type": "string", "format": "uuid"},
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "edge_id": {"type": "string", "format": "uuid"},
+    "target_id": {"type": "string", "format": "uuid"},
+    "operation": {"type": "string", "enum": ["collect", "refresh", "reboot_cpe", "set_wifi_ssid", "provision_onu"]},
+    "parameters_ref": {"type": "string", "description": "Encrypted, scoped payload reference; no plaintext secret in envelope"},
+    "idempotency_key": {"type": "string", "minLength": 8},
+    "issued_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "nonce": {"type": "string"},
+    "intent_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+    "policy_version": {"type": "string"},
+    "approval_ids": {"type": "array", "items": {"type": "string", "format": "uuid"}},
+    "signature": {"type": "string", "description": "Detached signature encoded; precise algorithm/key distribution via ADR"}
+  }
+}

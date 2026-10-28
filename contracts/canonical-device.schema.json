@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.fibercore.local/device-canonical.v1.json",
+  "title": "Canonical FTTx device snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "tenant_id", "device_id", "observed_at", "source", "quality", "protocol_bindings"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "device_id": {"type": "string", "format": "uuid"},
+    "manufacturer": {"type": ["string", "null"]},
+    "model": {"type": ["string", "null"]},
+    "firmware": {"type": ["string", "null"]},
+    "serial_number": {"type": ["string", "null"]},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "source": {"enum": ["genieacs", "usp", "olt", "erp", "simulator"]},
+    "quality": {"enum": ["fresh", "stale", "unknown", "conflict"]},
+    "protocol_bindings": {"type": "array", "uniqueItems": true, "items": {"enum": ["tr069", "tr369", "olt"]}},
+    "fields": {"type": "object", "additionalProperties": {"type": ["string", "number", "boolean", "null"]}}
+  }
+}

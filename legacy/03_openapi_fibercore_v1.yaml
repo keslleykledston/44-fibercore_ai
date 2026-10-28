@@ -1,0 +1,1992 @@
+openapi: 3.0.3
+info:
+  title: FiberCore AI API
+  version: 1.0.0
+  description: >
+    API Core do FiberCore AI para gestão FTTH multi-tenant.
+    Esta especificação cobre a Fase 1 do MVP: cadastro de OLT,
+    inventário de ONUs, importação CSV de clientes, associação ONU x Cliente
+    e reboot de ONU autorizado.
+servers:
+  - url: https://api.fibercore.local/v1
+    description: Produção
+  - url: http://localhost:8000/v1
+    description: Desenvolvimento local
+security:
+  - bearerAuth: []
+tags:
+  - name: Auth
+  - name: Tenants
+  - name: Dashboard
+  - name: OLTs
+  - name: ONUs
+  - name: Customers
+  - name: Imports
+  - name: Associations
+  - name: Automations
+  - name: Incidents
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Autenticar usuário
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login realizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Obter usuário autenticado
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: Usuário autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /tenants/current:
+    get:
+      tags: [Tenants]
+      summary: Obter tenant atual
+      operationId: getCurrentTenant
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      responses:
+        '200':
+          description: Tenant atual
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+  /dashboard/summary:
+    get:
+      tags: [Dashboard]
+      summary: Obter resumo operacional FTTH
+      operationId: getDashboardSummary
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      responses:
+        '200':
+          description: Resumo operacional
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardSummary'
+  /olts:
+    get:
+      tags: [OLTs]
+      summary: Listar OLTs
+      operationId: listOlts
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/OltStatus'
+        - name: vendor
+          in: query
+          schema:
+            type: string
+        - name: q
+          in: query
+          description: Busca por nome, hostname ou IP
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Lista paginada de OLTs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OltListResponse'
+    post:
+      tags: [OLTs]
+      summary: Cadastrar OLT
+      operationId: createOlt
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOltRequest'
+      responses:
+        '201':
+          description: OLT cadastrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Olt'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /olts/{olt_id}:
+    get:
+      tags: [OLTs]
+      summary: Obter detalhes da OLT
+      operationId: getOlt
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/OltId'
+      responses:
+        '200':
+          description: Detalhes da OLT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Olt'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [OLTs]
+      summary: Atualizar OLT
+      operationId: updateOlt
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/OltId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOltRequest'
+      responses:
+        '200':
+          description: OLT atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Olt'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [OLTs]
+      summary: Remover OLT
+      operationId: deleteOlt
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/OltId'
+        - name: force
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '204':
+          description: OLT removida
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /olts/{olt_id}/collect:
+    post:
+      tags: [OLTs]
+      summary: Solicitar coleta da OLT
+      operationId: requestOltCollection
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/OltId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectOltRequest'
+      responses:
+        '202':
+          description: Coleta solicitada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncJobAccepted'
+  /olts/{olt_id}/pon-ports:
+    get:
+      tags: [OLTs]
+      summary: Listar portas PON de uma OLT
+      operationId: listOltPonPorts
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/OltId'
+      responses:
+        '200':
+          description: Lista de portas PON
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PonPort'
+  /onus:
+    get:
+      tags: [ONUs]
+      summary: Listar inventário de ONUs
+      operationId: listOnus
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: olt_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: pon_port_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: cto_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/OnuStatus'
+        - name: association_status
+          in: query
+          schema:
+            $ref: '#/components/schemas/AssociationStatus'
+        - name: signal_level
+          in: query
+          schema:
+            type: string
+            enum: [excellent, good, warning, critical, severe]
+        - name: q
+          in: query
+          description: Busca por serial, MAC, cliente, contrato ou login PPPoE
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Lista paginada de ONUs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnuListResponse'
+  /onus/{onu_id}:
+    get:
+      tags: [ONUs]
+      summary: Obter detalhes técnicos da ONU
+      operationId: getOnu
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/OnuId'
+      responses:
+        '200':
+          description: Detalhes da ONU
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Onu'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /onus/{onu_id}/360:
+    get:
+      tags: [ONUs]
+      summary: Obter visão ONU 360
+      operationId: getOnu360
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/OnuId'
+      responses:
+        '200':
+          description: Visão ONU 360
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Onu360'
+  /onus/{onu_id}/metrics:
+    get:
+      tags: [ONUs]
+      summary: Consultar histórico de métricas da ONU
+      operationId: getOnuMetrics
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/OnuId'
+        - name: start
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: end
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: bucket
+          in: query
+          schema:
+            type: string
+            enum: [raw, 5m, 1h, 1d]
+            default: raw
+      responses:
+        '200':
+          description: Métricas da ONU
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OnuMetricSample'
+  /onus/{onu_id}/actions/reboot:
+    post:
+      tags: [ONUs, Automations]
+      summary: Solicitar reboot autorizado da ONU
+      operationId: requestOnuReboot
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/OnuId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RebootOnuRequest'
+      responses:
+        '202':
+          description: Solicitação de reboot criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationRun'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /customers:
+    get:
+      tags: [Customers]
+      summary: Listar clientes
+      operationId: listCustomers
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/CustomerStatus'
+        - name: financial_status
+          in: query
+          schema:
+            $ref: '#/components/schemas/FinancialStatus'
+        - name: q
+          in: query
+          description: Busca por nome, contrato, telefone, login ou ID ERP
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Lista paginada de clientes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerListResponse'
+    post:
+      tags: [Customers]
+      summary: Criar cliente manualmente
+      operationId: createCustomer
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCustomerRequest'
+      responses:
+        '201':
+          description: Cliente criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+  /customers/{customer_id}:
+    get:
+      tags: [Customers]
+      summary: Obter cliente
+      operationId: getCustomer
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/CustomerId'
+      responses:
+        '200':
+          description: Cliente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+  /customers/{customer_id}/contracts:
+    get:
+      tags: [Customers]
+      summary: Listar contratos do cliente
+      operationId: listCustomerContracts
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/CustomerId'
+      responses:
+        '200':
+          description: Contratos do cliente
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Contract'
+  /imports/customers/csv:
+    post:
+      tags: [Imports, Customers]
+      summary: Importar clientes por CSV
+      operationId: importCustomersCsv
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CustomerCsvImportRequest'
+      responses:
+        '202':
+          description: Importação aceita
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportJob'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /imports/{import_job_id}:
+    get:
+      tags: [Imports]
+      summary: Consultar status de importação
+      operationId: getImportJob
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/ImportJobId'
+      responses:
+        '200':
+          description: Status da importação
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportJob'
+  /imports/{import_job_id}/rows:
+    get:
+      tags: [Imports]
+      summary: Listar linhas processadas de uma importação
+      operationId: listImportJobRows
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/ImportJobId'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, success, error, skipped]
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Linhas da importação
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportJobRowListResponse'
+  /associations/onu-customer:
+    post:
+      tags: [Associations]
+      summary: Associar ONU a cliente/contrato
+      operationId: associateOnuCustomer
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssociateOnuCustomerRequest'
+      responses:
+        '201':
+          description: Associação criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnuCustomerAssociation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /associations/onu-customer/suggestions:
+    get:
+      tags: [Associations]
+      summary: Listar sugestões de associação ONU x Cliente
+      operationId: listAssociationSuggestions
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: min_score
+          in: query
+          schema:
+            type: number
+            format: float
+            minimum: 0
+            maximum: 100
+            default: 60
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/AssociationStatus'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Sugestões de associação
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssociationSuggestionListResponse'
+  /associations/onu-customer/{association_id}:
+    delete:
+      tags: [Associations]
+      summary: Remover associação ONU x Cliente
+      operationId: removeOnuCustomerAssociation
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: association_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Associação removida
+  /automations:
+    get:
+      tags: [Automations]
+      summary: Listar automações
+      operationId: listAutomationRuns
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/AutomationStatus'
+        - name: automation_type
+          in: query
+          schema:
+            $ref: '#/components/schemas/AutomationType'
+        - name: target_entity_type
+          in: query
+          schema:
+            $ref: '#/components/schemas/EntityType'
+        - name: target_entity_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Lista paginada de automações
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationRunListResponse'
+  /automations/{automation_run_id}:
+    get:
+      tags: [Automations]
+      summary: Obter automação
+      operationId: getAutomationRun
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/AutomationRunId'
+      responses:
+        '200':
+          description: Automação
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationRun'
+  /automations/{automation_run_id}/approve:
+    post:
+      tags: [Automations]
+      summary: Aprovar automação pendente
+      operationId: approveAutomationRun
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/AutomationRunId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveAutomationRequest'
+      responses:
+        '200':
+          description: Automação aprovada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationRun'
+  /automations/{automation_run_id}/cancel:
+    post:
+      tags: [Automations]
+      summary: Cancelar automação
+      operationId: cancelAutomationRun
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/AutomationRunId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelAutomationRequest'
+      responses:
+        '200':
+          description: Automação cancelada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutomationRun'
+  /incidents:
+    get:
+      tags: [Incidents]
+      summary: Listar incidentes
+      operationId: listIncidents
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/IncidentStatus'
+        - name: severity
+          in: query
+          schema:
+            $ref: '#/components/schemas/SeverityLevel'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Lista paginada de incidentes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentListResponse'
+  /incidents/{incident_id}:
+    get:
+      tags: [Incidents]
+      summary: Obter incidente
+      operationId: getIncident
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: incident_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Incidente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    TenantHeader:
+      name: X-Tenant-ID
+      in: header
+      required: true
+      description: UUID do tenant ativo
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Chave para evitar duplicidade de operações sensíveis
+      schema:
+        type: string
+        maxLength: 128
+    Page:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: page_size
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    OltId:
+      name: olt_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    OnuId:
+      name: onu_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CustomerId:
+      name: customer_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ImportJobId:
+      name: import_job_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AutomationRunId:
+      name: automation_run_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    BadRequest:
+      description: Requisição inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Não autenticado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Sem permissão
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Conflito de estado ou duplicidade
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: admin@isp.com.br
+        password:
+          type: string
+          format: password
+    LoginResponse:
+      type: object
+      required: [access_token, token_type, expires_in, user]
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: bearer
+        expires_in:
+          type: integer
+          example: 3600
+        user:
+          $ref: '#/components/schemas/CurrentUser'
+    CurrentUser:
+      type: object
+      required: [id, tenant_id, name, email, permissions]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        is_tenant_admin:
+          type: boolean
+        permissions:
+          type: array
+          items:
+            type: string
+    Tenant:
+      type: object
+      required: [id, name, status, timezone]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        legal_name:
+          type: string
+          nullable: true
+        document:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, trial, suspended, cancelled]
+        plan_name:
+          type: string
+          nullable: true
+        timezone:
+          type: string
+          example: America/Manaus
+    OltStatus:
+      type: string
+      enum: [unknown, online, offline, degraded, maintenance]
+    OnuStatus:
+      type: string
+      enum: [unknown, online, offline, los, dying_gasp, disabled, unauthorized]
+    PonStatus:
+      type: string
+      enum: [unknown, online, offline, degraded, saturated, maintenance]
+    CustomerStatus:
+      type: string
+      enum: [active, suspended, cancelled, pending_activation, pending_installation, unknown]
+    FinancialStatus:
+      type: string
+      enum: [paid, overdue, blocked, negotiation, unknown]
+    ContractStatus:
+      type: string
+      enum: [active, suspended, cancelled, pending_activation, pending_installation, unknown]
+    SeverityLevel:
+      type: string
+      enum: [info, warning, minor, major, critical]
+    IncidentStatus:
+      type: string
+      enum: [open, investigating, field_dispatched, resolved, closed, cancelled]
+    AutomationStatus:
+      type: string
+      enum: [requested, pending_approval, approved, running, success, failed, cancelled, rollback_running, rolled_back]
+    AutomationType:
+      type: string
+      enum: [onu_reboot, onu_provision, onu_deprovision, onu_replace, change_plan, suspend_customer, unsuspend_customer, sync_erp, custom_command]
+    AutomationRiskLevel:
+      type: string
+      enum: [low, medium, high, critical]
+    AssociationStatus:
+      type: string
+      enum: [associated, suggested, conflict, unassociated, orphan_onu, customer_without_onu]
+    EntityType:
+      type: string
+      enum: [tenant, user, olt, pon_port, onu, cto, customer, contract, incident, alarm, automation_run, connector_agent, erp_integration]
+    CreateOltRequest:
+      type: object
+      required: [name, vendor, mgmt_ip]
+      properties:
+        name:
+          type: string
+          example: OLT-MNS-01
+        hostname:
+          type: string
+          nullable: true
+        vendor:
+          type: string
+          example: Huawei
+        model:
+          type: string
+          nullable: true
+          example: MA5800-X7
+        firmware_version:
+          type: string
+          nullable: true
+        mgmt_ip:
+          type: string
+          example: 10.10.10.2
+        mgmt_port:
+          type: integer
+          default: 22
+        mgmt_protocol:
+          type: string
+          enum: [ssh, telnet, snmp, api]
+          default: ssh
+        site_id:
+          type: string
+          format: uuid
+          nullable: true
+        connector_agent_id:
+          type: string
+          format: uuid
+          nullable: true
+        credential_id:
+          type: string
+          format: uuid
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        region:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          format: double
+          nullable: true
+        longitude:
+          type: number
+          format: double
+          nullable: true
+        automation_mode:
+          type: string
+          enum: [read_only, assisted_automation, controlled_autopilot, break_glass]
+          default: read_only
+        tags:
+          type: array
+          items:
+            type: string
+    UpdateOltRequest:
+      allOf:
+        - $ref: '#/components/schemas/CreateOltRequest'
+    Olt:
+      type: object
+      required: [id, tenant_id, name, vendor, mgmt_ip, status, health_score, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        site_id:
+          type: string
+          format: uuid
+          nullable: true
+        connector_agent_id:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        hostname:
+          type: string
+          nullable: true
+        vendor:
+          type: string
+        model:
+          type: string
+          nullable: true
+        firmware_version:
+          type: string
+          nullable: true
+        serial_number:
+          type: string
+          nullable: true
+        mgmt_ip:
+          type: string
+        mgmt_port:
+          type: integer
+        mgmt_protocol:
+          type: string
+        status:
+          $ref: '#/components/schemas/OltStatus'
+        automation_mode:
+          type: string
+        cpu_percent:
+          type: number
+          format: float
+          nullable: true
+        memory_percent:
+          type: number
+          format: float
+          nullable: true
+        temperature_celsius:
+          type: number
+          format: float
+          nullable: true
+        uptime_seconds:
+          type: integer
+          format: int64
+          nullable: true
+        health_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+        last_collected_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    OltListResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Olt'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    CollectOltRequest:
+      type: object
+      properties:
+        scope:
+          type: string
+          enum: [full, status_only, onus_only, pon_ports_only]
+          default: full
+        priority:
+          type: string
+          enum: [low, normal, high]
+          default: normal
+    AsyncJobAccepted:
+      type: object
+      required: [job_id, status]
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          example: accepted
+        message:
+          type: string
+    PonPort:
+      type: object
+      required: [id, tenant_id, olt_id, slot_no, port_no, status, health_score]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        olt_id:
+          type: string
+          format: uuid
+        frame_no:
+          type: integer
+        slot_no:
+          type: integer
+        port_no:
+          type: integer
+        if_name:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/PonStatus'
+        onu_count:
+          type: integer
+        online_onu_count:
+          type: integer
+        offline_onu_count:
+          type: integer
+        capacity:
+          type: integer
+          nullable: true
+        utilization_percent:
+          type: number
+          format: float
+          nullable: true
+        avg_rx_power:
+          type: number
+          format: float
+          nullable: true
+        health_score:
+          type: number
+          format: float
+    Onu:
+      type: object
+      required: [id, tenant_id, olt_id, serial_number, status, health_score, association_score, association_status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        olt_id:
+          type: string
+          format: uuid
+        pon_port_id:
+          type: string
+          format: uuid
+          nullable: true
+        cto_id:
+          type: string
+          format: uuid
+          nullable: true
+        cto_port_id:
+          type: string
+          format: uuid
+          nullable: true
+        onu_index:
+          type: integer
+          nullable: true
+        onu_id_on_olt:
+          type: string
+          nullable: true
+        serial_number:
+          type: string
+          example: HWTC12345678
+        mac_address:
+          type: string
+          nullable: true
+        vendor:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        firmware_version:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/OnuStatus'
+        rx_power:
+          type: number
+          format: float
+          nullable: true
+        tx_power:
+          type: number
+          format: float
+          nullable: true
+        olt_rx_power:
+          type: number
+          format: float
+          nullable: true
+        distance_meters:
+          type: integer
+          nullable: true
+        temperature_celsius:
+          type: number
+          format: float
+          nullable: true
+        voltage:
+          type: number
+          format: float
+          nullable: true
+        uptime_seconds:
+          type: integer
+          format: int64
+          nullable: true
+        last_down_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_up_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_down_reason:
+          type: string
+          nullable: true
+        vlan_id:
+          type: integer
+          nullable: true
+        service_port:
+          type: string
+          nullable: true
+        gem_port:
+          type: string
+          nullable: true
+        dba_profile:
+          type: string
+          nullable: true
+        line_profile:
+          type: string
+          nullable: true
+        service_profile:
+          type: string
+          nullable: true
+        health_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+        association_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+        association_status:
+          $ref: '#/components/schemas/AssociationStatus'
+        last_collected_at:
+          type: string
+          format: date-time
+          nullable: true
+    OnuListResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Onu'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    Onu360:
+      type: object
+      required: [onu, olt]
+      properties:
+        onu:
+          $ref: '#/components/schemas/Onu'
+        olt:
+          $ref: '#/components/schemas/OltSummary'
+        pon_port:
+          $ref: '#/components/schemas/PonPort'
+          nullable: true
+        cto:
+          $ref: '#/components/schemas/CtoSummary'
+          nullable: true
+        customer:
+          $ref: '#/components/schemas/Customer'
+          nullable: true
+        contract:
+          $ref: '#/components/schemas/Contract'
+          nullable: true
+        association:
+          $ref: '#/components/schemas/OnuCustomerAssociation'
+          nullable: true
+        diagnosis:
+          $ref: '#/components/schemas/SimpleDiagnosis'
+          nullable: true
+    OltSummary:
+      type: object
+      required: [id, name, vendor, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        vendor:
+          type: string
+        model:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/OltStatus'
+    CtoSummary:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        city:
+          type: string
+          nullable: true
+        neighborhood:
+          type: string
+          nullable: true
+        health_score:
+          type: number
+          format: float
+          nullable: true
+    OnuMetricSample:
+      type: object
+      required: [time, status]
+      properties:
+        time:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/OnuStatus'
+        rx_power:
+          type: number
+          format: float
+          nullable: true
+        tx_power:
+          type: number
+          format: float
+          nullable: true
+        olt_rx_power:
+          type: number
+          format: float
+          nullable: true
+        distance_meters:
+          type: integer
+          nullable: true
+        health_score:
+          type: number
+          format: float
+          nullable: true
+        flapping_count_1h:
+          type: integer
+          nullable: true
+        offline_seconds_24h:
+          type: integer
+          nullable: true
+    RebootOnuRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 5
+        require_approval:
+          type: boolean
+          default: false
+        dry_run:
+          type: boolean
+          default: true
+        postcheck:
+          type: boolean
+          default: true
+    CreateCustomerRequest:
+      type: object
+      required: [name]
+      properties:
+        external_erp_id:
+          type: string
+          nullable: true
+        name:
+          type: string
+        document_masked:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        whatsapp:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/CustomerStatus'
+        financial_status:
+          $ref: '#/components/schemas/FinancialStatus'
+        address:
+          type: string
+          nullable: true
+        neighborhood:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        segment:
+          type: string
+          default: residential
+        is_vip:
+          type: boolean
+          default: false
+    Customer:
+      type: object
+      required: [id, tenant_id, name, status, financial_status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        external_erp_id:
+          type: string
+          nullable: true
+        name:
+          type: string
+        document_masked:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        whatsapp:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/CustomerStatus'
+        financial_status:
+          $ref: '#/components/schemas/FinancialStatus'
+        city:
+          type: string
+          nullable: true
+        neighborhood:
+          type: string
+          nullable: true
+        segment:
+          type: string
+        is_vip:
+          type: boolean
+        churn_risk_score:
+          type: number
+          format: float
+        technical_risk_score:
+          type: number
+          format: float
+    CustomerListResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Customer'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    Contract:
+      type: object
+      required: [id, tenant_id, customer_id, contract_number, status, financial_status, monthly_revenue]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+          format: uuid
+        service_plan_id:
+          type: string
+          format: uuid
+          nullable: true
+        external_erp_id:
+          type: string
+          nullable: true
+        contract_number:
+          type: string
+        status:
+          $ref: '#/components/schemas/ContractStatus'
+        financial_status:
+          $ref: '#/components/schemas/FinancialStatus'
+        pppoe_login:
+          type: string
+          nullable: true
+        monthly_revenue:
+          type: number
+          format: float
+        sla_level:
+          type: string
+          nullable: true
+        onu_id:
+          type: string
+          format: uuid
+          nullable: true
+    CustomerCsvImportRequest:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+        delimiter:
+          type: string
+          default: ';'
+        has_header:
+          type: boolean
+          default: true
+        mapping:
+          type: string
+          description: JSON string com mapeamento de colunas
+    ImportJob:
+      type: object
+      required: [id, tenant_id, import_type, status, total_rows, processed_rows, success_rows, error_rows]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        import_type:
+          type: string
+          example: customers_csv
+        source:
+          type: string
+          example: csv
+        original_filename:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, running, success, failed, partial_success, cancelled]
+        total_rows:
+          type: integer
+        processed_rows:
+          type: integer
+        success_rows:
+          type: integer
+        error_rows:
+          type: integer
+        summary:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+    ImportJobRow:
+      type: object
+      required: [id, row_number, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        row_number:
+          type: integer
+        status:
+          type: string
+          enum: [pending, success, error, skipped]
+        raw_data:
+          type: object
+          additionalProperties: true
+        normalized_data:
+          type: object
+          additionalProperties: true
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+    ImportJobRowListResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportJobRow'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    AssociateOnuCustomerRequest:
+      type: object
+      required: [onu_id]
+      properties:
+        onu_id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+          format: uuid
+          nullable: true
+        contract_id:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          $ref: '#/components/schemas/AssociationStatus'
+        association_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          default: 100
+        source:
+          type: string
+          enum: [manual, csv, erp, auto_match, api]
+          default: manual
+        evidence:
+          type: object
+          additionalProperties: true
+        update_contract_onu:
+          type: boolean
+          default: true
+    OnuCustomerAssociation:
+      type: object
+      required: [id, tenant_id, onu_id, status, association_score, source, is_current]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        onu_id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+          format: uuid
+          nullable: true
+        contract_id:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          $ref: '#/components/schemas/AssociationStatus'
+        association_score:
+          type: number
+          format: float
+        source:
+          type: string
+        evidence:
+          type: object
+          additionalProperties: true
+        is_current:
+          type: boolean
+        associated_at:
+          type: string
+          format: date-time
+          nullable: true
+        unassociated_at:
+          type: string
+          format: date-time
+          nullable: true
+    AssociationSuggestion:
+      type: object
+      required: [onu, association_score, status, evidence]
+      properties:
+        onu:
+          $ref: '#/components/schemas/Onu'
+        customer:
+          $ref: '#/components/schemas/Customer'
+          nullable: true
+        contract:
+          $ref: '#/components/schemas/Contract'
+          nullable: true
+        association_score:
+          type: number
+          format: float
+        status:
+          $ref: '#/components/schemas/AssociationStatus'
+        evidence:
+          type: object
+          additionalProperties: true
+    AssociationSuggestionListResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssociationSuggestion'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    AutomationRun:
+      type: object
+      required: [id, tenant_id, automation_type, risk_level, status, target_entity_type, target_entity_id, requested_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        automation_type:
+          $ref: '#/components/schemas/AutomationType'
+        risk_level:
+          $ref: '#/components/schemas/AutomationRiskLevel'
+        status:
+          $ref: '#/components/schemas/AutomationStatus'
+        target_entity_type:
+          $ref: '#/components/schemas/EntityType'
+        target_entity_id:
+          type: string
+          format: uuid
+        requested_by:
+          type: string
+          format: uuid
+          nullable: true
+        approved_by:
+          type: string
+          format: uuid
+          nullable: true
+        requested_at:
+          type: string
+          format: date-time
+        approved_at:
+          type: string
+          format: date-time
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+        input:
+          type: object
+          additionalProperties: true
+        dry_run_result:
+          type: object
+          additionalProperties: true
+          nullable: true
+        execution_result:
+          type: object
+          additionalProperties: true
+          nullable: true
+        postcheck_result:
+          type: object
+          additionalProperties: true
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        command_preview:
+          type: string
+          nullable: true
+        command_redacted:
+          type: string
+          nullable: true
+    AutomationRunListResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AutomationRun'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    ApproveAutomationRequest:
+      type: object
+      properties:
+        comment:
+          type: string
+          nullable: true
+    CancelAutomationRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          nullable: true
+    Incident:
+      type: object
+      required: [id, tenant_id, severity, status, incident_type, title, affected_customers, affected_revenue, started_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        severity:
+          $ref: '#/components/schemas/SeverityLevel'
+        status:
+          $ref: '#/components/schemas/IncidentStatus'
+        incident_type:
+          type: string
+          example: pon_mass_down
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        probable_cause:
+          type: string
+          nullable: true
+        root_entity_type:
+          $ref: '#/components/schemas/EntityType'
+        root_entity_id:
+          type: string
+          format: uuid
+          nullable: true
+        affected_customers:
+          type: integer
+        affected_vip_customers:
+          type: integer
+        affected_contracts:
+          type: integer
+        affected_revenue:
+          type: number
+          format: float
+        started_at:
+          type: string
+          format: date-time
+        detected_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+    IncidentListResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Incident'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    DashboardSummary:
+      type: object
+      required: [olts, onus, customers, incidents, business_impact]
+      properties:
+        olts:
+          type: object
+          properties:
+            total: { type: integer }
+            online: { type: integer }
+            offline: { type: integer }
+            degraded: { type: integer }
+        onus:
+          type: object
+          properties:
+            total: { type: integer }
+            online: { type: integer }
+            offline: { type: integer }
+            signal_critical: { type: integer }
+            unassociated: { type: integer }
+            orphan_onus: { type: integer }
+        customers:
+          type: object
+          properties:
+            active: { type: integer }
+            active_offline: { type: integer }
+            suspended_online: { type: integer }
+            customers_without_onu: { type: integer }
+        incidents:
+          type: object
+          properties:
+            open: { type: integer }
+            critical: { type: integer }
+            major: { type: integer }
+        business_impact:
+          type: object
+          properties:
+            affected_customers: { type: integer }
+            affected_vip_customers: { type: integer }
+            affected_revenue:
+              type: number
+              format: float
+    SimpleDiagnosis:
+      type: object
+      properties:
+        status:
+          type: string
+        summary:
+          type: string
+        recommended_action:
+          type: string
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+    Pagination:
+      type: object
+      required: [page, page_size, total, total_pages]
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+          nullable: true
+        correlation_id:
+          type: string
+          format: uuid
+          nullable: true

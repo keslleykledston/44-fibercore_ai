@@ -1,0 +1,15 @@
+site_name: FiberCore AI Engineering Wiki
+site_description: Architecture, ADRs, runbooks and decisions
+nav:
+  - Home: wiki/IMPLEMENTATION_STATUS.md
+  - Decisions: wiki/DECISIONS.md
+  - Changelog: wiki/CHANGELOG.md
+  - Known Issues: wiki/KNOWN_ISSUES.md
+  - Product PRD: product/PRD_V2.md
+  - Architecture: architecture/ARCHITECTURE.md
+  - Security: security/SECURITY_AND_APPROVALS.md
+  - SRE: operations/SRE_ORCHESTRATION.md
+  - Catalog: engineering/DEVICE_CATALOG.md
+  - Integrations: erp/ERP_INTEGRATIONS.md
+  - Copilot: ai/COPILOT_SPEC.md
+  - UX: ux/UX_SPEC.md

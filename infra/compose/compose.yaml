@@ -1,0 +1,65 @@
+name: fibercore-dev
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: fibercore
+      POSTGRES_DB: fibercore
+      POSTGRES_PASSWORD: ${FIBERCORE_DB_PASSWORD:?Set FIBERCORE_DB_PASSWORD in shell or .env}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks: [control]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fibercore -d fibercore"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+  nats:
+    image: nats:2.11-alpine
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    volumes:
+      - nats_data:/data
+    networks: [control]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8222/healthz"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    # development only: NATS must be configured with TLS, credentials and ACL before production.
+  api-core:
+    build:
+      context: ../..
+      dockerfile: starter/apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://fibercore:${FIBERCORE_DB_PASSWORD}@postgres:5432/fibercore
+      MODULE_MANIFEST: /app/configs/modules.yaml
+      DEMO_MODE: "true"
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    networks: [control]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/livez', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp]
+networks:
+  control:
+    driver: bridge
+volumes:
+  pg_data: {}
+  nats_data: {}
