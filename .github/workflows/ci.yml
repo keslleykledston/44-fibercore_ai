@@ -36,3 +36,17 @@ jobs:
         with: {fetch-depth: 0}
       - uses: gitleaks/gitleaks-action@v2
         env: {GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"}
+  supply-chain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m venv .venv && .venv/bin/pip install -q pip-audit cyclonedx-bom
+      - run: VENV=.venv scripts/sbom.sh
+      - uses: actions/upload-artifact@v4
+        with: {name: sbom, path: build/sbom}
+      - name: Build image and scan
+        run: |
+          docker build -f apps/api/Dockerfile -t fibercore-api:ci .
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.58.1 image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed fibercore-api:ci

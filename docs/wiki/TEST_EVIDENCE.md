@@ -32,3 +32,10 @@ Ambiente: Linux, Python 3.12.3, Docker 29.2.1, PostgreSQL 17-alpine (container d
 ## 2026-10-27 — Sprint 0 PR 3
 - `pytest -q`: **PASS — 38 passed** (edge heartbeat/RLS/revogação/permissões mínimas, allowlist anti-SSRF, NBI mock read-only, schema de frame).
 - OpenAPI válido; `validate_kit.py` PASS.
+
+## 2026-10-27 — Sprint 0 PR 4
+- `scripts/sbom.sh`: **PASS** — SBOM CycloneDX gerado; pip-audit: No known vulnerabilities (lock com hashes).
+- `scripts/secrets-scan.sh` (gitleaks 8.21.2, 15 commits): **PASS — no leaks found**.
+- trivy 0.58.1 na imagem `api-core` (debian 13.7): **PASS — HIGH 0 / CRITICAL 0** (ignore-unfixed).
+- `scripts/backup.sh` + `scripts/restore-verify.sh` no Compose: **PASS** — alembic_version=0004, 7 tabelas com RLS forçada, contagens batem; banco de verificação removido.
+- Workflow GitHub Actions: **NOT_RUN** (definido, ainda não executado remotamente).

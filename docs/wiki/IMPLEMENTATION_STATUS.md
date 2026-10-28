@@ -1,6 +1,6 @@
 # Implementation status (evidência, não promessa)
 
-Atualizado: 2026-10-27 | Branch: `sprint0/03-edge-fleet-mocks` | Estado: **Sprint 0 em andamento (PR 1 de N)**
+Atualizado: 2026-10-27 | Branch: `sprint0/04-supply-chain-backup` | Estado: **Sprint 0 em andamento (PR 1 de N)**
 
 | Item Sprint 0 | Status | Prova | Pendência |
 |---|---|---|---|
@@ -10,7 +10,7 @@ Atualizado: 2026-10-27 | Branch: `sprint0/03-edge-fleet-mocks` | Estado: **Sprin
 | D. Registry/feature flags, OpenAPI | Parcial | OpenAPI válido (`openapi-spec-validator`); registry com probes reais | flags dinâmicas por tenant; lint Spectral; geração de tipos TS/Py |
 | E. Outbox + JetStream producer/consumer | Feito (PR 2) | 26 testes PASS incl. crash/restart, dedupe por Msg-Id, ledger idempotente, DLQ; E2E em Compose | TLS/ACL do NATS (produção); DLQ replay tool |
 | F. Mock Edge / Mock NBI / contrato de stream / segredos | Feito (PR 3) | `tools/mocks`, `contracts/edge-frame.schema.json`, `EDGE_GATEWAY_CONTRACT.md`, ADR-0011; 38 testes PASS | mTLS real e Gateway = Sprint 1 |
-| G. SBOM/scan, backup/restore staging | **Não iniciado** (CI com gitleaks definido, **não executado**) | — | PR dedicado |
+| G. SBOM/scan, backup/restore, plano de deploy | Feito (PR 4) | sbom+pip-audit (0 vulns), gitleaks (0 leaks), trivy imagem (0 HIGH/CRIT), backup→restore verificado | digest das imagens; CI remoto ainda não executado (sem Actions run) |
 | H. Wiki/ADRs/contexto | Feito (ADR 0001–0010 Proposed) | `docs/wiki/adr/` | aprovação Codex |
 | I. Este arquivo | Feito | — | atualizar a cada PR |
 
