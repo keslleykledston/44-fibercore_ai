@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a185d6-d08a-7852-9cf0-99ab1f1384b0).
+[codex] Turn started (01a185d6-d0dd-7752-bb99-c7ee07c934a4).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de API, migração e UI em busca de r...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/inventory....
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/inventory.... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=35 main...HEAD -- apps/api/app/cli.py apps/ap...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=35 main...HEAD -- apps/api/app/cli.py apps/ap... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "certification|identified|supported|capability-set|capabilit" docs/wiki/...
+[codex] Command completed: /bin/bash -lc 'rg -n "certification|identified|supported|capability-set|capabilit" docs/wiki/... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"CREATE TABLE events_outbox|POLICY.*events_outbox|GRANT INSERT.*events_...
+[codex] Command completed: /bin/bash -lc "rg -n \"CREATE TABLE events_outbox|POLICY.*events_outbox|GRANT INSERT.*events_... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o CLI permite registrar suporte se...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o CLI permite registrar suporte sem evidência, e a API o apresenta como `supported`. Isso pode levar operadores a confiar em uma capacidade nunca verificada.
+
+Findings:
+- [medium] CLI aceita capacidade suportada sem evidência (apps/api/app/cli.py:80-81)
+  `capability-set` exige evidência apenas quando `certification` é `observed` ou `certified`. Assim, `capability-set … supported identified` grava uma afirmação de suporte sem referência ou data de verificação; a API depois retorna `status: supported`, embora a única proteção do banco exija evidência para certificações acima de `identified`. Um operador pode interpretar isso como suporte confirmado. Exija evidência para status `supported` e `unsupported` (ou represente a afirmação como `unknown` até verificação) e aplique a mesma regra no banco.
+  Recommendation: Exigir `--evidence` e `--verified-at` para qualquer status diferente de `unknown`, com constraint equivalente na tabela.

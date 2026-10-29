@@ -110,7 +110,9 @@ def test_tenants_are_isolated_and_permissions_enforced(client, seed, inv, migrat
 
 
 def test_database_refuses_unevidenced_claims_and_the_app_role_cannot_write(client, seed, migrated):
-    for kw in ({"certification": "certified", "evidence_ref": None}, {"certification": "observed", "verified_at": None}):
+    for kw in ({"certification": "certified", "evidence_ref": None}, {"certification": "observed", "verified_at": None},
+               {"certification": "identified", "status": "supported", "evidence_ref": None, "verified_at": None},  # a bare "supported"
+               {"certification": "identified", "status": "unsupported", "evidence_ref": "x", "verified_at": None}):
         with pytest.raises(DBAPIError):
             _set(migrated, seed["A"], vendor="NoEvidence", **kw)
     with pytest.raises(DBAPIError):
@@ -127,14 +129,16 @@ def test_cli_capability_set_requires_evidence_validates_the_catalog_and_emits_an
     monkeypatch.setenv("ADMIN_DATABASE_URL", admin_url)
     t = str(seed["A"])
     base = [t, "CliCo", "C1", "2.0", "tr069", "refresh", "supported"]
-    with pytest.raises(SystemExit, match="require --evidence"):
+    with pytest.raises(SystemExit, match="requires --evidence"):
         cli.main(["capability-set", *base, "certified"])
+    with pytest.raises(SystemExit, match="requires --evidence"):  # "supported" is a claim too, even at the lowest certification
+        cli.main(["capability-set", *base, "identified"])
     with pytest.raises(SystemExit, match="unknown operation"):
-        cli.main(["capability-set", t, "CliCo", "C1", "2.0", "tr069", "invented_op", "supported", "identified"])
+        cli.main(["capability-set", t, "CliCo", "C1", "2.0", "tr069", "invented_op", "unknown", "identified"])
     with pytest.raises(SystemExit, match="not catalogued"):  # OLT operation over a CPE protocol, and the other way round
-        cli.main(["capability-set", t, "CliCo", "C1", "2.0", "tr069", "collect", "supported", "identified"])
+        cli.main(["capability-set", t, "CliCo", "C1", "2.0", "tr069", "collect", "unknown", "identified"])
     with pytest.raises(SystemExit, match="not catalogued"):
-        cli.main(["capability-set", t, "CliCo", "C1", "2.0", "olt", "set_wifi_ssid", "supported", "identified"])
+        cli.main(["capability-set", t, "CliCo", "C1", "2.0", "olt", "set_wifi_ssid", "unknown", "identified"])
     cli.main(["capability-set", t, "CliCo", "C1", "2.0", "tr369", "refresh", "unknown", "identified"])  # a valid pair on the other CPE protocol
     cli.main(["capability-set", *base, "observed", "--evidence", "lab-cli-1", "--verified-at", "2026-10-29T12:00:00+00:00"])
     cli.main(["capability-set", *base, "certified", "--evidence", "lab-cli-2", "--verified-at", "2026-10-29T13:00:00+00:00"])  # upsert

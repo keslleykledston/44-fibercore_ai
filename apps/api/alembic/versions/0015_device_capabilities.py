@@ -33,7 +33,9 @@ def upgrade() -> None:
           created_at timestamptz NOT NULL DEFAULT now(),
           PRIMARY KEY (tenant_id, id),
           -- observed/certified are claims about the real world: they must point at evidence and say when it was verified
-          CHECK (certification = 'identified' OR (evidence_ref IS NOT NULL AND verified_at IS NOT NULL))
+          CHECK (certification = 'identified' OR (evidence_ref IS NOT NULL AND verified_at IS NOT NULL)),
+          -- and so is "supported"/"unsupported": without evidence the only honest status is unknown
+          CHECK (status = 'unknown' OR (evidence_ref IS NOT NULL AND verified_at IS NOT NULL))
         );
         CREATE UNIQUE INDEX device_capabilities_profile_op
           ON device_capabilities (tenant_id, lower(vendor), lower(model), firmware, protocol, operation);

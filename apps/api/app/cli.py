@@ -77,8 +77,8 @@ def main(argv: list[str] | None = None) -> None:
                      "SELECT :t, id, :r FROM users_global WHERE lower(email)=lower(:e)"),
                 {"t": a.tenant_id, "r": a.role, "e": a.email})
         elif a.cmd == "capability-set":
-            if a.certification != "identified" and not (a.evidence and a.verified_at):
-                sys.exit("observed/certified require --evidence and --verified-at")
+            if (a.certification != "identified" or a.status != "unknown") and not (a.evidence and a.verified_at):
+                sys.exit("any claim (supported/unsupported, or observed/certified) requires --evidence and --verified-at")
             from app.api.jobs import OPERATIONS  # the catalog is the job engine's operations: no invented names
             if a.operation not in OPERATIONS:
                 sys.exit(f"unknown operation {a.operation!r}; known: {', '.join(sorted(OPERATIONS))}")
