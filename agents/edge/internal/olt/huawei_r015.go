@@ -13,7 +13,7 @@ import (
 // modes. Everything stays read-only: the allowlist below is the exact set of commands this profile may send.
 var (
 	// the data commands (display board 0, display ont info/optical-info <port> all) are catalog queries with bounded parameters (query.go)
-	hwR015Allowed = regexp.MustCompile(`^(enable|config|quit|interface gpon \d+/\d+)$`)
+	hwR015Allowed = regexp.MustCompile(`^(enable|config|quit|interface gpon 0/([0-9]|1[0-7]))$`) // frame 0 only; slot ceiling = query.go maxSlot
 
 	// "  0/ 0/14   7  4857544310001A2B  active      online   normal   match    no"
 	r015OntRow = regexp.MustCompile(`^\s*(\d+)/\s*(\d+)/\s*(\d+)\s+(\d+)\s+([0-9A-Fa-f]{16})\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*$`)
@@ -40,7 +40,8 @@ type HuaweiR015 struct {
 }
 
 func (h HuaweiR015) Allowed(cmd string) bool {
-	return HuaweiAllowed(cmd) || hwR015Allowed.MatchString(cmd) || h.Queries.allows(cmd)
+	// Deliberately NOT delegating to the generic Huawei allowlist: its F/S/P forms take unbounded numbers and this profile never sends them.
+	return hwR015Allowed.MatchString(cmd) || h.Queries.allows(cmd)
 }
 
 func (h HuaweiR015) Snapshot(ctx context.Context, s Session, ports []string) (Snapshot, error) {

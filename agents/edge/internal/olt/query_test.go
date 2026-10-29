@@ -109,6 +109,12 @@ func TestOnlyValidatedQueriesAreAllowedUntilTheOperatorEnablesOne(t *testing.T) 
 		// bounds are enforced by the allowlist itself, also for the validated queries
 		"display ont info 15 all": true, "display ont info 16 all": false, "display ont info 999 all": false, "display ont info 007 all": false,
 		"display ont optical-info 99 all": false, "display ont optical-info -1 all": false, "display board 1": false,
+		// the generic Huawei forms with unbounded F/S/P are not part of this profile
+		"display ont optical-info 999/999/999 all": false, "display ont optical-info 0/1/0 all": false, "display ont info summary 0/1/0": false,
+		// CLI mode words: interface context is frame 0, slot 0..17, canonical numbers
+		"enable": true, "config": true, "quit": true, "interface gpon 0/0": true, "interface gpon 0/1": true, "interface gpon 0/17": true,
+		"interface gpon 0/18": false, "interface gpon 1/1": false, "interface gpon 999/999": false, "interface gpon 0/01": false,
+		"interface gpon 0/1 ": false, "interface gpon 0/-1": false, "interface gpon 0/1; reload": false, "reload": false, "system-view": false,
 	} {
 		if got := h.Allowed(cmd); got != want {
 			t.Fatalf("Allowed(%q)=%v want %v", cmd, got, want)
