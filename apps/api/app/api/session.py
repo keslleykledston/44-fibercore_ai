@@ -54,6 +54,13 @@ def refresh(body: RefreshIn, settings: Settings = Depends(get_settings)) -> Sess
     token means it leaked (or a client raced itself): the whole family is revoked and the user must log in again."""
     sess = None
     with scoped_connection(get_engine()) as conn:
+        # Per-account lock BEFORE the token row is read: an administrator MFA reset holds the same lock until it commits, so a refresh
+        # that started earlier cannot go on to mint a session from a token the reset has already revoked (it re-reads after the wait).
+        uid = conn.execute(
+            text("SELECT user_id FROM refresh_tokens WHERE token_hash = :h"), {"h": hash_refresh(body.refresh_token)}
+        ).scalar()
+        if uid is not None:
+            conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{uid}"})
         _lock_family(conn, body.refresh_token)
         row = conn.execute(
             text("SELECT id, family_id, user_id, expires_at, family_expires_at, used_at, grace_used_at, revoked_at FROM refresh_tokens "

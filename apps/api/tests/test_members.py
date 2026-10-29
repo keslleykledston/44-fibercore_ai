@@ -218,3 +218,28 @@ def test_a_deactivated_account_token_is_refused_by_the_mfa_routes_too(client, se
     with migrated.begin() as c:
         c.execute(text("UPDATE users_global SET is_active = false WHERE id = :u"), {"u": who["id"]})
     assert client.get("/v1/auth/mfa/status", headers=_bearer(tok)).status_code == 401
+
+
+def test_refresh_that_races_a_reset_cannot_mint_a_session_after_it(client, seed, make, migrated):
+    """Deterministic: a connection plays the reset (holds the per-account lock, then revokes + commits) while a refresh with the target's
+    token is already in flight. The refresh must WAIT for the lock and then see the revocation (401), not mint a session from stale state."""
+    import threading
+    import time
+
+    target = make("engineer")
+    first = _login(client, target)  # no MFA: a plain session with a refresh token
+    out: dict = {}
+
+    def refresh():
+        out["r"] = client.post("/v1/auth/refresh", json={"refresh_token": first["refresh_token"]})
+
+    with migrated.begin() as holder:
+        holder.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{target['id']}"})
+        t = threading.Thread(target=refresh)
+        t.start()
+        time.sleep(1.5)
+        assert t.is_alive() and "r" not in out, "refresh did not wait for the account lock (it would read the token before the reset commits)"
+        holder.execute(text("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = :u"), {"u": target["id"]})
+        holder.execute(text("UPDATE users_global SET tokens_valid_after = clock_timestamp() WHERE id = :u"), {"u": target["id"]})
+    t.join(15)
+    assert out["r"].status_code == 401, out["r"].text

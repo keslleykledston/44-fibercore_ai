@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18569-4f2e-7593-8b8d-db294ee9d09b).
+[codex] Turn started (01a18569-5cb9-77d0-82ab-4288fbfcd8be).
+[codex] Assistant message captured: Vou revisar o diff completo contra `main`, priorizando caminhos de autenticação de access tok...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/app/api/deps.py ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/app/api/deps.py ap... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "decode_token|Authorization|authorization|Bearer|_user_id|authenticated_...
+[codex] Command completed: /bin/bash -lc 'rg -n "decode_token|Authorization|authorization|Bearer|_user_id|authenticated_... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '160,330p' apps/api/app/api/routes.py; sed -n '1,340p' apps/api/app/api...
+[codex] Command completed: /bin/bash -lc "sed -n '160,330p' apps/api/app/api/routes.py; sed -n '1,340p' apps/api/app/api... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/members.py | sed -n '90,108p'; nl -ba apps/api/app/api...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/members.py | sed -n '90,108p'; nl -ba apps/api/app/api... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: o reset pode deixar uma sessão nov...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: o reset pode deixar uma sessão nova válida numa corrida com refresh, contrariando a revogação imediata prometida.
+
+Findings:
+- [high] Corrida entre reset e refresh pode emitir token posterior ao corte (apps/api/app/api/members.py:101-103)
+  `now()` no PostgreSQL é fixado no início da transação. Se o refresh já bloqueou o token antigo e insere o sucessor enquanto o reset executa, o `UPDATE refresh_tokens` do reset pode não ver esse sucessor ainda não confirmado. O refresh então pode confirmar um access token com `iat` posterior ao `tokens_valid_after` gravado no reset; a checagem central o aceita e essa sessão sobrevive ao reset. O refresh também não verifica `tokens_valid_after` antes de emitir. Isso é uma inferência do isolamento/transação mostrados; não há sincronização comum entre o lock de conta usado no reset e o refresh.
+  Recommendation: Serializar refresh e reset com o mesmo lock por conta e validar a revogação ao emitir; grave o corte com um timestamp efetivo após a sincronização (por exemplo, `clock_timestamp()`), garantindo que nenhum token emitido concorrentemente fique depois dele.
