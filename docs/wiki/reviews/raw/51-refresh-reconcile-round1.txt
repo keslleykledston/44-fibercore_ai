@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a188de-2a18-79a1-b3d7-6f5e87bf000c).
+[codex] Turn started (01a188de-2ea7-7223-bf3f-097cb37f66c6).
+[codex] Assistant message captured: Vou ler o diff contra `main` e seguir os caminhos de reconciliação, concorrência e tratamento...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/nbi/re...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/nbi/re... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/nbi/refresh.go | sed -n '135,285p'; git diff --no-...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/nbi/refresh.go | sed -n '135,285p'; git diff --no-... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: a reconciliação pode apagar uma taref...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: a reconciliação pode apagar uma tarefa idêntica criada por outro processo no mesmo dispositivo; a janela de um minuto amplia esse risco.
+
+Findings:
+- [high] A limpeza pode apagar tarefas de outro processo concorrente (agents/edge/internal/nbi/refresh.go:217-228)
+  `matchingTasks` usa dispositivo, tipo, nomes e timestamp recente para inferir autoria, mas essas propriedades não identificam esta chamada. Se outro processo criar a mesma tarefa para o dispositivo durante a janela de skew, `cleanupTasks` inclui seu ID e envia DELETE. O próprio código amplia essa janela para um minuto (`since - taskClockSkew`), então uma falha ambígua pode cancelar trabalho legítimo de um operador ou de outro refresh. Isso contradiz a alegação do ADR de que só tarefas criadas pela própria chamada são removidas. Use um identificador de correlação/autoria verificável ou restrinja a exclusão ao ID retornado pelo POST; sem prova de propriedade, falhe fechado e retenha o dispositivo.
+  Recommendation: Não trate correspondência de conteúdo e timestamp como prova de autoria. Acrescente um mecanismo de correlação suportado pelo ACS para identificar a tarefa desta chamada; se não houver, não apague tarefas descobertas apenas por correspondência.
+- [medium] A listagem global pode tornar a limpeza inviável em dispositivos com muitas tarefas (agents/edge/internal/nbi/refresh.go:243-263)
+  `matchingTasks` carrega `/tasks` inteiro e `do` rejeita respostas acima de 1 MiB (`maxTaskBody`). Se o ACS tiver muitas tarefas para o dispositivo, uma lista acima desse limite falha antes de identificar a tarefa recém-criada; a chamada então retorna `ErrRefreshUncleaned` e provoca retenção de 24 horas, mesmo que a tarefa pudesse ser localizada com paginação ou uma consulta mais seletiva. O teste cobre falha HTTP na listagem, mas não lista grande nem truncamento no limite.
+  Recommendation: Reduza o escopo da listagem no ACS e implemente paginação/limite explícito com continuação até cobrir os resultados relevantes; teste respostas acima de 1 MiB e garanta que não se declare limpeza sem verificar todas as páginas.

@@ -122,3 +122,6 @@
 - Edge: `nbi.RefreshParams` (tarefa `getParameterValues` por grupo, só nomes da lista fechada, detecção de modelo de dados, limpeza de tarefas pendentes) e `RefreshGuard` (1 por dispositivo/10 min, 20/h, persistido antes de pedir). Config `refresh_tasks` (padrão **desligado**; exige `nbi_url` + `jobs_enabled`).
 - Nuvem: o despacho de `refresh` de um CPE assina `target_ref` (id TR-069 do binding) no envelope; contrato `job-envelope` ganhou o campo opcional. `collect` e CPE sem binding seguem como antes.
 - ADR-SD-002 → Accepted (autorização do responsável em 2026-10-29).
+
+## Unreleased — PR 51 (reconciliação de tarefas do refresh ativo)
+- Edge: depois de um POST ambíguo, de uma tarefa em fila/falha ou de id inválido, `RefreshParams` lista as tarefas do dispositivo, apaga só as que a própria chamada criou (mesmo nome e mesmos parâmetros, carimbo recente) e confirma por nova listagem. Motivo: no ensaio real o ACS criou a tarefa e fechou a conexão (EOF).

@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 // SD-001 / ADR-SD-002 item 4 (authorised by the owner on 2026-10-29): ask the ACS to read ALLOWLISTED leaves from ONE CPE.
@@ -38,7 +39,13 @@ var (
 	// ErrRefreshUncleaned: a task that did not complete could not be removed, so it may still be queued on the ACS (and fire a connection to
 	// the customer's CPE later). The caller must treat the refresh as FAILED and hold the device.
 	ErrRefreshUncleaned = errors.New("nbi refresh: an unfinished task could not be removed from the ACS")
-	errNotAllowlisted   = errors.New("nbi refresh: parameter outside the allowlist")
+	// ErrRefreshUnproven: after an ambiguous request nothing of ours was found on the ACS, but absence cannot be proven (the task could still
+	// become visible). Always wrapped together with ErrRefreshUncleaned; the caller holds the device for less time than for a proven leftover.
+	ErrRefreshUnproven = errors.New("nbi refresh: could not prove that no task was created")
+	// ErrRefreshPending: the device already has an unfinished getParameterValues task for allowlisted names (left by an earlier unproven
+	// attempt, an operator or another process). Nothing new is created until it is gone; the check runs before every refresh.
+	ErrRefreshPending = errors.New("nbi refresh: an unfinished allowlisted task already exists on this device")
+	errNotAllowlisted = errors.New("nbi refresh: parameter outside the allowlist")
 )
 
 // refreshGroups are the objects asked for, one task each, instance 1 (and the 5 GHz radio). A task that targets an object the CPE does not
@@ -80,6 +87,8 @@ type RefreshReport struct {
 
 // RefreshParams asks the ACS to read the allowlisted groups from one device. Nothing is requested unless the data model is detected first.
 func (c *Client) RefreshParams(ctx context.Context, deviceID string) (RefreshReport, error) {
+	c.refreshMu.Lock() // one active read at a time through this client (the Edge runs one job at a time and is a single instance per state dir)
+	defer c.refreshMu.Unlock()
 	var rep RefreshReport
 	if !deviceIDRe.MatchString(deviceID) || strings.HasPrefix(deviceID, "DISCOVERYSERVICE") { // placeholder identities are not inventory
 		return rep, ErrBadDeviceID
@@ -100,18 +109,39 @@ func (c *Client) RefreshParams(ctx context.Context, deviceID string) (RefreshRep
 			}
 		}
 	}
+	// Evidence instead of a timer: a task that became visible late (or was left by anyone) shows up here, and blocks, on the next attempt.
+	pending, err := c.deviceTasks(ctx, deviceID)
+	if err != nil {
+		return rep, fmt.Errorf("nbi refresh: cannot check for pending tasks: %w", err)
+	}
+	for _, d := range pending {
+		if d.Name == "getParameterValues" && allAllowlisted(d.Names) {
+			return rep, ErrRefreshPending
+		}
+	}
 	for _, g := range groups {
 		rep.Groups++
+		started := time.Now()
 		status, taskID, faulted, err := c.postTask(ctx, deviceID, g)
+		ambiguous := false
 		if err != nil {
-			// A lost response, a timeout, a 5xx or a proxy-style 4xx (408, 429...) does not prove the ACS did NOT create the task. Only the statuses
-			// the NBI itself uses to refuse a request before creating anything do.
+			// A lost response, a timeout, a 5xx or a proxy-style 4xx (408, 429...) does not prove the ACS did NOT create the task. Only the
+			// statuses the NBI itself uses to refuse a request before creating anything do.
 			var rej *rejectedError
 			if errors.As(err, &rej) && definitelyNotCreated[rej.status] {
 				return rep, err
 			}
-			rep.Uncleaned++
-			return rep, fmt.Errorf("%w: %v", ErrRefreshUncleaned, err)
+			ambiguous = true
+		}
+		if ambiguous || status != http.StatusOK || faulted { // never leave a queued/faulted/unknown task on a customer CPE
+			if cerr := c.cleanupTasks(ctx, deviceID, g, started, taskID); cerr != nil {
+				rep.Uncleaned++
+				return rep, fmt.Errorf("%w: %w", ErrRefreshUncleaned, cerr) // stop: nothing new while a task may still be pending
+			}
+			rep.Cleaned++
+			if ambiguous {
+				return rep, fmt.Errorf("nbi refresh: request outcome unknown, no task of ours remains: %w", err)
+			}
 		}
 		switch {
 		case status == http.StatusOK && !faulted:
@@ -120,14 +150,6 @@ func (c *Client) RefreshParams(ctx context.Context, deviceID string) (RefreshRep
 			rep.Faulted++
 		default:
 			rep.Queued++
-		}
-		if status != http.StatusOK || faulted { // never leave a queued/faulted task retrying on a customer CPE
-			if taskID != "" && c.deleteTask(ctx, taskID) == nil {
-				rep.Cleaned++
-			} else {
-				rep.Uncleaned++
-				return rep, ErrRefreshUncleaned // stop: no further task is created while one may still be pending
-			}
 		}
 	}
 	return rep, nil
@@ -202,6 +224,188 @@ func (e *rejectedError) Error() string {
 	return fmt.Sprintf("nbi: task rejected with status %d", e.status)
 }
 
+// cleanupTasks removes the task(s) THIS call created on deviceID and proves nothing of ours is left. Ownership rules, strictest first:
+//   - the ACS returned a well-formed task id: only that id is deleted, and only if the device's task list shows it; a look-alike next to it
+//     (same shape, same window) cannot be attributed, so the call fails closed without touching either;
+//   - no usable id: a task is ours only if it is the ONLY one on the device with getParameterValues + exactly the posted names + a stamp not
+//     older than the call (small skew). Two or more candidates cannot be attributed, so the call fails closed (the caller holds the device).
+//
+// Residual risk (accepted, ADR-SD-002): with no id and exactly one look-alike created within the skew window by someone else, that one
+// read-only task of the same allowlisted leaves would be removed.
+func (c *Client) cleanupTasks(ctx context.Context, deviceID string, names []string, since time.Time, knownID string) error {
+	docs, err := c.deviceTasks(ctx, deviceID)
+	if err != nil {
+		return err
+	}
+	var cand []string
+	for _, d := range docs {
+		if looksLikeOurs(d, names, since) {
+			cand = append(cand, d.ID)
+		}
+	}
+	var target string
+	if knownID != "" {
+		// The id is the proof of WHICH task is ours, but the listing must show it (with this device) before anything is deleted, and no other
+		// same-shape task from the same window may exist: a duplicate cannot be attributed, so we fail closed instead of guessing.
+		found := hasID(docs, knownID)
+		for i := 1; i < settleChecks && !found; i++ { // the task we were told about may not be listed yet: look again, bounded
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(settleDelay):
+			}
+			if docs, err = c.deviceTasks(ctx, deviceID); err != nil {
+				return err
+			}
+			cand = cand[:0]
+			for _, d := range docs {
+				if looksLikeOurs(d, names, since) {
+					cand = append(cand, d.ID)
+				}
+			}
+			found = hasID(docs, knownID)
+		}
+		if !found {
+			return errors.New("nbi: the task the ACS returned is not in the device's task list")
+		}
+		for _, id := range cand {
+			if id != knownID {
+				return errors.New("nbi: another look-alike task exists next to ours, cannot attribute")
+			}
+		}
+		target = knownID
+	} else {
+		// No id and nothing listed yet is NOT proof that nothing was created (the task may become visible a moment later): look again
+		// over a short, bounded window before accepting "nothing of ours exists".
+		for i := 1; i < settleChecks && len(cand) == 0; i++ {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(settleDelay):
+			}
+			if docs, err = c.deviceTasks(ctx, deviceID); err != nil {
+				return err
+			}
+			for _, d := range docs {
+				if looksLikeOurs(d, names, since) {
+					cand = append(cand, d.ID)
+				}
+			}
+		}
+		if len(cand) > 1 {
+			return errors.New("nbi: several look-alike tasks, cannot attribute ours")
+		}
+		if len(cand) == 1 {
+			target = cand[0]
+		}
+	}
+	if target == "" {
+		// Nothing of ours was seen, but with no task id from the ACS that is not proof that nothing was created.
+		return ErrRefreshUnproven
+	}
+	if err := c.deleteTask(ctx, target); err != nil {
+		return err
+	}
+	after, err := c.deviceTasks(ctx, deviceID)
+	if err != nil {
+		return err
+	}
+	for _, d := range after {
+		if d.ID == target || looksLikeOurs(d, names, since) {
+			return errors.New("nbi: task still present after delete")
+		}
+	}
+	return nil
+}
+
+// settleChecks lists in total (the first plus settleChecks-1 more, settleDelay apart) before "no task of ours" is accepted. Variables so tests
+// can shrink the wait; production keeps ~4 s.
+var (
+	settleChecks = 3
+	settleDelay  = 2 * time.Second
+)
+
+const (
+	taskClockSkew   = 5 * time.Second
+	maxTaskListBody = 4 << 20
+)
+
+type taskDoc struct {
+	ID        string   `json:"_id"`
+	Name      string   `json:"name"`
+	Device    string   `json:"device"`
+	Names     []string `json:"parameterNames"`
+	Timestamp string   `json:"timestamp"`
+}
+
+func looksLikeOurs(d taskDoc, names []string, since time.Time) bool {
+	ts, err := time.Parse(time.RFC3339, d.Timestamp)
+	return err == nil && d.Name == "getParameterValues" && sameNames(d.Names, names) && !ts.Before(since.Add(-taskClockSkew))
+}
+
+// deviceTasks lists the tasks of ONE device (query sent to the ACS and re-checked here). A list too large to read in full is an error:
+// cleanup is never declared on a partial view.
+func (c *Client) deviceTasks(ctx context.Context, deviceID string) ([]taskDoc, error) {
+	q, _ := json.Marshal(map[string]string{"device": deviceID})
+	u := *c.base
+	u.Path = strings.TrimRight(u.Path, "/") + "/tasks"
+	u.RawQuery = url.Values{"query": {string(q)}}.Encode()
+	body, st, err := c.doLimit(ctx, http.MethodGet, u.String(), nil, maxTaskListBody)
+	if err != nil {
+		return nil, err
+	}
+	if st != http.StatusOK {
+		return nil, fmt.Errorf("nbi: list tasks status %d", st)
+	}
+	var docs []taskDoc
+	if err := json.Unmarshal(body, &docs); err != nil {
+		return nil, fmt.Errorf("nbi: decode tasks: %w", err)
+	}
+	out := docs[:0]
+	for _, d := range docs {
+		if d.Device == deviceID && taskIDRe.MatchString(d.ID) {
+			out = append(out, d)
+		}
+	}
+	return out, nil
+}
+
+func allAllowlisted(names []string) bool {
+	if len(names) == 0 {
+		return false
+	}
+	for _, n := range names {
+		if _, ok := allowlist[n]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func hasID(docs []taskDoc, id string) bool {
+	for _, d := range docs {
+		if d.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func sameNames(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	x, y := append([]string(nil), a...), append([]string(nil), b...)
+	sort.Strings(x)
+	sort.Strings(y)
+	for i := range x {
+		if x[i] != y[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func (c *Client) deleteTask(ctx context.Context, taskID string) error {
 	if !taskIDRe.MatchString(taskID) {
 		return errors.New("nbi: invalid task id")
@@ -220,6 +424,10 @@ func (c *Client) deleteTask(ctx context.Context, taskID string) error {
 
 // do is the single request path of the refresh feature: the method is one of three literals chosen by the callers above.
 func (c *Client) do(ctx context.Context, method, rawURL string, body []byte) ([]byte, int, error) {
+	return c.doLimit(ctx, method, rawURL, body, maxTaskBody)
+}
+
+func (c *Client) doLimit(ctx context.Context, method, rawURL string, body []byte, limit int64) ([]byte, int, error) {
 	var rd io.Reader
 	if body != nil {
 		rd = bytes.NewReader(body)
@@ -239,12 +447,12 @@ func (c *Client) do(ctx context.Context, method, rawURL string, body []byte) ([]
 		return nil, 0, err
 	}
 	defer resp.Body.Close()
-	b, err := io.ReadAll(io.LimitReader(resp.Body, maxTaskBody+1))
+	b, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return nil, resp.StatusCode, err
 	}
-	if len(b) > maxTaskBody {
-		return nil, resp.StatusCode, fmt.Errorf("nbi: response exceeds %d bytes", maxTaskBody)
+	if int64(len(b)) > limit {
+		return nil, resp.StatusCode, fmt.Errorf("nbi: response exceeds %d bytes", limit)
 	}
 	return b, resp.StatusCode, nil
 }

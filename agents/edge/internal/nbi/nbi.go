@@ -10,15 +10,17 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 )
 
 const maxBody = 16 << 20 // 16 MiB
 
 type Client struct {
-	base     *url.URL
-	http     *http.Client
-	authUser string
-	authPass string
+	refreshMu sync.Mutex // serialises RefreshParams: pre-flight check, POSTs and cleanup of one call never interleave with another call's
+	base      *url.URL
+	http      *http.Client
+	authUser  string
+	authPass  string
 }
 
 func New(base string, hc *http.Client, basicAuth string) (*Client, error) {

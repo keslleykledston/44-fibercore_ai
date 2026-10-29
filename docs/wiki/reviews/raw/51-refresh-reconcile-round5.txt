@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a188e2-3db4-7da3-9bfd-f9d5c7747289).
+[codex] Turn started (01a188e2-3df8-7573-acbe-414e8b066c2c).
+[codex] Assistant message captured: Vou comparar o branch com `main` em modo somente leitura e seguir os caminhos de reconciliaçã...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- agents/edge/internal/nbi/re...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- agents/edge/internal/nbi/re... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- agents/edge/internal/nbi/re...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- agents/edge/internal/nbi/re... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/nbi/refresh.go | sed -n '100,280p'; nl -ba agents/...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/nbi/refresh.go | sed -n '100,280p'; nl -ba agents/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a janela de reconciliação termina ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a janela de reconciliação termina sem provar ausência, mas o bloqueio expira após uma hora sem evidência de que uma tarefa tardia já não possa aparecer ou executar.
+
+Findings:
+- [high] Retenção de uma hora não é sustentada pelo limite de visibilidade do ACS (agents/edge/cmd/fibercore-edge/main.go:79-83)
+  Quando não há id nem candidata após as consultas, `cleanupTasks` retorna `ErrRefreshUnproven`; este ramo converte isso em retenção de apenas uma hora. A ADR reconhece que não há medição de latência máxima de visibilidade. Se a tarefa aparecer depois da janela de ~4 s e continuar pendente quando a retenção expirar, um novo refresh pode ser admitido enquanto a tarefa anterior ainda pode atingir o CPE. A janela limitada detecta algumas tarefas tardias, mas não demonstra que uma hora seja segura.
+  Recommendation: Mantenha o dispositivo retido até uma verificação operacional da ACS, ou estabeleça e documente um limite máximo de visibilidade/vida de tarefa com evidência da ACS antes de usar uma expiração automática.

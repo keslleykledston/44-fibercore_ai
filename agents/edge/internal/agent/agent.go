@@ -243,6 +243,8 @@ func refreshReason(err error) string {
 		return "hourly refresh budget exhausted"
 	case errors.Is(err, nbi.ErrRefreshUncleaned):
 		return "a pending task may remain on the ACS; operator check required"
+	case errors.Is(err, nbi.ErrRefreshPending):
+		return "a pending task already exists on the ACS; operator check required"
 	case errors.Is(err, nbi.ErrRefreshHeld):
 		return "device on hold after an unclean refresh"
 	case errors.Is(err, nbi.ErrRefreshNoReserve):
