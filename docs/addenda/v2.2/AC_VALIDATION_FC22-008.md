@@ -1,6 +1,6 @@
 # FC22-008 — Validação de AC-004 (frescor) e AC-009 (NOC) contra o código
 
-Data: 2026-10-29 · Escopo: **só validar e documentar** o que já existe (ADR-0018, `edge_silent`, `incident_onus`); nenhum comportamento foi alterado. Cada linha aponta um teste que roda na suíte (`pytest -q`, 239 passed no commit desta validação).
+Data: 2026-10-29 · Escopo: **só validar e documentar** o que já existe (ADR-0018, `edge_silent`, `incident_onus`); nenhum comportamento foi alterado. Cada linha aponta um teste que roda na suíte (`pytest -q`, 240 passed no commit desta validação).
 
 ## AC-004 — Edge offline ⇒ stale/unknown; nunca "ONU offline generalizada"
 | Caso | Teste | O que prova |
@@ -8,7 +8,9 @@ Data: 2026-10-29 · Escopo: **só validar e documentar** o que já existe (ADR-0
 | Silêncio do Edge não vira ONU offline | `test_inventory.py::test_silence_means_stale_not_offline` | leitura de ONU/OLT sem coleta recente é `stale`, com idade; o status gravado não muda |
 | Heartbeat velho lê offline do **Edge**, não das ONUs | `test_edge.py::test_stale_heartbeat_reads_offline_not_online` | o estado "offline" é do coletor |
 | Incidente aberto + Edge silencioso | `test_noc.py::test_silent_edge_flags_incidents_and_never_fabricates_offline` | incidente é marcado `edge_silent` (suprimido) e o Edge aparece como alerta; nenhuma ONU é inventada offline |
-| Snapshot velho não conta como estado atual | `test_noc.py::test_stale_snapshot_data_does_not_count_toward_current_state` | dado velho atualiza histórico, não abre/fecha incidente |
+| Snapshot velho (>15 min) nunca ABRE incidente | `test_noc.py::test_backlogged_old_snapshots_never_open_an_incident`, `test_a_drop_that_already_ended_in_the_backlog_does_not_open_either`, `test_ongoing_outage_discovered_after_a_backlog_opens_on_the_fresh_snapshot` | backlog atualiza o histórico; só o snapshot fresco avalia |
+| Snapshot velho e saudável nunca FECHA incidente aberto | `test_noc.py::test_an_old_all_healthy_snapshot_never_resolves_an_open_incident` | **teste novo** (a primeira versão desta matriz citou, por engano, `test_stale_snapshot_data_does_not_count_toward_current_state`, que só prova que amostra PARCIAL não resolve; Codex apontou). Mutante sem o gate `EVAL_FRESH_FOR` reprova |
+| Amostra parcial não fecha incidente | `test_noc.py::test_stale_snapshot_data_does_not_count_toward_current_state` | evidência insuficiente (2 de 10 ONUs reportadas) não resolve |
 | Silêncio nunca expira nem resolve incidente | `test_noc.py::test_silence_never_expires_an_incident` | ausência de dado não é evidência de recuperação |
 | Queda ocorrida durante o silêncio ainda é detectada ao voltar | `test_noc.py::test_outage_while_the_edge_was_silent_is_still_detected` | janela de 6 h (ADR-0018) |
 | Contagens da PON carregam a idade | `test_onu360.py::test_pon_counts_carry_their_age_so_stale_is_not_shown_as_current` | "13 online de 15" vem com a idade, não como estado atual |

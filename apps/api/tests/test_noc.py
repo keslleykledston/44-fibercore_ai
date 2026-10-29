@@ -378,3 +378,23 @@ def test_naive_opened_observed_at_cannot_break_the_join_path(client, seed, inv, 
     # two more ONUs drop: the join comparison must not mix naive and aware datetimes
     assert push(client, inv, "OLT-X5", onus(12, "los", "X5A"), observed=_now(-480)).status_code == 202
     assert mine(client, h, "OLT-X5")[0]["status"] == "open"
+
+
+def test_an_old_all_healthy_snapshot_never_resolves_an_open_incident(client, seed, inv, migrated):
+    """AC-004: a late (store-and-forward) snapshot beyond EVAL_FRESH_FOR is history. It updates ONU state but must not close an event
+    that was open on fresh data. Time is aged in the database so the late snapshot is newer than the stored state yet older than 15 min."""
+    h = hdr(client, "alice", seed, "A")
+    push(client, inv, "OLT-N9", up("N9A", 10), observed=_now(-600))
+    push(client, inv, "OLT-N9", onus(10, "los", "N9A"), observed=_now(-540))
+    assert mine(client, h, "OLT-N9")[0]["status"] == "open"
+    with migrated.begin() as c:
+        c.execute(text("UPDATE onus SET observed_at = observed_at - interval '2 hours', down_since = down_since - interval '2 hours', "
+                       "last_online_at = last_online_at - interval '2 hours' WHERE olt_id = (SELECT id FROM olts WHERE name = 'OLT-N9')"))
+        c.execute(text("UPDATE pon_ports SET observed_at = observed_at - interval '2 hours' WHERE olt_id = (SELECT id FROM olts WHERE name = 'OLT-N9')"))
+        c.execute(text("UPDATE olts SET observed_at = observed_at - interval '2 hours' WHERE name = 'OLT-N9'"))
+    assert push(client, inv, "OLT-N9", up("N9A", 10), observed=_now(-1800)).status_code == 202   # 30 min old: beyond the 15 min freshness
+    assert mine(client, h, "OLT-N9")[0]["status"] == "open"
+    with migrated.begin() as c:   # recorded as history: the ONUs are stored as online, just not presented as the present state
+        assert c.execute(text("SELECT count(*) FROM onus WHERE olt_id = (SELECT id FROM olts WHERE name = 'OLT-N9') AND status = 'online'")).scalar() == 10
+    push(client, inv, "OLT-N9", up("N9A", 10), observed=_now(-5))                                  # a FRESH healthy snapshot does resolve
+    assert mine(client, h, "OLT-N9")[0]["status"] == "resolved"

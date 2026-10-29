@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18651-6784-79c0-894a-7f1989a2ec8c).
+[codex] Turn started (01a18651-6a80-7893-9b8a-207b35aa2ae6).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir cada referência do documento até o teste ou código...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/tests/test_invento...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/tests/test_invento... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'def test_(silence_means_stale_not_offline|stale_heartbeat_reads_offline...
+[codex] Command completed: /bin/bash -lc "rg -n 'def test_(silence_means_stale_not_offline|stale_heartbeat_reads_offline... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,260p' apps/api/tests/test_noc.py; sed -n '330,370p' apps/api/tests/t...
+[codex] Command completed: /bin/bash -lc "sed -n '1,260p' apps/api/tests/test_noc.py; sed -n '330,370p' apps/api/tests/t... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/addenda/v2.2/AC_VALIDATION_FC22-008.md; nl -ba apps/api/tests/test...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/addenda/v2.2/AC_VALIDATION_FC22-008.md; nl -ba apps/api/tests/test... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '35,75p' apps/api/app/api/noc.py; nl -ba apps/api/tests/test_noc.py | s...
+[codex] Command completed: /bin/bash -lc "sed -n '35,75p' apps/api/app/api/noc.py; nl -ba apps/api/tests/test_noc.py | s... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: a validação atribui ao teste de snaps...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: a validação atribui ao teste de snapshot stale uma cobertura que ele não exerce; esse teste só verifica que uma amostra parcial não resolve um incidente.
+
+Findings:
+- [medium] Teste citado não cobre snapshot stale (docs/addenda/v2.2/AC_VALIDATION_FC22-008.md:11)
+  A linha descreve que dado velho não abre nem fecha incidente, mas `test_stale_snapshot_data_does_not_count_toward_current_state` envia snapshots observados há 8–10 minutos, dentro do limite de frescor de 15 minutos (`EVAL_FRESH_FOR`). O incidente permanece aberto porque a amostra informa apenas 2 ONUs saudáveis e as outras 8 não fazem parte dela; isso não testa o caminho de snapshot antigo ignorado. Assim, a matriz deixa sem evidência automatizada justamente a afirmação sobre snapshots stale e pode levar a confiar numa regressão desse comportamento. Use timestamps além do limite de 15 minutos e afirme que essa ingestão não altera incidentes, ou restrinja a descrição ao comportamento de amostra parcial que o teste prova.
+  Recommendation: Ajustar o teste para enviar um snapshot com `observed_at` anterior a `EVAL_FRESH_FOR` e verificar explicitamente que não abre nem resolve incidentes; atualizar a linha da matriz para refletir essa cobertura.
