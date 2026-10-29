@@ -12,6 +12,6 @@ export type Onu360 = {
   last_online_at: string | null; down_since: string | null; source: string;
   olt: { id: string; name: string; vendor: string; model: string | null; firmware: string | null; support_level: string; observed_at: string | null; freshness: string };
   pon: { path: string | null; onus: number; online: number } | null;
-  incident: { id: string; kind: string; suspected_cause: string; opened_at: string } | null;
-  customer: { association: "approved" | "suggested" | "none"; pending_suggestions: number; display_name?: string; document_last4?: string | null; contract_status?: string } | null;
+  incident: { id: string; kind: string; suspected_cause: string; opened_at: string } | null; incident_hidden: boolean;
 };
+export type OnuCustomer = { association: "approved" | "suggested" | "none"; pending_suggestions: number; display_name?: string; document_last4?: string | null; contract_status?: string };

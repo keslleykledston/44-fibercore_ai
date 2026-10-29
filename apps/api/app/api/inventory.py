@@ -309,8 +309,9 @@ def onu_360(
     p: Principal = Depends(require("inventory:read")),
     conn: Connection = TENANT_CONN,
 ) -> dict:
-    """ONU 360: everything we know about ONE ONU, with where each piece came from. Read-only. The subscriber section is personal
-    data: it exists only for roles with customers:read and every view is audited; the other roles get `customer: null`."""
+    """ONU 360: everything the inventory knows about ONE ONU, with where each piece came from. Read-only. Personal data is NOT here:
+    the subscriber lives behind its own route (customers:read, audited). The open incident needs incidents:read; without it the field
+    is absent and `incident_hidden` is true (never a misleading "no incident")."""
     u = conn.execute(
         text(
             "SELECT u.id, u.olt_id, u.pon_id, u.serial, u.status, u.rx_dbm, u.observed_at, u.last_online_at, u.down_since, "
@@ -329,6 +330,7 @@ def onu_360(
             {"p": u.pon_id},
         ).one()
         pon = {"path": u.pon_path, "onus": t.total, "online": t.online}
+    can_incidents = p.can("incidents:read")
     inc = conn.execute(
         text(
             "SELECT i.id, i.kind, i.suspected_cause, i.opened_at FROM incident_onus io JOIN incidents i "
@@ -336,24 +338,7 @@ def onu_360(
             "WHERE io.onu_id = :o AND i.status = 'open' ORDER BY i.opened_at DESC LIMIT 1"
         ),
         {"o": onu_id},
-    ).first()
-    customer = None
-    if p.can("customers:read"):
-        c = conn.execute(
-            text(
-                "SELECT a.id, a.score, c.display_name, c.document_last4, c.contract_status FROM associations a "
-                "JOIN customers c ON c.id = a.customer_id AND c.tenant_id = a.tenant_id "
-                "WHERE a.onu_id = :o AND a.status = 'approved'"
-            ),
-            {"o": onu_id},
-        ).first()
-        pending = conn.execute(
-            text("SELECT count(*) FROM associations WHERE onu_id = :o AND status = 'suggested'"), {"o": onu_id}
-        ).scalar_one()
-        customer = {"association": ("approved" if c else ("suggested" if pending else "none")), "pending_suggestions": pending}
-        if c:
-            customer.update(display_name=c.display_name, document_last4=c.document_last4, contract_status=c.contract_status)
-        audit(conn, p, "onu360.view", "onu", str(onu_id), {"customer_section": True})  # access to personal data is logged
+    ).first() if can_incidents else None
     return {
         "id": str(u.id), "serial": u.serial, "status": u.status, "rx_dbm": float(u.rx_dbm) if u.rx_dbm is not None else None,
         "observed_at": u.observed_at.isoformat() if u.observed_at else None, "freshness": _fresh(u.observed_at),
@@ -365,9 +350,33 @@ def onu_360(
         "pon": pon,
         "incident": ({"id": str(inc.id), "kind": inc.kind, "suspected_cause": inc.suspected_cause,
                       "opened_at": inc.opened_at.isoformat()} if inc else None),
-        "customer": customer,
+        "incident_hidden": not can_incidents,
         "source": "olt_snapshot",  # where status/rx came from (CLI/SNMP read by the Edge); nothing here is written to the network
     }
+
+
+@router.get("/v1/onus/{onu_id}/customer")
+def onu_customer(
+    onu_id: UUID,
+    p: Principal = Depends(require("customers:read")),
+    conn: Connection = TENANT_CONN,
+) -> dict:
+    """Subscriber linked to an ONU (personal data): customers:read only, every view audited."""
+    if conn.execute(text("SELECT 1 FROM onus WHERE id = :i"), {"i": onu_id}).first() is None:
+        raise HTTPException(404, "onu not found")
+    c = conn.execute(
+        text(
+            "SELECT c.display_name, c.document_last4, c.contract_status FROM associations a "
+            "JOIN customers c ON c.id = a.customer_id AND c.tenant_id = a.tenant_id WHERE a.onu_id = :o AND a.status = 'approved'"
+        ),
+        {"o": onu_id},
+    ).first()
+    pending = conn.execute(text("SELECT count(*) FROM associations WHERE onu_id = :o AND status = 'suggested'"), {"o": onu_id}).scalar_one()
+    out: dict = {"association": "approved" if c else ("suggested" if pending else "none"), "pending_suggestions": pending}
+    if c:
+        out.update(display_name=c.display_name, document_last4=c.document_last4, contract_status=c.contract_status)
+    audit(conn, p, "onu360.customer.view", "onu", str(onu_id), {})  # access to personal data is logged
+    return out
 
 
 @router.get("/v1/cpes")

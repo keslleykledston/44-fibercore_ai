@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { DataFreshness, ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
-import type { Onu360 } from "@/lib/types";
+import type { Onu360, OnuCustomer } from "@/lib/types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const cause: Record<string, string> = { fiber_or_los: "Suspeita: perda de sinal / fibra", power: "Suspeita: falta de energia", unknown: "Causa não determinada" };
@@ -20,10 +20,12 @@ function Row({ k, children }: { k: string; children: React.ReactNode }) {
 export default async function Onu360Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!UUID.test(id)) notFound();
-  const r = await apiSafe<Onu360>(`/v1/onus/${id}`);
+  // O assinante é dado pessoal: rota própria (customers:read, auditada). 403 = papel sem acesso => o bloco simplesmente não aparece.
+  const [r, cu] = await Promise.all([apiSafe<Onu360>(`/v1/onus/${id}`), apiSafe<OnuCustomer>(`/v1/onus/${id}/customer`)]);
   if (r.status === 404) notFound();
   if (r.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver o inventário." /></AppShell>;
   const o = r.data;
+  const customer = cu.status === 200 ? cu.data : null;
   if (!o) return <AppShell active="/rede" user="1"><ErrorState title="Falha ao carregar a ONU" hint="Tente novamente em instantes." /></AppShell>;
   return (
     <AppShell active="/rede" user="1">
@@ -58,18 +60,19 @@ export default async function Onu360Page({ params }: { params: Promise<{ id: str
               <p className="mt-1 text-muted">{cause[o.incident.suspected_cause] ?? cause.unknown} · aberto em {when(o.incident.opened_at)}</p>
               <Link href="/noc" className="mt-3 inline-flex min-h-touch items-center rounded-btn text-accent hover:underline">Ver no NOC</Link>
             </div>
-          ) : <p className="text-sm text-muted">Nenhum incidente aberto envolve esta ONU.</p>}
+          ) : o.incident_hidden ? <p className="text-sm text-muted">Seu papel não permite ver incidentes.</p>
+            : <p className="text-sm text-muted">Nenhum incidente aberto envolve esta ONU.</p>}
         </Card>
-        {o.customer && (
+        {customer && (
           <Card title="Assinante" testid="onu360-customer">
-            {o.customer.association === "approved" ? (
+            {customer.association === "approved" ? (
               <dl>
-                <Row k="Nome">{o.customer.display_name}</Row>
-                {o.customer.document_last4 && <Row k="Documento">final {o.customer.document_last4}</Row>}
-                <Row k="Situação">{contract[o.customer.contract_status ?? "unknown"] ?? contract.unknown}</Row>
+                <Row k="Nome">{customer.display_name}</Row>
+                {customer.document_last4 && <Row k="Documento">final {customer.document_last4}</Row>}
+                <Row k="Situação">{contract[customer.contract_status ?? "unknown"] ?? contract.unknown}</Row>
               </dl>
-            ) : o.customer.association === "suggested" ? (
-              <p className="text-sm">Há {o.customer.pending_suggestions} sugestão(ões) de vínculo aguardando revisão. <Link href="/assinantes" className="text-accent underline underline-offset-2">Revisar em Assinantes</Link></p>
+            ) : customer.association === "suggested" ? (
+              <p className="text-sm">Há {customer.pending_suggestions} sugestão(ões) de vínculo aguardando revisão. <Link href="/assinantes" className="text-accent underline underline-offset-2">Revisar em Assinantes</Link></p>
             ) : <p className="text-sm text-muted">Nenhum assinante vinculado a esta ONU.</p>}
             <p className="mt-3 text-xs text-muted">O acesso a dados de assinante fica registrado na auditoria.</p>
           </Card>

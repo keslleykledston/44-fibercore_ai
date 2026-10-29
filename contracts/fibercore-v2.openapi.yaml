@@ -283,11 +283,23 @@ paths:
     get:
       tags: [Network]
       operationId: getOnu360
-      summary: ONU 360 — estado, OLT/PON, incidente aberto e (só com customers:read, auditado) o assinante vinculado
+      summary: ONU 360 — estado, OLT/PON e incidente aberto (incidents:read; sem a permissão, incident_hidden=true). Nunca traz dados pessoais
       parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: onu_id, in: path, required: true, schema: {type: string, format: uuid}}]
       responses:
         '200':
-          description: "{id, serial, status, rx_dbm, freshness, last_online_at, down_since, olt{}, pon{path,onus,online}, incident{}|null, customer{}|null, source}"
+          description: "{id, serial, status, rx_dbm, freshness, last_online_at, down_since, olt{}, pon{path,onus,online}, incident{}|null, incident_hidden, source}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: ONU inexistente ou de outro provedor}
+  /onus/{onu_id}/customer:
+    get:
+      tags: [Network]
+      operationId: getOnuCustomer
+      summary: Assinante vinculado à ONU (dado pessoal) — exige customers:read e toda visualização é auditada
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: onu_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200':
+          description: "{association: approved|suggested|none, pending_suggestions, display_name?, document_last4?, contract_status?}"
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {description: ONU inexistente ou de outro provedor}
