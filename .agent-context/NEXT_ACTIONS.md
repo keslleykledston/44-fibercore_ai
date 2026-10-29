@@ -58,3 +58,6 @@
 - Ler `docs/addenda/v2.2/GAP_ANALYSIS.md` antes de qualquer FC22. PR 34 = planejamento. Próximo: PR 35 = FC22-002 fatia mínima (tabela `device_capabilities`, `GET /v1/devices/{id}/capabilities`, bloco "Capacidades" na ONU 360, how-to + capturas, Codex). Depois S1: 003, 004 (vínculo ONU↔CPE, ADR-0021), 005 (Lovable em lote, flags por tenant ADR-0023).
 - Não declarar feito sem código + teste + captura real + how-to + Codex. Scores só com dado real (ADR-0022).
 - v2.2 PR 35 (FC22-002 mínimo) implementado; migração 0015 aplicada no LAB (2026-10-29). Próximo: FC22-003 (envelope source/quality), tenant flags (ADR-0023), 004.
+- v2.2 PR 36 (FC22-003 + flags) e PR 37 (FC22-004: vínculo ONU↔CPE por evidência + Customer Context) em `main`; LAB em Alembic 0017 (2026-10-29), flags `onu_cpe_links`/`customer_context`/`subscriber_360` DESLIGADAS no LAB (padrão). Próximo: **PR 38 = FC22-005 Subscriber 360** (UM pedido em lote ao Lovable com UX_HANDOFF.md, sem segredos; mesma rota ONU 360; abas só onde houver suporte; flag `subscriber_360`; capturas 1440×900/390×844; how-to; Codex).
+- Decisões pendentes do responsável: TTL do dado de ERP = 7 dias (suposição); ligar `onu_cpe_links`/`customer_context` no LAB (`feature-set`, owner CLI) quando houver CPE real coletado (Edge × NBI ainda não roda de verdade).
+

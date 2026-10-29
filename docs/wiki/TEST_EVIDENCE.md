@@ -109,4 +109,5 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - Codex round 4: `pending_suggestions` é o total real (itens exibidos limitados a 10 + `has_more_suggestions`; a UI avisa); mutante que volta a contar só os exibidos reprova. pytest **226 passed**.
 - Achado de isolamento nos testes: outros módulos deixam CPEs/ONUs de mesmo serial no tenant compartilhado; os testes novos filtram por prefixo `CTX-`.
 - NOT_RUN: carga/p95; ERP real (TTL de 7 dias é suposição); NBI real (ver KNOWN_ISSUES).
+- Deploy no LAB (2026-10-29, PR 37): backup verificado antes; Alembic 0017; `onu_cpe_links` com RLS forçada, 0 linhas, app com INSERT/SELECT (+ UPDATE só em 3 colunas); prodcheck sem issues. Flags desligadas no LAB; o fluxo ligado só foi exercitado no E2E sintético e no pytest.
 
