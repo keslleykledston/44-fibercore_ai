@@ -18,14 +18,15 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "isp_admin": frozenset({
         "customers:read", "customers:import", "associations:review", "incidents:read", "incidents:ack",
         "jobs:read", "jobs:request", "jobs:approve", "inventory:read", "tenant:read", "audit:read", "members:read", "edge:read",
-        "members:mfa_reset",
+        "members:mfa_reset", "diagnostics:run",
     }),
     "engineer": frozenset({
         "customers:read", "associations:review", "incidents:read", "incidents:ack", "jobs:read", "jobs:request",
-        "inventory:read", "tenant:read", "edge:read",
+        "inventory:read", "tenant:read", "edge:read", "diagnostics:run",
     }),
     "noc_n2": frozenset({
         "customers:read", "incidents:read", "incidents:ack", "jobs:read", "jobs:request", "inventory:read", "tenant:read", "edge:read",
+        "diagnostics:run",
     }),
     "noc_n1": frozenset({"tenant:read", "inventory:read", "incidents:read"}),
     "support": frozenset({"tenant:read", "inventory:read", "customers:read"}),

@@ -97,7 +97,7 @@ Fonte: `docs/addenda/v2.2/` (pacote intacto). Análise: `docs/addenda/v2.2/GAP_A
 | FC22-003 | P0 | [~] envelope `provenance{source,observed_at,quality}` na ONU 360 (PR 36); falta nas demais respostas/telas | S1 | 001 |
 | FC22-004 | P0 | [x] PR 37: `/v1/customers/{id}/context` + vínculo ONU↔CPE por evidência com confirmação humana (flags `onu_cpe_links`/`customer_context`, desligadas por padrão); falta: regras de vínculo além de serial igual | S1 | 002, 003 |
 | FC22-005 | P0 | [x] PR 38: `/assinantes/[id]` (entrada por cliente, abas Conexão/Óptica/Roteador/Cliente/Ações só com dado, flag `subscriber_360`); falta: busca por cliente/contrato no ⌘K, Wi-Fi e Histórico (sem fonte homologada) | S1 | 004 |
-| FC22-006 | P0 | [ ] parcial: regra `pon_mass_outage` fixa; falta registro versionado/runs | S2 | 002–004 |
+| FC22-006 | P0 | [x] PR 39: R-D001 v1 extraída (função pura; o correlator a usa sem mudar comportamento), registro versionado, `diagnostic_runs` append-only, `POST /diagnostics/runs` somente-leitura + replay (flag `diagnostic_engine`). Faltam: R-D002..004 (dependem de dados Wi-Fi/WAN/sessão ACS ainda não coletados), UI (FC22-007) | S2 | 002–004 |
 | FC22-007 | P0 | [ ] falta | S2 | 006 |
 | FC22-008 | P0 | [x] existe (ADR-0018, `edge_silent`); validar contra AC-004/009 | S2 | — |
 | FC22-009 | P0 | [ ] parcial: fila em `/noc`; falta prioridade/impacto | S2 | 008, 004 |

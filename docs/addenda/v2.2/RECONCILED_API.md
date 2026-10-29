@@ -15,7 +15,8 @@ Os contratos listam caminhos relativos ao servidor público **`/api/v1`**. O cor
 | `GET /customers/{id}/context` | `GET /customers/{customer_id}/context` | **implemented** (FC22-004, PR 37) |
 | — (novo, ADR-0021) | `POST /onu-cpe-links/suggest`, `GET /onu-cpe-links`, `POST /onu-cpe-links/{link_id}/confirm\|reject` | **implemented** (FC22-004, PR 37) |
 | `GET /devices/{id}/capabilities` | **descartado** (não há recurso `devices`) → `GET /cpes/{cpeId}/capabilities` (**documentada sem handler; implementada no PR 35**) + `GET /olts/{oltId}/capabilities` | **implemented** (PR 35) |
-| `POST /diagnostics/runs` (200) | `POST /diagnostics/runs` (201 + `run_id`) | planned (FC22-006) |
+| `POST /diagnostics/runs` (200) | `POST /diagnostics/runs` (201 + `run_id`) | **implemented** (FC22-006, PR 39) |
+| — (novo) | `GET /diagnostics/rules`, `GET /diagnostics/runs/{run_id}` | **implemented** (FC22-006, PR 39) |
 | `GET /network/topology` | idem | planned (FC22-010) |
 | `GET /qoe/{id}` | `GET /qoe/{subject_id}` (`score: null` + `insufficient_data` até haver dado) | planned (FC22-011/012) |
 | `GET /workflow-definitions` | idem (catálogo; execução = jobs) | planned (FC22-014) |

@@ -17,12 +17,12 @@ from sqlalchemy import Connection, text
 
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import EDGE_OFFLINE_AFTER, audit
+from app.core import diagnostics
+from app.core.diagnostics import MIN_DROPPED, OPEN_RATIO  # noqa: F401  (the thresholds live with the rule; re-exported for callers/tests)
 from app.events import outbox
 
 router = APIRouter()
 
-MIN_DROPPED = 5        # fewer than this many simultaneous drops is not a PON event (one customer down is not a PON event)
-OPEN_RATIO = 0.8       # share of the PON's ACTIVE population (online + recently dropped) that dropped
 RESOLVE_RATIO = 0.5    # hysteresis: prevents flapping around the threshold
 # An ONU counts as "recently dropped" if it went online->down within this lookback. It is long enough for an Edge that
 # reconnects after a silence/backlog to still show an outage that began while it was away; older drops are chronic.
@@ -74,10 +74,14 @@ def evaluate_pons(
             text("SELECT id, opened_at, evidence FROM incidents WHERE dedupe_key = :k AND status = 'open' FOR UPDATE"), {"k": key}
         ).first()
         if open_row is None:
-            population = len(online) + len(fresh)
-            ratio = len(fresh) / population if population else 0.0
-            if len(fresh) >= MIN_DROPPED and ratio >= OPEN_RATIO:
-                _open_incident(conn, tenant_id, olt_id, pon_id, key, path, len(onus), fresh, len(down) - len(fresh), ratio, observed_at)
+            # the opening decision IS rule R-D001 v1 (app/core/diagnostics.py), extracted without changing it
+            res = diagnostics.r_d001_v1({
+                "pon_path": path, "observed": len(onus), "online": len(online), "recent_drops": len(fresh),
+                "los": sum(1 for r in fresh if r.status == "los"), "dying_gasp": sum(1 for r in fresh if r.status == "dying_gasp"),
+                "chronic": len(down) - len(fresh), "fresh_data": True})  # freshness was already enforced above (EVAL_FRESH_FOR)
+            if res.matched:
+                _open_incident(conn, tenant_id, olt_id, pon_id, key, path, len(onus), fresh, len(down) - len(fresh),
+                               res.finding["evidence"]["ratio"], observed_at)
             continue
         # open incident: judge the ONUs it covers (plus ONUs that dropped with it afterwards)
         members = {r.onu_id for r in conn.execute(
@@ -147,7 +151,7 @@ def _open_incident(conn: Connection, tenant_id: UUID, olt_id: UUID, pon_id: UUID
                    fresh: list, chronic: int, ratio: float, observed_at: datetime) -> None:
     los = sum(1 for r in fresh if r.status == "los")
     dg = sum(1 for r in fresh if r.status == "dying_gasp")
-    cause = "fiber_or_los" if los >= len(fresh) / 2 else ("power" if dg >= len(fresh) / 2 else "unknown")
+    cause = diagnostics.suspected_cause(los, dg, len(fresh))
     evidence = {"pon_path": path, "onus_observed": observed, "onus_down": len(fresh), "los": los, "dying_gasp": dg,
                 "ratio": round(ratio, 3), "members": len(fresh), "chronic_offline": chronic,
                 "opened_observed_at": observed_at.isoformat(), "evidence_at": datetime.now(UTC).isoformat()}

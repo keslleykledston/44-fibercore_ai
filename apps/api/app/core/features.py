@@ -16,6 +16,7 @@ FEATURES: dict[str, bool] = {
     "onu_cpe_links": False,        # FC22-004 / ADR-0021
     "customer_context": False,     # FC22-004
     "subscriber_360": False,       # FC22-005
+    "diagnostic_engine": False,    # FC22-006
 }
 
 

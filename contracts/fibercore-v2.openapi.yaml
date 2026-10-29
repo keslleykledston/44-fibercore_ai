@@ -16,6 +16,8 @@ tags:
   - name: Copilot
   - name: Edge
   - name: NOC
+  - name: Inventory
+  - name: Diagnostics
 security:
   - bearerAuth: []
 paths:
@@ -432,6 +434,44 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {description: Cliente inexistente ou de outro provedor}
+  /diagnostics/rules:
+    get:
+      tags: [Diagnostics]
+      operationId: listDiagnosticRules
+      summary: Regras determinísticas registradas (id, versão, título, descrição). Versões antigas permanecem; mudança de comportamento é versão nova. incidents:read + flag diagnostic_engine (FC22-006)
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      responses:
+        '200': {description: "[{id, version, title, description, subject, read_only}]"}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /diagnostics/runs:
+    post:
+      tags: [Diagnostics]
+      operationId: createDiagnosticRun
+      summary: Executa uma regra SOMENTE-LEITURA sobre o estado já coletado (sem tocar em equipamento, sem abrir incidente) e persiste a execução (regra+versão, entradas exatas, achados). Achados `observed|inferred|unknown`; `inferred` exige confirmação humana; dado velho = `unknown`. diagnostics:run + flag diagnostic_engine; até 200 PONs por execução (`truncated`)
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false, required: [rule_id], properties: {rule_id: {type: string, pattern: '^R-D[0-9]{3}$'}, rule_version: {type: integer, minimum: 1}, olt_id: {type: string, format: uuid}, pon_id: {type: string, format: uuid}}}
+      responses:
+        '201': {description: "{run_id, rule_id, rule_version, scope, truncated, findings[{finding_id, status, hypothesis, evidence, evidence_refs, requires_human_confirmation, next_read_action}]}"}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Regra ou versão inexistente}
+        '422': {description: Corpo inválido}
+  /diagnostics/runs/{run_id}:
+    get:
+      tags: [Diagnostics]
+      operationId: getDiagnosticRun
+      summary: Execução gravada + `reproducible` (reavaliar as ENTRADAS gravadas com a MESMA versão da regra dá os mesmos achados). incidents:read + flag diagnostic_engine
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: run_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Execução}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Execução inexistente ou de outro provedor}
   /cpes/{cpeId}/capabilities:
     get:
       tags: [CPE]

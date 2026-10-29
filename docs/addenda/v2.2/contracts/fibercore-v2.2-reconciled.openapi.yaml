@@ -93,10 +93,28 @@ paths:
     post:
       operationId: createDiagnosticRun
       x-fc22-id: FC22-006
-      x-status: planned
+      x-status: implemented
       summary: Executa regras determinísticas versionadas (sem mutação de equipamento) e persiste a execução
       responses:
         '201': {description: "{run_id, rule_version, findings[{status observed|inferred|unknown, evidence_refs}]}"}
+  /diagnostics/rules:
+    get:
+      operationId: listDiagnosticRules
+      x-fc22-id: FC22-006
+      x-status: implemented
+      summary: Registro de regras versionadas (novo; não constava da proposta)
+      responses:
+        '200': {description: "[Rule]"}
+  /diagnostics/runs/{run_id}:
+    get:
+      operationId: getDiagnosticRun
+      x-fc22-id: FC22-006
+      x-status: implemented
+      summary: Execução gravada com `reproducible` (replay das entradas gravadas)
+      parameters: [{in: path, name: run_id, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Execução}
+        '404': {description: Inexistente ou de outro provedor}
   /network/topology:
     get:
       operationId: getNetworkTopology
