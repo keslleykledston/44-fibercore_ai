@@ -13,7 +13,7 @@ const UP = ["online"], DOWN = ["offline", "los", "dying_gasp"];
 export const onuState = (status: string): "up" | "down" | "unrecognised" => (UP.includes(status) ? "up" : DOWN.includes(status) ? "down" : "unrecognised");
 const stateText = (status: string) => ({ up: "online", down: "fora do ar", unrecognised: "em estado não reconhecido" })[onuState(status)];
 const trustOf = (p: Provenance | null): Trust => (p && p.quality === "fresh" ? "confirmado" : "indisponivel");
-const why = (p: Provenance | null) => (!p ? "sem coleta" : p.quality === "stale" ? "dado defasado" : p.quality === "unknown" ? "sem coleta" : "");
+const why = (p: Provenance | null) => (!p ? "sem coleta" : p.quality === "stale" ? "dado defasado" : p.quality === "conflict" ? "fontes divergentes" : p.quality === "unknown" ? "sem coleta" : "");
 
 export type RunState = { finding: DiagnosticFinding | null; denied: boolean; failed: boolean };
 
@@ -30,10 +30,11 @@ export function buildSteps(ctx: CustomerContext, onu: CustomerOnu | undefined, r
   }
   const s2: Step = { id: 2, title: "ONU aprovada", trust: "confirmado", provenance: null, summary: "Há uma ONU aprovada por uma pessoa para este cliente.",
     facts: [["Serial", onu.serial], ["OLT · PON", `${onu.olt}${onu.pon_path ? ` · ${onu.pon_path}` : ""}`]], action: { kind: "link", label: "Abrir a ONU 360", href: `/rede/onu/${onu.id}` } };
-  const t3: Trust = onuState(onu.status) === "unrecognised" ? "indisponivel" : trustOf(onu.provenance);
+  const noState = onuState(onu.status) === "unrecognised" || onu.provenance.quality === "conflict";  // nothing is asserted about the state
+  const t3: Trust = noState ? "indisponivel" : trustOf(onu.provenance);
   const s3: Step = { id: 3, title: "Estado e óptica da ONU", trust: t3, provenance: onu.provenance,
-    summary: onuState(onu.status) === "unrecognised" ? "A OLT não informou um estado reconhecido para esta ONU: nada é afirmado." : t3 === "confirmado" ? `ONU ${stateText(onu.status)} na última leitura da OLT. Rx ausente não comprova a causa da queda.` : `Último estado conhecido (${why(onu.provenance)}): ${stateText(onu.status)}. A idade do dado não indica que a ONU esteja offline.`,
-    facts: [["Status", onu.status], ["Rx", onu.rx_dbm !== null ? `${onu.rx_dbm} dBm` : "—"]], action: { kind: "link", label: "Abrir a ONU 360", href: `/rede/onu/${onu.id}` } };
+    summary: onu.provenance.quality === "conflict" ? "As fontes divergem sobre o estado desta ONU: nada é afirmado até serem conciliadas." : onuState(onu.status) === "unrecognised" ? "A OLT não informou um estado reconhecido para esta ONU: nada é afirmado." : t3 === "confirmado" ? `ONU ${stateText(onu.status)} na última leitura da OLT. Rx ausente não comprova a causa da queda.` : `Último estado conhecido (${why(onu.provenance)}): ${stateText(onu.status)}. A idade do dado não indica que a ONU esteja offline.`,
+    facts: noState ? [] : [["Status", onu.status], ["Rx", onu.rx_dbm !== null ? `${onu.rx_dbm} dBm` : "—"]], action: { kind: "link", label: "Abrir a ONU 360", href: `/rede/onu/${onu.id}` } };
   const f = run.finding;
   const s4: Step = { id: 4, title: "Padrão coletivo na PON (R-D001)", provenance: null,
     trust: !f ? "indisponivel" : f.status === "inferred" ? "hipotese" : f.status === "observed" ? "confirmado" : "indisponivel",
