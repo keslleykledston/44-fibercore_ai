@@ -24,5 +24,6 @@
 | feat/39-diagnostic-rule-engine (PR 39, FC22-006) | 1 | approve | (bruto em `raw/39-*`) sem achados; a extração é coberta por teste de propriedade (2000 casos) e pelos 29 testes do NOC sem alteração |
 | feat/40-guided-troubleshooting (PR 40, FC22-007) | 5 | approve | (brutos em `raw/40-*`) estado de ONU desconhecido virando 'fora do ar'; ticket com documento e sintoma como fato; proveniência em conflito afirmando estado; execução antiga/de outra PON aceita como atual (agora por `pon_id` estável e ≤ 15 min) |
 | feat/41-ac-validation (PR 41, FC22-008) | 3 | approve | (brutos em `raw/41-*`) a matriz citava testes que não sustentavam 'snapshot velho' (parcial ≠ velho; queda encerrada ≠ queda ativa): corrigido, +1 teste novo com mutante |
+| feat/42-noc-command-center (PR 42, FC22-009) | 4 | approve | (brutos em `raw/42-*`) prioridade aplicada depois do limite (agora antes, com varredura dos abertos e `truncated`); classificação de Edge silencioso limitada a 100 (agora todos); contestados com evidência: `edge_id` NULL (coluna NOT NULL) e impacto oculto na ordem (nunca entra) |
 
 Riscos aceitos e documentados (não corrigidos): DoS direcionado por lockout de conta (KNOWN_ISSUES); postcss embutido no Next (build-time).
