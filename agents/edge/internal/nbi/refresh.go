@@ -39,7 +39,10 @@ var (
 	// ErrRefreshUncleaned: a task that did not complete could not be removed, so it may still be queued on the ACS (and fire a connection to
 	// the customer's CPE later). The caller must treat the refresh as FAILED and hold the device.
 	ErrRefreshUncleaned = errors.New("nbi refresh: an unfinished task could not be removed from the ACS")
-	errNotAllowlisted   = errors.New("nbi refresh: parameter outside the allowlist")
+	// ErrRefreshUnproven: after an ambiguous request nothing of ours was found on the ACS, but absence cannot be proven (the task could still
+	// become visible). Always wrapped together with ErrRefreshUncleaned; the caller holds the device for less time than for a proven leftover.
+	ErrRefreshUnproven = errors.New("nbi refresh: could not prove that no task was created")
+	errNotAllowlisted  = errors.New("nbi refresh: parameter outside the allowlist")
 )
 
 // refreshGroups are the objects asked for, one task each, instance 1 (and the 5 GHz radio). A task that targets an object the CPE does not
@@ -118,7 +121,7 @@ func (c *Client) RefreshParams(ctx context.Context, deviceID string) (RefreshRep
 		if ambiguous || status != http.StatusOK || faulted { // never leave a queued/faulted/unknown task on a customer CPE
 			if cerr := c.cleanupTasks(ctx, deviceID, g, started, taskID); cerr != nil {
 				rep.Uncleaned++
-				return rep, fmt.Errorf("%w: %v", ErrRefreshUncleaned, cerr) // stop: nothing new while a task may still be pending
+				return rep, fmt.Errorf("%w: %w", ErrRefreshUncleaned, cerr) // stop: nothing new while a task may still be pending
 			}
 			rep.Cleaned++
 			if ambiguous {
@@ -229,9 +232,23 @@ func (c *Client) cleanupTasks(ctx context.Context, deviceID string, names []stri
 	if knownID != "" {
 		// The id is the proof of WHICH task is ours, but the listing must show it (with this device) before anything is deleted, and no other
 		// same-shape task from the same window may exist: a duplicate cannot be attributed, so we fail closed instead of guessing.
-		found := false
-		for _, d := range docs {
-			found = found || d.ID == knownID
+		found := hasID(docs, knownID)
+		for i := 1; i < settleChecks && !found; i++ { // the task we were told about may not be listed yet: look again, bounded
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(settleDelay):
+			}
+			if docs, err = c.deviceTasks(ctx, deviceID); err != nil {
+				return err
+			}
+			cand = cand[:0]
+			for _, d := range docs {
+				if looksLikeOurs(d, names, since) {
+					cand = append(cand, d.ID)
+				}
+			}
+			found = hasID(docs, knownID)
 		}
 		if !found {
 			return errors.New("nbi: the task the ACS returned is not in the device's task list")
@@ -268,7 +285,8 @@ func (c *Client) cleanupTasks(ctx context.Context, deviceID string, names []stri
 		}
 	}
 	if target == "" {
-		return nil // nothing of ours exists on the ACS (the request never created a task)
+		// Nothing of ours was seen, but with no task id from the ACS that is not proof that nothing was created.
+		return ErrRefreshUnproven
 	}
 	if err := c.deleteTask(ctx, target); err != nil {
 		return err
@@ -335,6 +353,15 @@ func (c *Client) deviceTasks(ctx context.Context, deviceID string) ([]taskDoc, e
 		}
 	}
 	return out, nil
+}
+
+func hasID(docs []taskDoc, id string) bool {
+	for _, d := range docs {
+		if d.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 func sameNames(a, b []string) bool {

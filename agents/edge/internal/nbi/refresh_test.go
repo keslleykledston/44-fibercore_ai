@@ -238,8 +238,8 @@ func TestRefreshReconcilesWhenTheConnectionDropsAfterTheTaskWasCreated(t *testin
 	// the POST failed without creating anything: also clean, also reported
 	f = &fakeACS{devices: igd, taskCode: 504, dropCreate: true}
 	rep, err = newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-	if err == nil || errors.Is(err, ErrRefreshUncleaned) || len(f.db) != 0 {
-		t.Fatalf("%+v %v", rep, err)
+	if !errors.Is(err, ErrRefreshUnproven) || !errors.Is(err, ErrRefreshUncleaned) || len(f.db) != 0 {
+		t.Fatalf("with no id and nothing listed, absence cannot be proven: %+v %v", rep, err)
 	}
 }
 
@@ -534,12 +534,11 @@ func TestRefreshLooksAgainBeforeAcceptingThatNoTaskOfOursExists(t *testing.T) {
 	if err == nil || errors.Is(err, ErrRefreshUncleaned) || len(f.db) != 0 || rep.Cleaned != 1 {
 		t.Fatalf("%+v %v left=%d lists=%d", rep, err, len(f.db), f.listCalls)
 	}
-	// it only shows up after the whole window: not provable => the caller holds the device only if the task is seen later; here it stays unseen,
-	// which is the documented assumption (the ACS store is read-after-write consistent within the window)
+	// it only shows up after the whole window: absence is not proven, so the call fails as unproven and the caller holds the device
 	f = &fakeACS{devices: igd, hangup: true, lateAfter: 99}
 	_, err = newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-	if err == nil || f.listCalls < settleChecks {
-		t.Fatalf("err=%v lists=%d (must have looked %d times)", err, f.listCalls, settleChecks)
+	if !errors.Is(err, ErrRefreshUnproven) || f.listCalls < settleChecks {
+		t.Fatalf("err=%v lists=%d (must have looked %d times and then refuse to call it clean)", err, f.listCalls, settleChecks)
 	}
 }
 
@@ -559,5 +558,17 @@ func TestRefreshWaitIsBoundedAndHonoursCancellation(t *testing.T) {
 	rep, err := newACS(t, f).RefreshParams(ctx, "AAAA00-ONT-SN1")
 	if err == nil {
 		t.Fatalf("a cancelled context must stop: %+v", rep)
+	}
+}
+
+func TestRefreshKnownIDVisibleOnlyOnALaterLook(t *testing.T) {
+	f := &fakeACS{devices: igd, taskCode: 202, lateAfter: 2}
+	rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
+	if err != nil || rep.Cleaned != 5 || len(f.db) != 0 {
+		t.Fatalf("%+v %v left=%d: an id that is listed a moment later is still ours", rep, err, len(f.db))
+	}
+	f = &fakeACS{devices: igd, taskCode: 202, omitFromList: true}
+	if _, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1"); !errors.Is(err, ErrRefreshUncleaned) || f.listCalls < settleChecks {
+		t.Fatalf("an id that never appears must fail closed after the bounded window: %v lists=%d", err, f.listCalls)
 	}
 }

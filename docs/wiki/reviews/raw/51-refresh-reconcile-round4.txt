@@ -1,0 +1,37 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a188e1-27ab-7e51-8e95-938aecc30a92).
+[codex] Turn started (01a188e1-27e6-7183-abf1-52c2e522e406).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de reconciliação, cancelamento e ev...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/nbi/re...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/nbi/re... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=5 main...HEAD -- agents/edge/internal/nbi/ref...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=5 main...HEAD -- agents/edge/internal/nbi/ref... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "settle|Consistency|refresh_tasks|RefreshParams|refresh" agents/edge/int...
+[codex] Command completed: /bin/bash -lc 'rg -n "settle|Consistency|refresh_tasks|RefreshParams|refresh" agents/edge/int... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/nbi/refresh.go | sed -n '210,310p'; nl -ba agents/...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/nbi/refresh.go | sed -n '210,310p'; nl -ba agents/... (exit 0)
+[codex] Assistant message captured: A revisão encontrou uma lacuna no próprio mecanismo de prova: a janela de repetição só roda q...
+[codex] Running command: /bin/bash -lc "rg -n \"TestRefresh.*(202|202|queued|fault|taskBody|200)|taskCode|lateAfter\" ...
+[codex] Command completed: /bin/bash -lc "rg -n \"TestRefresh.*(202|202|queued|fault|taskBody|200)|taskCode|lateAfter\" ... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=3 main...HEAD -- docs/wiki/TEST_EVIDENCE.md d...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=3 main...HEAD -- docs/wiki/TEST_EVIDENCE.md d... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: uma listagem vazia após três consu...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: uma listagem vazia após três consultas só prova ausência se o backend realmente satisfaz a consistência documentada; além disso, a repetição é ignorada quando a primeira lista mostra qualquer candidata, mesmo que o ID retornado pelo ACS ainda não apareça.
+
+Findings:
+- [high] A janela não cobre listagens não vazias sem o ID retornado (agents/edge/internal/nbi/refresh.go:229-237)
+  Quando `knownID` existe, o código faz uma única listagem. Se ela contém uma tarefa de mesmo formato que não seja a tarefa retornada, falha fechado; porém, se ela não contém candidata alguma, também falha imediatamente por `found == false`, sem repetir a consulta. A tarefa própria pode ainda estar propagando enquanto uma tarefa alheia aparece, exatamente a situação em que as novas consultas deveriam resolver a ambiguidade. Isso causa retenção desnecessária e deixa o caso de consistência eventual do ID sem cobertura pelos testes. Repita a busca do ID dentro da janela limitada antes de concluir que ele não está listado, preservando falha fechada se outro look-alike impedir atribuição.
+  Recommendation: Aplicar a janela de consultas também ao ramo `knownID`: aguardar/relistar quando o ID estiver ausente e só falhar após o limite; adicionar teste em que a tarefa retornada aparece numa consulta posterior.
+- [high] A aprovação de ausência depende de uma premissa sem evidência operacional no diff (agents/edge/internal/nbi/refresh.go:245-271)
+  Sem ID e sem candidata, após três listas vazias o método retorna sucesso de limpeza (`target == ""`). O ADR chama isso de seguro sob consistência leitura-após-escrita dentro da janela, mas o ensaio real descrito demonstra criação seguida de EOF, não que `/tasks` reflita a escrita em até ~4 s. O teste `lateAfter: 99` codifica a hipótese como condição de sucesso, não testa o limite máximo real do ACS. Se o ACS publicar a tarefa depois da janela, o Edge aceita que nada ficou pendente e não retém o dispositivo; a tarefa pode executar posteriormente no CPE. A configuração desligada por padrão reduz exposição, mas não impede isso quando habilitada. Só aceite esse risco com evidência do ACS em uso que estabeleça o limite de visibilidade, ou mantenha a resposta ambígua como não limpa/retida quando a ausência não puder ser provada.
+  Recommendation: Documentar e validar a consistência temporal do endpoint de tarefas no GenieACS implantado; sem esse contrato verificável, não tratar três respostas vazias como prova de que o POST não criou tarefa.
+
+Next steps:
+- Demonstrar a latência máxima real de visibilidade de tarefas no ACS configurado ou manter POST ambíguo sem ID sob retenção quando nenhuma tarefa é encontrada.
+- Adicionar teste cobrindo ID conhecido ausente na primeira listagem e presente em uma posterior.
