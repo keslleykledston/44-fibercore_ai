@@ -106,6 +106,22 @@ def test_sensitive_values_cannot_travel_in_evidence():
         assert _v(_component("Evidence"), bad), bad
 
 
+def test_narrative_text_rejects_credentials_and_macs_and_is_bounded():
+    ai = json.loads((FIX / "ai_response.json").read_text(encoding="utf-8"))
+    assert not _v(AI_OUT, ai)
+    leaks = ["senha: abc123", "PSK=xyz", "password = hunter2", "token:abc", "usuario: joao@isp", "mac aa:bb:cc:dd:ee:ff", "x" * 1600]
+    for leak in leaks:
+        assert _v(AI_OUT, {**ai, "summary_pt_br": leak}), leak
+        assert _v(AI_OUT, {**ai, "operator_message": leak}), leak
+        assert _v(AI_OUT, {**ai, "findings": [{**ai["findings"][0], "explanation": leak}]}), leak
+        assert _v(AI_OUT, {**ai, "proposed_actions": [{**ai["proposed_actions"][0], "rationale": leak}]}), leak
+        assert _v(_component("Finding"), {"category": "WIFI_SIGNAL", "certainty": "insufficient_evidence", "evidence_ids": [], "explanation": leak}), leak
+    for key in ("missing_data", "recommended_tests"):  # códigos, nunca frase livre
+        assert _v(AI_OUT, {**ai, key: ["senha do cliente é 1234"]})
+    assert _v(AI_OUT, {**ai, "findings": [{**ai["findings"][0], "category": "texto livre"}]})
+    assert not _v(AI_OUT, {**ai, "summary_pt_br": "O cliente deve testar perto do roteador e anotar a senha nova no cadastro."})  # a palavra sozinha é legítima
+
+
 def test_action_parameters_are_strict_per_kind():
     base = {"proposal_id": "11111111-1111-4111-8111-111111111111", "cpe_id": "22222222-2222-4222-8222-222222222222", "risk": "R2",
             "proposal_hash": "a" * 64, "expires_at": "2026-10-30T00:00:00Z", "status": "proposed"}
@@ -210,7 +226,7 @@ def test_adr_0025_is_accepted():
 
 def _without_descriptions(node):
     if isinstance(node, dict):
-        return {k: _without_descriptions(v) for k, v in node.items() if k != "description"}
+        return {k: _without_descriptions(v) for k, v in node.items() if k not in ("description", "pattern")}
     if isinstance(node, list):
         return [_without_descriptions(v) for v in node]
     return node
@@ -218,7 +234,7 @@ def _without_descriptions(node):
 
 @pytest.mark.parametrize("name", ["evidence-envelope.schema.json", "ai-diagnostic-output.schema.json"])
 def test_no_secret_like_names_in_contract_schemas(name):
-    # só estrutura (chaves, enums, padrões): as descrições podem citar o que o contrato impede
+    # só estrutura (chaves e enums): descrições e padrões de rejeição citam justamente o que o contrato impede
     text = json.dumps(_without_descriptions(json.loads((SD / name).read_text(encoding="utf-8")))).lower()
     for bad in ("password", "psk", "passphrase", "secret", "pppoe_user"):
         assert bad not in text

@@ -26,7 +26,8 @@
     },
     "summary_pt_br": {
       "type": "string",
-      "maxLength": 1500
+      "maxLength": 1500,
+      "pattern": "^(?!.*(([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([Ss]enha|[Pp]assword|[Pp]asswd|PSK|psk|[Pp]assphrase|[Ss]ecret|[Tt]oken|[Cc]have|[Pp]ppoe|[Uu]su[aá]rio|[Uu]ser(name)?)\\s*[:=]))[\\s\\S]*$"
     },
     "findings": {
       "type": "array",
@@ -42,7 +43,19 @@
         ],
         "properties": {
           "category": {
-            "type": "string"
+            "enum": [
+              "PON_OPTICAL",
+              "PON_MASS_OUTAGE",
+              "ONU_OFFLINE",
+              "WAN_LINK",
+              "WAN_AUTH",
+              "WIFI_SIGNAL",
+              "WIFI_INTERFERENCE",
+              "LAN_PORT",
+              "CPE_STALE_DATA",
+              "ERP_STATUS",
+              "INCONCLUSIVE"
+            ]
           },
           "certainty": {
             "enum": [
@@ -70,7 +83,8 @@
           },
           "explanation": {
             "type": "string",
-            "maxLength": 1000
+            "maxLength": 1000,
+            "pattern": "^(?!.*(([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([Ss]enha|[Pp]assword|[Pp]asswd|PSK|psk|[Pp]assphrase|[Ss]ecret|[Tt]oken|[Cc]have|[Pp]ppoe|[Uu]su[aá]rio|[Uu]ser(name)?)\\s*[:=]))[\\s\\S]*$"
           }
         },
         "allOf": [
@@ -100,17 +114,32 @@
     "missing_data": {
       "type": "array",
       "maxItems": 20,
+      "uniqueItems": true,
       "items": {
-        "type": "string",
-        "maxLength": 200
+        "enum": [
+          "wan_speed_test_unsupported",
+          "endpoint_test_missing",
+          "cpe_offline",
+          "cpe_data_stale",
+          "olt_data_stale",
+          "wifi_scan_missing",
+          "bng_session_missing",
+          "optical_rx_olt_missing"
+        ]
       }
     },
     "recommended_tests": {
       "type": "array",
       "maxItems": 20,
+      "uniqueItems": true,
       "items": {
-        "type": "string",
-        "maxLength": 100
+        "enum": [
+          "customer_endpoint_speed_optional",
+          "wifi_scan",
+          "wan_reconnect_check",
+          "optical_recheck",
+          "near_router_test"
+        ]
       }
     },
     "proposed_actions": {
@@ -135,7 +164,8 @@
           },
           "rationale": {
             "type": "string",
-            "maxLength": 1000
+            "maxLength": 1000,
+            "pattern": "^(?!.*(([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([Ss]enha|[Pp]assword|[Pp]asswd|PSK|psk|[Pp]assphrase|[Ss]ecret|[Tt]oken|[Cc]have|[Pp]ppoe|[Uu]su[aá]rio|[Uu]ser(name)?)\\s*[:=]))[\\s\\S]*$"
           },
           "evidence_ids": {
             "type": "array",
@@ -152,8 +182,9 @@
     },
     "operator_message": {
       "type": "string",
-      "maxLength": 1000
+      "maxLength": 1000,
+      "pattern": "^(?!.*(([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([Ss]enha|[Pp]assword|[Pp]asswd|PSK|psk|[Pp]assphrase|[Ss]ecret|[Tt]oken|[Cc]have|[Pp]ppoe|[Uu]su[aá]rio|[Uu]ser(name)?)\\s*[:=]))[\\s\\S]*$"
     }
   },
-  "description": "Saída estruturada e SOMENTE consultiva do copiloto (SD-001; só após ADR-0015/ADR-SD-006). Nunca autoriza nem executa: proposed_actions são sugestões para o motor de política."
+  "description": "Saída estruturada e SOMENTE consultiva do copiloto (SD-001; só após ADR-0015/ADR-SD-006). Nunca autoriza nem executa: proposed_actions são sugestões para o motor de política. Texto narrativo: o schema só rejeita padrões óbvios (MAC e chave=valor de credencial) e limita o tamanho; NÃO prova ausência de segredo. O controle real é de execução: o modelo só recebe evidência já redigida (ADR-SD-002/ADR-SD-006) e a saída passa por redator antes de persistir ou exibir (requisito do PR que habilitar o copiloto; a flag smart_diagnostics_copilot segue desligada). A interface mostra como texto puro, nunca HTML."
 }

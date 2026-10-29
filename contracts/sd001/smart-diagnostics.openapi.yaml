@@ -209,6 +209,16 @@ components:
         received_at: {type: string, format: date-time}
         method: {type: string, enum: [snmp, cli, genieacs_nbi, usp, vendor_driver, vendor_driver_mock, mock_genieacs, unsupported]}
         confidence: {type: string, enum: [verified, observed, unverified]}
+    SafeText:
+      type: string
+      maxLength: 1000
+      pattern: '^(?!.*(([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([Ss]enha|[Pp]assword|[Pp]asswd|PSK|psk|[Pp]assphrase|[Ss]ecret|[Tt]oken|[Cc]have|[Pp]ppoe|[Uu]su[aá]rio|[Uu]ser(name)?)\s*[:=]))[\s\S]*$'
+      description: >-
+        Texto narrativo. Rejeita MAC e chave=valor de credencial, mas NÃO prova ausência de segredo: o controle real é a redação na origem
+        e antes de persistir/exibir (ADR-SD-002/ADR-SD-006). Exibir como texto puro.
+    FindingCategory:
+      type: string
+      enum: [PON_OPTICAL, PON_MASS_OUTAGE, ONU_OFFLINE, WAN_LINK, WAN_AUTH, WIFI_SIGNAL, WIFI_INTERFERENCE, LAN_PORT, CPE_STALE_DATA, ERP_STATUS, INCONCLUSIVE]
     OpaqueRef:
       type: string
       pattern: '^(?![0-9A-Fa-f]{2}([-:.]?[0-9A-Fa-f]{2}){5}$)[A-Za-z0-9_-]{1,64}$'
@@ -224,13 +234,13 @@ components:
       additionalProperties: false
       required: [category, certainty, evidence_ids, explanation]
       properties:
-        category: {type: string, maxLength: 64}
+        category: {$ref: '#/components/schemas/FindingCategory'}
         certainty: {type: string, enum: [confirmed, likely, possible, insufficient_evidence]}
         evidence_ids:
           type: array
           uniqueItems: true
           items: {$ref: '#/components/schemas/OpaqueRef'}
-        explanation: {type: string, maxLength: 1000}
+        explanation: {$ref: '#/components/schemas/SafeText'}
       allOf:
         - if:
             properties: {certainty: {enum: [confirmed, likely, possible]}}

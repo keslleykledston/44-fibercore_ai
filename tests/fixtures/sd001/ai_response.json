@@ -15,8 +15,8 @@
     }
   ],
   "missing_data": [
-    "speedtest WAN não suportado pelo mock",
-    "teste no dispositivo final não realizado"
+    "wan_speed_test_unsupported",
+    "endpoint_test_missing"
   ],
   "recommended_tests": [
     "customer_endpoint_speed_optional"
