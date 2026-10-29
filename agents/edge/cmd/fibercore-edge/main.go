@@ -88,7 +88,14 @@ func main() {
 	}
 
 	if len(cfg.OLTs) > 0 {
-		oc := &collector.OLT{EdgeID: cfg.EdgeID, Guard: collector.FileGuard{Path: guardPath}}
+		oc := &collector.OLT{EdgeID: cfg.EdgeID, Guard: collector.FileGuard{Path: guardPath},
+			OnCollected: func(name string, took time.Duration, items int, err error) {
+				if err != nil {
+					log.Warn("olt collection failed", "olt", name, "took_ms", took.Milliseconds(), "err", err)
+					return
+				}
+				log.Info("olt collected", "olt", name, "took_ms", took.Milliseconds(), "chunks", items)
+			}}
 		for _, o := range cfg.OLTs {
 			o := o
 			if o.Transport == "snmp" {

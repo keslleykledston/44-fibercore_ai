@@ -757,3 +757,38 @@ func TestATimestampFarInTheFutureCannotBlockTheDeviceForever(t *testing.T) {
 		t.Fatalf("a fresh process after the corrected cooldown works: items=%d err=%v opens=%d", len(items), err, opens)
 	}
 }
+
+func TestOLTTimeoutGrowsWithPortsButNeverPastTheAgentsRoundLimit(t *testing.T) {
+	for ports, want := range map[int]time.Duration{1: 5 * time.Minute, 16: 5 * time.Minute, 17: 5*time.Minute + 15*time.Second, 32: 9 * time.Minute, 256: 9 * time.Minute} {
+		if got := oltTimeout(ports); got != want {
+			t.Errorf("oltTimeout(%d)=%s want %s", ports, got, want)
+		}
+	}
+}
+
+func TestOnCollectedReportsOnlyAttemptsThatReachedTheDeviceAndNeverDeviceOutput(t *testing.T) {
+	var opens, runs int
+	clock := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	type call struct {
+		name  string
+		items int
+		err   string
+	}
+	var calls []call
+	s := cliSrc(&opens, &runs, nil)
+	s.Interval = 15 * time.Minute
+	o := &OLT{Sources: []OLTSource{s}, Now: func() time.Time { return clock },
+		OnCollected: func(n string, _ time.Duration, items int, err error) {
+			c := call{n, items, ""}
+			if err != nil {
+				c.err = err.Error()
+			}
+			calls = append(calls, c)
+		}}
+	_, _ = o.Collect(context.Background())
+	clock = clock.Add(time.Minute)
+	_, _ = o.Collect(context.Background()) // not due: a silent skip, nothing reached the device
+	if len(calls) != 1 || calls[0].name != "OLT-CLI" || calls[0].items != 1 || calls[0].err != "" {
+		t.Fatalf("calls=%+v", calls)
+	}
+}

@@ -33,9 +33,23 @@ type OLTSource struct {
 }
 
 const (
-	oltTimeout     = 5 * time.Minute
 	maxBytesPerOLT = 32 << 20
+	// The Agent cancels a whole collection round after 10 minutes, so a single OLT never gets more than this.
+	oltTimeoutMax = 9 * time.Minute
 )
+
+// oltTimeout is the wall-clock budget of one OLT collection. A shell session answers about one command per second and the pager
+// adds a few pages per PON, so a fixed 5 minutes is enough for a handful of PONs but not for a full 32-PON chassis.
+func oltTimeout(ports int) time.Duration {
+	d := time.Minute + time.Duration(ports)*15*time.Second
+	if d < 5*time.Minute {
+		d = 5 * time.Minute
+	}
+	if d > oltTimeoutMax {
+		d = oltTimeoutMax
+	}
+	return d
+}
 
 // ponComplete: a PON is complete only when the driver is observed AND either the transport proves where each command ends
 // or the driver proved the listing complete in band (the CLI's own total matched the parsed rows).
@@ -52,6 +66,9 @@ type OLT struct {
 
 	// Guard persists the pacing state (last attempt, cooldown) so a restart cannot reopen the window. nil = in memory only (tests).
 	Guard GuardStore
+	// OnCollected, when set, is told how every attempt that reached the device ended (never called for skips): the only way an
+	// operator can see how long a real OLT takes and whether it answered. err is the collection error, never device output.
+	OnCollected func(name string, took time.Duration, items int, err error)
 
 	mu      sync.Mutex
 	st      map[string]GuardState // device key -> pacing state
@@ -129,7 +146,7 @@ func (o *OLT) collectCLI(ctx context.Context, src OLTSource, observed string) ([
 	}
 	defer closeFn()
 	// Per-OLT limits: wall-clock, commands and total bytes (worst case stays bounded regardless of port count).
-	ctx, cancel := context.WithTimeout(ctx, oltTimeout)
+	ctx, cancel := context.WithTimeout(ctx, oltTimeout(len(src.Ports)))
 	defer cancel()
 	sess := olt.NewBudget(olt.ReadOnlySession{Inner: raw, Allowed: src.Driver.Allowed}, commandBudget(len(src.Ports)), maxBytesPerOLT)
 	id, err := src.Driver.Identify(ctx, sess)
@@ -234,7 +251,11 @@ func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, er
 	o.busy[key] = true
 	o.mu.Unlock()
 
+	started := o.now()
 	items, err := run()
+	if o.OnCollected != nil {
+		o.OnCollected(src.Name, o.now().Sub(started), len(items), err)
+	}
 
 	o.mu.Lock()
 	delete(o.busy, key)
@@ -256,7 +277,7 @@ func (o *OLT) collectSNMP(ctx context.Context, src OLTSource, observed string) (
 		return nil, err
 	}
 	defer closeFn()
-	ctx, cancel := context.WithTimeout(ctx, oltTimeout)
+	ctx, cancel := context.WithTimeout(ctx, oltTimeout(len(src.Ports)))
 	defer cancel()
 	id, err := src.SNMPDriver.Identify(ctx, r, src.Ports)
 	if err != nil {
