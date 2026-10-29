@@ -10,7 +10,7 @@
       "name": "rx_optical_power",
       "value": -20.8,
       "unit": "dBm",
-      "origin": "OLT query of ONU reported RX",
+      "origin": "olt_query",
       "method": "vendor_driver_mock",
       "side": "onu_rx"
     },
@@ -29,7 +29,7 @@
       "name": "wan_link_status",
       "value": "Up",
       "unit": "",
-      "origin": "CPE WAN",
+      "origin": "cpe_parameter",
       "method": "mock_genieacs"
     },
     "device_model": "MOCK-CPE-01",
@@ -47,7 +47,7 @@
       "name": "associated_client_rssi",
       "value": -78,
       "unit": "dBm",
-      "origin": "CPE radio station telemetry",
+      "origin": "cpe_station_telemetry",
       "method": "mock_genieacs"
     },
     "device_model": "MOCK-CPE-01",
@@ -65,14 +65,14 @@
       "name": "wan_download",
       "value": null,
       "unit": "Mbps",
-      "origin": "CPE WAN",
+      "origin": "cpe_parameter",
       "method": "unsupported"
     },
     "device_model": "MOCK-CPE-01",
     "firmware": "0.0.0-lab",
     "source_ref": "mock-cpe-01",
     "instrument_limitations": [
-      "download diagnostics not homologated on mock firmware"
+      "not_homologated_firmware"
     ]
   }
 ]

@@ -26,7 +26,7 @@
     },
     "summary_pt_br": {
       "type": "string",
-      "maxLength": 3000
+      "maxLength": 1500
     },
     "findings": {
       "type": "array",
@@ -63,26 +63,54 @@
           "evidence_ids": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^(?![0-9A-Fa-f]{2}([-:.]?[0-9A-Fa-f]{2}){5}$)[A-Za-z0-9_-]{1,64}$"
             },
             "uniqueItems": true
           },
           "explanation": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 1000
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "certainty": {
+                  "enum": [
+                    "confirmed",
+                    "likely",
+                    "possible"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "evidence_ids": {
+                  "minItems": 1
+                }
+              }
+            }
+          }
+        ]
       }
     },
     "missing_data": {
       "type": "array",
+      "maxItems": 20,
       "items": {
-        "type": "string"
+        "type": "string",
+        "maxLength": 200
       }
     },
     "recommended_tests": {
       "type": "array",
+      "maxItems": 20,
       "items": {
-        "type": "string"
+        "type": "string",
+        "maxLength": 100
       }
     },
     "proposed_actions": {
@@ -97,22 +125,34 @@
         ],
         "properties": {
           "action_kind": {
-            "type": "string"
+            "enum": [
+              "wifi_channel_change",
+              "wifi_band_steering",
+              "wan_reconnect",
+              "cpe_reboot",
+              "plan_profile_align"
+            ]
           },
           "rationale": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 1000
           },
           "evidence_ids": {
             "type": "array",
             "items": {
-              "type": "string"
-            }
+              "type": "string",
+              "pattern": "^(?![0-9A-Fa-f]{2}([-:.]?[0-9A-Fa-f]{2}){5}$)[A-Za-z0-9_-]{1,64}$"
+            },
+            "uniqueItems": true,
+            "minItems": 1
           }
         }
-      }
+      },
+      "maxItems": 5
     },
     "operator_message": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 1000
     }
   },
   "description": "Saída estruturada e SOMENTE consultiva do copiloto (SD-001; só após ADR-0015/ADR-SD-006). Nunca autoriza nem executa: proposed_actions são sugestões para o motor de política."

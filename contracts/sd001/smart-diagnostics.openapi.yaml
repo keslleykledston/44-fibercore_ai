@@ -190,30 +190,52 @@ components:
         created_at: {type: string, format: date-time}
     Evidence:
       type: object
+      additionalProperties: false
       required: [evidence_id, source_type, status, captured_at]
       properties:
-        evidence_id: {type: string}
+        evidence_id: {$ref: '#/components/schemas/OpaqueRef'}
         source_type: {type: string, enum: [olt, cpe_cwmp, cpe_usp, edge, endpoint, erp, bng]}
         status: {type: string, enum: [available, stale, unsupported, failed, inconclusive]}
-        metric: {type: string}
-        value: {type: [number, string, 'null']}
-        unit: {type: string}
-        capture_side: {type: string}
+        metric: {$ref: '#/components/schemas/MetricName'}
+        value:
+          description: Número ou estado da lista permitida; nunca texto livre (PSK, usuário PPPoE e MAC não passam por aqui)
+          oneOf:
+            - {type: number}
+            - {$ref: '#/components/schemas/StateValue'}
+            - {type: 'null'}
+        unit: {type: string, enum: ['', dBm, dB, Mbps, ms, percent, seconds, count]}
+        capture_side: {type: string, enum: [onu_rx, olt_rx, cpe, wan, lan, wifi_2g, wifi_5g]}
         captured_at: {type: string, format: date-time}
         received_at: {type: string, format: date-time}
-        instrument: {type: string}
-        method: {type: string}
+        method: {type: string, enum: [snmp, cli, genieacs_nbi, usp, vendor_driver, vendor_driver_mock, mock_genieacs, unsupported]}
         confidence: {type: string, enum: [verified, observed, unverified]}
+    OpaqueRef:
+      type: string
+      pattern: '^(?![0-9A-Fa-f]{2}([-:.]?[0-9A-Fa-f]{2}){5}$)[A-Za-z0-9_-]{1,64}$'
+      description: Identificador opaco; rejeita o formato de MAC
+    MetricName:
+      type: string
+      enum: [rx_optical_power, tx_optical_power, onu_status, wan_link_status, wan_connection_status, wan_download, wan_upload, associated_client_rssi, wifi_channel, wifi_band, wifi_radio_enabled, lan_port_status, latency_rtt, packet_loss, uptime_seconds]
+    StateValue:
+      type: string
+      enum: [Up, Down, Connected, Connecting, Disconnected, Unconfigured, Enabled, Disabled, Error, Unknown, online, offline, los, dying_gasp]
     Finding:
       type: object
+      additionalProperties: false
       required: [category, certainty, evidence_ids, explanation]
       properties:
-        category: {type: string}
+        category: {type: string, maxLength: 64}
         certainty: {type: string, enum: [confirmed, likely, possible, insufficient_evidence]}
         evidence_ids:
           type: array
-          items: {type: string}
-        explanation: {type: string}
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/OpaqueRef'}
+        explanation: {type: string, maxLength: 1000}
+      allOf:
+        - if:
+            properties: {certainty: {enum: [confirmed, likely, possible]}}
+          then:
+            properties: {evidence_ids: {minItems: 1}}
     DiagnosticJob:
       type: object
       required: [job_id, status, data_quality, evidences, findings, created_at]
@@ -246,16 +268,55 @@ components:
         consent_id: {type: string, minLength: 1}
     ActionProposal:
       type: object
+      additionalProperties: false
       required: [proposal_id, cpe_id, action_kind, risk, proposal_hash, expires_at, status]
       properties:
         proposal_id: {type: string, format: uuid}
         cpe_id: {type: string, format: uuid}
         action_kind: {type: string, enum: [wifi_channel_change, wifi_band_steering, wan_reconnect, cpe_reboot, plan_profile_align]}
-        parameters: {type: object, additionalProperties: true, description: Somente argumentos tipados e validados criados pelo servidor}
+        parameters:
+          type: object
+          description: Somente argumentos tipados e validados criados pelo servidor, estritos por action_kind
         risk: {type: string, enum: [R1, R2, R3]}
         proposal_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
         expires_at: {type: string, format: date-time}
         status: {type: string, enum: [proposed, pending_approval, approved, rejected, expired, blocked, executed]}
+      allOf:
+        - if: {properties: {action_kind: {const: wifi_channel_change}}, required: [action_kind]}
+          then:
+            required: [parameters]
+            properties:
+              parameters:
+                type: object
+                additionalProperties: false
+                required: [band, channel]
+                properties:
+                  band: {type: string, enum: [2.4GHz, 5GHz]}
+                  channel: {type: integer, minimum: 1, maximum: 196}
+        - if: {properties: {action_kind: {const: wifi_band_steering}}, required: [action_kind]}
+          then:
+            required: [parameters]
+            properties:
+              parameters:
+                type: object
+                additionalProperties: false
+                required: [enabled]
+                properties:
+                  enabled: {type: boolean}
+        - if: {properties: {action_kind: {const: plan_profile_align}}, required: [action_kind]}
+          then:
+            required: [parameters]
+            properties:
+              parameters:
+                type: object
+                additionalProperties: false
+                required: [profile_id]
+                properties:
+                  profile_id: {type: string, format: uuid}
+        - if: {properties: {action_kind: {enum: [wan_reconnect, cpe_reboot]}}, required: [action_kind]}
+          then:
+            properties:
+              parameters: {type: object, additionalProperties: false, maxProperties: 0}
     ApprovalDecision:
       type: object
       additionalProperties: false

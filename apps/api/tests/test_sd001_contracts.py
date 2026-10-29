@@ -63,6 +63,73 @@ def test_schemas_reject_malformed_payloads():
         assert list(Draft202012Validator(AI_OUT).iter_errors(bad)), bad
 
 
+def _v(schema, instance):
+    return list(Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER).iter_errors(instance))
+
+
+def _component(name):
+    return {"$ref": f"#/components/schemas/{name}", "components": OVERLAY["components"]}
+
+
+def test_actions_and_conclusions_must_cite_evidence():
+    ai = json.loads((FIX / "ai_response.json").read_text(encoding="utf-8"))
+    act = ai["proposed_actions"][0]
+    assert _v(AI_OUT, {**ai, "proposed_actions": [{**act, "evidence_ids": []}]})  # ação sem evidência
+    assert _v(AI_OUT, {**ai, "proposed_actions": [{"action_kind": "run_shell", "rationale": "x", "evidence_ids": ["ev-1"]}]})  # tipo fora da lista
+    assert _v(AI_OUT, {**ai, "findings": [{**ai["findings"][0], "evidence_ids": []}]})  # likely sem evidência
+    assert not _v(AI_OUT, {**ai, "findings": [{**ai["findings"][0], "certainty": "insufficient_evidence", "evidence_ids": []}]})
+    f = {"category": "WIFI_SIGNAL", "certainty": "likely", "evidence_ids": [], "explanation": "x"}
+    assert _v(_component("Finding"), f)
+    assert not _v(_component("Finding"), {**f, "certainty": "insufficient_evidence"})
+
+
+def test_sensitive_values_cannot_travel_in_evidence():
+    ev = json.loads((FIX / "evidence.json").read_text(encoding="utf-8"))[1]  # wan_link_status = "Up"
+    assert not _v(EVIDENCE, ev)
+    meas = ev["measurement"]
+    for bad in (
+        {**ev, "measurement": {**meas, "value": "S3nh4-do-Wi-Fi!"}},  # PSK em texto livre
+        {**ev, "measurement": {**meas, "name": "wifi_psk"}},
+        {**ev, "measurement": {**meas, "origin": "senha do cliente"}},
+        {**ev, "source_ref": "aa:bb:cc:dd:ee:ff"},
+        {**ev, "source_ref": "AA-BB-CC-DD-EE-FF"},
+        {**ev, "evidence_id": "00:1a:2b:3c:4d:5e"},
+        {**ev, "firmware": "user=joao@pppoe"},
+        {**ev, "instrument_limitations": ["texto livre com dado do cliente"]},
+    ):
+        assert _v(EVIDENCE, bad), bad
+    # mesma garantia no contrato HTTP
+    http = {"evidence_id": "ev-1", "source_type": "cpe_cwmp", "status": "available", "metric": "wan_link_status", "value": "Up",
+            "captured_at": "2026-10-29T05:00:10Z"}
+    assert not _v(_component("Evidence"), http)
+    for bad in ({**http, "value": "S3nh4-do-Wi-Fi!"}, {**http, "metric": "wifi_psk"}, {**http, "evidence_id": "aa:bb:cc:dd:ee:ff"}, {**http, "x": 1}):
+        assert _v(_component("Evidence"), bad), bad
+
+
+def test_action_parameters_are_strict_per_kind():
+    base = {"proposal_id": "11111111-1111-4111-8111-111111111111", "cpe_id": "22222222-2222-4222-8222-222222222222", "risk": "R2",
+            "proposal_hash": "a" * 64, "expires_at": "2026-10-30T00:00:00Z", "status": "proposed"}
+    ok = {**base, "action_kind": "wifi_channel_change", "parameters": {"band": "5GHz", "channel": 36}}
+    assert not _v(_component("ActionProposal"), ok)
+    for bad in (
+        {**ok, "parameters": {"band": "5GHz", "channel": 36, "psk": "x"}},  # propriedade extra
+        {**ok, "parameters": {"band": "5GHz"}},  # faltando
+        {**ok, "parameters": {"band": "6GHz", "channel": 36}},
+        {k: v for k, v in ok.items() if k != "parameters"},
+        {**base, "action_kind": "cpe_reboot", "parameters": {"ssid": "x"}},  # reboot não leva parâmetro
+        {**base, "action_kind": "plan_profile_align", "parameters": {"profile_id": "nao-uuid"}},
+        {**ok, "action_kind": "factory_reset"},
+        {**ok, "tenant_id": "x"},
+    ):
+        assert _v(_component("ActionProposal"), bad), bad
+    assert not _v(_component("ActionProposal"), {**base, "action_kind": "cpe_reboot", "parameters": {}})
+
+
+def test_job_fixture_conforms_to_the_http_contract():
+    job = json.loads((FIX / "diagnostic_job.json").read_text(encoding="utf-8"))
+    assert not _v(_component("DiagnosticJob"), job)
+
+
 def test_job_fixture_cites_only_existing_evidence_and_never_invents_a_value():
     job = json.loads((FIX / "diagnostic_job.json").read_text(encoding="utf-8"))
     ids = {e["evidence_id"] for e in job["evidences"]}
@@ -141,8 +208,17 @@ def test_adr_0025_is_accepted():
     assert adr.splitlines()[2].startswith("Status: Accepted")
 
 
+def _without_descriptions(node):
+    if isinstance(node, dict):
+        return {k: _without_descriptions(v) for k, v in node.items() if k != "description"}
+    if isinstance(node, list):
+        return [_without_descriptions(v) for v in node]
+    return node
+
+
 @pytest.mark.parametrize("name", ["evidence-envelope.schema.json", "ai-diagnostic-output.schema.json"])
-def test_no_secret_like_keys_in_contract_schemas(name):
-    text = (SD / name).read_text(encoding="utf-8").lower()
+def test_no_secret_like_names_in_contract_schemas(name):
+    # só estrutura (chaves, enums, padrões): as descrições podem citar o que o contrato impede
+    text = json.dumps(_without_descriptions(json.loads((SD / name).read_text(encoding="utf-8")))).lower()
     for bad in ("password", "psk", "passphrase", "secret", "pppoe_user"):
         assert bad not in text
