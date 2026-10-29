@@ -95,3 +95,6 @@
 - Edge: a coleta de OLT (SSH/CLI e SNMP) passa por UM guard por equipamento físico: uma coleta por vez, intervalo mínimo (`collect_seconds`, padrão 15 min no CLI), resfriamento após falha (`cooldown_seconds`, padrão 15 min CLI / 5 min SNMP).
 - O estado do guard (última tentativa + resfriamento) é gravado em `olt-guard.json` (0600, atômico) ANTES de qualquer E/S e sobrevive a restart; falha ao gravar = não toca na OLT; arquivo corrompido (inclusive `null`) = assume que a OLT acabou de ser tocada; timestamps >24 h à frente são normalizados e persistidos.
 - Instância única por diretório de estado (`edge.lock`, flock). Chave do guard = host físico (`config.DeviceKey`), independente de transporte/porta; a config recusa duas entradas para o mesmo equipamento e exige IP literal no endereço de OLT por CLI.
+
+## Unreleased — PR 44 (Edge → OLT, observabilidade)
+- Edge: cada tentativa que chega à OLT registra `olt collected`/`olt collection failed` com duração (nunca saída do equipamento); o orçamento de tempo vira proporcional às PONs (1 min + 15 s/PON, entre 5 e 9 min) e cobre também o login.
