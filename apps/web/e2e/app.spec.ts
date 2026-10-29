@@ -134,6 +134,9 @@ test("Visão 360 do assinante: estado explicado, fonte por bloco, abas só com d
   if (a) expect((await request.post(`${API_URL}/v1/associations/${a.id}/approve`, { headers: h })).status()).toBe(200);
   await login(page);
   await page.goto("/assinantes");
+  await page.getByLabel("Buscar cliente pelo nome").fill("demo tr");  // sem diferenciar maiúsculas; os curingas não existem
+  await page.getByRole("button", { name: "Buscar", exact: true }).click();
+  await expect(page.getByTestId("customer-list").getByRole("link")).toHaveCount(1);
   await page.getByTestId("customer-list").getByRole("link", { name: /Cliente Demo Três/ }).click();
   await expect(page).toHaveURL(/\/assinantes\/[0-9a-f-]{36}$/);
   await expect(page.getByRole("heading", { name: "Cliente Demo Três" })).toBeVisible();

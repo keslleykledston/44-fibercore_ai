@@ -15,7 +15,16 @@ export default async function Assinantes({ searchParams }: { searchParams: Promi
   const r = await apiSafe<Association[]>(`/v1/associations?status=suggested&limit=${PAGE + 1}&offset=${(page - 1) * PAGE}`);
   if (r.status === 403) return <AppShell active="/assinantes" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver assinantes." /></AppShell>;
   const sub360 = await featureOn("subscriber_360");
-  const customers = sub360 ? await apiSafe<CustomerRow[]>("/v1/customers?limit=50") : null;
+  // clientes: busca por nome (q) e páginas de 20; pede 1 a mais para saber se há próxima (nenhum cliente fica inacessível)
+  const CPAGE = 20;
+  const cq = (q.q ?? "").trim().slice(0, 64);
+  const cpage = Math.max(1, Math.min(10_000, Number(/^\d{1,5}$/.test(q.c ?? "") ? q.c : 1)));
+  const customers = sub360
+    ? await apiSafe<CustomerRow[]>(`/v1/customers?limit=${CPAGE + 1}&offset=${(cpage - 1) * CPAGE}${cq ? `&q=${encodeURIComponent(cq)}` : ""}`)
+    : null;
+  const cMore = (customers?.data ?? []).length > CPAGE;
+  const cList = (customers?.data ?? []).slice(0, CPAGE);
+  const cHref = (n: number) => `/assinantes?c=${n}${cq ? `&q=${encodeURIComponent(cq)}` : ""}`;
   const hasMore = (r.data ?? []).length > PAGE;
   const list = (r.data ?? []).slice(0, PAGE);
   return (
@@ -42,10 +51,22 @@ export default async function Assinantes({ searchParams }: { searchParams: Promi
         {customers && (
           <section aria-label="Clientes" data-testid="customer-list">
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Clientes · visão 360</h2>
-            {customers.data === null ? <ErrorState title="Falha ao carregar clientes" /> : customers.data.length === 0 ? <EmptyState title="Nenhum cliente importado" /> : (
+            <form action="/assinantes" method="get" role="search" className="mb-2 flex gap-2">
+              <label className="sr-only" htmlFor="cq">Buscar cliente pelo nome</label>
+              <input id="cq" name="q" defaultValue={cq} maxLength={64} placeholder="Buscar cliente pelo nome" className="min-h-touch min-w-0 flex-1 rounded-btn border border-line bg-bg px-3 text-sm" />
+              <button className="min-h-touch rounded-btn border border-line px-3 text-sm">Buscar</button>
+            </form>
+            {customers.data === null ? <ErrorState title="Falha ao carregar clientes" /> : cList.length === 0 ? <EmptyState title={cq ? "Nenhum cliente com esse nome" : "Nenhum cliente importado"} /> : (
               <ul className="panel divide-y divide-line">
-                {customers.data.map((c) => <li key={c.id}><Link href={`/assinantes/${c.id}`} className="flex min-h-touch items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-accent-soft"><span>{c.display_name}</span><span className="text-xs text-accent">Ver 360 →</span></Link></li>)}
+                {cList.map((c) => <li key={c.id}><Link href={`/assinantes/${c.id}`} className="flex min-h-touch items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-accent-soft"><span>{c.display_name}</span><span className="text-xs text-accent">Ver 360 →</span></Link></li>)}
               </ul>
+            )}
+            {(cpage > 1 || cMore) && (
+              <nav aria-label="Paginação de clientes" className="mt-2 flex items-center justify-between text-sm" data-testid="customer-pagination">
+                {cpage > 1 ? <a className="min-h-touch rounded-btn border border-line px-3 py-2" href={cHref(cpage - 1)}>← Anteriores</a> : <span />}
+                <span className="text-muted">Página {cpage}</span>
+                {cMore ? <a className="min-h-touch rounded-btn border border-line px-3 py-2" href={cHref(cpage + 1)}>Próximos →</a> : <span />}
+              </nav>
             )}
           </section>
         )}

@@ -17,7 +17,7 @@ ui_route: "/assinantes/[id]"
 
 ## Passo a passo
 
-1. Abra **Assinantes**. Com o recurso ligado, aparece a lista **Clientes · visão 360**.
+1. Abra **Assinantes**. Com o recurso ligado, aparece a lista **Clientes · visão 360** (20 por página; use a caixa de busca para filtrar pelo nome, sem diferenciar maiúsculas).
 2. Clique no cliente (**Ver 360 →**).
 3. Leia o **Estado geral** no topo: **Completo**, **Parcial**, **Defasado** ou **Desconhecido**, com a frase que explica o motivo.
 4. Se o cliente tiver mais de uma ONU, escolha a ONU pelo serial.

@@ -370,3 +370,34 @@ def test_pending_count_is_the_true_total_even_when_the_list_is_capped(client, se
                       {"t": seed["A"], "o": onu["id"], "c": cid})
     blk = client.get(f"/v1/onus/{onu['id']}", headers=h).json()["cpe"]
     assert blk["pending_suggestions"] == 12 and len(blk["suggestions"]) == 10 and blk["has_more_suggestions"] is True
+
+
+def test_customer_list_paging_and_search_treat_wildcards_as_literals_and_audit_the_scope_not_the_text(client, seed, migrated):
+    h = hdr(client, "alice", seed, "A")
+    names = ["Zz_Ctx 100%", "Zz-Ctx 100X", "Zz_Ctx 200", "Zz_Ctx 300", "Zz_Ctx 400"]
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        for i, n in enumerate(names):
+            c.execute(text("INSERT INTO customers(tenant_id, erp_source, erp_customer_id, display_name) VALUES (:t,'ctxtest',:e,:n)"),
+                      {"t": seed["A"], "e": f"L{i}", "n": n})
+
+    def ls(**p):
+        r = client.get("/v1/customers", headers=h, params=p)
+        assert r.status_code == 200, r.text
+        return [x["display_name"] for x in r.json()]
+    assert ls(q="100%") == ["Zz_Ctx 100%"]            # % is a literal, not "anything"
+    assert ls(q="Zz_Ctx 100") == ["Zz_Ctx 100%"]      # _ is a literal: it must not match the hyphen row
+    assert ls(q="zz_ctx 2") == ["Zz_Ctx 200"]         # case-insensitive substring
+    assert ls(q="%") == ["Zz_Ctx 100%"]
+    assert ls(q="\\") == []
+    page1, page2 = ls(q="Zz", limit=2), ls(q="Zz", limit=2, offset=2)
+    assert len(page1) == 2 and len(page2) == 2 and not set(page1) & set(page2)
+    assert len(ls(q="Zz", limit=2, offset=4)) == 1 and ls(q="Zz", limit=2, offset=5) == []
+    assert client.get("/v1/customers", headers=h, params={"q": ""}).status_code == 422
+    assert client.get("/v1/customers", headers=h, params={"q": "x" * 65}).status_code == 422
+    assert client.get("/v1/customers", headers=hdr(client, "dave", seed, "A"), params={"q": "Zz"}).status_code == 403
+    assert client.get("/v1/customers", headers=hdr(client, "bob", seed, "B"), params={"q": "Zz"}).json() == []  # RLS
+    with migrated.begin() as c:
+        ev = c.execute(text("SELECT evidence_redacted FROM audit_log WHERE action = 'customers.list' AND tenant_id = :t ORDER BY created_at DESC LIMIT 1"),
+                       {"t": seed["B"]}).scalar()
+    assert ev == {"limit": 100, "offset": 0, "filtered": True} and "Zz" not in json.dumps(ev)

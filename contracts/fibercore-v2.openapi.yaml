@@ -228,8 +228,12 @@ paths:
     get:
       tags: [ERP]
       operationId: listCustomers
-      description: Acesso a dados pessoais é registrado em auditoria.
-      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {$ref: '#/components/parameters/Limit'}]
+      description: Acesso a dados pessoais é registrado em auditoria (evidência = limit, offset e se houve filtro; o texto buscado não é gravado). `q` é substring do nome sem diferenciar maiúsculas; %, _ e \ são literais.
+      parameters:
+        - {$ref: '#/components/parameters/WorkspaceOptional'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {name: offset, in: query, required: false, schema: {type: integer, minimum: 0, maximum: 1000000, default: 0}}
+        - {name: q, in: query, required: false, schema: {type: string, minLength: 1, maxLength: 64}}
       responses:
         '200': {description: Clientes (sem documento completo), content: {application/json: {schema: {type: array, items: {type: object}}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}

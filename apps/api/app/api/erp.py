@@ -191,15 +191,20 @@ def _suggest(conn: Connection, tenant_id: UUID, customer_id: UUID, serial: str) 
 @router.get("/v1/customers")
 def list_customers(
     limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0, le=1_000_000),
+    q: str | None = Query(None, min_length=1, max_length=64),
     p: Principal = Depends(require("customers:read")),
     conn: Connection = TENANT_CONN,
 ) -> list[dict]:
+    """`q` is a case-insensitive substring of the display name; %, _ and \\ in it are literals, never wildcards."""
+    pattern = None if q is None else "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
     rows = conn.execute(
         text("SELECT id, erp_source, erp_customer_id, display_name, document_last4, contract_status FROM customers "
-             "ORDER BY display_name LIMIT :l"),
-        {"l": limit},
+             "WHERE (CAST(:p AS text) IS NULL OR display_name ILIKE :p ESCAPE '\\') ORDER BY display_name, id LIMIT :l OFFSET :o"),
+        {"l": limit, "o": offset, "p": pattern},
     )
-    audit(conn, p, "customers.list", "customer", "*", {"limit": limit})  # access to personal data is logged
+    # access to personal data is logged; the scope (page and whether it was filtered) is part of the evidence, the search text is not
+    audit(conn, p, "customers.list", "customer", "*", {"limit": limit, "offset": offset, "filtered": q is not None})
     return [{"id": str(r.id), "erp_source": r.erp_source, "erp_customer_id": r.erp_customer_id,
              "display_name": r.display_name, "document_last4": r.document_last4, "contract_status": r.contract_status}
             for r in rows]

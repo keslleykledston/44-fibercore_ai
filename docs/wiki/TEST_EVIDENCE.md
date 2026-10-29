@@ -115,4 +115,6 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - `scripts/e2e.sh` completo (com capturas): **45 passed** (1 novo: lista → Visão 360 → abas Conexão/Óptica/Roteador/Ações, fonte por bloco, ausência da aba Wi-Fi, axe sem violações sérias, 404 para id inexistente/inválido). `tsc --noEmit`, `validate_kit`, `validate_help` (11 artigos), `validate_addendum_v22`: PASS. Backend inalterado (pytest 226 do PR 37).
 - Defeitos pegos pelo E2E: `Link href="?aba="` não trocava o conteúdo (trocado por `<a>`); `loading.tsx` fazia o `notFound` responder 200 (removido).
 - NOT_RUN: E2E com a flag desligada; LAB com flags ligadas e CPE real.
+- Codex PR 38 round 1: lista de clientes truncada em 50 e sem busca → `GET /v1/customers` ganhou `offset` e `q` (substring do nome, `%`/`_`/`\` literais; auditoria grava limit/offset/filtered, não o texto); UI com busca + páginas de 20. pytest **227 passed**; E2E **45 passed**. Mutante sem escape dos curingas reprova; o desempate `id` na ordenação sobrevive (defensivo, não observável de forma determinística).
+- Aceito/documentado: cada visita à lista é uma leitura real de dados pessoais e continua auditada (`customers.list`).
 
