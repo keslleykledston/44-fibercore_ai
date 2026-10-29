@@ -23,5 +23,6 @@
 | feat/38-subscriber-360 (PR 38, FC22-005) | 3 | approve | (brutos em `raw/38-*`) lista de clientes sem busca/paginação (API ganhou `offset`/`q` com curingas literais; auditoria sem o texto); dependência de flags (UI exige `subscriber_360` e `customer_context`) |
 | feat/39-diagnostic-rule-engine (PR 39, FC22-006) | 1 | approve | (bruto em `raw/39-*`) sem achados; a extração é coberta por teste de propriedade (2000 casos) e pelos 29 testes do NOC sem alteração |
 | feat/40-guided-troubleshooting (PR 40, FC22-007) | 5 | approve | (brutos em `raw/40-*`) estado de ONU desconhecido virando 'fora do ar'; ticket com documento e sintoma como fato; proveniência em conflito afirmando estado; execução antiga/de outra PON aceita como atual (agora por `pon_id` estável e ≤ 15 min) |
+| feat/41-ac-validation (PR 41, FC22-008) | 3 | approve | (brutos em `raw/41-*`) a matriz citava testes que não sustentavam 'snapshot velho' (parcial ≠ velho; queda encerrada ≠ queda ativa): corrigido, +1 teste novo com mutante |
 
 Riscos aceitos e documentados (não corrigidos): DoS direcionado por lockout de conta (KNOWN_ISSUES); postcss embutido no Next (build-time).
