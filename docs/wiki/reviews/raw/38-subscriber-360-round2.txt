@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1861b-e3d2-7772-8b34-6399f52b6899).
+[codex] Turn started (01a1861b-e7eb-7a93-bdc3-b27b973345ab).
+[codex] Assistant message captured: Vou conferir o diff completo contra `main` e rastrear os pontos de autorização, exposição de ...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/erp.py 'ap...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/erp.py 'ap... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=10 main...HEAD -- 'apps/web/src/app/assinante...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=10 main...HEAD -- 'apps/web/src/app/assinante... (exit 0)
+[codex] Assistant message captured: A tela nova depende de uma flag `subscriber_360`, enquanto o endpoint consulta `customer_cont...
+[codex] Running command: /bin/bash -lc "sed -n '1,280p' apps/api/app/api/context.py; sed -n '1,100p' apps/api/app/core...
+[codex] Command completed: /bin/bash -lc "sed -n '1,280p' apps/api/app/api/context.py; sed -n '1,100p' apps/api/app/core... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"subscriber_360|customer_context\" docs/addenda/v2.2 docs/product docs/...
+[codex] Command completed: /bin/bash -lc "rg -n \"subscriber_360|customer_context\" docs/addenda/v2.2 docs/product docs/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: `subscriber_360` habilitado sozinh...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: `subscriber_360` habilitado sozinho mostra a lista e a rota, mas o endpoint continua bloqueado pela flag `customer_context`, resultando em 403 para todos os assinantes.
+
+Findings:
+- [medium] As flags da Visão 360 não estão alinhadas (apps/web/src/app/assinantes/[id]/page.tsx:91-92)
+  A interface testa `subscriber_360`, mas a chamada de dados exige `customer_context`. Como são flags independentes e ambas vêm desligadas por padrão, habilitar a flag de FC22-005 conforme o backlog libera a lista e a página, mas não os dados: o endpoint retorna 403 e a tela exibe “Sem permissão”, embora o papel possa ter `customers:read`. Isso torna o rollout configurado como documentado inoperante a menos que alguém descubra e habilite também a flag do FC22-004.
+  Recommendation: Defina e aplique uma dependência explícita entre as flags: exigir `customer_context` na interface antes de mostrar a entrada, ou fazer `subscriber_360` habilitar/implicar a capacidade do endpoint. Documente a combinação necessária e evite apresentar o 403 de feature como falta de permissão.

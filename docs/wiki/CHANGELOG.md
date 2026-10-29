@@ -76,7 +76,7 @@
 - **Não feito (declarado):** busca por cliente/contrato na UI (FC22-005), regras de vínculo além de `serial_equal`, desfazer um vínculo confirmado.
 
 ## Unreleased — Visão 360 do assinante (PR 38, FC22-005)
-- `/assinantes/[id]` (Next, servidor): estado geral explicado (Completo/Parcial/Defasado/Desconhecido), seletor de ONU, abas por query (`?aba=`) só com dado — Conexão (conexão + roteador + incidente), Óptica, Roteador (CPE), Cliente, Ações (sempre bloqueadas). Lista "Clientes · visão 360" em Assinantes. Tudo atrás da flag `subscriber_360` (desligada por padrão; fora dela a rota é 404). Consome `GET /v1/customers/{id}/context` (sem API nova).
+- `/assinantes/[id]` (Next, servidor): estado geral explicado (Completo/Parcial/Defasado/Desconhecido), seletor de ONU, abas por query (`?aba=`) só com dado — Conexão (conexão + roteador + incidente), Óptica, Roteador (CPE), Cliente, Ações (sempre bloqueadas). Lista "Clientes · visão 360" em Assinantes. Tudo atrás das flags `subscriber_360` **e** `customer_context` (desligadas por padrão; faltando qualquer uma a rota é 404 e a lista não aparece; o bloco do roteador precisa ainda de `onu_cpe_links`). Consome `GET /v1/customers/{id}/context` (sem API nova).
 - Referência visual do Lovable (um lote); how-to `assinantes/visao-360` + capturas reais 1440×900/390×844; seed demo liga a flag.
 - **Não feito (declarado):** busca por cliente/contrato no ⌘K, Wi-Fi e Histórico (sem fonte homologada), caminho "flag desligada" não coberto por E2E (só 404 por construção + flags testadas no backend).
 

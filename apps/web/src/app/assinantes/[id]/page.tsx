@@ -5,7 +5,7 @@ import { Card, Row } from "@/components/Panel";
 import { SourceChip } from "@/components/SourceChip";
 import { EmptyState, ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
-import { featureOn } from "@/lib/features";
+import { subscriber360On } from "@/lib/features";
 import type { CustomerContext, CustomerOnu } from "@/lib/types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -88,7 +88,7 @@ function Panel({ tab, o }: { tab: string; o: CustomerOnu }) {
 export default async function Subscriber360({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ aba?: string; onu?: string }> }) {
   const { id } = await params;
   const q = await searchParams;
-  if (!UUID.test(id) || !(await featureOn("subscriber_360"))) notFound();  // desligada = a tela não existe para este provedor
+  if (!UUID.test(id) || !(await subscriber360On())) notFound();  // desligada = a tela não existe para este provedor
   const r = await apiSafe<CustomerContext>(`/v1/customers/${id}/context`);
   if (r.status === 404) notFound();
   const shell = (c: React.ReactNode) => <AppShell active="/assinantes" user="1">{c}</AppShell>;

@@ -13,7 +13,7 @@ ui_route: "/assinantes/[id]"
 
 **Objetivo:** ver, em uma tela, a situação de um cliente (contrato, ONU, sinal e roteador) sabendo de onde vem cada informação e quão recente ela é.
 
-**Antes de começar:** o recurso precisa estar ligado para o seu provedor (flag `subscriber_360`, liberada pelo responsável da plataforma). Permissão `customers:read`; o bloco de incidente exige também `incidents:read`. Cada visualização é registrada na auditoria.
+**Antes de começar:** o recurso precisa estar ligado para o seu provedor (flags `subscriber_360` **e** `customer_context`, liberadas pelo responsável da plataforma; o bloco do roteador também precisa de `onu_cpe_links`). Permissão `customers:read`; o bloco de incidente exige também `incidents:read`. Cada visualização é registrada na auditoria.
 
 ## Passo a passo
 

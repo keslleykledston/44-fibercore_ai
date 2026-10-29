@@ -2,8 +2,11 @@ import "server-only";
 import { apiSafe } from "./api";
 import type { TenantFeature } from "./types";
 
-/** Flag por provedor (ADR-0023). Falha ao consultar = desligada: nunca liga uma tela por engano. */
-export async function featureOn(name: string): Promise<boolean> {
+/** Flags por provedor (ADR-0023): TODAS as nomeadas precisam estar ligadas. Falha ao consultar = desligada: nunca liga uma tela por engano. */
+export async function featuresOn(...names: string[]): Promise<boolean> {
   const r = await apiSafe<TenantFeature[]>("/v1/tenant/features");
-  return !!r.data?.find((f) => f.feature === name)?.enabled;
+  return names.every((n) => !!r.data?.find((f) => f.feature === n)?.enabled);
 }
+
+/** A Visão 360 mostra dados da rota de contexto do cliente (customer_context): sem ela a tela só daria 403. */
+export const subscriber360On = () => featuresOn("subscriber_360", "customer_context");

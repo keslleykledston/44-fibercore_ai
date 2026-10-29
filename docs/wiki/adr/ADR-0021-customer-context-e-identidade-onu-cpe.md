@@ -21,5 +21,6 @@ Testes: A/B, 403 sem `customers:read`, auditoria registrada, vínculo ausente �
 - `evidence.rule` é obrigatório no banco (CHECK; `IS TRUE` porque `NULL` passaria num CHECK simples): nenhum vínculo existe sem a regra que o produziu. A confirmação humana é registrada (`reviewed_by/at`, auditoria, evento); justificativa em texto livre fica fora desta fatia.
 - As duas flags são **independentes**: `onu_cpe_links` governa o bloco `cpe` (ONU 360 e contexto); `customer_context` governa só a rota do cliente (dado pessoal). Testado.
 - Ambiguidade é contada com a **mesma normalização** da regra (`upper(btrim(serial))`); o contexto devolve no máximo 50 ONUs (`onus_truncated`; truncado nunca é `complete`).
+- Dependência de flags da UI (FC22-005): a Visão 360 exige `subscriber_360` **e** `customer_context` (a tela consome a rota de contexto); só liga-se a primeira, a tela some em vez de mostrar 403.
 - Isolamento: as consultas filtram por id e a barreira é a RLS forçada de cada relação lida (teste lê `pg_class`/`pg_policies` de todas).
 

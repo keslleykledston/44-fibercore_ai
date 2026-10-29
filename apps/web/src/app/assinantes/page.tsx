@@ -2,7 +2,7 @@ import { AppShell } from "@/components/AppShell";
 import { EmptyState, ErrorState, PageHeader } from "@/components/ui";
 import Link from "next/link";
 import { apiSafe } from "@/lib/api";
-import { featureOn } from "@/lib/features";
+import { subscriber360On } from "@/lib/features";
 import type { Association, CustomerRow } from "@/lib/types";
 
 const n = (v: string | undefined) => (v && /^\d{1,5}$/.test(v) ? v : "0");
@@ -14,7 +14,7 @@ export default async function Assinantes({ searchParams }: { searchParams: Promi
   // pede 1 item a mais para saber se há próxima página (nenhum vínculo fica inacessível)
   const r = await apiSafe<Association[]>(`/v1/associations?status=suggested&limit=${PAGE + 1}&offset=${(page - 1) * PAGE}`);
   if (r.status === 403) return <AppShell active="/assinantes" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver assinantes." /></AppShell>;
-  const sub360 = await featureOn("subscriber_360");
+  const sub360 = await subscriber360On();
   // clientes: busca por nome (q) e páginas de 20; pede 1 a mais para saber se há próxima (nenhum cliente fica inacessível)
   const CPAGE = 20;
   const cq = (q.q ?? "").trim().slice(0, 64);
