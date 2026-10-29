@@ -41,3 +41,5 @@ Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetido
 - Codex 3 rodadas → approve. pytest 227 passed; E2E 45 passed; validate_* PASS. Deploy: backup 20261029T052517Z verificado, `make up-prod`, Alembic 0017, prodcheck sem issues. Flags desligadas no LAB: fluxo ligado só no E2E/pytest.
 ## 2026-10-29 — PR 39 (FC22-006) + Edge no GenieACS
 - R-D001 v1 extraída (pura, versionada), `diagnostic_runs` append-only, `/v1/diagnostics/*`; Codex approve em 1 rodada; pytest 237. Edge instalado no host do GenieACS (cron, sem root), 6 CPEs no LAB; NBI não fechado (sem root; runbook). Flags do LAB ligadas por autorização do responsável.
+## 2026-10-29 — PR 40 (FC22-007)
+- `/assinantes/diagnostico/[id]`, BFF de execução, `onu_id` no escopo, `pon_id` no contexto; Codex 5 rodadas → approve; pytest 238, E2E 48; Lovable 2º lote (4,7 créditos). Deploy no LAB feito.
