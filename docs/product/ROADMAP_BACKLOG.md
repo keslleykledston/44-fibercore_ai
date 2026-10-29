@@ -112,3 +112,9 @@ Fonte: `docs/addenda/v2.2/` (pacote intacto). Análise: `docs/addenda/v2.2/GAP_A
 | FC22-018 | P2 | [ ] adiado (ADR-0015) | pós-S4 | 004, 006 |
 | (DoD) flags por tenant | — | [x] PR 36: `tenant_features`, `feature-set`, `/v1/tenant/features`, kill switch do registro | S1 | — |
 
+
+
+## Feature Pack SD-001 (Smart Diagnostics & Remediation) — ligado ao backlog, sem renumerar (2026-10-29)
+- Gate B0 entregue: `docs/feature-packs/SD-001/BASELINE_COMPATIBILITY_REPORT.md` + ADR-0025 (Proposed). P0/P1/P2 e FC22-001…009 permanecem como estão.
+- Ordem proposta: SD-PR-01 contratos+mocks+flags off → SD-PR-02 `device_capabilities` (parameter_paths/TTL) → SD-PR-03 `diagnostic_jobs` read-only → (após ADRs) coleta WAN/Wi-Fi, testes ativos, propostas/aprovação (sobre o gate de jobs), homologação em laboratório.
+- Bloqueios: ADR-SD-002 (árvore de parâmetros + NBI fechado), ADR-0015/ADR-SD-006 (copiloto), ADR-SD-003 (testes ativos), ADR-SD-005 (USP). Escrita real: homologação + autorização operacional separada.
