@@ -162,3 +162,4 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - Mutation check: caminho sensível na lista → 2 testes falham; enum aceitando qualquer texto → 1 teste falha.
 - `make test-api`: **271 passed** (teste cruzado: estados/métricas que o Edge emite ⊂ contrato).
 - Medição na LAB (somente nomes de caminho, sem valores): 43 dispositivos, 5 com árvore (3 TR-098, 2 TR-181), nenhum com WAN/Wi-Fi/PPP. NOT_RUN: leitura real de WAN/Wi-Fi (não existe no cache; depende da decisão do ADR-SD-002 item 4).
+- Codex PR 48: 2 rodadas até approve (ver CODEX_REVIEW_LOG). `CachedParams` em lotes de 25 ids, teto de 5000 por chamada; teste de lotes e rejeições sem tocar a rede.
