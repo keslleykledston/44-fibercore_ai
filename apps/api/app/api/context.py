@@ -24,6 +24,7 @@ router = APIRouter()
 
 ERP_FRESH_FOR = timedelta(days=7)   # ASSUMPTION (to be approved): ERP imports are batch jobs, not minute-level telemetry
 SUGGEST_LIMIT = 1000
+CONTEXT_ONU_LIMIT = 50              # a customer with more approved ONUs is reported as truncated, never silently cut
 CONF_SERIAL_EQUAL = 0.50            # equality of serials is only an indication
 CONF_SERIAL_EQUAL_AMBIGUOUS = 0.20  # the same ONU serial exists on more than one OLT
 
@@ -47,7 +48,8 @@ def suggest_links(p: Principal = Depends(require("associations:review")), conn: 
     features.ensure(conn, p.tenant_id, "onu_cpe_links")
     rows = conn.execute(
         text(
-            "SELECT u.id AS onu_id, c.id AS cpe_id, (SELECT count(*) FROM onus u2 WHERE u2.serial = u.serial) AS same_serial_onus "
+            "SELECT u.id AS onu_id, c.id AS cpe_id, "
+            "(SELECT count(*) FROM onus u2 WHERE upper(btrim(u2.serial)) = upper(btrim(u.serial))) AS same_serial_onus "
             "FROM onus u JOIN cpes c ON upper(btrim(u.serial)) = c.canonical_serial "
             "WHERE NOT EXISTS (SELECT 1 FROM onu_cpe_links l WHERE l.onu_id = u.id AND l.cpe_id = c.id) "
             "ORDER BY u.serial, u.id LIMIT :n"
@@ -175,10 +177,12 @@ def customer_context(customer_id: UUID, p: Principal = Depends(require("customer
             "FROM associations a JOIN onus u ON u.id = a.onu_id AND u.tenant_id = a.tenant_id "
             "JOIN olts o ON o.id = u.olt_id AND o.tenant_id = u.tenant_id "
             "LEFT JOIN pon_ports pp ON pp.id = u.pon_id AND pp.tenant_id = u.tenant_id "
-            "WHERE a.customer_id = :c AND a.status = 'approved' ORDER BY u.serial"
+            "WHERE a.customer_id = :c AND a.status = 'approved' ORDER BY u.serial LIMIT :n"
         ),
-        {"c": customer_id},
+        {"c": customer_id, "n": CONTEXT_ONU_LIMIT + 1},
     ).all()
+    truncated = len(onus) > CONTEXT_ONU_LIMIT
+    onus = onus[:CONTEXT_ONU_LIMIT]
     out_onus, qualities, unlinked = [], [], False
     for u in onus:
         cb = cpe_block(conn, p.tenant_id, u.id, p.can("associations:review"))
@@ -195,9 +199,10 @@ def customer_context(customer_id: UUID, p: Principal = Depends(require("customer
         })
     erp = _prov(f"erp:{cu.erp_source}", cu.source_updated_at or cu.created_at, ERP_FRESH_FOR)
     qualities.append(erp["quality"])
-    status = "unknown" if not onus else "stale" if any(q != "fresh" for q in qualities) else "partial" if unlinked else "complete"
+    status = ("unknown" if not onus else "stale" if any(q != "fresh" for q in qualities)
+              else "partial" if (unlinked or truncated) else "complete")  # ONUs we did not look at cannot be called complete
     audit(conn, p, "customer.context.view", "customer", str(customer_id), {})  # personal data: every view is audited
-    return {"customer_id": str(customer_id), "status": status,
+    return {"customer_id": str(customer_id), "status": status, "onus_truncated": truncated,
             "customer": {"display_name": cu.display_name, "document_last4": cu.document_last4, "contract_status": cu.contract_status,
                          "provenance": erp},
             "onus": out_onus}

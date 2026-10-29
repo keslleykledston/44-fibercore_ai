@@ -20,7 +20,7 @@ def _cleanup(migrated):
         c.execute(text("DELETE FROM customers WHERE erp_source = 'ctxtest'"))
         c.execute(text("DELETE FROM cpe_protocol_bindings WHERE cpe_id IN (SELECT id FROM cpes WHERE canonical_serial LIKE 'CTX-%')"))
         c.execute(text("DELETE FROM cpes WHERE canonical_serial LIKE 'CTX-%'"))
-        c.execute(text("DELETE FROM onus WHERE serial LIKE 'CTX-%'"))
+        c.execute(text("DELETE FROM onus WHERE serial LIKE 'CTX-%' OR olt_id IN (SELECT id FROM olts WHERE name LIKE 'OLT-CTX-%')"))
         c.execute(text("DELETE FROM pon_ports WHERE olt_id IN (SELECT id FROM olts WHERE name LIKE 'OLT-CTX-%')"))
         c.execute(text("DELETE FROM olts WHERE name LIKE 'OLT-CTX-%'"))
         c.execute(text("DELETE FROM tenant_memberships WHERE role = 'support'"))
@@ -283,3 +283,41 @@ def test_flags_are_independent_links_show_the_cpe_on_onu360_while_the_customer_c
     cid = _customer(migrated, seed["A"], None, seed["alice"])
     r = client.get(f"/v1/customers/{cid}/context", headers=h)
     assert r.status_code == 403 and r.json()["detail"] == "feature_disabled"
+
+
+def test_ambiguity_uses_the_same_normalisation_as_the_match(client, seed, inv, migrated):
+    h = _setup(client, inv, seed, migrated, "CTX-NRM1")
+    _olt(client, inv, "a2", "OLT-CTX-A2", "CTX-NRM1X")
+    with migrated.begin() as c:  # same serial up to case/blanks on another OLT: raw equality would call it unambiguous
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        assert c.execute(text("UPDATE onus SET serial = ' ctx-nrm1 ' WHERE serial = 'CTX-NRM1X'")).rowcount == 1
+    _suggest(client, h)
+    every = client.get("/v1/onu-cpe-links", headers=h, params={"limit": 1000}).json()  # the renamed ONU no longer starts with CTX-
+    links = [x for x in every if x["cpe"]["canonical_serial"] == "CTX-NRM1"]
+    assert len(links) == 2 and all(x["evidence"]["ambiguous"] is True and x["confidence"] == 0.2 for x in links)
+    assert all(client.post(f"/v1/onu-cpe-links/{x['id']}/confirm", headers=h).status_code == 409 for x in links)
+
+
+def test_context_is_bounded_and_says_when_it_cut(client, seed, inv, migrated, monkeypatch):
+    from app.api import context
+    monkeypatch.setattr(context, "CONTEXT_ONU_LIMIT", 2)
+    h = _setup(client, inv, seed, migrated)
+    onus = [{"serial": f"CTX-BIG{i}", "pon_path": "0/6/0", "status": "online", "rx_dbm": -20.0} for i in range(3)]
+    assert client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a1"),
+                       json=snap(inv, "a1", name="OLT-CTX-BIG", pons=[{"pon_path": "0/6/0", "status": "up"}], onus=onus)).status_code == 202
+    for i in (0, 1):  # the two ONUs that fit are fully linked: only the cut makes the context incomplete
+        _cpe(client, inv, "a1", f"CTX-BIG{i}")
+    _suggest(client, h)
+    for x in _links(client, h):
+        if x["onu"]["serial"] in ("CTX-BIG0", "CTX-BIG1"):
+            assert client.post(f"/v1/onu-cpe-links/{x['id']}/confirm", headers=h).status_code == 200
+    cid = _customer(migrated, seed["A"], None, seed["alice"])
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        for o in c.execute(text("SELECT id FROM onus WHERE serial LIKE 'CTX-BIG%'")).all():
+            c.execute(text("INSERT INTO associations(tenant_id, onu_id, customer_id, status, score, evidence, reviewed_by, reviewed_at) "
+                           "VALUES (:t,:o,:c,'approved',100,CAST('{}' AS jsonb),:r,now())"),
+                      {"t": seed["A"], "o": o.id, "c": cid, "r": seed["alice"]})
+    d = client.get(f"/v1/customers/{cid}/context", headers=h).json()
+    assert [o["cpe"]["link"] for o in d["onus"]] == ["confirmed", "confirmed"]
+    assert len(d["onus"]) == 2 and d["onus_truncated"] is True and d["status"] == "partial"  # never `complete` for ONUs not examined

@@ -421,7 +421,7 @@ paths:
     get:
       tags: [ERP]
       operationId: getCustomerContext
-      summary: Visão read-only de UM cliente (contrato + ONUs de associação APROVADA + CPE só com vínculo CONFIRMADO), cada bloco com fonte/data/qualidade. customers:read, auditado (customer.context.view), flag customer_context. status = unknown > stale > partial > complete. Incidente só com incidents:read (senão incident_hidden). Nunca expõe HMAC do documento, ids do ERP nem segredos do CPE
+      summary: Visão read-only de UM cliente (contrato + ONUs de associação APROVADA + CPE só com vínculo CONFIRMADO), cada bloco com fonte/data/qualidade. customers:read, auditado (customer.context.view), flag customer_context. status = unknown > stale > partial > complete; no máximo 50 ONUs por resposta (`onus_truncated`=true ⇒ nunca `complete`). Incidente só com incidents:read (senão incident_hidden). Nunca expõe HMAC do documento, ids do ERP nem segredos do CPE
       parameters: [{$ref: '#/components/parameters/TenantId'}, {name: customer_id, in: path, required: true, schema: {type: string, format: uuid}}]
       responses:
         '200': {description: CustomerContext, content: {application/json: {schema: {type: object}}}}

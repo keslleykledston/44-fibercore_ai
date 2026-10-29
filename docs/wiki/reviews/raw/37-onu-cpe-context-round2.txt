@@ -1,0 +1,29 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a185f6-4407-7931-8e4a-dbf3086d5fae).
+[codex] Turn started (01a185f6-4449-7d50-ab2d-a3e8753045ed).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e rastrear os caminhos de concorrência, isolamento do tenan...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/context.py | sed -n '30,205p'; nl -ba apps/api/alembic...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/context.py | sed -n '30,205p'; nl -ba apps/api/alembic... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '300,330p'; rg -n \"observed_at....
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '300,330p'; rg -n \"observed_at.... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: a sugestão pode classificar como n...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: a sugestão pode classificar como não ambíguo um serial que colide após normalização; o contexto também permite resposta e custo de consulta sem limite por cliente.
+
+Findings:
+- [high] A verificação de ambiguidade usa serial bruto, mas a sugestão usa serial normalizado (apps/api/app/api/context.py:50-60)
+  O vínculo é sugerido por `upper(btrim(u.serial)) = c.canonical_serial`, mas a contagem de colisões compara `u2.serial = u.serial`. Se duas ONUs em OLTs diferentes tiverem serials que só diferem em caixa ou espaços, o JOIN pode sugerir ambas contra o mesmo CPE enquanto a contagem marca cada uma como não ambígua. A confirmação pode então associar um CPE à ONU errada, contrariando a regra de bloquear colisões entre OLTs.
+  Recommendation: Contar colisões usando a mesma normalização da regra de correspondência e garantir que todas as sugestões para um serial normalizado ambíguo sejam bloqueadas para confirmação.
+- [medium] O endpoint de contexto não limita ONUs nem o tamanho da resposta (apps/api/app/api/context.py:170-184)
+  A consulta busca todas as associações aprovadas de um cliente e materializa todas com `.all()`. Depois, `cpe_block` executa consultas adicionais por ONU. Um cliente com muitas associações pode provocar uma resposta muito grande e muitas consultas em uma única requisição autenticada, consumindo conexões e CPU; não há paginação ou limite visível neste caminho.
+  Recommendation: Definir e aplicar um limite explícito de ONUs por contexto ou paginar o resultado, e reduzir as consultas por ONU com uma consulta em lote.
+
+Next steps:
+- Normalizar a contagem de ambiguidade e limitar ou paginar o contexto antes de liberar a alteração.
