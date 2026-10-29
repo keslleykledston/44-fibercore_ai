@@ -155,7 +155,7 @@ components:
       name: Idempotency-Key
       in: header
       required: true
-      description: Valor opaco (ex.: UUID). O código de jobs já impõe um padrão parecido; aqui sem ':' para não aceitar MAC.
+      description: "Valor opaco, por exemplo um UUID. O código de jobs já impõe um padrão parecido; aqui sem dois-pontos para não aceitar MAC."
       schema: {type: string, minLength: 8, maxLength: 128, pattern: '^[A-Za-z0-9_.-]+$'}
     JobId:
       name: job_id
