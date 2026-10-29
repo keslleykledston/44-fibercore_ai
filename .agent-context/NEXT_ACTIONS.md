@@ -48,3 +48,4 @@
 ## Atualização 2026-10-28 (tela MFA)
 - Feito: `/conta/seguranca` (ativar/desativar MFA, QR, códigos de recuperação uma vez), política `MFA_REQUIRED_ROLES` (403 mfa_enrolment_required, sem auto-downgrade, boot falha com papel inexistente), how-to publicado com capturas reais, E2E.
 - Pendente: redefinição de MFA por administrador (auditada); regeneração de códigos; ligar `FIBERCORE_MFA_REQUIRED_ROLES=isp_admin` no LAB depois que o admin cadastrar; eventos de segurança globais.
+- Edge × NBI (2026-10-29): coletor validado contra payload real (43 dispositivos; fixture sintética em `agents/edge/internal/collector/testdata/`), filtro de `DISCOVERYSERVICE`. NÃO foi possível abrir túnel TCP pelo SSH do host do GenieACS (timeout do canal); a leitura real foi um `curl` remoto equivalente. Pendente: Edge rodando de fato na rede do GenieACS, NBI fechado/autenticado (ver KNOWN_ISSUES).

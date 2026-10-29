@@ -43,3 +43,6 @@
 
 ## Unreleased — ONU 360 (PR 28)
 - `GET /v1/onus/{id}` (estado, OLT/PON com idade do dado, incidente com `incidents:read`) e `GET /v1/onus/{id}/customer` (dado pessoal: `customers:read`, auditado). Página `/rede/onu/[id]`, painel lateral `EntityDetailDrawer` (dialog) na tabela de Rede, how-to com capturas. Codex: 4 rodadas, approve.
+
+## Unreleased — Edge × GenieACS NBI (PR 30)
+- Coletor GenieACS descarta identidades provisórias `DISCOVERYSERVICE` (37 de 43 dispositivos no servidor real) e reporta só contagens (`no_serial`, `placeholder_identity`). Teste com fixture sintética da estrutura real; mutação verificada.

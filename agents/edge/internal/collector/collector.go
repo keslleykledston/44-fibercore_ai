@@ -27,6 +27,9 @@ type DeviceLister interface {
 }
 
 type GenieACS struct {
+	// OnSkip, when set, receives how many devices were left out and why ("no_serial", "placeholder_identity"); nothing identifying.
+	OnSkip func(reason string, n int)
+
 	EdgeID      string
 	ConnectorID string
 	Client      DeviceLister
@@ -54,6 +57,15 @@ type cpeSnapshot struct {
 
 const maxPerSnapshot = 5000 // keep in sync with the Cloud limit
 
+// placeholderID is the identity GenieACS/CPEs use BEFORE a device is really known (observed on the real server: Huawei ONTs informing
+// as DISCOVERYSERVICE with a fresh random serial each time). It is not an inventory identity: ingesting it would create a new fake CPE
+// per Inform. Counts of what was dropped are reported through OnSkip, never the identifiers.
+const placeholderID = "DISCOVERYSERVICE"
+
+func isPlaceholder(d nbi.Device) bool {
+	return d.DeviceID.OUI == placeholderID || d.DeviceID.Manufacturer == placeholderID || d.DeviceID.ProductClass == placeholderID
+}
+
 func (g *GenieACS) Collect(ctx context.Context) ([]Item, error) {
 	devs, err := g.Client.Devices(ctx)
 	if err != nil {
@@ -78,9 +90,24 @@ func (g *GenieACS) Collect(ctx context.Context) ([]Item, error) {
 		batch = nil
 		return nil
 	}
+	skipped := map[string]int{}
+	defer func() {
+		if g.OnSkip != nil {
+			for _, r := range []string{"no_serial", "placeholder_identity"} {
+				if skipped[r] > 0 {
+					g.OnSkip(r, skipped[r])
+				}
+			}
+		}
+	}()
 	for _, d := range devs {
+		if isPlaceholder(d) {
+			skipped["placeholder_identity"]++
+			continue
+		}
 		serial := d.DeviceID.SerialNumber
 		if serial == "" || d.ID == "" {
+			skipped["no_serial"]++
 			continue // cannot be keyed canonically; skip rather than invent identity
 		}
 		batch = append(batch, cpeIn{

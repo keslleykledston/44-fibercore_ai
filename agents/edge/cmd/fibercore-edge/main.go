@@ -73,7 +73,8 @@ func main() {
 			log.Error("nbi", "err", err)
 			os.Exit(2)
 		}
-		collectors = append(collectors, &collector.GenieACS{EdgeID: cfg.EdgeID, ConnectorID: cfg.ConnectorID, Client: nbiClient})
+		collectors = append(collectors, &collector.GenieACS{EdgeID: cfg.EdgeID, ConnectorID: cfg.ConnectorID, Client: nbiClient,
+			OnSkip: func(reason string, n int) { log.Info("genieacs: devices left out", "reason", reason, "count", n) }})
 	}
 
 	if len(cfg.OLTs) > 0 {

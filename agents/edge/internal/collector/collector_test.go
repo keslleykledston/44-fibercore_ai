@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,5 +52,61 @@ func TestBatchesAtCloudLimit(t *testing.T) {
 	items, _ := (&GenieACS{EdgeID: "e", ConnectorID: "c", Client: fakeLister{devs}}).Collect(context.Background())
 	if len(items) != 2 {
 		t.Fatalf("want 2 snapshots, got %d", len(items))
+	}
+}
+
+// Structure of a real GenieACS /devices answer (captured read-only from the production-like server; ALL values here are synthetic):
+// provisional DISCOVERYSERVICE identities with a random serial per Inform, a serial with a hyphen, a URL-encoded _id, an empty serial.
+func TestRealNBIShapeSkipsPlaceholdersAndReportsOnlyCounts(t *testing.T) {
+	raw, err := os.ReadFile("testdata/nbi_devices_structure.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/devices" || r.URL.Query().Get("projection") != "_id,_lastInform,_deviceId" {
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.String())
+		}
+		_, _ = w.Write(raw)
+	}))
+	defer srv.Close()
+	c, err := nbi.New(srv.URL, srv.Client(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	skips := map[string]int{}
+	g := &GenieACS{EdgeID: "e1", ConnectorID: "genieacs-lab", Client: c, OnSkip: func(r string, n int) { skips[r] = n }}
+	items, err := g.Collect(context.Background())
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items=%d err=%v", len(items), err)
+	}
+	var snap struct {
+		CPEs []struct {
+			CanonicalSerial string `json:"canonical_serial"`
+			Binding         struct {
+				ExternalID string `json:"external_id"`
+			} `json:"binding"`
+		} `json:"cpes"`
+	}
+	if err := json.Unmarshal(items[0].Payload, &snap); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, c := range snap.CPEs {
+		got[c.CanonicalSerial] = c.Binding.ExternalID
+	}
+	want := map[string]string{"SYN0000001": "AAAA00-HG8245H-SYN0000001", "SYN-00000002": "BBBB11-G3000E-SYN-00000002", "SYN0000003": "CCCC22-hAP%20lite-SYN0000003"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v", got)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Fatalf("serial %s: external_id %q want %q", k, got[k], v)
+		}
+	}
+	if strings.Contains(string(items[0].Payload), "DISCOVERYSERVICE") {
+		t.Fatal("placeholder identity leaked into the snapshot")
+	}
+	if skips["placeholder_identity"] != 2 || skips["no_serial"] != 1 {
+		t.Fatalf("skips=%v", skips)
 	}
 }
