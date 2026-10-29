@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import Connection, text
 
 from app.api.deps import TENANT_CONN, Principal, require
@@ -29,6 +29,13 @@ class RunRequest(BaseModel):
     rule_version: int | None = Field(None, ge=1)   # omitted = the latest registered version
     olt_id: UUID | None = None
     pon_id: UUID | None = None
+    onu_id: UUID | None = None   # the PON of this ONU (resolved server-side); exclusive with olt_id/pon_id
+
+    @model_validator(mode="after")
+    def _one_scope(self) -> RunRequest:
+        if self.onu_id and (self.olt_id or self.pon_id):
+            raise ValueError("onu_id cannot be combined with olt_id or pon_id")
+        return self
 
 
 def _rule_view(r: diagnostics.Rule) -> dict:
@@ -83,9 +90,19 @@ def create_run(body: RunRequest, p: Principal = Depends(require("diagnostics:run
     rule = diagnostics.RULES.get((body.rule_id, body.rule_version)) if body.rule_version else diagnostics.latest(body.rule_id)
     if rule is None:
         raise HTTPException(404, "rule not found")
-    inputs, truncated = _pon_inputs(conn, body.olt_id, body.pon_id)
+    pon_id = body.pon_id
+    if body.onu_id:
+        # RLS: another tenant's ONU is simply not found
+        row = conn.execute(text("SELECT pon_id FROM onus WHERE id = :o"), {"o": body.onu_id}).first()
+        if row is None:
+            raise HTTPException(404, "onu not found")
+        if row.pon_id is None:
+            raise HTTPException(409, "onu has no known PON")
+        pon_id = row.pon_id
+    inputs, truncated = _pon_inputs(conn, body.olt_id, pon_id)
     findings = diagnostics.run(rule, inputs)
-    scope = {"olt_id": str(body.olt_id) if body.olt_id else None, "pon_id": str(body.pon_id) if body.pon_id else None}
+    scope = {"olt_id": str(body.olt_id) if body.olt_id else None, "pon_id": str(pon_id) if pon_id else None,
+             "onu_id": str(body.onu_id) if body.onu_id else None}
     run_id = conn.execute(
         text("INSERT INTO diagnostic_runs (tenant_id, rule_id, rule_version, scope, inputs, findings, truncated, requested_by) "
              "VALUES (:t,:r,:v,CAST(:s AS jsonb),CAST(:i AS jsonb),CAST(:f AS jsonb),:x,:u) RETURNING id"),

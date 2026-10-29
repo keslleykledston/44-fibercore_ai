@@ -14,7 +14,7 @@ Navegação (≤6 grupos): **já são 6** (Visão Geral, Rede, Assinantes, NOC, 
 | CapabilityGate | falta | **PR 35**: bloco de capacidades no card Ações da ONU 360 |
 | ConnectionSummary / OpticalSummary / ClientSummary | parcial | cards Estado/Localização/Assinante da ONU 360 |
 | EvidenceTimeline | falta | FC22-007 (Histórico do assinante sem fonte homologada) |
-| DiagnosticStepper | falta | FC22-007 |
+| DiagnosticStepper | implementado (PR 40) | FC22-007 |
 | IncidentQueue | parcial | lista em `/noc` (sem componente próprio) |
 | TopologyTree | falta | FC22-010 |
 | ScoreWithCoverage | falta | FC22-011/013 (renderiza `insufficient_data`) |
@@ -25,7 +25,7 @@ Navegação (≤6 grupos): **já são 6** (Visão Geral, Rede, Assinantes, NOC, 
 | Tela v2.2 | Estado | Rota atual / alvo | help_slug |
 |---|---|---|---|
 | Subscriber 360 | parcial | evolui `/rede/onu/[id]` | atual `rede/onu-360`; novo `assinantes/visao-360` quando houver entrada por cliente |
-| Guided Troubleshooting | falta | `/assinantes/diagnostico/[id]` (alvo) | `assinantes/diagnostico-guiado` |
+| Guided Troubleshooting | implementado (PR 40) | `/assinantes/diagnostico/[id]` (alvo) | `assinantes/diagnostico-guiado` |
 | NOC Command Center | parcial | `/noc` evolui | `noc/acompanhar-incidente` (existe) |
 | Network Explorer | falta | `/rede/explorar` (alvo) | `rede/explorar-topologia` |
 | Wi-Fi Experience | falta/bloqueado | aba de Subscriber 360 | `assinantes/wifi` |

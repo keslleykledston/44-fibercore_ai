@@ -10,3 +10,7 @@ export async function featuresOn(...names: string[]): Promise<boolean> {
 
 /** A Visão 360 mostra dados da rota de contexto do cliente (customer_context): sem ela a tela só daria 403. */
 export const subscriber360On = () => featuresOn("subscriber_360", "customer_context");
+
+/** O diagnóstico guiado parte da Visão 360 e executa a regra: precisa das três flags. */
+export const diagnosticsOn = () => featuresOn("subscriber_360", "customer_context", "diagnostic_engine");
+

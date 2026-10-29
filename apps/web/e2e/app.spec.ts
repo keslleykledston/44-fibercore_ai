@@ -161,6 +161,49 @@ test("Visão 360 do assinante: estado explicado, fonte por bloco, abas só com d
 });
 
 
+test("Diagnóstico guiado: conclusão só após executar, hipótese com a PON em queda, sem padrão na PON saudável, resumo para ticket", async ({ page, request }) => {
+  const tok = (await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json()).access_token as string;
+  const h = { Authorization: `Bearer ${tok}` };
+  const assoc = (await (await request.get(`${API_URL}/v1/associations?status=suggested&limit=200`, { headers: h })).json()) as { id: string; customer_name: string }[];
+  for (const name of ["Cliente Demo Cinco", "Cliente Demo Três"]) {
+    const a = assoc.find((x) => x.customer_name === name);
+    if (a) expect((await request.post(`${API_URL}/v1/associations/${a.id}/approve`, { headers: h })).status()).toBe(200);
+  }
+  await login(page);
+  const open = async (nome: string) => {
+    await page.goto(`/assinantes?q=${encodeURIComponent(nome)}`);
+    await page.getByTestId("customer-list").getByRole("link", { name: new RegExp(nome) }).click();
+    await page.getByTestId("open-diagnostic").click();
+    await expect(page.getByTestId("diag-ready")).toBeVisible();
+  };
+  await open("Cliente Demo Cinco");
+  await expect(page.getByTestId("diag-conclusion")).toContainText("Sem conclusão");           // antes de executar nada se afirma
+  await expect(page.getByTestId("step-4")).toContainText("Indisponível");
+  await expect(page.getByTestId("step-2")).toContainText("Confirmado");
+  await page.getByTestId("step-4").click();
+  await page.getByTestId("step-action").click();                                              // executa a regra (somente leitura)
+  await expect(page.getByTestId("diag-conclusion")).toContainText("Hipótese");
+  await expect(page.getByTestId("diag-conclusion")).toContainText("perda de sinal / fibra");
+  await expect(page.getByTestId("diag-conclusion")).toContainText("Nenhuma alteração foi feita na rede");
+  await expect(page.getByTestId("step-4")).toContainText("Hipótese");
+  await expect(page.getByTestId("diag-evidence")).toContainText("Caíram recentemente");
+  await page.getByTestId("ticket").locator("summary").click();
+  const txt = await page.locator("#ticket-text").inputValue();
+  expect(txt).toContain("nenhuma alteração foi feita na rede");
+  expect(txt).toContain("Hipótese");
+  expect(txt).not.toMatch(/\d{3}\.\d{3}\.\d{3}/);                                              // nenhum documento completo
+  const res = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+  expect(res.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
+  await open("Cliente Demo Três");                                                            // PON saudável: sem padrão, nunca "saudável"
+  await page.getByTestId("step-4").click();
+  await page.getByTestId("step-action").click();
+  await expect(page.getByTestId("diag-conclusion")).toContainText("Sem padrão coletivo");
+  await expect(page.getByTestId("diag-conclusion")).not.toContainText("Hipótese");
+  await expect(page.getByTestId("diag-evidence")).toContainText("não prova que a PON esteja saudável");
+  expect((await page.goto("/assinantes/diagnostico/00000000-0000-0000-0000-000000000000"))?.status()).toBe(404);
+  expect((await page.goto("/assinantes/diagnostico/nao-e-uuid"))?.status()).toBe(404);
+});
+
 for (const scheme of ["light", "dark"] as const) {
   test(`acessibilidade (axe) sem violações sérias - tema ${scheme}`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });

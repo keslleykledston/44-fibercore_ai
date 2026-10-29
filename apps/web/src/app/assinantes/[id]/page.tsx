@@ -5,7 +5,7 @@ import { Card, Row } from "@/components/Panel";
 import { SourceChip } from "@/components/SourceChip";
 import { EmptyState, ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
-import { subscriber360On } from "@/lib/features";
+import { diagnosticsOn, subscriber360On } from "@/lib/features";
 import type { CustomerContext, CustomerOnu } from "@/lib/types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -99,9 +99,11 @@ export default async function Subscriber360({ params, searchParams }: { params: 
   const tabs = tabsFor(o);
   const cur = tabs.some(([t]) => t === q.aba) ? (q.aba as string) : tabs[0][0];
   const ov = OVERALL[d.status];
+  const diag = await diagnosticsOn();
   return shell(
     <>
       <PageHeader title={d.customer.display_name} subtitle="Visão 360 do assinante, com a origem de cada dado" helpSlug="assinantes/visao-360">
+        {diag && o && <Link href={`/assinantes/diagnostico/${id}?onu=${o.id}`} data-testid="open-diagnostic" className="inline-flex min-h-touch items-center rounded-btn border border-line px-3 text-sm">Diagnóstico guiado</Link>}
         <Link href="/assinantes" className="inline-flex min-h-touch items-center rounded-btn px-3 text-sm text-accent hover:underline">← Voltar para Assinantes</Link>
       </PageHeader>
       <div data-testid="sub360-ready" className="grid gap-4">

@@ -38,4 +38,10 @@ export type CustomerContext = {
 };
 export type CustomerRow = { id: string; display_name: string; document_last4: string | null; contract_status: string };
 export type TenantFeature = { feature: string; enabled: boolean; source: string };
+export type DiagnosticFinding = {
+  finding_id: string; status: "observed" | "inferred" | "unknown"; hypothesis: string | null; reason?: string; suspected_cause?: string;
+  evidence: { pon_path: string; onus_observed: number; onus_down_recent: number; online: number; los: number; dying_gasp: number; chronic_offline: number; ratio: number };
+  requires_human_confirmation: boolean; next_read_action: string; rule_id: string; rule_version: number;
+};
+export type DiagnosticRun = { run_id: string; rule_id: string; rule_version: number; scope: { onu_id: string | null }; created_at: string; findings: DiagnosticFinding[]; reproducible: boolean | null };
 

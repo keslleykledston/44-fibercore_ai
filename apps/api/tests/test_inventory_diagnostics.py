@@ -216,3 +216,20 @@ def test_runs_are_append_only_and_tenant_isolated_in_the_database(client, seed, 
                 c.execute(text("INSERT INTO diagnostic_runs (tenant_id, rule_id, rule_version, inputs, findings, requested_by) "
                                "VALUES (:t,:r,1,'[]','[]',:u)"), {"t": seed["A"], "r": bad, "u": seed["alice"]})
     assert run["run_id"]
+
+
+def test_run_scoped_by_onu_resolves_its_pon_server_side(client, seed, inv, migrated):
+    _on(migrated, seed["A"])
+    h = hdr(client, "alice", seed, "A")
+    ok = [{"serial": f"{NAME}6-{i}", "pon_path": p, "status": "online", "rx_dbm": -20.0} for i, p in enumerate(("0/1/0", "0/1/1"))]
+    _push(client, inv, "a1", NAME + "6", ok, _now(-30), pons=("0/1/0", "0/1/1"))
+    onu = next(o for o in client.get(f"/v1/onus?serial={NAME}6-1", headers=h).json())
+    d = client.post("/v1/diagnostics/runs", headers=h, json={"rule_id": "R-D001", "onu_id": onu["id"]}).json()
+    assert len(d["findings"]) == 1 and d["findings"][0]["evidence"]["pon_path"] == "0/1/1"   # only that ONU's PON, not the whole OLT
+    assert d["scope"]["onu_id"] == onu["id"] and d["scope"]["pon_id"]
+    r = client.post("/v1/diagnostics/runs", headers=h, json={"rule_id": "R-D001", "onu_id": onu["id"], "olt_id": onu["olt_id"]})
+    assert r.status_code == 422                                                                     # scopes do not mix
+    assert client.post("/v1/diagnostics/runs", headers=h, json={"rule_id": "R-D001", "onu_id": "00000000-0000-0000-0000-000000000000"}).status_code == 404
+    _on(migrated, seed["B"])
+    assert client.post("/v1/diagnostics/runs", headers=hdr(client, "bob", seed, "B"),
+                       json={"rule_id": "R-D001", "onu_id": onu["id"]}).status_code == 404         # RLS: B cannot probe A's ONU

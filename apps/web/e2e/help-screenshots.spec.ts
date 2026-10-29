@@ -22,6 +22,18 @@ const sub360Route = async (request: APIRequest) => {
   const cu = (await (await request.get(`${API_URL}/v1/customers?limit=200`, { headers: h })).json()) as { id: string; display_name: string }[];
   return `/assinantes/${cu.find((x) => x.display_name === "Cliente Demo Três")!.id}`;
 };
+/** Cliente demo numa PON com queda coletiva: aprova o vínculo, executa o diagnóstico (somente leitura) e devolve a rota já com o resultado. */
+const diagRoute = async (request: APIRequest) => {
+  const tok = (await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json()).access_token as string;
+  const h = { Authorization: `Bearer ${tok}` };
+  const assoc = (await (await request.get(`${API_URL}/v1/associations?status=suggested&limit=200`, { headers: h })).json()) as { id: string; customer_name: string }[];
+  const a = assoc.find((x) => x.customer_name === "Cliente Demo Cinco");
+  if (a) expect((await request.post(`${API_URL}/v1/associations/${a.id}/approve`, { headers: h })).status()).toBe(200);
+  const cu = (await (await request.get(`${API_URL}/v1/customers?limit=200&q=Demo%20Cinco`, { headers: h })).json()) as { id: string }[];
+  const ctx = (await (await request.get(`${API_URL}/v1/customers/${cu[0].id}/context`, { headers: h })).json()) as { onus: { id: string }[] };
+  const run = (await (await request.post(`${API_URL}/v1/diagnostics/runs`, { headers: h, data: { rule_id: "R-D001", onu_id: ctx.onus[0].id } })).json()) as { run_id: string };
+  return `/assinantes/diagnostico/${cu[0].id}?onu=${ctx.onus[0].id}&run=${run.run_id}`;
+};
 type APIRequest = APIRequestContext;
 const screens: { slug: string; route: string; ready: string; prepare?: (r: APIRequest) => Promise<void>; dynamicRoute?: (r: APIRequest) => Promise<string>; steps?: (page: Page) => Promise<void> }[] = [
   { slug: "visao-geral/visao-geral", route: "/", ready: "kpis" },
@@ -29,6 +41,7 @@ const screens: { slug: string; route: string; ready: string; prepare?: (r: APIRe
   { slug: "rede/onu-360", route: "/rede?serial=DEMOA0001", ready: "onu360-ready", prepare: suggestLinks,
     steps: async (page: Page) => { await page.getByTestId("onu-open").click(); await page.getByTestId("onu-360-link").click(); } },
   { slug: "assinantes/visao-360", route: "/assinantes", ready: "sub360-ready", dynamicRoute: sub360Route },
+  { slug: "assinantes/diagnostico-guiado", route: "/assinantes", ready: "diag-ready", dynamicRoute: diagRoute },
   { slug: "noc/acompanhar-incidente", route: "/noc", ready: "incident-queue" },
   { slug: "assinantes/importar-e-revisar-vinculos", route: "/assinantes", ready: "association-list" },
   { slug: "operacoes/acompanhar-operacoes", route: "/operacoes", ready: "jobs-table" },

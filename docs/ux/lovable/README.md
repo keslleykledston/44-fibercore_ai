@@ -28,4 +28,8 @@ Adotado da proposta, adaptado aos tokens já validados por axe (os valores de `m
 - **Adotado:** "Cobertura das informações" com estado em texto + ícone e a frase do porquê; rótulo "Último estado conhecido" + "a idade do dado não indica ONU offline"; aba Conexão agrupando conexão + roteador + incidente; abas Óptica/Roteador só com dado; "Não é diagnóstico" no incidente; mensagens de erro/403 que não afirmam nada.
 - **Não adotado:** skeleton de carregamento via `loading.tsx` (faz o Next responder 200 para `notFound`); seletor de estado de demonstração; abas por JS (as nossas são links de servidor, funcionam sem hidratação); botões Confirmar/Rejeitar na tela do cliente (a revisão fica na ONU 360).
 - **Não verificado por nós no Lovable:** tema escuro e demais estados da página de demonstração.
-
+## Diagnóstico guiado (2026-10-29, FC22-007)
+- Segundo e último lote desta fase (`UX_HANDOFF_GUIDED_TROUBLESHOOTING.md`), commit `151f59d74fc1…`, 4,7 créditos, concluído (chamada com `wait=false`; resultado lido por `get_message`/`read_file`). Nada do código foi importado.
+- **Adotado:** rótulos de confiança Confirmado/Hipótese/Indisponível em texto+símbolo; as frases de cautela por passo ("não comprova conexão", "Rx ausente não comprova a causa da queda", "identificar o roteador não comprova acesso à internet"); ticket com "Sintoma relatado" e a idade de cada fonte em minutos; nenhum botão de escrita.
+- **Não adotado:** seletor de estado DEMO; estado de permissão simulado por flag no cliente (aqui a permissão vem do servidor: 403 do BFF); dados fixos de PON (aqui vêm do `diagnostic_runs`).
+- **Não verificado por nós no Lovable:** tema escuro e demais estados da página de demonstração.

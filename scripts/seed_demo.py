@@ -36,6 +36,7 @@ def main() -> None:
     cli("feature-set", tenant, "onu_cpe_links", "on")  # FC22-004 (ADR-0021/0023): off by default in production, on for the demo tenant
     cli("feature-set", tenant, "customer_context", "on")
     cli("feature-set", tenant, "subscriber_360", "on")  # FC22-005
+    cli("feature-set", tenant, "diagnostic_engine", "on")  # FC22-006/007
     edge = cli("register-edge", tenant, "edge-demo", "--site", "POP Central (demo)")
     sa = subprocess.run([*COMPOSE, "run", "--rm", "-T", "--no-deps", "migrate", "python", "-m", "app.cli",
                          "create-service-account", tenant, "edge-demo-agent", "edge_agent", "--edge-id", edge],
@@ -82,7 +83,8 @@ def main() -> None:
     uh = {"Authorization": f"Bearer {ut}"}
     csv_body = ("erp_customer_id,display_name,document,contract_status,onu_serial\n"
                 "D001,Cliente Demo Um,,active,DEMOA0000\nD002,Cliente Demo Dois,,active,DEMOA0001\n"
-                "D003,Cliente Demo Três,,suspended,DEMOD0000\nD004,Cliente Demo Ambíguo,,active,DEMODUP001\n")
+                "D003,Cliente Demo Três,,suspended,DEMOD0000\nD004,Cliente Demo Ambíguo,,active,DEMODUP001\n"
+                "D005,Cliente Demo Cinco,,active,DEMOC0000\n")  # Cinco: ONU numa PON com queda coletiva (diagnóstico guiado)
     r = u.post("/v1/erp/import-csv?source=csv-demo", headers={**uh, "content-type": "text/csv"}, content=csv_body.encode())
     assert r.status_code == 200, r.text
     olt_id = next(o["id"] for o in u.get("/v1/olts", headers=uh).json() if o["name"] == "OLT-DEMO-01")

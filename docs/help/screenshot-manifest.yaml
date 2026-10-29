@@ -35,6 +35,14 @@ articles:
   - assets/assinantes/visao-360/mobile.png
   e2e_test: help-screenshots.spec.ts › assinantes/visao-360; app.spec.ts › Visão 360 do assinante
   last_verified: '2026-10-29'
+- slug: assinantes/diagnostico-guiado
+  ui_route: /assinantes/diagnostico/[id]
+  status: published
+  images:
+  - assets/assinantes/diagnostico-guiado/desktop.png
+  - assets/assinantes/diagnostico-guiado/mobile.png
+  e2e_test: help-screenshots.spec.ts › assinantes/diagnostico-guiado; app.spec.ts › Diagnóstico guiado
+  last_verified: '2026-10-29'
 - slug: noc/acompanhar-incidente
   ui_route: /noc
   status: published

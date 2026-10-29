@@ -123,3 +123,6 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - Mutações (10, todas reprovadas): razão estrita, dado velho afirmando, mínimo de quedas, confirmação humana, causa, flag na execução, replay falso, truncamento escondido, frescor sempre verdadeiro, correlator que nunca abre.
 - NOT_RUN: execução com dados reais de OLT (o LAB não coleta OLT; Edge de OLT não ligado).
 - Deploy no LAB (2026-10-29, PR 39): backup verificado antes; Alembic 0018; `diagnostic_runs` com RLS forçada, 0 linhas; flag `diagnostic_engine` ligada no tenant do LAB; prodcheck sem issues; Edge do GenieACS com heartbeat recente. Execução real de diagnóstico no LAB não feita (sem OLT coletada).
+## 2026-10-29 — Diagnóstico guiado, PR 40 (FC22-007)
+- `scripts/e2e.sh` completo (com capturas): **48 passed** (1 funcional novo: abre pela Visão 360 → "Sem conclusão" antes de executar → executa a regra → Hipótese na PON em queda (Cliente Demo Cinco) → resumo para ticket sem documento completo → axe sem violações sérias → PON saudável (Cliente Demo Três) dá "Sem padrão coletivo" e nunca "Hipótese" → 404 para id inexistente/inválido; 2 capturas reais). pytest: 238 (1 novo: escopo por ONU).
+- NOT_RUN: E2E com a flag desligada; execução com dado real de OLT.
