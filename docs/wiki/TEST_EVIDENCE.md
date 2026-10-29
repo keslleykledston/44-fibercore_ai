@@ -198,4 +198,5 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
   - Folhas da lista fechada lidas no cache do ACS: estado do link físico da WAN (Up), `Enable`/`Channel` de 2 rádios Wi-Fi (rádio 1 canal 1; rádio 5 canal 36). Nenhum segredo na lista.
   - Lacuna: `ConnectionStatus`/`Uptime` das conexões WAN (PPP/IP) NÃO vieram — a lista fechada cobre `WANConnectionDevice.{1,2}.{WANPPPConnection,WANIPConnection}.{1,2}` e esta ONT não expôs valor nesses caminhos (instância/numeração a verificar em captura sanitizada do firmware, sem ampliar a lista às cegas).
   - Ainda NOT_RUN: transporte `cpe_state` Edge→cloud (migração 0019) e uso do dado nas regras R-D002..004.
+- **Refresh com 11 grupos (instâncias WAN 1..4) na ONT de bancada, LAB, 2026-10-29 (Edge 0.3.2-lab-0d741fa):** `completed=11 faulted=0 queued=0 cleaned=0; readable_metrics=7`. Estado da conexão PPP (instância 3) e uptime lidos além do link e dos 2 rádios. Faults no ACS antes/depois: 1/1 (nenhum da ONT); tarefas 3/3. `go vet ./... && go test -race ./...` PASS (Edge). Contrato dos 11 grupos fixado por teste.
 
