@@ -374,3 +374,16 @@ def test_identical_repeated_claims_next_to_a_valid_entry_are_deduplicated(client
     body = {"edge_id": str(inv["a1"]["edge"]), "observed_at": _now(), "cpes": [one, {**one, "vendor": "B"}, ok]}
     r = client.post("/v1/edge/cpe-snapshots", headers=a, json=body)
     assert r.status_code == 202 and r.json() == {"status": "accepted", "cpes": 2, "skipped": 0, "conflicts": 0}, r.text
+
+
+def test_one_device_over_two_protocols_makes_one_cpe_with_two_bindings_and_the_first_claim_names_it(client, seed, inv):
+    a = agent(client, inv, "a1")
+    body = {"edge_id": str(inv["a1"]["edge"]), "observed_at": _now(), "cpes": [
+        {"canonical_serial": "MULTI-PROTO-1", "vendor": "FirstVendor", "binding": {"protocol": "tr069", "external_id": "mp-cwmp", "connector_id": "c-mp"}},
+        {"canonical_serial": "MULTI-PROTO-1", "vendor": "SecondVendor", "binding": {"protocol": "tr369", "external_id": "mp-usp", "connector_id": "c-mp"}},
+        {"canonical_serial": "MULTI-OTHER-1", "binding": {"protocol": "tr069", "external_id": "mp-other", "connector_id": "c-mp"}}]}
+    r = client.post("/v1/edge/cpe-snapshots", headers=a, json=body)
+    assert r.status_code == 202 and r.json()["conflicts"] == 0 and r.json()["cpes"] == 3, r.text
+    rows = {x["canonical_serial"]: x for x in client.get("/v1/cpes", headers=hdr(client, "alice", seed, "A")).json()}
+    assert rows["MULTI-PROTO-1"]["vendor"] == "FirstVendor" and {b["protocol"] for b in rows["MULTI-PROTO-1"]["bindings"]} == {"tr069", "tr369"}
+    assert "MULTI-OTHER-1" in rows

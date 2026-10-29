@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1854e-9ce0-7311-8ceb-006e5d0c3fdf).
+[codex] Turn started (01a1854e-b13e-7a13-844c-e6fde1fcbfcd).
+[codex] Assistant message captured: Vou conferir o diff contra `main`, com foco no fluxo de coleta, canonicalização e upserts sob...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/app/api/inventory.py'
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/app/api/inventory.py' (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"cpe_protocol_bindings|canonical_serial|CpeSnapshotAck|repeats|conflict...
+[codex] Command completed: /bin/bash -lc "rg -n \"cpe_protocol_bindings|canonical_serial|CpeSnapshotAck|repeats|conflict... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: reivindicações distintas do mesmo s...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: reivindicações distintas do mesmo serial podem fazer o upsert em lote falhar por inteiro.
+
+Findings:
+- [high] Serial repetido com chaves de binding diferentes aborta o snapshot (apps/api/app/api/inventory.py:245-274)
+  A deduplicação usa `k = (canonical_serial, connector_id, protocol)`, então reivindicações do mesmo serial com connector ou protocol diferente podem sobreviver em `fresh`. Em seguida, o `INSERT ... ON CONFLICT` inclui ambas as linhas para a mesma chave única `(tenant_id, canonical_serial)`. PostgreSQL rejeita esse caso porque uma única instrução de upsert não pode afetar a mesma linha mais de uma vez; o snapshot inteiro falha, inclusive CPEs sem conflito. Isso pode ocorrer com reivindicações TR-069 e TR-369 do mesmo CPE ou com connectors distintos. Agrupe o upsert de `cpes` por serial antes da instrução e defina explicitamente como selecionar uma linha representativa; mantenha os bindings aceitos para cada chave separadamente.
+  Recommendation: Garantir no máximo uma linha por `canonical_serial` no upsert de `cpes`, sem descartar bindings válidos de protocols/connectors distintos; acrescentar cobertura para ambos os casos.
