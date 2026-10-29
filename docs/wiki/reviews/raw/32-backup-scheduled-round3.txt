@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a185a4-1bdd-7740-b92c-efb0084ceaaf).
+[codex] Turn started (01a185a4-1c17-78c3-9d92-5e5c47ae42c3).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir o fluxo de backup, verificação e retenção, dand...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- scripts/backup-scheduled.sh...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- scripts/backup-scheduled.sh... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=25 main...HEAD -- docs/wiki/reviews/raw/32-ba...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=25 main...HEAD -- docs/wiki/reviews/raw/32-ba... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba scripts/backup-scheduled.sh | sed -n '8,32p'; git status --short"
+[codex] Command completed: /bin/bash -lc "nl -ba scripts/backup-scheduled.sh | sed -n '8,32p'; git status --short" (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar: uma colisão de timestamp pode marcar com...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar: uma colisão de timestamp pode marcar como falho e apagar um backup válido já existente.
+
+Findings:
+- [high] Falha de publicação pode reclassificar e remover backup preexistente (scripts/backup-scheduled.sh:19-21)
+  `OUT` usa timestamp com precisão de segundos. Se uma execução repetir o mesmo nome (por exemplo, chamada novamente no mesmo segundo), `backup.sh` recusa sobrescrever o destino existente e retorna erro. O `EXIT` trap verifica apenas se `OUT` ou `OUT.gpg` existe, então marca o arquivo preexistente como `.failed`; quando houver mais de dois marcadores, `prune_failed` remove esse dump e seu checksum, mesmo se ele já tinha sido verificado e tinha `.done`. Isso pode apagar um backup válido por uma falha que não publicou nenhum artefato novo. Marque como `.failed` apenas um arquivo comprovadamente criado por esta execução, ou gere um nome exclusivo e mantenha controle explícito de publicação própria.
+  Recommendation: Rastreie um estado de publicação desta execução definido somente após `backup.sh` concluir com sucesso; no trap, não sinalize arquivos preexistentes. Considere também incluir um sufixo exclusivo no nome do dump.
