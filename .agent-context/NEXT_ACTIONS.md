@@ -57,4 +57,4 @@
 ## Adendo v2.2 (2026-10-29)
 - Ler `docs/addenda/v2.2/GAP_ANALYSIS.md` antes de qualquer FC22. PR 34 = planejamento. Próximo: PR 35 = FC22-002 fatia mínima (tabela `device_capabilities`, `GET /v1/devices/{id}/capabilities`, bloco "Capacidades" na ONU 360, how-to + capturas, Codex). Depois S1: 003, 004 (vínculo ONU↔CPE, ADR-0021), 005 (Lovable em lote, flags por tenant ADR-0023).
 - Não declarar feito sem código + teste + captura real + how-to + Codex. Scores só com dado real (ADR-0022).
-
+- v2.2 PR 35 (FC22-002 mínimo) implementado; migração 0015 ainda NÃO aplicada no LAB até o merge. Próximo: FC22-003 (envelope source/quality), tenant flags (ADR-0023), 004.

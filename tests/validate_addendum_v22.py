@@ -68,7 +68,7 @@ SPEC = {(m, norm("/v1" + p)) for p, ops in real["paths"].items() for m in ops if
 
 # deriva contrato x código: tem de ser EXATAMENTE a conhecida (C-19 da GAP); deriva nova reprova
 KNOWN_DOCUMENTED_NOT_IMPLEMENTED = {
-    ("get", "/v1/cpes/{}/capabilities"), ("get", "/v1/integrations/erp"), ("post", "/v1/integrations/erp"),
+    ("get", "/v1/integrations/erp"), ("post", "/v1/integrations/erp"),
     ("post", "/v1/integrations/erp/{}/sync"), ("post", "/v1/copilot/suggestions"),
 }
 HEALTH = {("get", "/livez"), ("get", "/readyz"), ("get", "/version")}

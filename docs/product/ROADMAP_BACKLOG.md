@@ -93,7 +93,7 @@ Fonte: `docs/addenda/v2.2/` (pacote intacto). Análise: `docs/addenda/v2.2/GAP_A
 | ID | Pri | Estado (verificado no repo) | Sprint | Depende de |
 |---|---|---|---|---|
 | FC22-001 | P0 | [x] análise de GAP/conflitos/ADRs (PR 34) | S0 | — |
-| FC22-002 | P0 | [ ] parcial: Registry do Edge + `support_level`; rota `GET /cpes/{cpeId}/capabilities` documentada sem handler; **fatia mínima no PR 35** | S0/S1 | 001 |
+| FC22-002 | P0 | [~] **fatia mínima implementada (PR 35)**: tabela `device_capabilities` (RLS, leitura-only p/ a app), `GET /cpes/{cpeId}/capabilities` e `/olts/{oltId}/capabilities`, CLI `capability-set` com evidência, bloco na ONU 360. **Faltam**: flag por tenant, cobertura TR-369/Wi-Fi, gate por perfil nos jobs, Edge alimentando o registro | S0/S1 | 001 |
 | FC22-003 | P0 | [ ] parcial: `observed_at` + frescor na leitura; falta envelope `source/quality` | S1 | 001 |
 | FC22-004 | P0 | [ ] parcial: `/v1/onus/{id}/customer`; falta `/v1/customers/{id}/context` e vínculo ONU↔CPE | S1 | 002, 003 |
 | FC22-005 | P0 | [ ] parcial: ONU 360 publicada (`rede/onu-360`); falta entrada por cliente/abas | S1 | 004 |

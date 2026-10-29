@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { DataFreshness, ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
-import type { Onu360, OnuCustomer } from "@/lib/types";
+import { CapabilityGate } from "@/components/CapabilityGate";
+import type { Capability, Onu360, OnuCustomer } from "@/lib/types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const cause: Record<string, string> = { fiber_or_los: "Suspeita: perda de sinal / fibra", power: "Suspeita: falta de energia", unknown: "Causa não determinada" };
@@ -28,6 +29,7 @@ export default async function Onu360Page({ params }: { params: Promise<{ id: str
   const customer = cu.status === 200 ? cu.data : null;
   const customerFailed = cu.status !== 200 && cu.status !== 403; // só 403 (papel sem acesso) omite o bloco; o resto é falha e aparece
   if (!o) return <AppShell active="/rede" user="1"><ErrorState title="Falha ao carregar a ONU" hint="Tente novamente em instantes." /></AppShell>;
+  const caps = await apiSafe<Capability[]>(`/v1/olts/${o.olt.id}/capabilities`);  // perfil da OLT da ONU (registro de capacidades)
   return (
     <AppShell active="/rede" user="1">
       <PageHeader title={`ONU ${o.serial}`} subtitle="Visão completa de uma ONU, com a origem de cada dado" helpSlug="rede/onu-360">
@@ -87,7 +89,9 @@ export default async function Onu360Page({ params }: { params: Promise<{ id: str
         <Card title="Ações" testid="onu360-actions">
           <p className="text-sm">Nenhuma ação de escrita está liberada para esta ONU.</p>
           <p className="mt-1 text-sm text-muted">Reinício, troca de Wi-Fi e outras escritas na rede ficam bloqueadas até a homologação do driver e a política de aprovação. Gerência remota TR-069/TR-369: não homologada.</p>
-          <Link href="/operacoes" className="mt-3 inline-flex min-h-touch items-center rounded-btn text-accent hover:underline">Ver Operações</Link>
+          <Link href="/operacoes" className="mt-3 inline-flex min-h-touch items-center rounded-btn text-accent underline underline-offset-2">Ver Operações</Link>
+          {caps.data ? <CapabilityGate caps={caps.data} title="Capacidades da OLT desta ONU" />
+            : <p role="alert" className="mt-4 border-t border-line pt-3 text-sm text-danger" data-testid="capability-error">Não foi possível carregar as capacidades. Isso não significa que sejam suportadas.</p>}
         </Card>
       </div>
     </AppShell>

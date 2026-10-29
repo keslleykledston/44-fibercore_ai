@@ -363,11 +363,28 @@ paths:
     get:
       tags: [CPE]
       operationId: getCpeCapabilities
+      summary: Capacidades do CPE pelo perfil vendor/model/firmware (Capability Registry, ADR-0019). Sem registro, ou perfil/firmware incompleto = unknown/identified. Nunca libera escrita (blocked_reason vem do motor de jobs)
       parameters: [{$ref: '#/components/parameters/TenantId'}, {name: cpeId, in: path, required: true, schema: {type: string, format: uuid}}]
       responses:
         '200':
-          description: Capacidades por protocolo/firmware e homologação
+          description: Capacidades por protocolo/firmware e homologação (uma por operação do catálogo × protocolo)
           content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Capability'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: CPE inexistente ou de outro provedor}
+  /olts/{oltId}/capabilities:
+    get:
+      tags: [Network]
+      operationId: getOltCapabilities
+      summary: Mesmo contrato para a OLT (a ONU usa o perfil da sua OLT)
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: oltId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200':
+          description: Capacidades da OLT
+          content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Capability'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: OLT inexistente ou de outro provedor}
   /integrations/erp:
     get:
       tags: [ERP]
@@ -708,6 +725,11 @@ components:
         certification: {type: string, enum: [identified, observed, certified]}
         model: {type: [string, 'null']}
         firmware: {type: [string, 'null']}
+        vendor: {type: [string, 'null']}
+        writes: {type: boolean, description: A operação altera o equipamento}
+        blocked_reason: {type: [string, 'null'], description: Motivo do bloqueio pelo motor de jobs (operation_not_homologated); null = leitura}
+        verified_at: {type: [string, 'null'], format: date-time}
+        evidence_ref: {type: [string, 'null']}
     NewErpIntegration:
       type: object
       required: [provider, name, secret_ref]

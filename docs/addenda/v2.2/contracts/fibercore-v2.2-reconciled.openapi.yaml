@@ -25,8 +25,8 @@ paths:
     get:
       operationId: getCpeCapabilities
       x-fc22-id: FC22-002
-      x-status: planned
-      summary: DOCUMENTADA no contrato vigente, SEM handler no código. Capacidades pelo perfil vendor/model/firmware do CPE; operação sem registro = unknown (schema Capability vigente)
+      x-status: implemented
+      summary: Era documentada sem handler; implementada no PR 35. Capacidades pelo perfil vendor/model/firmware do CPE; sem registro = unknown (schema Capability vigente + campos aditivos)
       parameters: [{in: path, name: cpeId, required: true, schema: {type: string, format: uuid}}]
       responses:
         '200': {description: "[Capability] do contrato vigente: name, status supported|unsupported|unknown, protocol, certification, model, firmware"}
@@ -35,7 +35,7 @@ paths:
     get:
       operationId: getOltCapabilities
       x-fc22-id: FC22-002
-      x-status: planned
+      x-status: implemented
       summary: Mesmo contrato para OLT (perfil da OLT; ONU usa o perfil da sua OLT). Substitui o recurso genérico /devices/{id} da proposta, que não existe no modelo
       parameters: [{in: path, name: oltId, required: true, schema: {type: string, format: uuid}}]
       responses:

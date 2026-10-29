@@ -14,6 +14,7 @@ from sqlalchemy import Connection, text
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.noc import evaluate_pons
 from app.api.routes import audit
+from app.core.capabilities import catalog_for
 from app.events import outbox
 
 router = APIRouter()
@@ -431,6 +432,48 @@ def onu_customer(
         out.update(display_name=c.display_name, document_last4=c.document_last4, contract_status=c.contract_status)
     audit(conn, p, "onu360.customer.view", "onu", str(onu_id), {})  # access to personal data is logged
     return out
+
+
+def _capabilities(conn: Connection, tenant_id: UUID, kind: str, vendor: str | None, model: str | None, firmware: str | None) -> list[dict]:
+    """Catalog x registry for ONE profile. Unknown profile, unknown firmware or no row => status unknown / certification identified."""
+    from app.api.jobs import OPERATIONS, _blocked_reason  # local: jobs imports this module's siblings at load time
+
+    rows: dict[tuple[str, str], object] = {}
+    if vendor and model and firmware:
+        for r in conn.execute(
+            text("SELECT protocol, operation, status, certification, verified_at, evidence_ref FROM device_capabilities "
+                 "WHERE tenant_id = :t AND lower(vendor) = lower(:v) AND lower(model) = lower(:m) AND firmware = :f"),
+            {"t": tenant_id, "v": vendor.strip(), "m": model.strip(), "f": firmware.strip()},
+        ):
+            rows[(r.protocol, r.operation)] = r
+    out = []
+    for e in catalog_for(kind, OPERATIONS):
+        r = rows.get((e.protocol, e.operation))
+        out.append({
+            "name": e.operation, "protocol": e.protocol, "status": r.status if r else "unknown",
+            "certification": r.certification if r else "identified", "vendor": vendor, "model": model, "firmware": firmware,
+            "writes": e.writes,
+            # the SAME gate the job engine applies; the registry never opens a write by itself
+            "blocked_reason": _blocked_reason(e.operation),
+            "verified_at": r.verified_at.isoformat() if r and r.verified_at else None, "evidence_ref": r.evidence_ref if r else None,
+        })
+    return out
+
+
+@router.get("/v1/cpes/{cpe_id}/capabilities")
+def cpe_capabilities(cpe_id: UUID, p: Principal = Depends(require("inventory:read")), conn: Connection = TENANT_CONN) -> list[dict]:
+    c = conn.execute(text("SELECT vendor, model, firmware FROM cpes WHERE id = :i"), {"i": cpe_id}).first()
+    if c is None:
+        raise HTTPException(404, "cpe not found")
+    return _capabilities(conn, p.tenant_id, "cpe", c.vendor, c.model, c.firmware)
+
+
+@router.get("/v1/olts/{olt_id}/capabilities")
+def olt_capabilities(olt_id: UUID, p: Principal = Depends(require("inventory:read")), conn: Connection = TENANT_CONN) -> list[dict]:
+    o = conn.execute(text("SELECT vendor, model, firmware FROM olts WHERE id = :i"), {"i": olt_id}).first()
+    if o is None:
+        raise HTTPException(404, "olt not found")
+    return _capabilities(conn, p.tenant_id, "olt", o.vendor, o.model, o.firmware)
 
 
 @router.get("/v1/cpes")

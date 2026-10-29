@@ -1,6 +1,6 @@
 # ADR-0019: Capability Registry por perfil (vendor/model/firmware/protocolo/operação)
 
-Status: Proposed (fatia mínima em implementação no PR 35) | Data: 2026-10-29 | Owner: equipe | Origem: adendo v2.2, FC22-002
+Status: Accepted (fatia mínima implementada no PR 35; ver Consequências para o que NÃO está feito) | Data: 2026-10-29 | Owner: equipe | Origem: adendo v2.2, FC22-002
 
 ## Contexto
 Hoje a homologação vive em três lugares sem ligação: o `Registry` do Edge (OLT, níveis `identified/observed/certified`), `olts.support_level` no Cloud e o gate global `HOMOLOGATED_WRITES` (vazio) em `jobs.py`. Não há nada para CPE/TR-069/TR-369, nem resposta à pergunta "esta operação neste modelo+firmware é suportada, observada ou certificada?". O adendo exige `unknown` por padrão e bloqueio de escrita em firmware não certificado (AC-005).
@@ -13,3 +13,5 @@ Opção B. Tabela `device_capabilities` por tenant (RLS forçada): `vendor, mode
 
 ## Consequências
 Testes: isolamento A/B, `unknown` padrão, enums, escrita ausente da API. Rollback: `DROP TABLE` (aditiva). Limites: resolução do perfil depende de vendor/model/firmware estarem preenchidos no inventário (CPE hoje traz vendor/model; firmware pode faltar → `unknown`). Flag por tenant: ver ADR-0023.
+
+**Implementado no PR 35** (migração 0015, `app/core/capabilities.py`, rotas em `inventory.py`, CLI `capability-set`, `CapabilityGate` na ONU 360; testes `test_inventory_capabilities.py`). **Não feito**: flag por tenant (DoD parcial), ligação do gate de jobs ao registro, Edge alimentando o registro, capacidades de TR-369/Wi-Fi.

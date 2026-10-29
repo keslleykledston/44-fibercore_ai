@@ -90,6 +90,11 @@ test("ONU 360: painel lateral abre pelo serial, foco volta ao fechar e a página
   await expect(page.getByTestId("onu360-location")).toContainText("OLT-DEMO-01");
   await expect(page.getByTestId("onu360-customer")).toContainText(/Cliente Demo Um|sugestão/); // vínculo aprovado ou ainda sugerido, conforme a ordem dos testes
   await expect(page.getByTestId("onu360-actions")).toContainText("Nenhuma ação de escrita está liberada");
+  const gate = page.getByTestId("capability-gate");  // registro vazio no demo: tudo Desconhecida; escrita segue bloqueada pelo motor de jobs
+  await expect(gate).toContainText("Perfil: huawei MA5800-X7 · R018");
+  await expect(gate.getByTestId("cap-collect")).toContainText("Desconhecida");
+  await expect(gate.getByTestId("cap-provision_onu")).toContainText("Bloqueada: operação ainda não homologada");
+  await expect(gate.getByTestId("cap-collect")).not.toContainText("Suportada");
   const res = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
   const bad = res.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
   expect(bad.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(" | ")}`)).toEqual([]);

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import json
 import os
 import secrets
 import sys
@@ -43,6 +44,13 @@ def main(argv: list[str] | None = None) -> None:
     s = sub.add_parser("create-service-account")
     s.add_argument("tenant_id"); s.add_argument("name"); s.add_argument("role", choices=ROLES); s.add_argument("--edge-id")
     e = sub.add_parser("register-edge"); e.add_argument("tenant_id"); e.add_argument("name"); e.add_argument("--site")
+    cs = sub.add_parser("capability-set", help="record what is known about an operation on a vendor/model/firmware profile")
+    cs.add_argument("tenant_id"); cs.add_argument("vendor"); cs.add_argument("model"); cs.add_argument("firmware")
+    cs.add_argument("protocol", choices=["tr069", "tr369", "olt"]); cs.add_argument("operation")
+    cs.add_argument("status", choices=["supported", "unsupported", "unknown"])
+    cs.add_argument("certification", choices=["identified", "observed", "certified"])
+    cs.add_argument("--evidence", help="reference to the evidence (doc/commit/ticket); REQUIRED for observed/certified")
+    cs.add_argument("--verified-at", help="ISO-8601 time the evidence was verified; REQUIRED for observed/certified")
     sp = sub.add_parser("set-password", help="set a user's password (owner-only); ends all their sessions")
     sp.add_argument("email"); sp.add_argument("--password-env")
     ul = sub.add_parser("unlock-login"); ul.add_argument("key", help="e-mail, or svc:<client_id>, or ip:<addr>")
@@ -68,6 +76,30 @@ def main(argv: list[str] | None = None) -> None:
                 text("INSERT INTO tenant_memberships(tenant_id,user_id,role) "
                      "SELECT :t, id, :r FROM users_global WHERE lower(email)=lower(:e)"),
                 {"t": a.tenant_id, "r": a.role, "e": a.email})
+        elif a.cmd == "capability-set":
+            if a.certification != "identified" and not (a.evidence and a.verified_at):
+                sys.exit("observed/certified require --evidence and --verified-at")
+            from app.api.jobs import OPERATIONS  # the catalog is the job engine's operations: no invented names
+            if a.operation not in OPERATIONS:
+                sys.exit(f"unknown operation {a.operation!r}; known: {', '.join(sorted(OPERATIONS))}")
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            cid = c.execute(
+                text("INSERT INTO device_capabilities (tenant_id, vendor, model, firmware, protocol, operation, status, certification, "
+                     "verified_at, evidence_ref) VALUES (:t,btrim(:v),btrim(:m),btrim(:f),:p,:o,:s,:c,CAST(:va AS timestamptz),:e) "
+                     "ON CONFLICT (tenant_id, lower(vendor), lower(model), firmware, protocol, operation) DO UPDATE SET "
+                     "status = EXCLUDED.status, certification = EXCLUDED.certification, verified_at = EXCLUDED.verified_at, "
+                     "evidence_ref = EXCLUDED.evidence_ref RETURNING id"),
+                {"t": a.tenant_id, "v": a.vendor, "m": a.model, "f": a.firmware, "p": a.protocol, "o": a.operation, "s": a.status,
+                 "c": a.certification, "va": a.verified_at, "e": a.evidence},
+            ).scalar()
+            c.execute(
+                text("INSERT INTO events_outbox (tenant_id, aggregate_type, aggregate_id, event_type, schema_version, payload) "
+                     "VALUES (:t,'capability',:i,'device.capabilities.changed','1',CAST(:p AS jsonb))"),
+                {"t": a.tenant_id, "i": cid, "p": json.dumps({
+                    "vendor": a.vendor, "model": a.model, "firmware": a.firmware, "protocol": a.protocol, "operation": a.operation,
+                    "status": a.status, "certification": a.certification})},
+            )
+            print(f"capability {a.operation}/{a.protocol} on {a.vendor} {a.model} {a.firmware}: {a.status}/{a.certification}")
         elif a.cmd == "set-password":
             h = hash_secret(_password(a.password_env))
             uid = c.execute(text("SELECT id FROM users_global WHERE lower(email)=lower(:e)"), {"e": a.email}).scalar()

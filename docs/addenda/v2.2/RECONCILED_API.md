@@ -13,7 +13,7 @@ Os contratos listam caminhos relativos ao servidor público **`/api/v1`**. O cor
 | Proposto | Reconciliado (caminho público) | Estado |
 |---|---|---|
 | `GET /customers/{id}/context` | `GET /customers/{customer_id}/context` | planned (FC22-004) |
-| `GET /devices/{id}/capabilities` | **descartado** (não há recurso `devices`) → `GET /cpes/{cpeId}/capabilities` (**já documentada no contrato vigente, sem handler**) + `GET /olts/{oltId}/capabilities` | planned → PR 35 |
+| `GET /devices/{id}/capabilities` | **descartado** (não há recurso `devices`) → `GET /cpes/{cpeId}/capabilities` (**documentada sem handler; implementada no PR 35**) + `GET /olts/{oltId}/capabilities` | **implemented** (PR 35) |
 | `POST /diagnostics/runs` (200) | `POST /diagnostics/runs` (201 + `run_id`) | planned (FC22-006) |
 | `GET /network/topology` | idem | planned (FC22-010) |
 | `GET /qoe/{id}` | `GET /qoe/{subject_id}` (`score: null` + `insufficient_data` até haver dado) | planned (FC22-011/012) |

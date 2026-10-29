@@ -51,7 +51,7 @@ Legenda: **existe** = código + teste no repo; **parcial** = há base, falta par
 | C-17 | Migração | expand/contract | Alembic aditivo; backup + restore verificado antes de migrar | Mantido |
 | C-18 | `unknown` | nunca virar offline | ONU `status` já tem `unknown` | Mantido; teste existente |
 
-| C-19 | Contrato × código (deriva existente) | — | Contrato vigente documenta e o código **não** implementa: `GET /cpes/{cpeId}/capabilities`, `GET/POST /integrations/erp`, `POST /integrations/erp/{erpId}/sync`, `POST /copilot/suggestions`. O código tem `GET /v1/auth/workspaces` que o contrato **não** documentava | `/auth/workspaces` passou a constar no contrato (este PR). As 5 rotas documentadas e não implementadas ficam **registradas como deriva conhecida**; o validador falha se surgir deriva nova |
+| C-19 | Contrato × código (deriva existente) | — | Contrato vigente documenta e o código **não** implementa: `GET/POST /integrations/erp`, `POST /integrations/erp/{erpId}/sync`, `POST /copilot/suggestions`. O código tem `GET /v1/auth/workspaces` que o contrato **não** documentava | `/auth/workspaces` passou a constar no contrato (este PR). As 4 rotas restantes documentadas e não implementadas (a de capabilities do CPE foi implementada no PR 35) ficam **registradas como deriva conhecida**; o validador falha se surgir deriva nova |
 
 ## 3. Proposta de implementação incremental
 
