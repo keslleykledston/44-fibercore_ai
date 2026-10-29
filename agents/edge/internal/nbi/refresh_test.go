@@ -170,8 +170,9 @@ func TestRefreshGroupsAreSubsetsOfTheAllowlist(t *testing.T) {
 	}
 }
 
-// igdGroups: how many tasks one refresh creates on a TR-098 CPE (the counts below follow the table, not a literal).
-var igdGroups = len(refreshGroups["InternetGatewayDevice"])
+// igdGroups: how many tasks one refresh creates on a TR-098 CPE. A literal on purpose: raising the load on the ACS must be a deliberate edit
+// of this number (and of the ADR), not a side effect.
+const igdGroups = 11
 
 func TestRefreshOnlyPostsGetParameterValuesOfAllowlistedLeaves(t *testing.T) {
 	f := &fakeACS{devices: igd, taskCode: 200}
@@ -649,29 +650,38 @@ func TestRefreshCallsThroughOneClientNeverInterleave(t *testing.T) {
 }
 
 // The WANConnectionDevice instance of the PPP/IP connection is firmware specific (observed: 3 on a real EG8145V5), so every instance up to
-// the bound is asked for, and nothing beyond it, and each leaf is still in the closed allowlist.
-func TestRefreshCoversWANConnectionDeviceInstancesUpToTheBoundOnly(t *testing.T) {
-	seen := map[string]bool{}
-	for _, g := range refreshGroups["InternetGatewayDevice"] {
-		for _, p := range g {
+// the bound is asked for, and nothing beyond it. The exact composition is pinned: link, PPP+IP for instances 1..4, two Wi-Fi radios.
+func TestRefreshGroupsAreExactlyTheDocumentedOnes(t *testing.T) {
+	const w = "InternetGatewayDevice.WANDevice.1."
+	want := [][]string{
+		{w + "WANCommonInterfaceConfig.PhysicalLinkStatus"},
+		{w + "WANConnectionDevice.1.WANPPPConnection.1.ConnectionStatus", w + "WANConnectionDevice.1.WANPPPConnection.1.Uptime"},
+		{w + "WANConnectionDevice.1.WANIPConnection.1.ConnectionStatus", w + "WANConnectionDevice.1.WANIPConnection.1.Uptime"},
+		{w + "WANConnectionDevice.2.WANPPPConnection.1.ConnectionStatus", w + "WANConnectionDevice.2.WANPPPConnection.1.Uptime"},
+		{w + "WANConnectionDevice.2.WANIPConnection.1.ConnectionStatus", w + "WANConnectionDevice.2.WANIPConnection.1.Uptime"},
+		{w + "WANConnectionDevice.3.WANPPPConnection.1.ConnectionStatus", w + "WANConnectionDevice.3.WANPPPConnection.1.Uptime"},
+		{w + "WANConnectionDevice.3.WANIPConnection.1.ConnectionStatus", w + "WANConnectionDevice.3.WANIPConnection.1.Uptime"},
+		{w + "WANConnectionDevice.4.WANPPPConnection.1.ConnectionStatus", w + "WANConnectionDevice.4.WANPPPConnection.1.Uptime"},
+		{w + "WANConnectionDevice.4.WANIPConnection.1.ConnectionStatus", w + "WANConnectionDevice.4.WANIPConnection.1.Uptime"},
+		{"InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Enable", "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Channel"},
+		{"InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.Enable", "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.Channel"},
+	}
+	got := refreshGroups["InternetGatewayDevice"]
+	if len(got) != igdGroups || len(want) != igdGroups || len(got) > maxGroups {
+		t.Fatalf("groups=%d want=%d max=%d", len(got), len(want), maxGroups)
+	}
+	for i := range want {
+		if fmt.Sprint(got[i]) != fmt.Sprint(want[i]) {
+			t.Fatalf("group %d: got %v want %v", i, got[i], want[i])
+		}
+		for _, p := range got[i] {
 			if _, ok := allowlist[p]; !ok {
 				t.Fatalf("%s is not allowlisted", p)
 			}
-			seen[p] = true
 		}
 	}
-	for cd := 1; cd <= maxWANConnDevices; cd++ {
-		for _, node := range []string{"WANPPPConnection", "WANIPConnection"} {
-			if !seen[fmt.Sprintf("InternetGatewayDevice.WANDevice.1.WANConnectionDevice.%d.%s.1.ConnectionStatus", cd, node)] {
-				t.Fatalf("instance %d of %s is not read", cd, node)
-			}
-		}
-	}
-	beyond := fmt.Sprintf("InternetGatewayDevice.WANDevice.1.WANConnectionDevice.%d.WANPPPConnection.1.ConnectionStatus", maxWANConnDevices+1)
-	if _, ok := allowlist[beyond]; ok || seen[beyond] {
+	beyond := w + "WANConnectionDevice.5.WANPPPConnection.1.ConnectionStatus"
+	if _, ok := allowlist[beyond]; ok {
 		t.Fatalf("%s must stay outside the allowlist", beyond)
-	}
-	if len(refreshGroups["InternetGatewayDevice"]) > maxGroups {
-		t.Fatal("refresh would exceed maxGroups")
 	}
 }
