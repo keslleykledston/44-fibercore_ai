@@ -14,7 +14,7 @@ test("login inválido mostra erro e não cria sessão", async ({ page, context }
 });
 
 test("telas protegidas redirecionam para login sem sessão", async ({ page }) => {
-  for (const r of ["/", "/rede", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/conta/seguranca", "/ajuda"]) {
+  for (const r of ["/", "/rede", "/rede/onu/00000000-0000-0000-0000-000000000000", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/conta/seguranca", "/ajuda"]) {
     await page.goto(r);
     await expect(page).toHaveURL(/\/login/);
   }
@@ -58,6 +58,31 @@ test("busca por serial filtra a lista de ONUs", async ({ page }) => {
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/rede\?serial=DEMOA0001/);
   await expect(page.locator("tbody tr")).toHaveCount(1);
+});
+
+test("ONU 360: painel lateral abre pelo serial, foco volta ao fechar e a página completa mostra origem e bloqueio de escrita", async ({ page }) => {
+  await login(page);
+  await page.goto("/rede?serial=DEMOA0001");
+  const opener = page.getByTestId("onu-open");
+  await opener.click();
+  await expect(page.getByTestId("entity-drawer")).toBeVisible();
+  await expect(page.getByTestId("onu-summary")).toContainText("OLT-DEMO-01");
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("entity-drawer")).toBeHidden();
+  await expect(opener).toBeFocused();
+  await opener.click();
+  await page.getByTestId("onu-360-link").click();
+  await expect(page).toHaveURL(/\/rede\/onu\/[0-9a-f-]{36}$/);
+  await expect(page.getByRole("heading", { name: "ONU DEMOA0001" })).toBeVisible();
+  await expect(page.getByTestId("onu360-state")).toContainText("Leitura da OLT pelo Edge");
+  await expect(page.getByTestId("onu360-location")).toContainText("OLT-DEMO-01");
+  await expect(page.getByTestId("onu360-customer")).toContainText(/Cliente Demo Um|sugestão/); // vínculo aprovado ou ainda sugerido, conforme a ordem dos testes
+  await expect(page.getByTestId("onu360-actions")).toContainText("Nenhuma ação de escrita está liberada");
+  const res = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+  const bad = res.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
+  expect(bad.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(" | ")}`)).toEqual([]);
+  expect((await page.goto("/rede/onu/00000000-0000-0000-0000-000000000000"))?.status()).toBe(404);
+  expect((await page.goto("/rede/onu/nao-e-uuid"))?.status()).toBe(404);
 });
 
 for (const scheme of ["light", "dark"] as const) {

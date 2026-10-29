@@ -13,6 +13,7 @@ from sqlalchemy import Connection, text
 
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.noc import evaluate_pons
+from app.api.routes import audit
 from app.events import outbox
 
 router = APIRouter()
@@ -300,6 +301,73 @@ def list_onus(
          "observed_at": r.observed_at.isoformat() if r.observed_at else None, "freshness": _fresh(r.observed_at)}
         for r in rows
     ]
+
+
+@router.get("/v1/onus/{onu_id}")
+def onu_360(
+    onu_id: UUID,
+    p: Principal = Depends(require("inventory:read")),
+    conn: Connection = TENANT_CONN,
+) -> dict:
+    """ONU 360: everything we know about ONE ONU, with where each piece came from. Read-only. The subscriber section is personal
+    data: it exists only for roles with customers:read and every view is audited; the other roles get `customer: null`."""
+    u = conn.execute(
+        text(
+            "SELECT u.id, u.olt_id, u.pon_id, u.serial, u.status, u.rx_dbm, u.observed_at, u.last_online_at, u.down_since, "
+            "pp.pon_path, o.name AS olt_name, o.vendor, o.model, o.firmware, o.support_level, o.observed_at AS olt_observed_at "
+            "FROM onus u JOIN olts o ON o.id = u.olt_id AND o.tenant_id = u.tenant_id "
+            "LEFT JOIN pon_ports pp ON pp.id = u.pon_id AND pp.tenant_id = u.tenant_id WHERE u.id = :i"
+        ),
+        {"i": onu_id},
+    ).first()
+    if u is None:
+        raise HTTPException(404, "onu not found")
+    pon = None
+    if u.pon_id:
+        t = conn.execute(
+            text("SELECT count(*) AS total, count(*) FILTER (WHERE status = 'online') AS online FROM onus WHERE pon_id = :p"),
+            {"p": u.pon_id},
+        ).one()
+        pon = {"path": u.pon_path, "onus": t.total, "online": t.online}
+    inc = conn.execute(
+        text(
+            "SELECT i.id, i.kind, i.suspected_cause, i.opened_at FROM incident_onus io JOIN incidents i "
+            "ON i.id = io.incident_id AND i.tenant_id = io.tenant_id "
+            "WHERE io.onu_id = :o AND i.status = 'open' ORDER BY i.opened_at DESC LIMIT 1"
+        ),
+        {"o": onu_id},
+    ).first()
+    customer = None
+    if p.can("customers:read"):
+        c = conn.execute(
+            text(
+                "SELECT a.id, a.score, c.display_name, c.document_last4, c.contract_status FROM associations a "
+                "JOIN customers c ON c.id = a.customer_id AND c.tenant_id = a.tenant_id "
+                "WHERE a.onu_id = :o AND a.status = 'approved'"
+            ),
+            {"o": onu_id},
+        ).first()
+        pending = conn.execute(
+            text("SELECT count(*) FROM associations WHERE onu_id = :o AND status = 'suggested'"), {"o": onu_id}
+        ).scalar_one()
+        customer = {"association": ("approved" if c else ("suggested" if pending else "none")), "pending_suggestions": pending}
+        if c:
+            customer.update(display_name=c.display_name, document_last4=c.document_last4, contract_status=c.contract_status)
+        audit(conn, p, "onu360.view", "onu", str(onu_id), {"customer_section": True})  # access to personal data is logged
+    return {
+        "id": str(u.id), "serial": u.serial, "status": u.status, "rx_dbm": float(u.rx_dbm) if u.rx_dbm is not None else None,
+        "observed_at": u.observed_at.isoformat() if u.observed_at else None, "freshness": _fresh(u.observed_at),
+        "last_online_at": u.last_online_at.isoformat() if u.last_online_at else None,
+        "down_since": u.down_since.isoformat() if u.down_since else None,
+        "olt": {"id": str(u.olt_id), "name": u.olt_name, "vendor": u.vendor, "model": u.model, "firmware": u.firmware,
+                "support_level": u.support_level, "observed_at": u.olt_observed_at.isoformat() if u.olt_observed_at else None,
+                "freshness": _fresh(u.olt_observed_at)},
+        "pon": pon,
+        "incident": ({"id": str(inc.id), "kind": inc.kind, "suspected_cause": inc.suspected_cause,
+                      "opened_at": inc.opened_at.isoformat()} if inc else None),
+        "customer": customer,
+        "source": "olt_snapshot",  # where status/rx came from (CLI/SNMP read by the Edge); nothing here is written to the network
+    }
 
 
 @router.get("/v1/cpes")

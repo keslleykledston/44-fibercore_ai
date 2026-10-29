@@ -3,13 +3,15 @@
  * Gera docs/help/assets/<categoria>/<slug>/{desktop,mobile}.png. Dados de tempo relativo ficam mascarados.
  */
 import path from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { login } from "./helpers";
 
 const ROOT = path.resolve(__dirname, "..", "..", "..", "docs", "help", "assets");
-const screens = [
+const screens: { slug: string; route: string; ready: string; steps?: (page: Page) => Promise<void> }[] = [
   { slug: "visao-geral/visao-geral", route: "/", ready: "kpis" },
   { slug: "rede/consultar-onu", route: "/rede", ready: "onu-inventory-ready" },
+  { slug: "rede/onu-360", route: "/rede?serial=DEMOA0001", ready: "onu360-ready",
+    steps: async (page: Page) => { await page.getByTestId("onu-open").click(); await page.getByTestId("onu-360-link").click(); } },
   { slug: "noc/acompanhar-incidente", route: "/noc", ready: "incident-queue" },
   { slug: "assinantes/importar-e-revisar-vinculos", route: "/assinantes", ready: "association-list" },
   { slug: "operacoes/acompanhar-operacoes", route: "/operacoes", ready: "jobs-table" },
@@ -29,13 +31,14 @@ for (const vp of viewports) {
       test(`${s.slug} - ${vp.name}`, async ({ page }) => {
         await login(page);
         await page.goto(s.route);
+        await s.steps?.(page);
         await expect(page.getByTestId(s.ready)).toBeVisible();
         await page.evaluate(() => document.fonts.ready);
         await page.screenshot({
           path: path.join(ROOT, s.slug, `${vp.name}.png`),
           fullPage: true,
           animations: "disabled",
-          mask: [page.getByTestId("freshness")],
+          mask: [page.getByTestId("freshness"), page.getByTestId("volatile")],
           maskColor: "#C9D1DA",
         });
       });

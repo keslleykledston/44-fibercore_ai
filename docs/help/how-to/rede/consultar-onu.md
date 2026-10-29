@@ -19,7 +19,7 @@ ui_route: "/rede"
 
 1. Acesse **Rede** no menu lateral.
 2. Digite o serial na caixa **Buscar ONU por serial** e pressione Enter (ex.: DEMOA0001).
-3. Confira **Status**, **Rx (dBm)** e a coluna **Dado** (idade da informação).
+3. Clique no serial para abrir o resumo e, depois, a **ONU 360** (veja “Como ver a ONU 360”). Confira **Status**, **Rx (dBm)** e a coluna **Dado** (idade da informação).
 4. Na lista de OLTs, confira o **nível de suporte** do driver: Identificado, Observado ou Certificado.
 
 ![Tela em desktop 1440×900 — Como consultar uma ONU](../../assets/rede/consultar-onu/desktop.png)

@@ -279,6 +279,18 @@ paths:
         '200':
           description: Inventário ONU
           content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Onu'}}}}
+  /onus/{onu_id}:
+    get:
+      tags: [Network]
+      operationId: getOnu360
+      summary: ONU 360 — estado, OLT/PON, incidente aberto e (só com customers:read, auditado) o assinante vinculado
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: onu_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200':
+          description: "{id, serial, status, rx_dbm, freshness, last_online_at, down_since, olt{}, pon{path,onus,online}, incident{}|null, customer{}|null, source}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: ONU inexistente ou de outro provedor}
   /cpes:
     get:
       tags: [CPE]

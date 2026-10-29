@@ -19,6 +19,14 @@ articles:
   e2e_test: help-screenshots.spec.ts › rede/consultar-onu; app.spec.ts › busca por
     serial
   last_verified: '2026-10-28'
+- slug: rede/onu-360
+  ui_route: /rede/onu/[id]
+  status: published
+  images:
+  - assets/rede/onu-360/desktop.png
+  - assets/rede/onu-360/mobile.png
+  e2e_test: help-screenshots.spec.ts › rede/onu-360; app.spec.ts › ONU 360
+  last_verified: '2026-10-29'
 - slug: noc/acompanhar-incidente
   ui_route: /noc
   status: published
