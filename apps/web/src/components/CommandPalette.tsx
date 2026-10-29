@@ -35,6 +35,7 @@ export function CommandPalette() {
       try {
         const r = await fetch(`/bff/search/customers?q=${encodeURIComponent(s)}`, { signal: ctl.signal, cache: "no-store" });
         const d = (await r.json()) as { items?: { id: string; display_name: string }[] };
+        if (ctl.signal.aborted) return; // a digitação mudou (ou a paleta fechou) enquanto a resposta chegava: descarta
         setPeople((d.items ?? []).map((c) => ({ kind: "Cliente", label: c.display_name, href: `/assinantes/${c.id}` })));
       } catch { /* cancelada ou indisponível: a busca de telas/ONU continua */ }
     }, 300);
@@ -54,7 +55,7 @@ export function CommandPalette() {
         className="flex min-h-touch items-center gap-2 rounded-btn border border-line bg-bg px-3 text-sm text-muted hover:bg-surface-2">
         <Icon name="search" /><span className="hidden sm:inline">Buscar</span><kbd className="hidden rounded border border-line px-1.5 text-xs md:inline">⌘K</kbd>
       </button>
-      <dialog ref={ref} aria-label="Busca global" className="m-0 mx-auto mt-[12vh] w-[calc(100%-32px)] max-w-xl rounded-modal border border-line bg-surface p-0 text-text shadow-2xl backdrop:bg-black/30">
+      <dialog ref={ref} aria-label="Busca global" onClose={() => { setQ(""); setPeople([]); }} className="m-0 mx-auto mt-[12vh] w-[calc(100%-32px)] max-w-xl rounded-modal border border-line bg-surface p-0 text-text shadow-2xl backdrop:bg-black/30">
         <div className="flex items-center gap-2 border-b border-line px-4">
           <Icon name="search" className="size-4 text-muted" />
           <input autoFocus value={q} aria-label="Buscar telas, ONU por serial ou cliente por nome" placeholder="Digite um serial, um nome de cliente ou de tela" role="combobox" aria-expanded="true" aria-controls="cp-list"

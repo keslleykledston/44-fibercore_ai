@@ -1,0 +1,30 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18822-4329-71b0-aa85-24d199f3701b).
+[codex] Turn started (01a18822-5e65-7342-8962-ed0543f85ee2).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os fluxos do BFF e dos componentes para procura...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/app/bff/incide...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/app/bff/incide... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"sameOrigin|function apiPost|apiPost\\(|customers.list|acknowledg|/ack|...
+[codex] Command failed: /bin/bash -lc "rg -n \"sameOrigin|function apiPost|apiPost\\(|customers.list|acknowledg|/ack|... (exit 2)
+[codex] Running command: /bin/bash -lc "sed -n '1,130p' apps/web/src/lib/api.ts; cat apps/web/src/lib/csrf.ts; rg -n \...
+[codex] Command completed: /bin/bash -lc "sed -n '1,130p' apps/web/src/lib/api.ts; cat apps/web/src/lib/csrf.ts; rg -n \... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '298,330p' contracts/fibercore-v2.openapi.yaml; rg -n 'customers.list|d...
+[codex] Command failed: /bin/bash -lc "sed -n '298,330p' contracts/fibercore-v2.openapi.yaml; rg -n 'customers.list|d... (exit 2)
+[codex] Assistant message captured: O proxy de acknowledge aplica `sameOrigin` e valida o UUID. Estou verificando agora o comport...
+[codex] Running command: /bin/bash -lc "rg -n 'customers.list|audit.*customer|def list_customers|@router.get\\(\"/cust...
+[codex] Command completed: /bin/bash -lc "rg -n 'customers.list|audit.*customer|def list_customers|@router.get\\(\"/cust... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '185,213p' apps/api/app/api/erp.py; sed -n '300,335p' apps/api/app/api/...
+[codex] Command completed: /bin/bash -lc "sed -n '185,213p' apps/api/app/api/erp.py; sed -n '300,335p' apps/api/app/api/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: a busca pode instalar resultados de...
+[codex] Turn completion inferred after the main thread finished and subagent work drained.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: a busca pode instalar resultados de uma consulta antiga depois que a pessoa digita uma nova busca ou fecha a paleta, expondo nomes fora do contexto atual.
+
+Findings:
+- [medium] Respostas antigas podem repopular a paleta (apps/web/src/components/CommandPalette.tsx:34-38)
+  O efeito limpa `people` ao mudar `q` e aborta a requisição anterior no cleanup, mas o `catch` apenas ignora o cancelamento; não há verificação de que a resposta ainda corresponde à busca atual antes de chamar `setPeople`. Se o fetch já tiver resolvido quando o cleanup abortar, a continuação de `r.json()` pode terminar depois e instalar resultados da busca antiga. Isso pode mostrar nomes de clientes que não correspondem ao texto atual, inclusive após a paleta ser fechada e reaberta. Use um identificador de requisição ou confira `ctl.signal.aborted`/a busca atual antes de atualizar o estado; limpe os resultados ao fechar também.
+  Recommendation: Antes de atualizar `people`, descarte a resposta se o controller foi abortado ou se a consulta já não for a busca vigente; invalide a requisição ao fechar a paleta.
