@@ -39,3 +39,5 @@ Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetido
 ## 2026-10-29 — PR 38 (FC22-005) mesclado e implantado no LAB
 - `/assinantes/[id]` (Visão 360), lista de clientes com busca/paginação (`GET /v1/customers` + `offset`/`q`), flags `subscriber_360`+`customer_context`. Lovable: 1 lote (projeto 13aaf09e…, commit 1ad87e8; chamada MCP deu timeout ocioso mas o agente concluiu), só referência visual (ver `docs/ux/lovable/README.md`).
 - Codex 3 rodadas → approve. pytest 227 passed; E2E 45 passed; validate_* PASS. Deploy: backup 20261029T052517Z verificado, `make up-prod`, Alembic 0017, prodcheck sem issues. Flags desligadas no LAB: fluxo ligado só no E2E/pytest.
+## 2026-10-29 — PR 39 (FC22-006) + Edge no GenieACS
+- R-D001 v1 extraída (pura, versionada), `diagnostic_runs` append-only, `/v1/diagnostics/*`; Codex approve em 1 rodada; pytest 237. Edge instalado no host do GenieACS (cron, sem root), 6 CPEs no LAB; NBI não fechado (sem root; runbook). Flags do LAB ligadas por autorização do responsável.
