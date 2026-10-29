@@ -212,3 +212,32 @@ func TestOLTPacingDefaultsAndBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestDeviceKeyIsTheHostWhateverTheTransportOrPort(t *testing.T) {
+	for in, want := range map[string]string{"192.0.2.10:22": "192.0.2.10", "192.0.2.10:161": "192.0.2.10", "192.0.2.10": "192.0.2.10",
+		"[2001:DB8::1]:22": "2001:db8::1", "OLT-A.Example.NET:22": "olt-a.example.net"} {
+		if got := DeviceKey(in); got != want {
+			t.Errorf("DeviceKey(%q)=%q want %q", in, got, want)
+		}
+	}
+}
+
+func TestOnePhysicalOLTCannotBeConfiguredTwice(t *testing.T) {
+	ssh := `{"name":"A","vendor":"huawei","address":"10.0.0.9:22","username":"ro","secret_file":"/s","host_key_sha256":"SHA256:abc","pon_ports":["0/1/0"]}`
+	snmp := func(name, addr string) string {
+		return `{"name":"` + name + `","vendor":"huawei","transport":"snmp","snmp_address":"` + addr + `","snmp_community_file":"/c","pon_ports":["0/1/0"]}`
+	}
+	cases := map[string]string{
+		"ssh+snmp same host": `,"allowlist":["10.0.0.9:22","10.0.0.9:161"],"olts":[` + ssh + `,` + snmp("B", "10.0.0.9:161") + `]`,
+		"two snmp ports":     `,"allowlist":["10.0.0.9:161","10.0.0.9:162"],"olts":[` + snmp("A", "10.0.0.9:161") + `,` + snmp("B", "10.0.0.9:162") + `]`,
+	}
+	for name, body := range cases {
+		if _, err := Load(write(t, 0o600, good(body)), "v"); err == nil || !strings.Contains(err.Error(), "already configured") {
+			t.Errorf("%s: want 'already configured', got %v", name, err)
+		}
+	}
+	other := `,"allowlist":["10.0.0.9:22","10.0.0.10:161"],"olts":[` + ssh + `,` + snmp("B", "10.0.0.10:161") + `]`
+	if _, err := Load(write(t, 0o600, good(other)), "v"); err != nil {
+		t.Fatalf("two different devices are fine: %v", err)
+	}
+}

@@ -1,0 +1,31 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1880b-87be-7b43-8550-7d1c427f6441).
+[codex] Turn started (01a1880b-95d4-7ba1-a2de-1784eeebc372).
+[codex] Assistant message captured: I’ll trace the branch diff and the collector’s call paths, focusing on whether every route to...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"collectOne|\\.Collect\\(|refresh|CollectEvery|Sooner|retry|Sources|SNM...
+[codex] Command completed: /bin/bash -lc "rg -n \"collectOne|\\.Collect\\(|refresh|CollectEvery|Sooner|retry|Sources|SNM... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '145,215p'; nl -ba agent...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '145,215p'; nl -ba agent... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship: pacing and cooldown state vanish on ever...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship: pacing and cooldown state vanish on every Edge restart, so a restart loop can repeatedly log in during the CLI cooldown or interval.
+
+Findings:
+- [high] Restarting the Edge resets all OLT pacing protection (agents/edge/internal/collector/olt.go:45-55)
+  The lock, last-attempt timestamp, and cooldown deadline exist only in this `OLT` instance’s in-memory maps. A process restart recreates them empty, allowing the first collection after every restart to immediately open a new CLI session—even if the previous attempt failed moments earlier or a successful collection just ran. A crash/restart loop can therefore defeat both the 15-minute interval and failure cooldown and repeatedly hit the shared account. Persist per-device attempt/cooldown state across restarts, or implement an equivalent restart-safe mechanism before dialing.
+  Recommendation: Store the last-attempt and cooldown deadlines durably under a canonical device key, and load/check them before any OLT I/O; add a test that constructs a fresh collector after a failed attempt and verifies it does not dial during cooldown.
+- [medium] CLI and SNMP entries for the same OLT use different guard keys (agents/edge/cmd/fibercore-edge/main.go:87-108)
+  The CLI key is derived from `o.Address` (typically `IP:22`) while the SNMP key is derived from `o.SNMPAddress` (typically `IP:161`). Those keys differ for one physical OLT, and validation only deduplicates SNMP addresses; it permits a CLI entry and SNMP entry for the same device. Concurrent `Collect` calls can therefore pass the per-key busy check and access that device simultaneously. This defeats the stated physical-device serialization across transports under the overlapping periodic/job path. Use one transport-independent canonical device identity and reject conflicting duplicate device entries where identity cannot be established.
+  Recommendation: Define a canonical physical OLT key shared by CLI and SNMP configuration, validate duplicate physical devices across transports, and add a concurrent mixed-transport test proving only one collection can reach the device.
+
+Next steps:
+- Make OLT guard state survive process restarts.
+- Unify device identity across CLI and SNMP and test overlapping job/periodic collections.
+done

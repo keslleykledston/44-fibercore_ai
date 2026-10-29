@@ -78,13 +78,13 @@ func main() {
 	}
 
 	if len(cfg.OLTs) > 0 {
-		oc := &collector.OLT{EdgeID: cfg.EdgeID}
+		oc := &collector.OLT{EdgeID: cfg.EdgeID, Guard: collector.FileGuard{Path: cfg.QueuePath + ".olt-guard.json"}}
 		for _, o := range cfg.OLTs {
 			o := o
 			if o.Transport == "snmp" {
 				oc.Sources = append(oc.Sources, collector.OLTSource{
 					Name: o.Name, Ports: o.PonPorts, AllowUnverified: o.AllowUnverifiedFirmware, SNMPDriver: olt.HuaweiSNMP{},
-					SNMPKey: snmpKey(o.SNMPAddress), Interval: o.OLTInterval(), Cooldown: o.OLTCooldown(),
+					SNMPKey: config.DeviceKey(o.SNMPAddress), Interval: o.OLTInterval(), Cooldown: o.OLTCooldown(),
 					OpenSNMP: func(ctx context.Context) (olt.SNMPReader, func(), error) {
 						community, err := config.ReadSecret(o.SNMPCommunityFile)
 						if err != nil {
@@ -105,7 +105,7 @@ func main() {
 			}
 			oc.Sources = append(oc.Sources, collector.OLTSource{
 				Name: o.Name, Driver: drv, Ports: o.PonPorts, AllowUnverified: o.AllowUnverifiedFirmware,
-				SNMPKey: snmpKey(o.Address), Interval: o.OLTInterval(), Cooldown: o.OLTCooldown(),
+				SNMPKey: config.DeviceKey(o.Address), Interval: o.OLTInterval(), Cooldown: o.OLTCooldown(),
 				Open: func(ctx context.Context) (olt.Session, func(), error) {
 					pw, err := config.ReadSecret(o.SecretFile)
 					if err != nil {
@@ -157,11 +157,3 @@ func main() {
 	log.Info("fibercore-edge stopped")
 }
 
-// snmpKey is the canonical identity of an SNMP agent (ip:port with the IP normalised), used to serialise and cool down per device.
-func snmpKey(addr string) string {
-	h, p, err := net.SplitHostPort(addr)
-	if err != nil || net.ParseIP(h) == nil {
-		return addr
-	}
-	return net.JoinHostPort(net.ParseIP(h).String(), p)
-}

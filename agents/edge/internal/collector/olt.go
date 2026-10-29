@@ -50,10 +50,14 @@ type OLT struct {
 	Sources []OLTSource
 	Now     func() time.Time
 
-	mu   sync.Mutex
-	cool map[string]time.Time // device key -> do not touch before this instant (after a failure)
-	busy map[string]bool      // device keys with a collection in flight
-	last map[string]time.Time // device key -> start of the last attempt (Interval pacing)
+	// Guard persists the pacing state (last attempt, cooldown) so a restart cannot reopen the window. nil = in memory only (tests).
+	Guard GuardStore
+
+	mu      sync.Mutex
+	st      map[string]GuardState // device key -> pacing state
+	busy    map[string]bool       // device keys with a collection in flight
+	loaded  bool
+	corrupt bool // the state file could not be trusted: a device with no entry is treated as touched just now
 }
 
 // snmpCooldown: after ANY failed SNMP collection of an OLT the Edge leaves its agent alone for this long. The measured
@@ -143,6 +147,13 @@ func (o *OLT) collectCLI(ctx context.Context, src OLTSource, observed string) ([
 	return o.buildItems(src.Name, observed, id, level, snap, func(p olt.PON) bool { return ponComplete(level, raw, p) })
 }
 
+func (o *OLT) persistLocked() error {
+	if o.Guard == nil {
+		return nil
+	}
+	return o.Guard.Save(o.st)
+}
+
 func (o *OLT) now() time.Time {
 	if o.Now != nil {
 		return o.Now()
@@ -168,28 +179,47 @@ func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, er
 	}
 	o.mu.Lock()
 	now := o.now()
+	if !o.loaded {
+		o.st = map[string]GuardState{}
+		if o.Guard != nil {
+			m, err := o.Guard.Load()
+			if err != nil {
+				o.corrupt = true
+			} else {
+				o.st = m
+			}
+		}
+		o.loaded = true
+	}
 	if o.busy[key] {
 		o.mu.Unlock()
 		return nil, errors.New("collection already running for this olt")
 	}
-	if until := o.cool[key]; now.Before(until) {
+	cur, known := o.st[key]
+	if now.Before(cur.CoolUntil) {
 		o.mu.Unlock()
-		return nil, fmt.Errorf("olt cooling down after a failure (%s left)", until.Sub(now).Round(time.Second))
+		return nil, fmt.Errorf("olt cooling down after a failure (%s left)", cur.CoolUntil.Sub(now).Round(time.Second))
 	}
-	if src.Interval > 0 {
-		if at, ok := o.last[key]; ok && now.Before(at.Add(src.Interval)) {
-			o.mu.Unlock()
-			return nil, nil
-		}
+	if o.corrupt && !known && src.Interval > 0 { // unknown history: behave as if it was touched just now
+		o.st[key] = GuardState{Last: now}
+		err := o.persistLocked()
+		o.mu.Unlock()
+		return nil, err
+	}
+	if src.Interval > 0 && known && now.Before(cur.Last.Add(src.Interval)) {
+		o.mu.Unlock()
+		return nil, nil
+	}
+	cur.Last = now
+	o.st[key] = cur
+	if err := o.persistLocked(); err != nil { // fail closed: an attempt that cannot be remembered must not be made
+		o.mu.Unlock()
+		return nil, fmt.Errorf("olt guard cannot persist its state: %w", err)
 	}
 	if o.busy == nil {
 		o.busy = map[string]bool{}
 	}
-	if o.last == nil {
-		o.last = map[string]time.Time{}
-	}
 	o.busy[key] = true
-	o.last[key] = now
 	o.mu.Unlock()
 
 	items, err := run()
@@ -197,10 +227,10 @@ func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, er
 	o.mu.Lock()
 	delete(o.busy, key)
 	if err != nil {
-		if o.cool == nil {
-			o.cool = map[string]time.Time{}
-		}
-		o.cool[key] = o.now().Add(cooldown)
+		cur := o.st[key]
+		cur.CoolUntil = o.now().Add(cooldown)
+		o.st[key] = cur
+		_ = o.persistLocked() // best effort: the in-memory cooldown already holds, and the attempt itself was persisted before I/O
 	}
 	o.mu.Unlock()
 	return items, err

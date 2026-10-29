@@ -536,3 +536,119 @@ func TestACustomCooldownOverridesTheDefaultAndPacingAppliesPerPhysicalDevice(t *
 		t.Fatalf("custom 1 min cooldown elapsed: err=%v opens=%d", err, opens)
 	}
 }
+
+func TestPacingSurvivesARestartSoACrashLoopCannotLogInRepeatedly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "queue.db.olt-guard.json")
+	clock := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	var opens, runs int
+	boot := func(fail error, interval time.Duration) *OLT { // a brand-new process: nothing but the file is remembered
+		s := cliSrc(&opens, &runs, fail)
+		s.Interval = interval
+		return &OLT{EdgeID: "e", Sources: []OLTSource{s}, Guard: FileGuard{Path: path}, Now: func() time.Time { return clock }}
+	}
+	if _, err := boot(errors.New("ssh: unable to authenticate"), 15*time.Minute).Collect(context.Background()); err == nil || opens != 1 {
+		t.Fatalf("first boot fails after one login: err=%v opens=%d", err, opens)
+	}
+	for i := 0; i < 5; i++ { // cron relaunches the binary every minute
+		clock = clock.Add(time.Minute)
+		if _, err := boot(errors.New("again"), 15*time.Minute).Collect(context.Background()); err == nil || !strings.Contains(err.Error(), "cooling down") || opens != 1 {
+			t.Fatalf("restart %d inside the cooldown must not dial: err=%v opens=%d", i, err, opens)
+		}
+	}
+	clock = clock.Add(11 * time.Minute) // cooldown (15 min) over
+	if items, err := boot(nil, 15*time.Minute).Collect(context.Background()); err != nil || len(items) != 1 || opens != 2 {
+		t.Fatalf("after the cooldown a restart may collect: items=%d err=%v opens=%d", len(items), err, opens)
+	}
+	clock = clock.Add(2 * time.Minute) // a SUCCESS also paces: the interval holds across a restart
+	if items, err := boot(nil, 15*time.Minute).Collect(context.Background()); err != nil || len(items) != 0 || opens != 2 {
+		t.Fatalf("a restart right after a successful collection stays quiet: items=%d err=%v opens=%d", len(items), err, opens)
+	}
+	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("state file must be 0600: %v %v", fi, err)
+	}
+}
+
+func TestAnAttemptThatDiesMidWayStillCountsAfterTheRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "g.json")
+	clock := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	var opens, runs int
+	s := cliSrc(&opens, &runs, nil)
+	s.Interval = 15 * time.Minute
+	s.Open = func(context.Context) (olt.Session, func(), error) {
+		opens++
+		panic("process killed while the session was open") // no failure bookkeeping ever runs
+	}
+	func() {
+		defer func() { _ = recover() }()
+		_, _ = (&OLT{Sources: []OLTSource{s}, Guard: FileGuard{Path: path}, Now: func() time.Time { return clock }}).Collect(context.Background())
+	}()
+	if opens != 1 {
+		t.Fatalf("opens=%d", opens)
+	}
+	clock = clock.Add(time.Minute)
+	if items, err := (&OLT{Sources: []OLTSource{s}, Guard: FileGuard{Path: path}, Now: func() time.Time { return clock }}).Collect(context.Background()); err != nil || len(items) != 0 || opens != 1 {
+		t.Fatalf("the interval is persisted BEFORE any I/O: items=%d err=%v opens=%d", len(items), err, opens)
+	}
+}
+
+func TestACorruptStateFileMakesTheGuardAssumeTheDeviceWasJustTouched(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "g.json")
+	if err := os.WriteFile(path, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	var opens, runs int
+	s := cliSrc(&opens, &runs, nil)
+	s.Interval = 15 * time.Minute
+	o := &OLT{Sources: []OLTSource{s}, Guard: FileGuard{Path: path}, Now: func() time.Time { return clock }}
+	if items, err := o.Collect(context.Background()); err != nil || len(items) != 0 || opens != 0 {
+		t.Fatalf("unknown history: wait one interval, do not dial: items=%d err=%v opens=%d", len(items), err, opens)
+	}
+	clock = clock.Add(16 * time.Minute)
+	if items, err := o.Collect(context.Background()); err != nil || len(items) != 1 || opens != 1 {
+		t.Fatalf("after one interval it works again (and the file is healthy): items=%d err=%v opens=%d", len(items), err, opens)
+	}
+	if _, err := (FileGuard{Path: path}).Load(); err != nil {
+		t.Fatalf("the corrupt file must have been replaced: %v", err)
+	}
+}
+
+type brokenGuard struct{}
+
+func (brokenGuard) Load() (map[string]GuardState, error) { return map[string]GuardState{}, nil }
+func (brokenGuard) Save(map[string]GuardState) error     { return errors.New("read-only file system") }
+
+func TestIfThePacingCannotBeRememberedTheDeviceIsNotTouched(t *testing.T) {
+	var opens, runs int
+	o := &OLT{Sources: []OLTSource{cliSrc(&opens, &runs, nil)}, Guard: brokenGuard{}}
+	if _, err := o.Collect(context.Background()); err == nil || opens != 0 {
+		t.Fatalf("fail closed: err=%v opens=%d", err, opens)
+	}
+}
+
+func TestCLIAndSNMPEntriesOfOnePhysicalOLTShareOneGuard(t *testing.T) {
+	var opens, runs int
+	cli := cliSrc(&opens, &runs, nil)
+	cli.Name, cli.SNMPKey = "olt-ssh", "192.0.2.10"
+	snmpOpens := 0
+	sn := OLTSource{Name: "olt-snmp", SNMPKey: "192.0.2.10", Ports: []string{"0/0/14"}, SNMPDriver: olt.HuaweiSNMP{},
+		OpenSNMP: func(context.Context) (olt.SNMPReader, func(), error) { snmpOpens++; return snmpFake{}, func() {}, nil }}
+	gate := make(chan struct{})
+	entered := make(chan struct{}, 1)
+	cli.Open = func(context.Context) (olt.Session, func(), error) {
+		opens++
+		entered <- struct{}{}
+		<-gate
+		return countingSession{&runs, nil}, func() {}, nil
+	}
+	o := &OLT{Sources: []OLTSource{cli}}
+	done := make(chan struct{})
+	go func() { _, _ = o.Collect(context.Background()); close(done) }()
+	<-entered
+	o.Sources = []OLTSource{sn} // the periodic worker meets a job: same host, other transport
+	if _, err := o.Collect(context.Background()); err == nil || !strings.Contains(err.Error(), "already running") || snmpOpens != 0 {
+		t.Fatalf("SNMP must wait for the SSH session on the same OLT: err=%v snmpOpens=%d", err, snmpOpens)
+	}
+	close(gate)
+	<-done
+}

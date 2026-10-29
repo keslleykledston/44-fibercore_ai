@@ -126,7 +126,7 @@ func (c *Config) Validate() error {
 	if len(c.OLTs) > 64 {
 		errs = append(errs, errors.New("too many olts (max 64)"))
 	}
-	snmpSeen := map[string]bool{}
+	deviceSeen := map[string]bool{}
 	for i, o := range c.OLTs {
 		p := fmt.Sprintf("olts[%d]", i)
 		if o.Name == "" || len(o.Name) > 128 || seen[o.Name] {
@@ -150,6 +150,19 @@ func (c *Config) Validate() error {
 		if o.SSHPagerSpace && o.SSHMode != "shell" {
 			errs = append(errs, fmt.Errorf("%s: ssh_pager_space requires ssh_mode shell", p))
 		}
+		// One physical device must not be configured twice (another name, another transport or port): the per-device lock, interval
+		// and cooldown are keyed by host, and two entries would otherwise be two independent clients of the same OLT.
+		devAddr := o.Address
+		if o.Transport == "snmp" {
+			devAddr = o.SNMPAddress
+		}
+		if devAddr != "" {
+			if k := DeviceKey(devAddr); deviceSeen[k] {
+				errs = append(errs, fmt.Errorf("%s: the device at %s is already configured by another olt entry (one entry per physical OLT)", p, devAddr))
+			} else {
+				deviceSeen[k] = true
+			}
+		}
 		switch o.Transport {
 		case "", "cli":
 			if o.Username == "" || o.SecretFile == "" {
@@ -166,12 +179,7 @@ func (c *Config) Validate() error {
 			if err != nil || net.ParseIP(h) == nil || !allowed[strings.ToLower(o.SNMPAddress)] {
 				errs = append(errs, fmt.Errorf("%s: snmp_address must be ip:port (IP literal) AND listed in allowlist", p))
 			} else {
-				// One physical agent must not be reachable under two names: the per-device lock and cooldown would be bypassed.
-				key := net.JoinHostPort(net.ParseIP(h).String(), port)
-				if snmpSeen[key] {
-					errs = append(errs, fmt.Errorf("%s: snmp_address %s is already used by another olt", p, o.SNMPAddress))
-				}
-				snmpSeen[key] = true
+				_ = port
 			}
 			if o.Vendor != "huawei" {
 				errs = append(errs, fmt.Errorf("%s: snmp transport is implemented for huawei only", p))
@@ -202,6 +210,20 @@ func (c *Config) Validate() error {
 		errs = append(errs, errors.New("intervals too small (heartbeat>=5s, collect>=30s)"))
 	}
 	return errors.Join(errs...)
+}
+
+// DeviceKey is the identity of one PHYSICAL device behind an address, whatever the transport or port: the IP literal in canonical
+// form, or the lower-cased host name. The collection lock, interval and cooldown are keyed by it, so an SSH entry and an SNMP
+// entry (or two aliases) of the same OLT share them instead of reaching the device concurrently.
+func DeviceKey(addr string) string {
+	h, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		h = addr
+	}
+	if ip := net.ParseIP(h); ip != nil {
+		return ip.String()
+	}
+	return strings.ToLower(h)
 }
 
 // OLTInterval is the minimum time between two collections of one OLT. A CLI session is a login on a real device (and the pager
