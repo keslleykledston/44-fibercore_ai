@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 // SD-001 / ADR-SD-002 item 4 (authorised by the owner on 2026-10-29): ask the ACS to read ALLOWLISTED leaves from ONE CPE.
@@ -102,16 +103,27 @@ func (c *Client) RefreshParams(ctx context.Context, deviceID string) (RefreshRep
 	}
 	for _, g := range groups {
 		rep.Groups++
+		started := time.Now()
 		status, taskID, faulted, err := c.postTask(ctx, deviceID, g)
+		ambiguous := false
 		if err != nil {
-			// A lost response, a timeout, a 5xx or a proxy-style 4xx (408, 429...) does not prove the ACS did NOT create the task. Only the statuses
-			// the NBI itself uses to refuse a request before creating anything do.
+			// A lost response, a timeout, a 5xx or a proxy-style 4xx (408, 429...) does not prove the ACS did NOT create the task. Only the
+			// statuses the NBI itself uses to refuse a request before creating anything do.
 			var rej *rejectedError
 			if errors.As(err, &rej) && definitelyNotCreated[rej.status] {
 				return rep, err
 			}
-			rep.Uncleaned++
-			return rep, fmt.Errorf("%w: %v", ErrRefreshUncleaned, err)
+			ambiguous = true
+		}
+		if ambiguous || status != http.StatusOK || faulted { // never leave a queued/faulted/unknown task on a customer CPE
+			if cerr := c.cleanupTasks(ctx, deviceID, g, started, taskID); cerr != nil {
+				rep.Uncleaned++
+				return rep, fmt.Errorf("%w: %v", ErrRefreshUncleaned, cerr) // stop: nothing new while a task may still be pending
+			}
+			rep.Cleaned++
+			if ambiguous {
+				return rep, fmt.Errorf("nbi refresh: request outcome unknown, no task of ours remains: %w", err)
+			}
 		}
 		switch {
 		case status == http.StatusOK && !faulted:
@@ -120,14 +132,6 @@ func (c *Client) RefreshParams(ctx context.Context, deviceID string) (RefreshRep
 			rep.Faulted++
 		default:
 			rep.Queued++
-		}
-		if status != http.StatusOK || faulted { // never leave a queued/faulted task retrying on a customer CPE
-			if taskID != "" && c.deleteTask(ctx, taskID) == nil {
-				rep.Cleaned++
-			} else {
-				rep.Uncleaned++
-				return rep, ErrRefreshUncleaned // stop: no further task is created while one may still be pending
-			}
 		}
 	}
 	return rep, nil
@@ -200,6 +204,91 @@ type rejectedError struct{ status int }
 
 func (e *rejectedError) Error() string {
 	return fmt.Sprintf("nbi: task rejected with status %d", e.status)
+}
+
+// cleanupTasks removes every task on deviceID that THIS call can have created: getParameterValues with exactly the posted names, stamped no
+// earlier than the call (minus a clock-skew margin), plus the id the ACS returned if it is well formed. It then lists again: the call is clean
+// only if nothing matching remains. Any failure to list or delete is an error (the caller holds the device).
+func (c *Client) cleanupTasks(ctx context.Context, deviceID string, names []string, since time.Time, knownID string) error {
+	ids, err := c.matchingTasks(ctx, deviceID, names, since)
+	if err != nil {
+		return err
+	}
+	if knownID != "" {
+		seen := false
+		for _, id := range ids {
+			seen = seen || id == knownID
+		}
+		if !seen {
+			ids = append(ids, knownID)
+		}
+	}
+	for _, id := range ids {
+		if err := c.deleteTask(ctx, id); err != nil {
+			return err
+		}
+	}
+	left, err := c.matchingTasks(ctx, deviceID, names, since)
+	if err != nil {
+		return err
+	}
+	if len(left) > 0 {
+		return errors.New("nbi: task still present after delete")
+	}
+	return nil
+}
+
+const taskClockSkew = time.Minute
+
+func (c *Client) matchingTasks(ctx context.Context, deviceID string, names []string, since time.Time) ([]string, error) {
+	q, _ := json.Marshal(map[string]string{"device": deviceID})
+	u := *c.base
+	u.Path = strings.TrimRight(u.Path, "/") + "/tasks"
+	u.RawQuery = url.Values{"query": {string(q)}}.Encode()
+	body, st, err := c.do(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	if st != http.StatusOK {
+		return nil, fmt.Errorf("nbi: list tasks status %d", st)
+	}
+	var docs []struct {
+		ID        string   `json:"_id"`
+		Name      string   `json:"name"`
+		Device    string   `json:"device"`
+		Names     []string `json:"parameterNames"`
+		Timestamp string   `json:"timestamp"`
+	}
+	if err := json.Unmarshal(body, &docs); err != nil {
+		return nil, fmt.Errorf("nbi: decode tasks: %w", err)
+	}
+	var ids []string
+	for _, d := range docs {
+		ts, terr := time.Parse(time.RFC3339, d.Timestamp)
+		if d.Device != deviceID || d.Name != "getParameterValues" || !taskIDRe.MatchString(d.ID) || !sameNames(d.Names, names) {
+			continue
+		}
+		if terr != nil || ts.Before(since.Add(-taskClockSkew)) {
+			continue // not made by this call (older, or undated)
+		}
+		ids = append(ids, d.ID)
+	}
+	return ids, nil
+}
+
+func sameNames(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	x, y := append([]string(nil), a...), append([]string(nil), b...)
+	sort.Strings(x)
+	sort.Strings(y)
+	for i := range x {
+		if x[i] != y[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *Client) deleteTask(ctx context.Context, taskID string) error {

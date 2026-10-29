@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,14 +19,30 @@ import (
 type fakeACS struct {
 	mu         sync.Mutex
 	devices    string // JSON array returned by GET /devices
-	taskCode   int
-	taskBody   string
+	taskCode   int    // status of POST .../tasks
+	taskBody   string // when set, replaces the body of the POST response (e.g. to hide the id)
+	faultBody  bool   // answer 200 with a fault object
+	dropCreate bool   // the POST fails WITHOUT creating a task
+	hangup     bool   // the POST creates the task and then closes the connection (what the real ACS did)
+	listCode   int    // status of GET /tasks (0 = 200)
+	deleteCode int    // status of DELETE (0 = 200); a non-2xx deletes nothing
+	deleteNoop bool   // DELETE answers 200 but deletes nothing
 	methods    []string
 	taskPaths  []string
-	tasks      []map[string]any
+	posted     []map[string]any
+	db         []map[string]any // tasks currently on the ACS
 	deleted    []string
-	deleteCode int
 	query      string
+	seq        int
+	listCalls  int
+	now        func() time.Time
+}
+
+func (f *fakeACS) clock() time.Time {
+	if f.now != nil {
+		return f.now()
+	}
+	return time.Now()
 }
 
 func (f *fakeACS) handler() http.Handler {
@@ -36,20 +53,59 @@ func (f *fakeACS) handler() http.Handler {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/devices":
 			_, _ = w.Write([]byte(f.devices))
+		case r.Method == http.MethodGet && r.URL.Path == "/tasks":
+			f.listCalls++
+			if f.listCode != 0 {
+				w.WriteHeader(f.listCode)
+				return
+			}
+			b, _ := json.Marshal(f.db)
+			_, _ = w.Write(b)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/tasks"):
 			var m map[string]any
 			b, _ := io.ReadAll(r.Body)
 			_ = json.Unmarshal(b, &m)
-			f.tasks = append(f.tasks, m)
+			f.posted = append(f.posted, m)
 			f.taskPaths = append(f.taskPaths, r.URL.EscapedPath())
 			f.query = r.URL.RawQuery
+			f.seq++
+			id := fmt.Sprintf("task%08d", f.seq)
+			dev := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/devices/"), "/tasks")
+			if !f.dropCreate {
+				f.db = append(f.db, map[string]any{"_id": id, "name": m["name"], "device": dev, "parameterNames": m["parameterNames"],
+					"timestamp": f.clock().UTC().Format("2006-01-02T15:04:05.000Z")})
+			}
+			if f.hangup {
+				if hj, ok := w.(http.Hijacker); ok {
+					conn, _, _ := hj.Hijack()
+					conn.Close()
+				}
+				return
+			}
 			w.WriteHeader(f.taskCode)
-			_, _ = w.Write([]byte(f.taskBody))
+			switch {
+			case f.taskBody != "":
+				_, _ = w.Write([]byte(f.taskBody))
+			case f.faultBody:
+				_, _ = w.Write([]byte(`{"_id":"` + id + `","fault":{"code":"9005"}}`))
+			default:
+				_, _ = w.Write([]byte(`{"_id":"` + id + `"}`))
+			}
 		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/tasks/"):
-			f.deleted = append(f.deleted, strings.TrimPrefix(r.URL.Path, "/tasks/"))
+			id := strings.TrimPrefix(r.URL.Path, "/tasks/")
+			f.deleted = append(f.deleted, id)
 			if f.deleteCode != 0 {
 				w.WriteHeader(f.deleteCode)
 				return
+			}
+			if !f.deleteNoop {
+				keep := f.db[:0:0]
+				for _, t := range f.db {
+					if t["_id"] != id {
+						keep = append(keep, t)
+					}
+				}
+				f.db = keep
 			}
 			w.WriteHeader(200)
 		default:
@@ -86,16 +142,16 @@ func TestRefreshGroupsAreSubsetsOfTheAllowlist(t *testing.T) {
 }
 
 func TestRefreshOnlyPostsGetParameterValuesOfAllowlistedLeaves(t *testing.T) {
-	f := &fakeACS{devices: igd, taskCode: 200, taskBody: `{"_id":"abc12345"}`}
+	f := &fakeACS{devices: igd, taskCode: 200}
 	c := newACS(t, f)
 	rep, err := c.RefreshParams(context.Background(), "AAAA00-ONT-SN1")
 	if err != nil || rep.DataModel != "InternetGatewayDevice" || rep.Groups != 5 || rep.Completed != 5 || rep.Queued+rep.Faulted+rep.Cleaned != 0 {
 		t.Fatalf("%+v %v", rep, err)
 	}
-	if len(f.deleted) != 0 {
-		t.Fatalf("completed tasks must not be deleted: %v", f.deleted)
+	if len(f.deleted) != 0 || f.listCalls != 0 {
+		t.Fatalf("completed tasks need no cleanup: deleted=%v lists=%d", f.deleted, f.listCalls)
 	}
-	for _, task := range f.tasks {
+	for _, task := range f.posted {
 		if task["name"] != "getParameterValues" || len(task) != 2 {
 			t.Fatalf("only getParameterValues with parameterNames may be posted: %v", task)
 		}
@@ -130,34 +186,81 @@ func TestRefreshEscapesTheLiteralPercentOfAnACSIDExactlyOnce(t *testing.T) {
 	}
 }
 
-func TestRefreshCleansUpQueuedAndFaultedTasksButOnlyThoseItCreated(t *testing.T) {
-	f := &fakeACS{devices: igd, taskCode: 202, taskBody: `{"_id":"task1234abcd"}`}
-	c := newACS(t, f)
-	rep, err := c.RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-	if err != nil || rep.Queued != 5 || rep.Cleaned != 5 || len(f.deleted) != 5 {
-		t.Fatalf("%+v %v deleted=%v", rep, err, f.deleted)
-	}
-	f2 := &fakeACS{devices: igd, taskCode: 200, taskBody: `{"_id":"task1234abcd","fault":{"code":"9005"}}`}
-	rep, err = newACS(t, f2).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-	if err != nil || rep.Faulted != 5 || rep.Completed != 0 || len(f2.deleted) != 5 {
-		t.Fatalf("%+v %v", rep, err)
-	}
-	// an id the ACS invents (path traversal, oversized) is never turned into a DELETE: the refresh FAILS instead of claiming a clean state
-	for _, bad := range []string{`{"_id":"../devices"}`, `{"_id":"a/b"}`, `{"_id":""}`, `not json`} {
-		f3 := &fakeACS{devices: igd, taskCode: 202, taskBody: bad}
-		rep, err = newACS(t, f3).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-		if !errors.Is(err, ErrRefreshUncleaned) || len(f3.deleted) != 0 || rep.Cleaned != 0 || rep.Uncleaned != 1 || len(f3.tasks) != 1 {
-			t.Fatalf("%s: %+v %v deleted=%v tasks=%d", bad, rep, err, f3.deleted, len(f3.tasks))
+func TestRefreshLeavesNoTaskBehindWhateverTheOutcome(t *testing.T) {
+	for name, f := range map[string]*fakeACS{
+		"queued (202)":         {devices: igd, taskCode: 202},
+		"fault":                {devices: igd, taskCode: 200, faultBody: true},
+		"id hidden by the ACS": {devices: igd, taskCode: 202, taskBody: `{}`},
+		"invented id":          {devices: igd, taskCode: 202, taskBody: `{"_id":"../devices"}`},
+		"unparsable body":      {devices: igd, taskCode: 202, taskBody: `not json`},
+	} {
+		rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
+		if err != nil || rep.Cleaned != 5 || rep.Uncleaned != 0 || len(f.db) != 0 {
+			t.Fatalf("%s: %+v %v left=%d", name, rep, err, len(f.db))
+		}
+		for _, id := range f.deleted {
+			if !taskIDRe.MatchString(id) {
+				t.Fatalf("%s: DELETE for an id that is not well formed: %q", name, id)
+			}
 		}
 	}
 }
 
-func TestRefreshFailsAndStopsWhenAnUnfinishedTaskCannotBeRemoved(t *testing.T) {
-	for _, code := range []int{500, 404, 403} {
-		f := &fakeACS{devices: igd, taskCode: 202, taskBody: `{"_id":"task1234abcd"}`, deleteCode: code}
+func TestRefreshReconcilesWhenTheConnectionDropsAfterTheTaskWasCreated(t *testing.T) {
+	// what the real ACS did on 2026-10-29: it created the task and closed the connection (EOF) while it waited for the CPE
+	f := &fakeACS{devices: igd, hangup: true}
+	rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
+	if err == nil || errors.Is(err, ErrRefreshUncleaned) || len(f.db) != 0 || rep.Cleaned != 1 || len(f.posted) != 1 {
+		t.Fatalf("%+v %v left=%d posted=%d (the failure is reported, the task is gone, no hold is needed)", rep, err, len(f.db), len(f.posted))
+	}
+	// the POST failed without creating anything: also clean, also reported
+	f = &fakeACS{devices: igd, taskCode: 504, dropCreate: true}
+	rep, err = newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
+	if err == nil || errors.Is(err, ErrRefreshUncleaned) || len(f.db) != 0 {
+		t.Fatalf("%+v %v", rep, err)
+	}
+}
+
+func TestRefreshOnlyDeletesTasksThisCallCreated(t *testing.T) {
+	old := time.Now().Add(-48 * time.Hour).UTC().Format("2006-01-02T15:04:05.000Z")
+	names := refreshGroups["InternetGatewayDevice"][0]
+	other := func(id, dev, name string, pn []string, ts string) map[string]any {
+		return map[string]any{"_id": id, "name": name, "device": dev, "parameterNames": pn, "timestamp": ts}
+	}
+	f := &fakeACS{devices: igd, taskCode: 202, db: []map[string]any{
+		other("oldtask0001", "AAAA00-ONT-SN1", "getParameterValues", toAny(names), old),                                   // same shape, but old
+		other("othernames1", "AAAA00-ONT-SN1", "getParameterValues", []string{"Device.DeviceInfo.UpTime"}, old),           // different names
+		other("otherdevice", "BBBB00-ONT-SN2", "getParameterValues", toAny(names), time.Now().UTC().Format(time.RFC3339)), // other device
+		other("othername01", "AAAA00-ONT-SN1", "reboot", nil, time.Now().UTC().Format(time.RFC3339)),                      // other task kind
+	}}
+	rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
+	if err != nil || rep.Cleaned != 5 {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	if len(f.db) != 4 {
+		t.Fatalf("tasks that were not ours must stay untouched: %d left", len(f.db))
+	}
+	for _, id := range f.deleted {
+		if !strings.HasPrefix(id, "task0000") {
+			t.Fatalf("deleted a task that this call did not create: %s", id)
+		}
+	}
+}
+
+func toAny(s []string) []string { return s }
+
+func TestRefreshFailsAndStopsWhenCleanupCannotBeProven(t *testing.T) {
+	cases := map[string]*fakeACS{
+		"delete 500":       {devices: igd, taskCode: 202, deleteCode: 500},
+		"delete 404":       {devices: igd, taskCode: 202, deleteCode: 404},
+		"delete is a noop": {devices: igd, taskCode: 202, deleteNoop: true}, // 200 but the task is still there: verification catches it
+		"list 500":         {devices: igd, taskCode: 202, listCode: 500},
+		"list 403":         {devices: igd, taskCode: 202, listCode: 403},
+	}
+	for name, f := range cases {
 		rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-		if !errors.Is(err, ErrRefreshUncleaned) || rep.Uncleaned != 1 || rep.Cleaned != 0 || len(f.tasks) != 1 {
-			t.Fatalf("delete=%d: %+v %v tasks=%d (no further task may be created while one may be pending)", code, rep, err, len(f.tasks))
+		if !errors.Is(err, ErrRefreshUncleaned) || rep.Uncleaned != 1 || len(f.posted) != 1 {
+			t.Fatalf("%s: %+v %v posted=%d (no further task while one may be pending)", name, rep, err, len(f.posted))
 		}
 	}
 }
@@ -179,41 +282,30 @@ func TestRefreshRefusesBeforeAnyTaskWhenTheDeviceOrModelIsNotClear(t *testing.T)
 		"query injection":      {`x","$or":[{}]`, igd, ErrBadDeviceID},
 	} {
 		f := &fakeACS{devices: tc.devices, taskCode: 200, taskBody: `{}`}
-		if _, err := c(f).RefreshParams(context.Background(), tc.id); !errors.Is(err, tc.want) || len(f.tasks) != 0 {
-			t.Fatalf("%s: err=%v tasks=%d", name, err, len(f.tasks))
+		if _, err := c(f).RefreshParams(context.Background(), tc.id); !errors.Is(err, tc.want) || len(f.posted) != 0 {
+			t.Fatalf("%s: err=%v tasks=%d", name, err, len(f.posted))
 		}
 	}
 }
 
-func TestRefreshAmbiguousPostOutcomesAreTreatedAsPossiblyUncleanButExplicit4xxIsNot(t *testing.T) {
+func TestRefreshAmbiguousStatusesAreCleanedUpAndExplicitRefusalsAreNot(t *testing.T) {
 	for _, code := range []int{500, 502, 503, 504, 408, 429, 409, 413} {
 		f := &fakeACS{devices: igd, taskCode: code, taskBody: `x`}
 		rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-		if !errors.Is(err, ErrRefreshUncleaned) || rep.Uncleaned != 1 || len(f.tasks) != 1 {
-			t.Fatalf("%d: %+v %v tasks=%d (the ACS may have created the task)", code, rep, err, len(f.tasks))
+		if err == nil || errors.Is(err, ErrRefreshUncleaned) || f.listCalls == 0 || len(f.db) != 0 || len(f.posted) != 1 || rep.Cleaned != 1 {
+			t.Fatalf("%d: %+v %v lists=%d left=%d", code, rep, err, f.listCalls, len(f.db))
 		}
 	}
 	for _, code := range []int{400, 401, 403, 404, 405, 422} {
-		f := &fakeACS{devices: igd, taskCode: code, taskBody: `x`}
+		f := &fakeACS{devices: igd, taskCode: code, taskBody: `x`, dropCreate: true}
 		_, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-		if err == nil || errors.Is(err, ErrRefreshUncleaned) || len(f.tasks) != 1 {
-			t.Fatalf("%d: a refusal the NBI makes before creating anything: stop without a hold: %v tasks=%d", code, err, len(f.tasks))
+		if err == nil || errors.Is(err, ErrRefreshUncleaned) || len(f.posted) != 1 || f.listCalls != 0 {
+			t.Fatalf("%d: a refusal the NBI makes before creating anything needs no cleanup: %v lists=%d", code, err, f.listCalls)
 		}
 	}
-	// transport failure on the POST (connection dropped after the request was sent)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			_, _ = w.Write([]byte(igd))
-			return
-		}
-		if hj, ok := w.(http.Hijacker); ok {
-			conn, _, _ := hj.Hijack()
-			conn.Close()
-		}
-	}))
-	defer srv.Close()
-	c, _ := New(srv.URL, srv.Client(), "")
-	rep, err := c.RefreshParams(context.Background(), "AAAA00-ONT-SN1")
+	// ambiguous AND the cleanup is impossible => hold
+	f := &fakeACS{devices: igd, taskCode: 503, listCode: 500}
+	rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
 	if !errors.Is(err, ErrRefreshUncleaned) || rep.Uncleaned != 1 {
 		t.Fatalf("%+v %v", rep, err)
 	}
