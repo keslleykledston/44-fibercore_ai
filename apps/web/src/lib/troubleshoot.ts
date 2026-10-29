@@ -15,7 +15,9 @@ const stateText = (status: string) => ({ up: "online", down: "fora do ar", unrec
 const trustOf = (p: Provenance | null): Trust => (p && p.quality === "fresh" ? "confirmado" : "indisponivel");
 const why = (p: Provenance | null) => (!p ? "sem coleta" : p.quality === "stale" ? "dado defasado" : p.quality === "conflict" ? "fontes divergentes" : p.quality === "unknown" ? "sem coleta" : "");
 
-export type RunState = { finding: DiagnosticFinding | null; denied: boolean; failed: boolean };
+export type RunState = { finding: DiagnosticFinding | null; denied: boolean; failed: boolean; ranAt: string | null; discarded: "old" | "other_pon" | null };
+/** Uma execução é um registro histórico: só vale como conclusão se for da PON atual da ONU e recente (mesma janela de frescor da regra). */
+export const RUN_FRESH_MINUTES = 15;
 
 /** Os 5 passos do diagnóstico guiado, só com o que a API já devolveu. Sem score, sem valor inventado. */
 export function buildSteps(ctx: CustomerContext, onu: CustomerOnu | undefined, run: RunState, customerId: string, canRunHint: boolean): Step[] {
@@ -38,10 +40,10 @@ export function buildSteps(ctx: CustomerContext, onu: CustomerOnu | undefined, r
   const f = run.finding;
   const s4: Step = { id: 4, title: "Padrão coletivo na PON (R-D001)", provenance: null,
     trust: !f ? "indisponivel" : f.status === "inferred" ? "hipotese" : f.status === "observed" ? "confirmado" : "indisponivel",
-    summary: run.denied ? "Seu papel não permite executar o diagnóstico." : run.failed ? "Não foi possível executar o diagnóstico agora; nada é afirmado." : !f ? "Ainda não executado. A leitura não altera nada na rede."
+    summary: run.denied ? "Seu papel não permite executar o diagnóstico." : run.failed ? "Não foi possível executar o diagnóstico agora; nada é afirmado." : !f ? (run.discarded === "old" ? "A última execução é antiga e foi descartada: ela não representa o estado atual. Execute de novo." : run.discarded === "other_pon" ? "A execução anterior era de outra PON e foi descartada. Execute de novo." : "Ainda não executado. A leitura não altera nada na rede.")
       : f.status === "inferred" ? `Hipótese: possível falha coletiva de acesso nesta PON (${cause[f.suspected_cause ?? "unknown"]}). Não é diagnóstico; confirme com o NOC/campo.`
       : f.status === "observed" ? "As quedas recentes não atingem o padrão de falha coletiva. Isso não prova que a PON esteja saudável." : `Sem conclusão: ${f.reason ?? "dado indisponível"}.`,
-    facts: f ? [["ONUs conhecidas na PON", String(f.evidence.onus_observed)], ["Caíram recentemente", String(f.evidence.onus_down_recent)], ["Online", String(f.evidence.online)], ["Cronicamente fora (não contam)", String(f.evidence.chronic_offline)]] : [],
+    facts: f ? [...(run.ranAt ? [["Executado em", run.ranAt] as [string, string]] : []), ["ONUs conhecidas na PON", String(f.evidence.onus_observed)], ["Caíram recentemente", String(f.evidence.onus_down_recent)], ["Online", String(f.evidence.online)], ["Cronicamente fora (não contam)", String(f.evidence.chronic_offline)]] : [],
     action: run.denied || !canRunHint ? null : { kind: "run", label: f ? "Reexecutar a leitura" : "Executar diagnóstico (somente leitura)" } };
   const k = onu.cpe;
   const s5: Step = { id: 5, title: "Roteador (CPE)", provenance: k.provenance,

@@ -5,7 +5,7 @@ import { SourceChip } from "@/components/SourceChip";
 import { EmptyState, ErrorState, PageHeader } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
 import { diagnosticsOn } from "@/lib/features";
-import { buildSteps, conclusion, TRUST_LABEL, ticketSummary, type Trust } from "@/lib/troubleshoot";
+import { buildSteps, conclusion, RUN_FRESH_MINUTES, TRUST_LABEL, ticketSummary, type Trust } from "@/lib/troubleshoot";
 import type { CustomerContext, DiagnosticRun } from "@/lib/types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -29,9 +29,14 @@ export default async function GuidedTroubleshooting({ params, searchParams }: { 
   const onu = ctx.onus.find((x) => x.id === q.onu) ?? ctx.onus[0];
   // a execução só vale para ESTA ONU: um link antigo ou de outra ONU é ignorado (nunca mostra a PON errada)
   const run = onu && q.run && UUID.test(q.run) ? await apiSafe<DiagnosticRun>(`/v1/diagnostics/runs/${q.run}`) : null;
-  const valid = run?.data && run.data.scope.onu_id === onu?.id && run.data.rule_id === "R-D001" ? run.data : null;
+  const mine = run?.data && run.data.scope.onu_id === onu?.id && run.data.rule_id === "R-D001" ? run.data : null;
+  const ageMin = mine ? (Date.now() - Date.parse(mine.created_at)) / 60000 : 0;
+  const samePon = !!mine && mine.findings[0]?.evidence.pon_path === onu?.pon_path;
+  const discarded = !mine ? null : !samePon ? "other_pon" : ageMin > RUN_FRESH_MINUTES ? "old" : null;
+  const valid = mine && !discarded ? mine : null;
   const denied = q.erro === "403";
-  const steps = buildSteps(ctx, onu, { finding: valid?.findings[0] ?? null, denied, failed: !!q.erro && !denied }, id, true);
+  const steps = buildSteps(ctx, onu, { finding: valid?.findings[0] ?? null, denied, failed: !!q.erro && !denied, discarded,
+    ranAt: valid ? `${new Date(valid.created_at).toISOString().replace("T", " ").slice(0, 16)} UTC (há ${Math.max(0, Math.round(ageMin))} min)` : null }, id, true);
   const concl = conclusion(steps);
   const cur = steps.find((s) => String(s.id) === q.passo) ?? steps[valid ? 3 : 0];
   const base = `/assinantes/diagnostico/${id}?${onu ? `onu=${onu.id}&` : ""}${valid ? `run=${valid.run_id}&` : ""}`;

@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18648-5eda-7a50-8de4-df8ce9f7fc35).
+[codex] Turn started (01a18648-6124-7243-95b0-2ab31529bc22).
+[codex] Assistant message captured: Vou comparar o branch com `main` e seguir o fluxo de proveniência até a tela e o ticket, proc...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/diagnostic...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/diagnostic... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=5 main...HEAD -- apps/web/src/lib/troubleshoo...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=5 main...HEAD -- apps/web/src/lib/troubleshoo... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não deve shippar ainda: uma execução antiga pode ser ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não deve shippar ainda: uma execução antiga pode ser apresentada como conclusão atual após a ONU mudar de PON ou o inventário mudar.
+
+Findings:
+- [medium] Execuções antigas são tratadas como conclusão atual (apps/web/src/app/assinantes/diagnostico/[id]/page.tsx:29-30)
+  A validação aceita qualquer execução da mesma ONU e regra, sem comparar a PON registrada em `scope.pon_id` com a PON atual nem considerar a idade da execução. Como o link `run` pode permanecer na URL, após uma mudança de PON ou atualização do inventário a tela e o ticket ainda podem mostrar uma hipótese ou ausência de padrão baseada em dados anteriores como se fosse atual.
+  Recommendation: Valide que a PON da execução corresponde à PON atual da ONU e indique a data da execução; descarte ou marque como histórica a conclusão quando a execução não representar o inventário atual.
