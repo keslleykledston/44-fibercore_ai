@@ -13,6 +13,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/olt"
 )
 
 type Config struct {
@@ -207,6 +209,8 @@ func (c *Config) Validate() error {
 		for _, pp := range o.PonPorts {
 			if !ponRe.MatchString(pp) {
 				errs = append(errs, fmt.Errorf("%s: invalid pon port %q", p, pp))
+			} else if o.Profile == "huawei_ma56_r015" && !olt.ValidR015Port(pp) {
+				errs = append(errs, fmt.Errorf("%s: pon port %q outside huawei_ma56_r015 limits (frame 0, slot 0..17, port 0..15)", p, pp))
 			}
 		}
 	}

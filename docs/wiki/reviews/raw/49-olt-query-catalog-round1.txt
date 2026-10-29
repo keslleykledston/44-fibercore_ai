@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a188a0-8698-7fa3-8067-390a2032c902).
+[codex] Turn started (01a188a0-9c70-7233-b6cb-f5b7dc509e38).
+[codex] Assistant message captured: Vou ler o diff contra `main` e rastrear os caminhos de renderização, validação e execução, in...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/qu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/qu... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"\\.Allowed\\(|Allowed\\(cmd|HuaweiR015|RunQuery|Session interface|type...
+[codex] Command completed: /bin/bash -lc "rg -n \"\\.Allowed\\(|Allowed\\(cmd|HuaweiR015|RunQuery|Session interface|type... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/query.go | sed -n '140,235p'; nl -ba agents/ed...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/query.go | sed -n '140,235p'; nl -ba agents/ed... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/ssh.go | sed -n '90,155p'; nl -ba agents/edge/...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/ssh.go | sed -n '90,155p'; nl -ba agents/edge/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a allowlist aceita comandos catalo...
+[codex] Turn completion inferred after the main thread finished and subagent work drained.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a allowlist aceita comandos catalogados fora dos limites impostos por `Render`, permitindo contornar a validação de parâmetros pelo caminho direto da sessão.
+
+Findings:
+- [medium] A allowlist ignora os limites de parâmetros do catálogo (agents/edge/internal/olt/query.go:152-171)
+  `QueryPolicy.allows` usa `matchesTemplate`, que aceita qualquer número de 1 a 3 dígitos nos placeholders; não reaplica os limites de slot, porta e ONT definidos por `Render`. Como `HuaweiR015.Allowed` expõe essa regra à `ReadOnlySession`, um chamador pode enviar diretamente, por exemplo, `display ont info 999 all`, sem passar por `RunQuery`. Isso não permite escrita, mas quebra a garantia documentada de que os parâmetros enviados pelo Edge são limitados e pode direcionar consultas a portas ou ONTs inválidas ou inesperadas. Faça a allowlist validar cada comando reconstruindo candidatos com parâmetros dentro dos limites ou garanta que só aceite planos produzidos por `Render`.
+  Recommendation: Alinhe a validação de `allows` aos mesmos limites e escopo de `Render`; acrescente casos de teste para limites excedidos via `Allowed`/`ReadOnlySession`, incluindo os IDs validados.

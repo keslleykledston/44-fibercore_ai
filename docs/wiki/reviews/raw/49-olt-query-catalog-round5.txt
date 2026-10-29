@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a188a7-445d-7d00-8343-efae06bca432).
+[codex] Turn started (01a188a7-6ed2-76b1-a29d-eacb6c74e77a).
+[codex] Assistant message captured: Vou comparar a branch com `main` e seguir o fluxo de validação até o primeiro comando enviado...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/qu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/qu... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- agents/edge/internal/olt/hu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- agents/edge/internal/olt/hu... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"HuaweiR015|RunQuery|Snapshot\\(|hwR015Allowed|Queries:\" agents/edge/i...
+[codex] Command completed: /bin/bash -lc "rg -n \"HuaweiR015|RunQuery|Snapshot\\(|hwR015Allowed|Queries:\" agents/edge/i... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: `RunQuery` confia em uma identidade forneci...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: `RunQuery` confia em uma identidade fornecida pelo chamador e pode executar consultas em firmware não verificado.
+
+Findings:
+- [high] A identidade do firmware pode ser falsificada pelo chamador (agents/edge/internal/olt/query.go:202-223)
+  `RunQuery` usa o `Identity` recebido como prova de compatibilidade e só então executa `enable`, `config` e a consulta. Como não chama `Identify` nem vincula essa identidade à sessão, qualquer chamador pode passar `r015ID` para uma sessão conectada a outro firmware e contornar a proteção de versão deste perfil. Isso pode enviar comandos específicos de R015 a uma OLT não verificada. Identifique a sessão dentro de `RunQuery` antes de enviar comandos, ou receba uma identidade vinculada a uma sessão cuja origem não possa ser escolhida pelo chamador.
+  Recommendation: Faça `RunQuery` obter e validar a identidade pela própria sessão antes de `enable`/`config`; adicione um teste que passe identidade R015 falsa para uma sessão que identifica outro firmware e confirme zero comandos de consulta.

@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a188a4-a1ee-7401-8706-b84cb00f3b83).
+[codex] Turn started (01a188a4-ada6-79d3-bd30-1fc5d67fed33).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir o fluxo de autorização e execução, incluindo o ...
+[codex] Running command: /bin/bash -lc 'git status --short && git diff --stat main...HEAD && git diff --unified=60 mai...
+[codex] Command completed: /bin/bash -lc 'git status --short && git diff --stat main...HEAD && git diff --unified=60 mai... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"HuaweiR015|snapshotR015|\\.Allowed\\(|RunQuery|QueryPolicy|HuaweiAllow...
+[codex] Command completed: /bin/bash -lc "rg -n \"HuaweiR015|snapshotR015|\\.Allowed\\(|RunQuery|QueryPolicy|HuaweiAllow... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,180p' agents/edge/internal/olt/huawei.go && sed -n '55,180p' agents/...
+[codex] Command completed: /bin/bash -lc "sed -n '1,180p' agents/edge/internal/olt/huawei.go && sed -n '55,180p' agents/... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"func commandBudget|maxBytesPerOLT|interface gpon|R015|ponPorts|PonPort...
+[codex] Command completed: /bin/bash -lc "rg -n \"func commandBudget|maxBytesPerOLT|interface gpon|R015|ponPorts|PonPort... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/config/config.go | sed -n '194,220p'; nl -ba agent...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/config/config.go | sed -n '194,220p'; nl -ba agent... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviaria ainda: a allowlist agora pode fazer uma ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviaria ainda: a allowlist agora pode fazer uma configuração R015 aceita falhar em toda coleta periódica, sem validação antecipada dos limites do perfil.
+
+Findings:
+- [medium] Configurações R015 fora dos limites só falham durante a coleta (agents/edge/internal/olt/huawei_r015.go:16)
+  O perfil agora permite `interface gpon` apenas com frame 0 e slot 0–17, mas a validação de `pon_ports` aceita qualquer caminho numérico (`F/S/P`). Assim, uma configuração R015 como `1/0/14` ou `0/18/14` passa na inicialização e falha quando `snapshotR015` tenta entrar na interface; a coleta periódica retorna erro e aciona o cooldown. Os testes do coletor cobrem apenas `0/0/14`, então não detectam esse caso. Valide os limites específicos do perfil durante o carregamento da configuração ou rejeite explicitamente essas portas com um erro de configuração antes de iniciar o coletor.
+  Recommendation: Adicione validação de `pon_ports` condicionada ao perfil R015 e um teste de configuração confirmando que frame diferente de 0 e slot acima de 17 são recusados antes da coleta.

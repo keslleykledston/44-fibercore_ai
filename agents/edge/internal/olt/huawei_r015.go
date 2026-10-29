@@ -12,7 +12,8 @@ import (
 // ONT commands only exist inside the GPON interface context (config -> interface gpon F/S), so this profile walks the CLI
 // modes. Everything stays read-only: the allowlist below is the exact set of commands this profile may send.
 var (
-	hwR015Allowed = regexp.MustCompile(`^(enable|config|quit|interface gpon \d+/\d+|display board 0|display ont info \d+ all|display ont optical-info \d+ all)$`)
+	// the data commands (display board 0, display ont info/optical-info <port> all) are catalog queries with bounded parameters (query.go)
+	hwR015Allowed = regexp.MustCompile(`^(enable|config|quit|interface gpon 0/([0-9]|1[0-7]))$`) // frame 0 only; slot ceiling = query.go maxSlot
 
 	// "  0/ 0/14   7  4857544310001A2B  active      online   normal   match    no"
 	r015OntRow = regexp.MustCompile(`^\s*(\d+)/\s*(\d+)/\s*(\d+)\s+(\d+)\s+([0-9A-Fa-f]{16})\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*$`)
@@ -24,6 +25,12 @@ var (
 	r015CLIError = regexp.MustCompile(`(?m)^\s*%\s|Unknown command|Parameter error|Too many parameters|Incomplete command`)
 )
 
+// ValidR015Port reports whether a PON path F/S/P is one this profile may touch: frame 0, slot 0..maxSlot, port 0..maxPort, canonical numbers.
+// Config loading and the snapshot use it so a bad port is a configuration error, not a collection that fails (and cools down) every round.
+func ValidR015Port(p string) bool { return r015PortRe.MatchString(p) }
+
+var r015PortRe = regexp.MustCompile(`^0/([0-9]|1[0-7])/([0-9]|1[0-5])$`)
+
 func isMA56(id Identity) bool { return strings.HasPrefix(strings.ToUpper(id.Model), "MA56") }
 
 // r015Firmware is the only release this profile was validated on; the CLI-mode commands are never sent to another one.
@@ -33,13 +40,22 @@ func isR015(id Identity) bool { return isMA56(id) && strings.HasPrefix(id.Firmwa
 
 // HuaweiR015 is selected by the OLT config (profile "huawei_ma56_r015"). Its allowlist includes the CLI mode commands
 // (enable, config, interface gpon F/S, quit) that the generic Huawei driver must never be able to send.
-type HuaweiR015 struct{ Huawei }
+type HuaweiR015 struct {
+	Huawei
+	Queries QueryPolicy // catalog queries beyond the validated ones; zero value enables nothing
+}
 
-func (HuaweiR015) Allowed(cmd string) bool {
-	return HuaweiAllowed(cmd) || hwR015Allowed.MatchString(cmd)
+func (h HuaweiR015) Allowed(cmd string) bool {
+	// Deliberately NOT delegating to the generic Huawei allowlist: its F/S/P forms take unbounded numbers and this profile never sends them.
+	return hwR015Allowed.MatchString(cmd) || h.Queries.allows(cmd)
 }
 
 func (h HuaweiR015) Snapshot(ctx context.Context, s Session, ports []string) (Snapshot, error) {
+	for _, p := range ports { // before ANY command, identification included: a bad port must not even touch the device
+		if !hwPort.MatchString(p) || !ValidR015Port(p) {
+			return Snapshot{}, fmt.Errorf("invalid pon port %q for huawei_ma56_r015", p)
+		}
+	}
 	id, err := h.Identify(ctx, s)
 	if err != nil {
 		return Snapshot{}, err
@@ -58,8 +74,8 @@ func (h Huawei) snapshotR015(ctx context.Context, s Session, id Identity, ports 
 	var order []string
 	bySlot := map[string][]r015Port{}
 	for _, p := range ports {
-		if !hwPort.MatchString(p) {
-			return Snapshot{}, fmt.Errorf("invalid pon port %q", p)
+		if !hwPort.MatchString(p) || !ValidR015Port(p) {
+			return Snapshot{}, fmt.Errorf("invalid pon port %q for huawei_ma56_r015", p)
 		}
 		f := strings.Split(p, "/")
 		slot := f[0] + "/" + f[1]
