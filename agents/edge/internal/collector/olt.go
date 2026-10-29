@@ -200,8 +200,8 @@ func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, er
 		o.mu.Unlock()
 		return nil, fmt.Errorf("olt cooling down after a failure (%s left)", cur.CoolUntil.Sub(now).Round(time.Second))
 	}
-	if o.corrupt && !known && src.Interval > 0 { // unknown history: behave as if it was touched just now
-		o.st[key] = GuardState{Last: now}
+	if o.corrupt && !known { // unknown history (any transport, any interval): behave as if a failure had just happened
+		o.st[key] = GuardState{Last: now, CoolUntil: now.Add(cooldown)}
 		err := o.persistLocked()
 		o.mu.Unlock()
 		return nil, err
@@ -210,9 +210,11 @@ func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, er
 		o.mu.Unlock()
 		return nil, nil
 	}
-	cur.Last = now
-	o.st[key] = cur
+	// Reserve BEFORE any I/O, pessimistically: the attempt time AND a cooldown as if it were going to fail. A crash, a kill or a
+	// failed save after the attempt then cannot reopen the window; only a success (below) lifts the cooldown.
+	o.st[key] = GuardState{Last: now, CoolUntil: now.Add(cooldown)}
 	if err := o.persistLocked(); err != nil { // fail closed: an attempt that cannot be remembered must not be made
+		o.st[key] = cur
 		o.mu.Unlock()
 		return nil, fmt.Errorf("olt guard cannot persist its state: %w", err)
 	}
@@ -226,12 +228,12 @@ func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, er
 
 	o.mu.Lock()
 	delete(o.busy, key)
-	if err != nil {
-		cur := o.st[key]
-		cur.CoolUntil = o.now().Add(cooldown)
-		o.st[key] = cur
-		_ = o.persistLocked() // best effort: the in-memory cooldown already holds, and the attempt itself was persisted before I/O
+	if err == nil {
+		o.st[key] = GuardState{Last: o.st[key].Last} // success lifts the pessimistic cooldown; if the save fails the file stays cooled (safe side)
+	} else {
+		o.st[key] = GuardState{Last: o.st[key].Last, CoolUntil: o.now().Add(cooldown)} // counted from the END of the failed attempt
 	}
+	_ = o.persistLocked() // best effort: the pessimistic reservation already on disk is the floor if this save fails
 	o.mu.Unlock()
 	return items, err
 }

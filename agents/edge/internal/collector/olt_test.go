@@ -586,8 +586,8 @@ func TestAnAttemptThatDiesMidWayStillCountsAfterTheRestart(t *testing.T) {
 		t.Fatalf("opens=%d", opens)
 	}
 	clock = clock.Add(time.Minute)
-	if items, err := (&OLT{Sources: []OLTSource{s}, Guard: FileGuard{Path: path}, Now: func() time.Time { return clock }}).Collect(context.Background()); err != nil || len(items) != 0 || opens != 1 {
-		t.Fatalf("the interval is persisted BEFORE any I/O: items=%d err=%v opens=%d", len(items), err, opens)
+	if items, err := (&OLT{Sources: []OLTSource{s}, Guard: FileGuard{Path: path}, Now: func() time.Time { return clock }}).Collect(context.Background()); err == nil || len(items) != 0 || opens != 1 {
+		t.Fatalf("the attempt AND its pessimistic cooldown are persisted BEFORE any I/O: items=%d err=%v opens=%d", len(items), err, opens)
 	}
 }
 
@@ -651,4 +651,62 @@ func TestCLIAndSNMPEntriesOfOnePhysicalOLTShareOneGuard(t *testing.T) {
 	}
 	close(gate)
 	<-done
+}
+
+func TestACorruptStateCoolsEveryTransportEvenWithoutAnInterval(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "g.json")
+	if err := os.WriteFile(path, []byte("garbage"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	snmpOpens := 0
+	sn := OLTSource{Name: "olt-snmp", SNMPKey: "192.0.2.10", Ports: []string{"0/0/14"}, SNMPDriver: olt.HuaweiSNMP{}, // Interval 0: paced per packet only
+		OpenSNMP: func(context.Context) (olt.SNMPReader, func(), error) { snmpOpens++; return snmpFake{}, func() {}, nil }}
+	o := &OLT{Sources: []OLTSource{sn}, Guard: FileGuard{Path: path}, Now: func() time.Time { return clock }}
+	for i := 0; i < 3; i++ { // the next calls must not slip through after the first one was deferred
+		_, _ = o.Collect(context.Background())
+		clock = clock.Add(time.Minute)
+	}
+	if snmpOpens != 0 {
+		t.Fatalf("a corrupt guard file must keep the agent untouched for the whole cooldown: opens=%d", snmpOpens)
+	}
+	clock = clock.Add(5 * time.Minute)
+	if _, err := o.Collect(context.Background()); err != nil || snmpOpens != 1 {
+		t.Fatalf("after the cooldown it collects: err=%v opens=%d", err, snmpOpens)
+	}
+}
+
+type flakySave struct {
+	inner FileGuard
+	fail  *bool
+}
+
+func (f flakySave) Load() (map[string]GuardState, error) { return f.inner.Load() }
+func (f flakySave) Save(m map[string]GuardState) error {
+	if *f.fail {
+		return errors.New("disk full")
+	}
+	return f.inner.Save(m)
+}
+
+func TestAFailureWhoseCooldownCannotBeSavedStillLeavesTheReservationOnDisk(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "g.json")
+	clock := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	var opens, runs int
+	failSave := false
+	s := cliSrc(&opens, &runs, errors.New("boom"))
+	s.Open = func(context.Context) (olt.Session, func(), error) {
+		opens++
+		failSave = true // the disk fills up while the session is open
+		return nil, nil, errors.New("connection refused")
+	}
+	g := flakySave{FileGuard{Path: path}, &failSave}
+	if _, err := (&OLT{Sources: []OLTSource{s}, Guard: g, Now: func() time.Time { return clock }}).Collect(context.Background()); err == nil {
+		t.Fatal("expected failure")
+	}
+	failSave = false
+	clock = clock.Add(time.Minute) // a restarted process reads the pessimistic reservation written before the I/O
+	if _, err := (&OLT{Sources: []OLTSource{s}, Guard: g, Now: func() time.Time { return clock }}).Collect(context.Background()); err == nil || !strings.Contains(err.Error(), "cooling down") || opens != 1 {
+		t.Fatalf("restart must still be cooling: err=%v opens=%d", err, opens)
+	}
 }

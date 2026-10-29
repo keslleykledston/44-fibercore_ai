@@ -20,6 +20,7 @@ import (
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/nbi"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/olt"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/queue"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/singleton"
 )
 
 var version = "0.1.0-dev"
@@ -58,6 +59,14 @@ func main() {
 	}
 	gwAllow, _ := allowlist.New([]string{gwHost})
 	gw := gateway.New(cfg.GatewayURL, cfg.ClientID, secret, gwAllow.HTTPClient(30*time.Second))
+
+	// One Edge per state directory: the OLT pacing guard is a file and cannot coordinate two processes by itself.
+	lock, err := singleton.Acquire(cfg.QueuePath + ".lock")
+	if err != nil {
+		log.Error("single instance", "err", err)
+		os.Exit(2)
+	}
+	defer lock.Close()
 
 	var collectors []collector.Collector
 	if cfg.NBIURL != "" {
@@ -156,4 +165,3 @@ func main() {
 	ag.Run(ctx)
 	log.Info("fibercore-edge stopped")
 }
-

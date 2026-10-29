@@ -241,3 +241,10 @@ func TestOnePhysicalOLTCannotBeConfiguredTwice(t *testing.T) {
 		t.Fatalf("two different devices are fine: %v", err)
 	}
 }
+
+func TestAnOLTAddressMustBeAnIPLiteralSoAliasesCannotSplitTheGuard(t *testing.T) {
+	body := `,"allowlist":["olt-a.example.net:22"],"olts":[{"name":"A","vendor":"huawei","address":"olt-a.example.net:22","username":"ro","secret_file":"/s","host_key_sha256":"SHA256:abc","pon_ports":["0/1/0"]}]`
+	if _, err := Load(write(t, 0o600, good(body)), "v"); err == nil || !strings.Contains(err.Error(), "IP literal") {
+		t.Fatalf("a host-name OLT address must be refused: %v", err)
+	}
+}

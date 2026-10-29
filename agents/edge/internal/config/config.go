@@ -152,6 +152,9 @@ func (c *Config) Validate() error {
 		}
 		// One physical device must not be configured twice (another name, another transport or port): the per-device lock, interval
 		// and cooldown are keyed by host, and two entries would otherwise be two independent clients of the same OLT.
+		if h, _, err := net.SplitHostPort(o.Address); o.Transport != "snmp" && err == nil && net.ParseIP(h) == nil {
+			errs = append(errs, fmt.Errorf("%s: address must be an IP literal (a host name and an IP of the same OLT would be two guard identities)", p))
+		}
 		devAddr := o.Address
 		if o.Transport == "snmp" {
 			devAddr = o.SNMPAddress
