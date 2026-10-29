@@ -365,3 +365,12 @@ def test_a_binding_already_linked_to_another_serial_costs_only_that_claim(client
     assert r.status_code == 202 and r.json()["conflicts"] == 1 and r.json()["cpes"] == 1, r.text
     rows = {x["canonical_serial"]: x for x in client.get("/v1/cpes", headers=hdr(client, "alice", seed, "A")).json()}
     assert "LINK-FINE-1" in rows and "LINK-THIEF-1" not in rows and rows["LINK-OWNER-1"]["bindings"][0]["external_id"] == "linked-ext"
+
+
+def test_identical_repeated_claims_next_to_a_valid_entry_are_deduplicated(client, seed, inv):
+    a = agent(client, inv, "a1")
+    one = {"canonical_serial": "REP-ONE-1", "vendor": "A", "binding": {"protocol": "tr069", "external_id": "rep-ext", "connector_id": "c-rep"}}
+    ok = {"canonical_serial": "REP-OK-1", "binding": {"protocol": "tr069", "external_id": "rep-ok", "connector_id": "c-rep"}}
+    body = {"edge_id": str(inv["a1"]["edge"]), "observed_at": _now(), "cpes": [one, {**one, "vendor": "B"}, ok]}
+    r = client.post("/v1/edge/cpe-snapshots", headers=a, json=body)
+    assert r.status_code == 202 and r.json() == {"status": "accepted", "cpes": 2, "skipped": 0, "conflicts": 0}, r.text

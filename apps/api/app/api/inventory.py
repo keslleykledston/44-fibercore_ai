@@ -216,7 +216,7 @@ def ingest_cpe_snapshot(
                                           and owners[c.canonical_serial][1] > body.observed_at)]
     skipped = len(body.cpes) - len(fresh)
     if not fresh:
-        return {"status": "ignored_stale", "cpes": 0, "skipped": skipped}
+        return {"status": "ignored_stale", "cpes": 0, "skipped": skipped, "conflicts": 0}
     # A serial is only a CLAIM made by the device. One CPE has ONE external id per (connector, protocol): a claim that names a
     # different one (than stored, or than another claim in this very batch) is IGNORED and counted, never merged into the existing
     # CPE (no second binding, no vendor/model overwrite). Ignoring instead of failing keeps one hostile device from blocking the rest.
@@ -243,6 +243,8 @@ def ingest_cpe_snapshot(
     for c in fresh:
         owners_of_binding.setdefault((c.binding.connector_id, c.binding.protocol, c.binding.external_id), set()).add(c.canonical_serial)
     kept = []
+    seen_claims: set[tuple] = set()
+    repeats = 0
     for c in fresh:
         k = (c.canonical_serial, c.binding.connector_id, c.binding.protocol)
         if len(claimed[k]) > 1 or stored.get(k, c.binding.external_id) != c.binding.external_id:
@@ -250,8 +252,12 @@ def ingest_cpe_snapshot(
         bk = (c.binding.connector_id, c.binding.protocol, c.binding.external_id)
         if len(owners_of_binding[bk]) > 1 or linked_to.get(bk, c.canonical_serial) != c.canonical_serial:
             continue
+        if k in seen_claims:  # identical repeat of an accepted claim: one row per claim key reaches the upserts (not a conflict)
+            repeats += 1
+            continue
+        seen_claims.add(k)
         kept.append(c)
-    conflicts = len(fresh) - len(kept)
+    conflicts = len(fresh) - len(kept) - repeats
     fresh = kept
     if not fresh:
         return {"status": "accepted", "cpes": 0, "skipped": skipped, "conflicts": conflicts}

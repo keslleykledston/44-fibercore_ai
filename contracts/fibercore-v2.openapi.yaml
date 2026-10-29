@@ -474,10 +474,12 @@ paths:
       summary: O serial é uma reivindicação do dispositivo; reivindicação com external_id diferente do já vinculado (ou conflitante no lote) é IGNORADA e contada em `conflicts`, nunca mesclada
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CpeSnapshot'}}}}
       responses:
-        '202': {description: "Aceito: {status, cpes, skipped, conflicts}"}
+        '202':
+          description: "Processado. `conflicts` conta reivindicações ignoradas (nunca mescladas); `skipped` conta CPEs mais antigos que o já gravado."
+          content: {application/json: {schema: {$ref: '#/components/schemas/CpeSnapshotAck'}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
-        '409': {$ref: '#/components/responses/Conflict'}
+        '409': {description: "Só quando o CPE já pertence a OUTRO edge (corrida entre edges). Reivindicação de identidade conflitante NÃO gera 409: é ignorada e contada em `conflicts`."}
         '422': {description: Validação}
   /edges:
     get:
@@ -512,6 +514,14 @@ components:
     Forbidden: {description: "Usuário sem permissão sobre tenant ou capacidade; detail=mfa_enrolment_required quando o papel exige MFA e o usuário ainda não o ativou (MFA_REQUIRED_ROLES)"}
     Conflict: {description: Operação concorrente ou estado incompatível}
   schemas:
+    CpeSnapshotAck:
+      type: object
+      required: [status, cpes, skipped, conflicts]
+      properties:
+        status: {type: string, enum: [accepted, ignored_stale]}
+        cpes: {type: integer, minimum: 0, description: CPEs gravados neste snapshot}
+        skipped: {type: integer, minimum: 0, description: CPEs ignorados por terem observação mais antiga que a já gravada}
+        conflicts: {type: integer, minimum: 0, description: Reivindicações de identidade ignoradas (external_id diferente do vinculado, serial/binding disputado no lote ou já ligado a outro serial)}
     LoginRequest:
       type: object
       required: [email, password]

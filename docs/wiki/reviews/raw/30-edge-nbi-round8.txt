@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1854b-c102-78f1-a966-486f7345d410).
+[codex] Turn started (01a1854b-c1c4-7611-8b4a-a0a0a5f34da4).
+[codex] Assistant message captured: Vou revisar o diff contra `main`, dando prioridade ao processamento parcial de conflitos, à s...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/inventory....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/inventory.... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- apps/api/app/api/inventory....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- apps/api/app/api/inventory.... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "cpe_protocol_bindings|CREATE.*cpe|UNIQUE.*external|canonical_serial" ap...
+[codex] Command completed: /bin/bash -lc 'rg -n "cpe_protocol_bindings|CREATE.*cpe|UNIQUE.*external|canonical_serial" ap... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '180,320p'; nl -ba contracts/fib...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '180,320p'; nl -ba contracts/fib... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: um binding disputado pode ser filt...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: um binding disputado pode ser filtrado corretamente e, mesmo assim, o lote inteiro falhar no upsert por causa da restrição única de binding por CPE. O contrato OpenAPI também não descreve os conflitos de forma consumível por clientes.
+
+Findings:
+- [high] Colisão de binding dentro do lote ainda pode abortar o snapshot (apps/api/app/api/inventory.py:245-253)
+  `owners_of_binding` agrupa bindings por `(connector_id, protocol, external_id)`, mas só descarta reivindicações quando há mais de um serial distinto. Duas entradas com o mesmo serial e binding repetido passam para `fresh`; o `INSERT ... ON CONFLICT DO UPDATE` então tenta inserir duas vezes a mesma chave única `(tenant_id, connector_id, protocol, external_id)` na mesma instrução. O PostgreSQL rejeita a instrução com cardinalidade de conflito, revertendo também os demais CPEs válidos do lote. Reproduz o cenário quando as entradas repetidas são duplicatas idênticas — o teste de duplicatas atual cobre o caso, mas só garante 202 sem demonstrar que a instrução não falha em produção — e contraria o objetivo de não deixar uma única reivindicação hostil derrubar o lote. Deduplicar ou classificar reivindicações repetidas antes do upsert, e cobrir duplicatas do mesmo binding junto de uma entrada válida.
+  Recommendation: Garantir no máximo uma entrada por chave única de binding antes do INSERT; para duplicatas divergentes, descartar todas as reivindicações ambíguas e contar os conflitos. Adicionar regressão com duas entradas de mesmo serial/binding e outra válida no lote.
+- [medium] OpenAPI não especifica o formato de resposta de conflicts (contracts/fibercore-v2.openapi.yaml:474-480)
+  A descrição do 202 apenas enumera nomes de campos em texto livre; não define schema, tipos, campos obrigatórios nem a resposta `ignored_stale` (que omite `conflicts`). Clientes gerados ou validadores não conseguem depender do novo contador e podem tratar a ausência dele como falha. Além disso, a rota continua documentando 409, embora o resumo prometa que reivindicações conflitantes não geram 409; o contrato não distingue conflitos individuais dos casos que ainda podem gerar 409, como ownership por outro edge.
+  Recommendation: Definir schema explícito para todas as variantes 202, incluindo se `conflicts` está sempre presente, e documentar quais condições ainda retornam 409.
