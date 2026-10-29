@@ -101,13 +101,20 @@ def test_priority_order_is_the_documented_one(client, seed, inv, migrated):
     assert client.get("/v1/incidents", headers=h, params={"order": "bogus"}).status_code == 422
 
 
-def test_unknown_impact_sorts_after_known_impact(client, seed, inv, migrated):
-    hd = hdr(client, "dave", seed, "A")
-    _outage(client, inv, "OLT-NCC-6", n=10)
-    _outage(client, inv, "OLT-NCC-7", n=6)
-    ordered = [i["olt"] for i in client.get("/v1/incidents", headers=hd, params={"order": "priority", "limit": 500}).json()["incidents"]
-               if i["olt"] in ("OLT-NCC-6", "OLT-NCC-7")]
-    assert ordered == ["OLT-NCC-6", "OLT-NCC-7"]   # nobody sees customers: falls back to ONUs down, never to a fabricated 0 vs 0 tie-break
+def test_hidden_impact_never_enters_the_order_and_the_assumptions_behind_the_queries_hold(client, seed, inv, migrated):
+    ha, hd = hdr(client, "alice", seed, "A"), hdr(client, "dave", seed, "A")     # dave (noc_n1) cannot see customers
+    _outage(client, inv, "OLT-NCC-6", n=10)       # bigger outage, no customers
+    _outage(client, inv, "OLT-NCC-7", n=6)        # smaller outage, but with customers
+    for k in range(3):
+        _approve(migrated, seed["A"], seed["alice"], f"OLT-NCC-7-{k:02d}", f"u{k}")
+
+    def order(h):
+        d = client.get("/v1/incidents", headers=h, params={"order": "priority", "limit": 500}).json()["incidents"]
+        return [i["olt"] for i in d if i["olt"] in ("OLT-NCC-6", "OLT-NCC-7")]
+    assert order(ha) == ["OLT-NCC-7", "OLT-NCC-6"]   # with customers:read the impact decides
+    assert order(hd) == ["OLT-NCC-6", "OLT-NCC-7"]   # without it the order must not betray the hidden impact: only ONUs down count
+    with migrated.begin() as c:   # the summary query treats `edge_id = ANY(silent)`; an OLT without an edge would drop out of it
+        assert c.execute(text("SELECT is_nullable FROM information_schema.columns WHERE table_name = 'olts' AND column_name = 'edge_id'")).scalar() == "NO"
 
 
 def test_summary_is_over_all_open_incidents_and_distinct_across_them(client, seed, inv, migrated):

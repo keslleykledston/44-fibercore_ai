@@ -204,7 +204,8 @@ def _impact(conn: Connection, ids: list[UUID], allowed: bool) -> dict[UUID, dict
 
 def _priority_key(i: dict) -> tuple:
     """The documented queue order (no score, nothing invented): open first; unacknowledged first; a confirmed drop before a suppressed
-    `edge_silent` one; larger impact first (unknown/hidden impact LAST); more ONUs down; most recent."""
+    `edge_silent` one; larger impact first (unknown impact LAST); more ONUs down; most recent. Without customers:read the impact is hidden
+    for EVERY incident, so it never enters the order (it would otherwise betray numbers the caller may not see)."""
     c = i["impact"]["customers_affected"]
     return (i["status"] != "open", i["acknowledged"], i["edge_silent"], c is None, -(c or 0),
             -int((i["evidence"] or {}).get("onus_down", 0)), -datetime.fromisoformat(i["opened_at"]).timestamp())

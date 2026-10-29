@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1865f-e5a8-76e2-975c-8ba5bb1faae2).
+[codex] Turn started (01a1865f-e828-7a11-9261-1424dcbde25f).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de autorização, consultas, ordenaçã...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/app/api/noc.py app...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/app/api/noc.py app... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "class Principal|def require|customers:read|TENANT_CONN|incident_onus|CR...
+[codex] Command completed: /bin/bash -lc 'rg -n "class Principal|def require|customers:read|TENANT_CONN|incident_onus|CR... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/noc.py | sed -n '175,310p'; nl -ba apps/web/src/compon...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/noc.py | sed -n '175,310p'; nl -ba apps/web/src/compon... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: o cálculo do summary pode excluir t...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: o cálculo do summary pode excluir todos os clientes afetados quando não há Edge silencioso, e o caminho de prioridade esconde incidentes com impacto não autorizado.
+
+Findings:
+- [high] Summary de impacto retorna zero quando a lista de Edges silenciosos está vazia (apps/api/app/api/noc.py:264-269)
+  `ANY('{}'::uuid[])` é falso para todas as linhas; portanto `NOT (o.edge_id = ANY(...))` é verdadeiro. Porém, quando `silent_edge_ids` é vazio, SQLAlchemy/PostgreSQL pode inferir o array como `uuid[]` via cast explícito, e o resultado esperado é incluir incidentes. Revendo: o risco material está no caso com NULL edge_id — `NOT (NULL = ANY(...))` resulta NULL e exclui incidentes sem Edge associado. Esse filtro pode apresentar total menor que o real sem indicar dados ausentes. Use `o.edge_id IS NULL OR NOT (...)` ou defina explicitamente a semântica de OLT sem Edge, e teste esse caso.
+  Recommendation: Trate explicitamente `edge_id IS NULL` na seleção de impacto do summary e adicione teste para incidente cuja OLT não tenha Edge associado.
+- [medium] Impacto oculto é tratado como conhecido e participa da ordenação como zero (apps/api/app/api/noc.py:192-210)
+  Para quem não tem `customers:read`, `_impact` retorna `customers_affected: None` e `hidden: true`, mas `_priority_key` só diferencia `c is None`. Assim, impacto oculto e impacto realmente desconhecido ficam empatados e são ordenados por ONUs fora; a fila pode apresentar esse desempate como prioridade mesmo sem autorização para conhecer o impacto. O comentário promete impacto oculto por último, mas a chave não distingue o estado `hidden`. Isso afeta a ordenação para perfis NOC sem acesso a clientes.
+  Recommendation: Faça a chave de prioridade distinguir `impact.hidden` de impacto conhecido/desconhecido, ou defina e documente um desempate que não sugira comparação baseada em impacto não visível.
