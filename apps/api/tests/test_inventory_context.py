@@ -214,6 +214,9 @@ def test_customer_context_status_precedence_and_no_secrets(client, seed, inv, mi
     cid = _customer(migrated, seed["A"], onu["id"], seed["alice"])
     d = client.get(f"/v1/customers/{cid}/context", headers=h).json()
     assert d["status"] == "partial" and d["onus"][0]["cpe"]["link"] == "none"
+    pon_id = d["onus"][0]["pon_id"]
+    with migrated.begin() as c:  # the stable PON id, not the path (0/1/0 repeats across OLTs)
+        assert c.execute(text("SELECT pon_id::text FROM onus WHERE id = :i"), {"i": onu["id"]}).scalar() == pon_id
     assert d["customer"]["provenance"]["source"] == "erp:ctxtest" and d["customer"]["provenance"]["quality"] == "fresh"
     _suggest(client, h)
     lid = _links(client, h)[0]["id"]

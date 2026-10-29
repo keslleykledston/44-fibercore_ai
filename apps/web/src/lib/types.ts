@@ -28,7 +28,7 @@ export type Member = { user_id: string; email: string; display_name: string; rol
 export type MemberList = { can_reset_mfa: boolean; members: Member[] };
 export type Capability = { name: string; protocol: string; status: "supported" | "unsupported" | "unknown"; certification: "identified" | "observed" | "certified"; vendor: string | null; model: string | null; firmware: string | null; writes: boolean; blocked_reason: string | null; verified_at: string | null; evidence_ref: string | null };
 export type CustomerOnu = {
-  id: string; serial: string; status: string; rx_dbm: number | null; olt: string; pon_path: string | null; provenance: Provenance;
+  id: string; pon_id: string | null; serial: string; status: string; rx_dbm: number | null; olt: string; pon_path: string | null; provenance: Provenance;
   incident: { suspected_cause: string } | null; incident_hidden: boolean; cpe: CpeBlock;
 };
 export type CustomerContext = {
@@ -43,5 +43,5 @@ export type DiagnosticFinding = {
   evidence: { pon_path: string; onus_observed: number; onus_down_recent: number; online: number; los: number; dying_gasp: number; chronic_offline: number; ratio: number };
   requires_human_confirmation: boolean; next_read_action: string; rule_id: string; rule_version: number;
 };
-export type DiagnosticRun = { run_id: string; rule_id: string; rule_version: number; scope: { onu_id: string | null }; created_at: string; findings: DiagnosticFinding[]; reproducible: boolean | null };
+export type DiagnosticRun = { run_id: string; rule_id: string; rule_version: number; scope: { onu_id: string | null; pon_id: string | null }; created_at: string; findings: DiagnosticFinding[]; reproducible: boolean | null };
 

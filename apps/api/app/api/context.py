@@ -194,7 +194,8 @@ def customer_context(customer_id: UUID, p: Principal = Depends(require("customer
     can_incidents = p.can("incidents:read")
     onus = conn.execute(
         text(
-            "SELECT u.id, u.serial, u.status, u.rx_dbm, u.observed_at, o.name AS olt_name, o.observed_at AS olt_observed_at, pp.pon_path, "
+            "SELECT u.id, u.pon_id, u.serial, u.status, u.rx_dbm, u.observed_at, o.name AS olt_name, "
+            "o.observed_at AS olt_observed_at, pp.pon_path, "
             "(SELECT i.suspected_cause FROM incident_onus io JOIN incidents i ON i.id = io.incident_id AND i.tenant_id = io.tenant_id "
             " WHERE io.onu_id = u.id AND i.status = 'open' ORDER BY i.opened_at DESC LIMIT 1) AS cause "
             "FROM associations a JOIN onus u ON u.id = a.onu_id AND u.tenant_id = a.tenant_id "
@@ -216,7 +217,8 @@ def customer_context(customer_id: UUID, p: Principal = Depends(require("customer
             qualities.append(cb["provenance"]["quality"])
         unlinked = unlinked or cb["link"] != "confirmed"
         out_onus.append({
-            "id": str(u.id), "serial": u.serial, "status": u.status, "rx_dbm": float(u.rx_dbm) if u.rx_dbm is not None else None,
+            "id": str(u.id), "pon_id": str(u.pon_id) if u.pon_id else None, "serial": u.serial, "status": u.status,
+            "rx_dbm": float(u.rx_dbm) if u.rx_dbm is not None else None,
             "olt": u.olt_name, "pon_path": u.pon_path, "provenance": pv,
             "incident": ({"suspected_cause": u.cause} if (can_incidents and u.cause) else None), "incident_hidden": not can_incidents,
             "cpe": cb,

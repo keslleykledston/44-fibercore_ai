@@ -31,7 +31,7 @@ export default async function GuidedTroubleshooting({ params, searchParams }: { 
   const run = onu && q.run && UUID.test(q.run) ? await apiSafe<DiagnosticRun>(`/v1/diagnostics/runs/${q.run}`) : null;
   const mine = run?.data && run.data.scope.onu_id === onu?.id && run.data.rule_id === "R-D001" ? run.data : null;
   const ageMin = mine ? (Date.now() - Date.parse(mine.created_at)) / 60000 : 0;
-  const samePon = !!mine && mine.findings[0]?.evidence.pon_path === onu?.pon_path;
+  const samePon = !!mine && !!onu?.pon_id && mine.scope.pon_id === onu.pon_id;  // identificador estável: o caminho (0/1/0) repete entre OLTs
   const discarded = !mine ? null : !samePon ? "other_pon" : ageMin > RUN_FRESH_MINUTES ? "old" : null;
   const valid = mine && !discarded ? mine : null;
   const denied = q.erro === "403";

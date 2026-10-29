@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1864a-af21-7923-b20f-fb383b97413f).
+[codex] Turn started (01a1864a-afb5-7022-9055-40016e3f3b74).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e rastrear em especial a validade por PON atual e janela...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/diagnostic...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/diagnostic... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- apps/web/src/lib/types.ts a...
+[codex] Command failed: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- apps/web/src/lib/types.ts a... (exit 2)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: a execução pode ser aceita após a ONU mudar...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: a execução pode ser aceita após a ONU mudar para outra PON com o mesmo caminho em uma OLT diferente.
+
+Findings:
+- [medium] Validação de PON compara apenas o caminho (apps/web/src/app/assinantes/diagnostico/[id]/page.tsx:34-35)
+  A execução é considerada da PON atual quando `evidence.pon_path` é igual a `onu.pon_path`. Esse caminho não identifica a PON globalmente: se a ONU for movida para outra OLT que use o mesmo caminho e a execução ainda tiver menos de 15 minutos, o resultado antigo será aceito como atual e poderá orientar a conclusão e o ticket com dados de outra PON. A comparação precisa usar um identificador estável da PON, ou incluir também a identidade da OLT.
+  Recommendation: Retorne e preserve o `pon_id` (e, se necessário, `olt_id`) no contexto atual e no resultado da execução; valide esses identificadores antes de usar o finding.
