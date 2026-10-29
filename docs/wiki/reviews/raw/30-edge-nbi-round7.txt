@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1854a-3d88-7c42-88de-a674130c9067).
+[codex] Turn started (01a1854a-3dc8-7ea1-905f-ad52c5bb54ed).
+[codex] Assistant message captured: Vou comparar o diff com `main` e seguir os caminhos de migração, ingestão e coleta em busca d...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/app/api/inventory....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/app/api/inventory.... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '390,530p'; git diff --no-ext-di...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '390,530p'; git diff --no-ext-di... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '270,370p';"
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '270,370p';" (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: uma reivindicação de binding já pertencente...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: uma reivindicação de binding já pertencente a outro CPE ainda pode abortar o snapshot inteiro e reverter as entradas válidas do lote.
+
+Findings:
+- [medium] Binding já associado a outro CPE aborta o lote inteiro (apps/api/app/api/inventory.py:280-282)
+  Se `external_id` já estiver vinculado a outro serial, a validação neste trecho lança HTTP 409 em vez de descartar e contar essa reivindicação. A exceção reverte a transação, incluindo os CPEs válidos processados no mesmo snapshot. Isso permite que uma reivindicação conflitante impeça a ingestão do restante do lote, contrariando o tratamento de conflitos como ignorados e isolados.
+  Recommendation: Trate o binding existente em outro CPE como conflito individual: remova essa reivindicação de `fresh`, incremente `conflicts` e prossiga com as entradas válidas; mantenha uma proteção transacional contra corridas.

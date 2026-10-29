@@ -197,7 +197,8 @@ def ingest_cpe_snapshot(
     # Serialise concurrent snapshots per CLAIM key (tenant, serial, connector, protocol) — also for serials that do not exist yet, which
     # row locks cannot cover. Sorted and taken sequentially, so two overlapping batches acquire them in the same order (no deadlock).
     # The unique index is the backstop.
-    keys = sorted({f"{p.tenant_id}|{c.canonical_serial}|{c.binding.connector_id}|{c.binding.protocol}" for c in body.cpes})
+    keys = sorted({f"{p.tenant_id}|{c.canonical_serial}|{c.binding.connector_id}|{c.binding.protocol}" for c in body.cpes}
+                  | {f"{p.tenant_id}|bind|{c.binding.connector_id}|{c.binding.protocol}|{c.binding.external_id}" for c in body.cpes})
     if keys:  # one statement per key, run by the driver in this exact order (a single SELECT over unnest() would not guarantee it)
         conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), [{"k": k} for k in keys])
     owners = {  # row locks serialise concurrent snapshots touching the same CPEs
@@ -230,6 +231,14 @@ def ingest_cpe_snapshot(
     claimed: dict[tuple, set[str]] = {}
     for c in fresh:
         claimed.setdefault((c.canonical_serial, c.binding.connector_id, c.binding.protocol), set()).add(c.binding.external_id)
+    linked_to: dict[tuple, str] = {  # external ids that already belong to ANOTHER serial (a hostile/mistaken claim must not cost the batch)
+        (r.connector_id, r.protocol, r.external_id): r.canonical_serial
+        for r in conn.execute(
+            text("SELECT b.connector_id, b.protocol, b.external_id, c.canonical_serial FROM cpe_protocol_bindings b JOIN cpes c "
+                 "ON c.id = b.cpe_id AND c.tenant_id = b.tenant_id WHERE b.tenant_id = :t AND b.external_id = ANY(:x)"),
+            {"t": p.tenant_id, "x": [c.binding.external_id for c in fresh]},
+        )
+    }
     owners_of_binding: dict[tuple, set[str]] = {}  # the same external id claimed by DIFFERENT serials in one batch: neither can be trusted
     for c in fresh:
         owners_of_binding.setdefault((c.binding.connector_id, c.binding.protocol, c.binding.external_id), set()).add(c.canonical_serial)
@@ -238,7 +247,8 @@ def ingest_cpe_snapshot(
         k = (c.canonical_serial, c.binding.connector_id, c.binding.protocol)
         if len(claimed[k]) > 1 or stored.get(k, c.binding.external_id) != c.binding.external_id:
             continue
-        if len(owners_of_binding[(c.binding.connector_id, c.binding.protocol, c.binding.external_id)]) > 1:
+        bk = (c.binding.connector_id, c.binding.protocol, c.binding.external_id)
+        if len(owners_of_binding[bk]) > 1 or linked_to.get(bk, c.canonical_serial) != c.canonical_serial:
             continue
         kept.append(c)
     conflicts = len(fresh) - len(kept)
@@ -267,19 +277,6 @@ def ingest_cpe_snapshot(
     if any(r.edge_id != body.edge_id for r in resolved):
         raise HTTPException(409, "cpe owned by another edge")
     ids = {r.canonical_serial: r.id for r in resolved}
-    # A binding (connector, protocol, external_id) identifies ONE cpe; re-pointing it to another serial is refused.
-    keys = [(c.binding.connector_id, c.binding.protocol, c.binding.external_id) for c in fresh]
-    existing = {
-        (r.connector_id, r.protocol, r.external_id): r.cpe_id
-        for r in conn.execute(
-            text("SELECT connector_id, protocol, external_id, cpe_id FROM cpe_protocol_bindings WHERE tenant_id=:t "
-                 "AND external_id = ANY(:x)"),
-            {"t": p.tenant_id, "x": [k[2] for k in keys]},
-        )
-    }
-    for c, k in zip(fresh, keys, strict=True):
-        if k in existing and existing[k] != ids[c.canonical_serial]:
-            raise HTTPException(409, f"binding {k[2]} already linked to another cpe")
     conn.execute(
         text(
             "INSERT INTO cpe_protocol_bindings (tenant_id, cpe_id, protocol, external_id, connector_id, observed_at) "

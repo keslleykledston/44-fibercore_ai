@@ -104,7 +104,9 @@ def test_cpe_snapshot_and_binding_conflict(client, seed, inv):
     rows = client.get("/v1/cpes", headers=hdr(client, "alice", seed, "A")).json()
     assert len(rows) == 1 and rows[0]["bindings"][0]["protocol"] == "tr069" and rows[0]["freshness"] == "fresh"
     clash = {**body, "cpes": [{**body["cpes"][0], "canonical_serial": "OTHER-SERIAL"}]}
-    assert client.post("/v1/edge/cpe-snapshots", headers=a, json=clash).status_code == 409
+    r = client.post("/v1/edge/cpe-snapshots", headers=a, json=clash)  # re-pointing a binding to another serial is ignored+counted, not merged
+    assert r.status_code == 202 and r.json()["conflicts"] == 1 and r.json()["cpes"] == 0
+    assert "OTHER-SERIAL" not in {c["canonical_serial"] for c in client.get("/v1/cpes", headers=hdr(client, "alice", seed, "A")).json()}
     assert client.get("/v1/cpes", headers=hdr(client, "bob", seed, "B")).json() == []
 
 
@@ -317,7 +319,7 @@ def test_claim_locks_are_taken_in_sorted_order(client, seed, inv):
         event.remove(eng, "before_cursor_execute", spy)
     ks = [p["k"] for params in seen for p in (params if isinstance(params, list) else [params])]
     ks = [k for k in ks if "|c-order|" in k]  # the login throttle takes advisory locks too (ip:/svc: keys); only the claim keys matter here
-    assert len(ks) == 10 and ks == sorted(ks), ks
+    assert len(ks) == 20 and ks == sorted(ks), ks  # 10 claim keys + 10 binding keys
 
 
 def test_duplicate_entries_in_one_batch_never_abort_the_snapshot(client, seed, inv):
@@ -348,3 +350,18 @@ def test_two_serials_claiming_the_same_binding_in_one_batch_are_both_ignored(cli
     assert r.status_code == 202 and r.json()["conflicts"] == 2 and r.json()["cpes"] == 1, r.text
     serials = {x["canonical_serial"] for x in client.get("/v1/cpes", headers=hdr(client, "alice", seed, "A")).json()}
     assert "SAMEB-OK-1" in serials and not ({"SAMEB-ONE-1", "SAMEB-TWO-1"} & serials)  # no CPE persisted without its binding
+
+
+def test_a_binding_already_linked_to_another_serial_costs_only_that_claim(client, seed, inv):
+    a = agent(client, inv, "a1")
+    c = "c-linked"
+
+    def post(cpes, obs=None):
+        return client.post("/v1/edge/cpe-snapshots", headers=a, json={"edge_id": str(inv["a1"]["edge"]), "observed_at": obs or _now(), "cpes": cpes})
+
+    mk = lambda serial, ext: {"canonical_serial": serial, "binding": {"protocol": "tr069", "external_id": ext, "connector_id": c}}  # noqa: E731
+    assert post([mk("LINK-OWNER-1", "linked-ext")], _now(-5)).status_code == 202
+    r = post([mk("LINK-THIEF-1", "linked-ext"), mk("LINK-FINE-1", "fine-linked")])
+    assert r.status_code == 202 and r.json()["conflicts"] == 1 and r.json()["cpes"] == 1, r.text
+    rows = {x["canonical_serial"]: x for x in client.get("/v1/cpes", headers=hdr(client, "alice", seed, "A")).json()}
+    assert "LINK-FINE-1" in rows and "LINK-THIEF-1" not in rows and rows["LINK-OWNER-1"]["bindings"][0]["external_id"] == "linked-ext"
