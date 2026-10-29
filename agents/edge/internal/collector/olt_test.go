@@ -742,8 +742,18 @@ func TestATimestampFarInTheFutureCannotBlockTheDeviceForever(t *testing.T) {
 	if _, err := o.Collect(context.Background()); err == nil || opens != 0 {
 		t.Fatalf("pulled back to a normal cooldown, not trusted: err=%v opens=%d", err, opens)
 	}
+	// a process restarted every few minutes must not renew the cooldown from the original absurd value
+	for i := 0; i < 3; i++ {
+		clock = clock.Add(4 * time.Minute)
+		o = &OLT{Sources: []OLTSource{s}, Guard: FileGuard{Path: path}, Now: func() time.Time { return clock }}
+		_, _ = o.Collect(context.Background())
+	}
+	if opens != 0 {
+		t.Fatalf("still inside the corrected cooldown: opens=%d", opens)
+	}
 	clock = clock.Add(16 * time.Minute)
+	o = &OLT{Sources: []OLTSource{s}, Guard: FileGuard{Path: path}, Now: func() time.Time { return clock }}
 	if items, err := o.Collect(context.Background()); err != nil || len(items) != 1 || opens != 1 {
-		t.Fatalf("and then it works: items=%d err=%v opens=%d", len(items), err, opens)
+		t.Fatalf("a fresh process after the corrected cooldown works: items=%d err=%v opens=%d", len(items), err, opens)
 	}
 }

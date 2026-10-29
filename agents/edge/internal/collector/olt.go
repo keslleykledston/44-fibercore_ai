@@ -201,6 +201,10 @@ func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, er
 	if limit := now.Add(24 * time.Hour); cur.CoolUntil.After(limit) || cur.Last.After(limit) {
 		cur = GuardState{Last: now, CoolUntil: now.Add(cooldown)}
 		o.st[key] = cur
+		if err := o.persistLocked(); err != nil { // the correction must survive a restart, or the implausible value comes back
+			o.mu.Unlock()
+			return nil, fmt.Errorf("olt guard cannot persist its state: %w", err)
+		}
 	}
 	if now.Before(cur.CoolUntil) {
 		o.mu.Unlock()

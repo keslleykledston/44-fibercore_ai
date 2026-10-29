@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18812-18fd-71f3-8b9b-b3dd6ca46997).
+[codex] Turn started (01a18812-1937-7913-a39d-3a9e3f5ccc18).
+[codex] Assistant message captured: I’ll inspect the branch diff against `main`, focusing on whether the round 5 null-map and fut...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- agents/edg...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- agents/edg... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --unified=20 main...HEAD -- agents/edge/internal/collector/olt_test.g...
+[codex] Command completed: /bin/bash -lc "git diff --unified=20 main...HEAD -- agents/edge/internal/collector/olt_test.g... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship: the future-timestamp recovery is only in...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship: the future-timestamp recovery is only in memory, so restarts can renew the cooldown indefinitely.
+
+Findings:
+- [medium] Future timestamp correction is not persisted (agents/edge/internal/collector/olt.go:201-207)
+  When `Last` or `CoolUntil` is more than 24 hours ahead, this branch replaces the state in `o.st`, then returns at the cooldown check without saving it. A restarted Edge reloads the original future timestamp and starts a fresh cooldown again. With a process restarted more often than the cooldown, the device can remain blocked indefinitely—the exact recovery case this change is intended to fix. Persist the normalized entry before returning the cooldown, and cover it with a restart-based regression test.
+  Recommendation: Save the corrected state after detecting the implausible timestamp, and handle save failure explicitly; test repeated new `OLT` instances against the same guard file.
