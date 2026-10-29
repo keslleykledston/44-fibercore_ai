@@ -315,6 +315,8 @@ def mfa_regenerate_recovery_codes(
     key, ip = f"mfa:{uid}", _client_ip(request, settings)
     codes: list[str] = []
     with scoped_connection(get_engine(), user_id=uid) as conn:
+        # same per-account lock as the administrator reset and the refresh: the MFA state below is read only AFTER any of them has committed
+        conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{uid}"})
         if _gate(conn, key, ip):
             outcome = "locked"
         elif _reauth(conn, request, settings, uid, body.password) is None:

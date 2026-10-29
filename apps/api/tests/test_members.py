@@ -262,3 +262,32 @@ def test_cli_set_password_changes_the_login_and_ends_old_sessions(client, make, 
     monkeypatch.setenv("NEW_PW_FOR_TEST", "short")
     with pytest.raises(SystemExit):
         cli.main(["set-password", who["email"], "--password-env", "NEW_PW_FOR_TEST"])  # same >= 12 rule as create-user
+
+
+def test_regenerating_codes_waits_for_the_account_lock_and_then_sees_a_reset(client, seed, make, migrated):
+    """Deterministic: a connection plays the administrator reset (holds the account lock, deletes the MFA, commits). The regeneration that
+    started meanwhile must wait, then answer 409 (MFA gone) instead of minting codes for an account that no longer has MFA."""
+    import threading
+    import time
+
+    who = make("engineer")
+    _secret, codes = _enrol(client, who)
+    s = client.post("/v1/auth/mfa/verify", json={"mfa_token": _login(client, who)["mfa_token"], "code": codes.pop()})
+    h = _bearer(s.json()["access_token"])
+    out: dict = {}
+
+    def regen():
+        out["r"] = client.post("/v1/auth/mfa/recovery-codes", json={"password": PW, "code": codes.pop()}, headers=h)
+
+    with migrated.begin() as holder:
+        holder.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{who['id']}"})
+        t = threading.Thread(target=regen)
+        t.start()
+        time.sleep(1.5)
+        assert t.is_alive() and "r" not in out, "regeneration did not wait for the account lock"
+        holder.execute(text("DELETE FROM user_mfa WHERE user_id = :u"), {"u": who["id"]})
+        holder.execute(text("DELETE FROM mfa_recovery_codes WHERE user_id = :u"), {"u": who["id"]})
+    t.join(15)
+    assert out["r"].status_code == 409, out["r"].text
+    with migrated.begin() as c:
+        assert c.execute(text("SELECT count(*) FROM mfa_recovery_codes WHERE user_id = :u"), {"u": who["id"]}).scalar() == 0
