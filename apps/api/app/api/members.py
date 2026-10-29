@@ -58,6 +58,9 @@ def reset_member_mfa(
 ) -> dict:
     if user_id == p.id:
         raise HTTPException(409, "use the account security page to change your own MFA")
+    # Per-ACCOUNT lock (shared with every membership writer: app.cli add-member takes the same key). Held until this transaction ends, so
+    # "belongs to no other workspace" stays true from the check below to the DELETE.
+    conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{user_id}"})
     member = conn.execute(
         text("SELECT 1 FROM tenant_memberships WHERE tenant_id = :t AND user_id = :u"), {"t": p.tenant_id, "u": user_id}
     ).first()

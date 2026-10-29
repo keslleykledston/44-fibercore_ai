@@ -151,3 +151,30 @@ def test_reset_of_a_required_role_fails_closed_until_it_re_enrols(client, seed, 
     ht = {**_bearer(_login(client, target)["access_token"]), "X-Workspace-ID": str(seed["A"])}
     blocked = client.get("/v1/incidents", headers=ht)
     assert blocked.status_code == 403 and blocked.json()["detail"] == "mfa_enrolment_required"  # reset never opens a hole
+
+
+def test_membership_created_while_the_reset_waits_is_seen_and_refused(client, seed, make, migrated):
+    """Deterministic TOCTOU check: another connection holds the per-account lock (as `app.cli add-member` does), the reset request waits
+    on it, a second workspace membership appears and the lock is released: the reset must see it and answer 409, not delete the MFA."""
+    import threading
+    import time
+
+    adm, codes, h = _admin_with_mfa(client, make, seed)
+    target = make("engineer")
+    _enrol(client, target)
+    out: dict = {}
+
+    def attempt():
+        out["r"] = client.post(f"/v1/members/{target['id']}/mfa/reset", json={"password": PW, "code": _code(codes)}, headers=h)
+
+    with migrated.begin() as holder:
+        holder.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{target['id']}"})
+        t = threading.Thread(target=attempt)
+        t.start()
+        time.sleep(1.5)
+        assert t.is_alive() and "r" not in out, "the reset did not wait for the account lock"
+        holder.execute(text("INSERT INTO tenant_memberships(tenant_id, user_id, role) VALUES (:t,:u,'support')"), {"t": seed["B"], "u": target["id"]})
+    t.join(15)
+    assert out["r"].status_code == 409 and "other workspaces" in out["r"].text, out["r"].text
+    with migrated.begin() as c:
+        assert c.execute(text("SELECT enabled FROM user_mfa WHERE user_id=:u"), {"u": target["id"]}).scalar() is True

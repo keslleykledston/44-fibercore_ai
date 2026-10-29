@@ -55,6 +55,13 @@ def main(argv: list[str] | None = None) -> None:
                 text("INSERT INTO users_global(email, display_name, password_hash) VALUES (:e,:d,:h) RETURNING id"),
                 {"e": a.email.lower(), "d": a.display_name, "h": h}).scalar())
         elif a.cmd == "add-member":
+            # same per-account lock as the administrator MFA reset: a membership cannot appear between that route's
+            # "only this workspace" check and its DELETE
+            c.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended('account:' || id::text, 0)) "
+                     "FROM users_global WHERE lower(email)=lower(:e)"),
+                {"e": a.email},
+            )
             c.execute(
                 text("INSERT INTO tenant_memberships(tenant_id,user_id,role) "
                      "SELECT :t, id, :r FROM users_global WHERE lower(email)=lower(:e)"),
