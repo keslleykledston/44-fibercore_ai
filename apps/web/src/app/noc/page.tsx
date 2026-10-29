@@ -1,45 +1,41 @@
 import { AppShell } from "@/components/AppShell";
-import { DataFreshness, EmptyState, ErrorState, PageHeader, StatusPill } from "@/components/ui";
+import { IncidentQueue } from "@/components/IncidentQueue";
+import { DataFreshness, EmptyState, ErrorState, Kpi, PageHeader } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
 import type { IncidentList } from "@/lib/types";
 
-const cause: Record<string, string> = { fiber_or_los: "Suspeita: perda de sinal / fibra", power: "Suspeita: falta de energia", unknown: "Causa não determinada" };
-
-export default async function Noc() {
-  const r = await apiSafe<IncidentList>("/v1/incidents?limit=50");
+export default async function Noc({ searchParams }: { searchParams: Promise<{ f?: string }> }) {
+  const { f } = await searchParams;
+  const onlyUnack = f === "nao-reconhecidos";
+  // A ordem de prioridade é do servidor (uma só fonte): abertos, não reconhecidos, queda confirmada antes de edge silencioso, maior impacto, mais ONUs fora.
+  const r = await apiSafe<IncidentList>("/v1/incidents?limit=50&order=priority");
   if (r.status === 403) return <AppShell active="/noc" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver incidentes." /></AppShell>;
-  // Fila: abertos primeiro; não reconhecidos antes; queda confirmada antes de 'edge silencioso'; depois maior impacto (proposta UX).
-  const list = [...(r.data?.incidents ?? [])].sort((a, b) =>
-    Number(b.status === "open") - Number(a.status === "open") ||
-    Number(a.acknowledged) - Number(b.acknowledged) ||
-    Number(a.edge_silent) - Number(b.edge_silent) ||
-    (b.evidence.onus_down ?? 0) - (a.evidence.onus_down ?? 0));
+  const all = r.data?.incidents ?? [];
+  const list = onlyUnack ? all.filter((i) => i.status === "open" && !i.acknowledged) : all;
+  const s = r.data?.summary;
   return (
     <AppShell active="/noc" user="1">
-      <PageHeader title="NOC" subtitle="Quedas em massa por PON, com evidências" helpSlug="noc/acompanhar-incidente" />
+      <PageHeader title="NOC" subtitle="Quedas em massa por PON, priorizadas, com impacto e evidências" helpSlug="noc/acompanhar-incidente" />
+      {s && (
+        <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="noc-kpis">
+          <Kpi label="Incidentes abertos" value={s.open} hint={s.open_suppressed > 0 ? `${s.open_suppressed} atrás de Edge silencioso (último estado conhecido)` : undefined} />
+          <Kpi label="Não reconhecidos" value={s.unacknowledged} />
+          <Kpi label="Clientes afetados" value={s.customers_hidden ? "—" : (s.customers_affected ?? "—")} hint={s.customers_hidden ? "Indisponível para o seu papel" : "Distintos, via associações aprovadas; não inclui Edge silencioso"} />
+          <Kpi label="Edges silenciosos" value={s.silent_edges} hint="Não contam como ONUs offline" />
+        </div>
+      )}
       {(r.data?.alerts ?? []).map((a) => (
         <div key={a.edge} role="status" className="panel mb-3 border-warn p-4 text-sm" data-testid="edge-silent">
           <strong>Edge {a.edge} sem dados</strong> <DataFreshness freshness="stale" observedAt={a.last_heartbeat_at} />
           <p className="text-muted">Os estados atrás deste edge são o último conhecido; não indicam que as ONUs estão offline.</p>
         </div>
       ))}
+      <nav aria-label="Filtro da fila" className="mb-3 flex gap-2 text-sm">
+        <a href="/noc" aria-current={!onlyUnack ? "page" : undefined} className={`inline-flex min-h-touch items-center rounded-btn px-3 ${!onlyUnack ? "bg-accent-soft font-medium text-accent" : "text-muted hover:underline"}`}>Todos</a>
+        <a href="/noc?f=nao-reconhecidos" aria-current={onlyUnack ? "page" : undefined} data-testid="filter-unack" className={`inline-flex min-h-touch items-center rounded-btn px-3 ${onlyUnack ? "bg-accent-soft font-medium text-accent" : "text-muted hover:underline"}`}>Só não reconhecidos</a>
+      </nav>
       <div data-testid="incident-queue">
-        {r.data === null ? <ErrorState title="Falha ao carregar incidentes" /> : list.length === 0 ? <EmptyState title="Nenhum incidente" /> : (
-          <ul className="grid gap-3">
-            {list.map((i) => (
-              <li key={i.id} className="panel p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="font-medium">{i.olt} · PON {i.evidence.pon_path}</h2>
-                  <StatusPill value={i.status} />
-                </div>
-                <p className="mt-1 text-sm">{i.evidence.onus_down} de {i.evidence.onus_observed} ONUs fora ({Math.round((i.evidence.ratio ?? 0) * 100)}%) · LOS {i.evidence.los} · sem energia {i.evidence.dying_gasp}</p>
-                <p className="text-sm text-muted">{cause[i.suspected_cause] ?? cause.unknown} — hipótese, não diagnóstico.</p>
-                {i.edge_silent && <p className="mt-1 text-sm text-warn">Edge silencioso: este é o último estado conhecido, não confirmado agora.</p>}
-                <p className="mt-1 text-xs text-muted">{i.acknowledged ? "Reconhecido" : "Não reconhecido"}</p>
-              </li>
-            ))}
-          </ul>
-        )}
+        {r.data === null ? <ErrorState title="Falha ao carregar incidentes" /> : list.length === 0 ? <EmptyState title={onlyUnack ? "Nenhum incidente não reconhecido" : "Nenhum incidente"} /> : <IncidentQueue incidents={list} />}
       </div>
     </AppShell>
   );

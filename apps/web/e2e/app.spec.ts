@@ -64,6 +64,35 @@ test("dados defasados e silêncio nunca viram 'offline' no texto de incidente", 
   await expect(page.getByTestId("incident-queue")).toContainText("hipótese, não diagnóstico");
 });
 
+test("NOC Command Center: 4 KPIs, impacto com fonte, ordem de prioridade, painel lateral com foco e filtro", async ({ page, request }) => {
+  const tok = (await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json()).access_token as string;
+  const h = { Authorization: `Bearer ${tok}` };
+  const assoc = (await (await request.get(`${API_URL}/v1/associations?status=suggested&limit=200`, { headers: h })).json()) as { id: string; customer_name: string }[];
+  const a = assoc.find((x) => x.customer_name === "Cliente Demo Cinco");
+  if (a) expect((await request.post(`${API_URL}/v1/associations/${a.id}/approve`, { headers: h })).status()).toBe(200);
+  await login(page);
+  await page.goto("/noc");
+  await expect(page.getByTestId("noc-kpis").locator('[data-testid^="kpi-"]')).toHaveCount(4);   // no máximo 4 indicadores
+  await expect(page.getByTestId("noc-kpis")).toContainText("Clientes afetados");
+  const first = page.getByTestId("incident-item").first();
+  await expect(first).toContainText("OLT-DEMO-01");
+  await expect(first.getByTestId("incident-impact")).toContainText("cliente(s) afetado(s) · fonte: associações aprovadas");
+  await first.getByTestId("incident-open").click();                                            // abre no painel lateral, sem trocar de tela
+  await expect(page).toHaveURL(/\/noc$/);
+  await expect(page.getByTestId("entity-drawer")).toBeVisible();
+  await expect(page.getByTestId("incident-detail")).toContainText("ONUs do incidente (10)");
+  await expect(page.getByTestId("drawer-impact")).toContainText("associações aprovadas");
+  await expect(page.getByTestId("incident-detail")).toContainText("hipótese, não diagnóstico");
+  const res = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+  expect(res.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("entity-drawer")).toBeHidden();
+  await expect(first.getByTestId("incident-open")).toBeFocused();                              // o foco volta ao gatilho
+  await page.getByTestId("filter-unack").click();
+  await expect(page).toHaveURL(/f=nao-reconhecidos/);
+  await expect(page.getByTestId("incident-queue")).toContainText("OLT-DEMO-01");               // o demo ainda não tem incidente reconhecido
+});
+
 test("busca por serial filtra a lista de ONUs", async ({ page }) => {
   await login(page);
   await page.getByLabel("Buscar ONU por serial").fill("DEMOA0001");

@@ -112,7 +112,10 @@ def test_rbac_ack_and_tenant_isolation(client, seed, inv):
     assert client.post(f"/v1/incidents/{inc['id']}/ack", headers=hdr(client, "dave", seed, "A")).status_code == 403  # but cannot ack
     assert client.get("/v1/incidents", headers={**login(client, "carol"), "X-Workspace-ID": str(seed["A"])}).status_code == 403  # auditor
     hb = hdr(client, "bob", seed, "B")
-    assert incidents(client, hb) == {"incidents": [], "alerts": []}
+    empty = incidents(client, hb)
+    assert empty["incidents"] == [] and empty["alerts"] == []                       # B sees none of A's incidents
+    assert empty["summary"] == {"open": 0, "unacknowledged": 0, "silent_edges": 0, "open_suppressed": 0, "customers_affected": 0,
+                                "customers_source": "associations_approved", "customers_hidden": False}
     assert client.post(f"/v1/incidents/{inc['id']}/ack", headers=hb).status_code == 404
     assert client.post(f"/v1/incidents/{inc['id']}/ack", headers=ha).status_code == 200
     assert client.post(f"/v1/incidents/{inc['id']}/ack", headers=ha).status_code == 409

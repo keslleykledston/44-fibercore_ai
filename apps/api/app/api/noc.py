@@ -172,19 +172,53 @@ def _j(d: dict) -> str:
     return json.dumps(d)
 
 
-@router.get("/v1/incidents")
-def list_incidents(
-    status: Literal["open", "resolved"] | None = None,
-    limit: int = Query(100, ge=1, le=500),
-    p: Principal = Depends(require("incidents:read")),
-    conn: Connection = TENANT_CONN,
-) -> dict:
+IMPACT_SOURCE = "associations_approved"   # customers are counted ONLY through associations a person approved (ADR-0021 / customers:read)
+MEMBERS_SHOWN = 50
+
+
+def _silent_edges(conn: Connection) -> list:
     cutoff = datetime.now(UTC) - EDGE_OFFLINE_AFTER
-    silent = conn.execute(  # filtered and bounded in SQL (tenant scoped by RLS)
+    return conn.execute(  # filtered and bounded in SQL (tenant scoped by RLS)
         text("SELECT id, name, last_heartbeat_at FROM edges WHERE status <> 'revoked' AND last_heartbeat_at IS NOT NULL "
              "AND last_heartbeat_at < :c ORDER BY last_heartbeat_at LIMIT 100"),
         {"c": cutoff},
     ).all()
+
+
+def _impact(conn: Connection, ids: list[UUID], allowed: bool) -> dict[UUID, dict]:
+    """Customers affected per incident, in ONE query for all of them. Distinct customers reached through APPROVED associations on the
+    incident's member ONUs. Without customers:read the number is `None` and `hidden` (never a 0 that reads as 'nobody affected');
+    an incident without member rows (opened before membership existed) has an unknown impact, not zero."""
+    if not allowed:
+        return {i: {"customers_affected": None, "source": IMPACT_SOURCE, "hidden": True, "members_known": True} for i in ids}
+    rows = conn.execute(
+        text("SELECT i.id AS incident_id, count(DISTINCT io.onu_id) AS members, count(DISTINCT a.customer_id) AS customers "
+             "FROM unnest(CAST(:ids AS uuid[])) AS i(id) LEFT JOIN incident_onus io ON io.incident_id = i.id "
+             "LEFT JOIN associations a ON a.onu_id = io.onu_id AND a.tenant_id = io.tenant_id AND a.status = 'approved' GROUP BY i.id"),
+        {"ids": ids},
+    )
+    out = {r.incident_id: {"customers_affected": r.customers if r.members else None, "source": IMPACT_SOURCE, "hidden": False,
+                           "members_known": r.members > 0} for r in rows}
+    return {i: out.get(i, {"customers_affected": None, "source": IMPACT_SOURCE, "hidden": False, "members_known": False}) for i in ids}
+
+
+def _priority_key(i: dict) -> tuple:
+    """The documented queue order (no score, nothing invented): open first; unacknowledged first; a confirmed drop before a suppressed
+    `edge_silent` one; larger impact first (unknown/hidden impact LAST); more ONUs down; most recent."""
+    c = i["impact"]["customers_affected"]
+    return (i["status"] != "open", i["acknowledged"], i["edge_silent"], c is None, -(c or 0),
+            -int((i["evidence"] or {}).get("onus_down", 0)), -datetime.fromisoformat(i["opened_at"]).timestamp())
+
+
+@router.get("/v1/incidents")
+def list_incidents(
+    status: Literal["open", "resolved"] | None = None,
+    order: Literal["recent", "priority"] = "recent",
+    limit: int = Query(100, ge=1, le=500),
+    p: Principal = Depends(require("incidents:read")),
+    conn: Connection = TENANT_CONN,
+) -> dict:
+    silent = _silent_edges(conn)
     silent_ids = {e.id for e in silent}
     rows = conn.execute(
         text(
@@ -194,20 +228,78 @@ def list_incidents(
             "WHERE (CAST(:s AS text) IS NULL OR i.status = :s) ORDER BY i.opened_at DESC LIMIT :l"
         ),
         {"s": status, "l": limit},
-    )
+    ).all()
+    can_customers = p.can("customers:read")
+    impact = _impact(conn, [r.id for r in rows], can_customers)
     incidents = [
         {"id": str(r.id), "kind": r.kind, "status": r.status, "suspected_cause": r.suspected_cause, "evidence": r.evidence,
          "olt": r.olt_name, "opened_at": r.opened_at.isoformat(),
          "resolved_at": r.resolved_at.isoformat() if r.resolved_at else None,
-         "acknowledged": r.acknowledged_at is not None,
+         "acknowledged": r.acknowledged_at is not None, "impact": impact[r.id],
          # open incident behind a silent edge: state is last-known, cannot be confirmed or cleared right now
          "edge_silent": r.status == "open" and r.edge_id in silent_ids}
         for r in rows
     ]
+    if order == "priority":
+        incidents.sort(key=_priority_key)
     alerts = [{"kind": "edge_silent", "edge": e.name, "last_heartbeat_at": e.last_heartbeat_at.isoformat(),
                "note": "no data from this edge; ONU/OLT states behind it are last-known, not offline"}
               for e in silent]
-    return {"incidents": incidents, "alerts": alerts}
+    return {"incidents": incidents, "alerts": alerts, "summary": _summary(conn, can_customers, [e.id for e in silent])}
+
+
+def _summary(conn: Connection, can_customers: bool, silent_edge_ids: list[UUID]) -> dict:
+    """At most 4 numbers for the NOC header, over ALL open incidents (not just the page that was listed). The customers number counts only
+    incidents behind a HEALTHY edge: behind a silent edge the state is the last known one, not an outage confirmed now (silence is not an
+    outage), so it is reported apart as `open_suppressed` and never added to the impact."""
+    r = conn.execute(
+        text("SELECT count(*) FILTER (WHERE i.status = 'open') AS open, "
+             "count(*) FILTER (WHERE i.status = 'open' AND i.acknowledged_at IS NULL) AS unack, "
+             "count(*) FILTER (WHERE i.status = 'open' AND o.edge_id = ANY(CAST(:s AS uuid[]))) AS suppressed "
+             "FROM incidents i JOIN olts o ON o.id = i.olt_id AND o.tenant_id = i.tenant_id"),
+        {"s": silent_edge_ids},
+    ).one()
+    customers = None
+    if can_customers:
+        customers = conn.execute(
+            text("SELECT count(DISTINCT a.customer_id) FROM incidents i JOIN olts o ON o.id = i.olt_id AND o.tenant_id = i.tenant_id "
+                 "JOIN incident_onus io ON io.incident_id = i.id AND io.tenant_id = i.tenant_id "
+                 "JOIN associations a ON a.onu_id = io.onu_id AND a.tenant_id = io.tenant_id AND a.status = 'approved' "
+                 "WHERE i.status = 'open' AND NOT (o.edge_id = ANY(CAST(:s AS uuid[])))"),
+            {"s": silent_edge_ids},
+        ).scalar_one()
+    return {"open": r.open, "unacknowledged": r.unack, "silent_edges": len(silent_edge_ids), "open_suppressed": r.suppressed,
+            "customers_affected": customers, "customers_source": IMPACT_SOURCE, "customers_hidden": not can_customers}
+
+
+@router.get("/v1/incidents/{incident_id}")
+def get_incident(incident_id: UUID, p: Principal = Depends(require("incidents:read")), conn: Connection = TENANT_CONN) -> dict:
+    """One incident for the drawer: evidence, impact with its source, and the member ONUs (inventory data only: no customer names)."""
+    r = conn.execute(
+        text("SELECT i.id, i.kind, i.status, i.suspected_cause, i.evidence, i.opened_at, i.resolved_at, i.acknowledged_at, "
+             "o.name AS olt_name, o.edge_id, o.observed_at AS olt_observed_at FROM incidents i "
+             "JOIN olts o ON o.id = i.olt_id AND o.tenant_id = i.tenant_id WHERE i.id = :i"),
+        {"i": incident_id},
+    ).first()
+    if r is None:
+        raise HTTPException(404, "incident not found")
+    silent_ids = {e.id for e in _silent_edges(conn)}
+    total = conn.execute(text("SELECT count(*) FROM incident_onus WHERE incident_id = :i"), {"i": incident_id}).scalar_one()
+    members = conn.execute(
+        text("SELECT u.id, u.serial, u.status, u.observed_at FROM incident_onus io "
+             "JOIN onus u ON u.id = io.onu_id AND u.tenant_id = io.tenant_id "
+             "WHERE io.incident_id = :i ORDER BY u.serial LIMIT :n"),
+        {"i": incident_id, "n": MEMBERS_SHOWN},
+    )
+    return {
+        "id": str(r.id), "kind": r.kind, "status": r.status, "suspected_cause": r.suspected_cause, "evidence": r.evidence,
+        "olt": r.olt_name, "opened_at": r.opened_at.isoformat(), "resolved_at": r.resolved_at.isoformat() if r.resolved_at else None,
+        "acknowledged": r.acknowledged_at is not None, "edge_silent": r.status == "open" and r.edge_id in silent_ids,
+        "impact": _impact(conn, [r.id], p.can("customers:read"))[r.id],
+        "members_total": total, "members_truncated": total > MEMBERS_SHOWN,
+        "members": [{"id": str(m.id), "serial": m.serial, "status": m.status,
+                     "observed_at": m.observed_at.isoformat() if m.observed_at else None} for m in members],
+    }
 
 
 @router.post("/v1/incidents/{incident_id}/ack")

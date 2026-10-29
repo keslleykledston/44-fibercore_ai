@@ -26,7 +26,7 @@ Navegação (≤6 grupos): **já são 6** (Visão Geral, Rede, Assinantes, NOC, 
 |---|---|---|---|
 | Subscriber 360 | parcial | evolui `/rede/onu/[id]` | atual `rede/onu-360`; novo `assinantes/visao-360` quando houver entrada por cliente |
 | Guided Troubleshooting | implementado (PR 40) | `/assinantes/diagnostico/[id]` (alvo) | `assinantes/diagnostico-guiado` |
-| NOC Command Center | parcial | `/noc` evolui | `noc/acompanhar-incidente` (existe) |
+| NOC Command Center | implementado (PR 42) | `/noc` evolui | `noc/acompanhar-incidente` (existe) |
 | Network Explorer | falta | `/rede/explorar` (alvo) | `rede/explorar-topologia` |
 | Wi-Fi Experience | falta/bloqueado | aba de Subscriber 360 | `assinantes/wifi` |
 | Automation Studio | falta | `/operacoes` evolui | `operacoes/fluxos` |

@@ -280,14 +280,31 @@ paths:
       description: >-
         Incidentes de queda em massa por PON (>=5 ONUs observadas no snapshot e >=80% fora; resolve <50%, com histerese) e alertas
         computados. Silêncio de Edge não abre nem fecha incidentes: marca `edge_silent` e lista o alerta; estados são "último conhecido".
+        Cada incidente traz `impact` {customers_affected, source: associations_approved, hidden, members_known}: clientes DISTINTOS ligados às ONUs
+        do incidente por associações APROVADAS (sem `customers:read` = `hidden`, nunca 0; incidente sem membros = desconhecido, nunca 0).
+        `summary` (sobre TODOS os abertos): open, unacknowledged, silent_edges, open_suppressed e customers_affected (não inclui incidentes
+        atrás de Edge silencioso). `order=priority`: abertos; não reconhecidos; queda confirmada antes de edge_silent; maior impacto (desconhecido
+        por último); mais ONUs fora; mais recente. Padrão `recent` (mais recente primeiro) inalterado (FC22-009).
       parameters:
         - {$ref: '#/components/parameters/WorkspaceOptional'}
         - {$ref: '#/components/parameters/Limit'}
         - {name: status, in: query, required: false, schema: {type: string, enum: [open, resolved]}}
+        - {name: order, in: query, required: false, schema: {type: string, enum: [recent, priority], default: recent}}
       responses:
-        '200': {description: "Objeto com incidents e alerts", content: {application/json: {schema: {type: object}}}}
+        '200': {description: "Objeto com incidents, alerts e summary", content: {application/json: {schema: {type: object}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /incidents/{incidentId}:
+    get:
+      tags: [NOC]
+      operationId: getIncident
+      summary: Um incidente para o painel lateral (FC22-009) - evidências, impacto com fonte e as ONUs-membro (até 50, `members_truncated`); só inventário, nunca nomes de clientes
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: incidentId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Incidente, content: {application/json: {schema: {type: object}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Não encontrado neste tenant}
   /incidents/{incidentId}/ack:
     post:
       tags: [NOC]

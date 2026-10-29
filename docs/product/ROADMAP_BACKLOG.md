@@ -100,7 +100,7 @@ Fonte: `docs/addenda/v2.2/` (pacote intacto). Análise: `docs/addenda/v2.2/GAP_A
 | FC22-006 | P0 | [x] PR 39: R-D001 v1 extraída (função pura; o correlator a usa sem mudar comportamento), registro versionado, `diagnostic_runs` append-only, `POST /diagnostics/runs` somente-leitura + replay (flag `diagnostic_engine`). Faltam: R-D002..004 (dependem de dados Wi-Fi/WAN/sessão ACS ainda não coletados), UI (FC22-007) | S2 | 002–004 |
 | FC22-007 | P0 | [x] PR 40: `/assinantes/diagnostico/[id]` (5 passos, Confirmado/Hipótese/Indisponível, resumo para ticket; só R-D001; sem timeline) | S2 | 006 |
 | FC22-008 | P0 | [x] validado contra AC-004/009 (`docs/addenda/v2.2/AC_VALIDATION_FC22-008.md`; +1 teste); lacunas declaradas: R-D003 como regra, R-D004, impacto (FC22-009) | S2 | — |
-| FC22-009 | P0 | [ ] parcial: fila em `/noc`; falta prioridade/impacto | S2 | 008, 004 |
+| FC22-009 | P0 | [x] PR 42: `/noc` com 4 KPIs, fila priorizada (ordem documentada), impacto (clientes distintos por associações aprovadas, Edge silencioso fora do impacto atual) e painel lateral; falta: ack pela UI | S2 | 008, 004 |
 | FC22-010 | P1 | [ ] falta (sem CTO/POP no modelo) | S3 | 003 |
 | FC22-011 | P1 | [ ] **bloqueado por dados** (ADR-0022) | S3 | 002, 003 |
 | FC22-012 | P1 | [ ] **bloqueado** (telemetria Wi-Fi/WAN não coletada; NBI aberto) | S3 | 002, ADR-0022 |

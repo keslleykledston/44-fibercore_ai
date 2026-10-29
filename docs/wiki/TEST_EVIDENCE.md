@@ -131,3 +131,8 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 
 ## 2026-10-29 — FC22-008 (validação AC-004/AC-009)
 - Mapeamento caso→teste em `docs/addenda/v2.2/AC_VALIDATION_FC22-008.md`; os testes citados rodam e passam; +2 testes novos (contexto do cliente com OLT velha = `stale` por bloco; snapshot velho e saudável não fecha incidente aberto, com mutante reprovado). `pytest -q`: **240 passed**. Codex (round 1) achou que a matriz citava o teste errado para 'snapshot velho': corrigido. Nenhum comportamento alterado. Lacunas declaradas no documento (R-D003 como regra, R-D004, impacto, p95).
+## 2026-10-29 — NOC Command Center, PR 42 (FC22-009)
+- `pytest -q`: **248 passed** (8 novos em `test_noc_command_center.py`: impacto distinto só por associação aprovada; oculto/desconhecido nunca 0; ordem documentada; desconhecido por último; summary sobre todos os abertos e distinto entre incidentes; impacto em UMA consulta; Edge silencioso fora do impacto e por último; detalhe do painel com RBAC/RLS/corte). 10 mutações reprovadas (inclui 2 que sobreviveram até o teste ficar discriminante: ack e edge_silent na ordem).
+- `scripts/e2e.sh`: **49 passed** (1 novo: 4 KPIs, impacto com fonte, painel lateral com axe, Esc devolve o foco, filtro). Capturas reais do NOC com o painel aberto.
+- Higiene de teste: outros módulos deixam heartbeat antigo em edges compartilhados; `test_noc_command_center.py` fixa heartbeat recente antes de cada teste.
+- NOT_RUN: carga/p95; reconhecimento pela UI.

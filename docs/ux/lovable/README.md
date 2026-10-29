@@ -33,3 +33,8 @@ Adotado da proposta, adaptado aos tokens já validados por axe (os valores de `m
 - **Adotado:** rótulos de confiança Confirmado/Hipótese/Indisponível em texto+símbolo; as frases de cautela por passo ("não comprova conexão", "Rx ausente não comprova a causa da queda", "identificar o roteador não comprova acesso à internet"); ticket com "Sintoma relatado" e a idade de cada fonte em minutos; nenhum botão de escrita.
 - **Não adotado:** seletor de estado DEMO; estado de permissão simulado por flag no cliente (aqui a permissão vem do servidor: 403 do BFF); dados fixos de PON (aqui vêm do `diagnostic_runs`).
 - **Não verificado por nós no Lovable:** tema escuro e demais estados da página de demonstração.
+## NOC Command Center (2026-10-29, FC22-009)
+- Terceiro lote (`UX_HANDOFF_NOC_COMMAND_CENTER.md`), commit `c9772843c4fa…`, 5,2 créditos, concluído. Nada do código foi importado.
+- **Adotado:** exatamente 4 KPIs; ordem de fila explicável (sem score); impacto = clientes distintos por associações aprovadas, nunca 0 quando indisponível; **incidentes atrás de Edge silencioso ficam fora do impacto atual** (aqui continuam na fila, por último, e contados à parte em `open_suppressed`); drawer lateral com Esc/foco; causa como hipótese.
+- **Não adotado:** seletor de cenários DEMO; incidentes suprimidos fora da fila (preferimos listá-los, marcados e ordenados por último, para não esconder um incidente aberto); folha inferior no mobile (o painel lateral do `<dialog>` já cobre a largura total no celular).
+- **Não verificado por nós no Lovable:** tema escuro e demais estados da página de demonstração.
