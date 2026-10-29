@@ -193,3 +193,28 @@ def test_reset_kills_access_tokens_already_issued_not_only_refresh_tokens(client
     assert client.get("/v1/incidents", headers=ht).status_code == 401  # ...and dies at once, without waiting for expiry
     fresh = _login(client, target)  # a login right after the reset (same second) is a NEW session and works
     assert client.get("/v1/incidents", headers={**_bearer(fresh["access_token"]), "X-Workspace-ID": str(seed["A"])}).status_code == 200
+
+
+def test_a_revoked_access_token_is_refused_by_every_user_route_not_just_tenant_ones(client, seed, make):
+    adm, codes, h = _admin_with_mfa(client, make, seed)
+    target = make("engineer")
+    _secret, tcodes = _enrol(client, target)
+    ch = _login(client, target)
+    tok = client.post("/v1/auth/mfa/verify", json={"mfa_token": ch["mfa_token"], "code": tcodes.pop()}).json()["access_token"]
+    bearer = _bearer(tok)
+    assert client.get("/v1/auth/workspaces", headers=bearer).status_code == 200
+    assert client.get("/v1/auth/mfa/status", headers=bearer).status_code == 200
+    assert client.post(f"/v1/members/{target['id']}/mfa/reset", json={"password": PW, "code": _code(codes)}, headers=h).status_code == 200
+    assert client.get("/v1/auth/workspaces", headers=bearer).status_code == 401
+    assert client.get("/v1/auth/mfa/status", headers=bearer).status_code == 401
+    assert client.post("/v1/auth/mfa/enroll", json={"password": PW}, headers=bearer).status_code == 401
+    assert client.get("/v1/incidents", headers={**bearer, "X-Workspace-ID": str(seed["A"])}).status_code == 401
+
+
+def test_a_deactivated_account_token_is_refused_by_the_mfa_routes_too(client, seed, make, migrated):
+    who = make("engineer")
+    tok = _login(client, who)["access_token"]
+    assert client.get("/v1/auth/mfa/status", headers=_bearer(tok)).status_code == 200
+    with migrated.begin() as c:
+        c.execute(text("UPDATE users_global SET is_active = false WHERE id = :u"), {"u": who["id"]})
+    assert client.get("/v1/auth/mfa/status", headers=_bearer(tok)).status_code == 401

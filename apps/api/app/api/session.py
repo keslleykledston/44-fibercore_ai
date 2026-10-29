@@ -8,10 +8,11 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
+from app.api.deps import authenticated_user_id
 from app.api.routes import _client_ip, _gate, _record, _throttled
 from app.core import mfa
 from app.core.db import get_engine, scoped_connection
-from app.core.security import decode_mfa_challenge, decode_token, verify_secret
+from app.core.security import decode_mfa_challenge, verify_secret
 from app.core.sessions import hash_refresh, issue_session
 from app.core.settings import Settings, get_settings, required_mfa_roles
 
@@ -149,15 +150,7 @@ def mfa_verify(body: MfaVerifyIn, request: Request, settings: Settings = Depends
 
 # ---- MFA: enrolment (authenticated user, re-authenticated with the password) -------------------
 def _user_id(authorization: str | None, settings: Settings) -> UUID:
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise _unauth()
-    try:
-        claims = decode_token(settings, authorization[7:].strip())
-    except (jwt.PyJWTError, ValueError) as exc:
-        raise _unauth() from exc
-    if claims.kind != "user":
-        raise HTTPException(403, "users only")
-    return claims.sub
+    return authenticated_user_id(authorization, settings)  # active account + not revoked (tokens_valid_after), like every other route
 
 
 def _reauth(conn, request: Request, settings: Settings, user_id: UUID, password: str):

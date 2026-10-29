@@ -29,6 +29,33 @@ def _unauth() -> HTTPException:
     return HTTPException(401, "invalid or missing credentials", headers={"WWW-Authenticate": "Bearer"})
 
 
+def assert_user_token_current(conn, claims) -> None:
+    """The ONE place that decides whether a user access token still counts: the account must be active AND the token must not predate
+    users_global.tokens_valid_after (set when the account is signed out everywhere, e.g. an administrator MFA reset)."""
+    u = conn.execute(
+        text("SELECT is_active, extract(epoch FROM tokens_valid_after) AS valid_after FROM users_global WHERE id = :u"), {"u": claims.sub},
+    ).first()
+    if not u or not u.is_active:
+        raise _unauth()
+    if u.valid_after is not None and claims.iat < float(u.valid_after):
+        raise _unauth()
+
+
+def authenticated_user_id(authorization: str | None, settings: Settings) -> UUID:
+    """For routes that need a USER session but no tenant (workspaces, MFA self-service): same checks as get_principal, no membership."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise _unauth()
+    try:
+        claims = decode_token(settings, authorization[7:].strip())
+    except (jwt.PyJWTError, ValueError) as exc:
+        raise _unauth() from exc
+    if claims.kind != "user":
+        raise HTTPException(403, "users only")
+    with scoped_connection(get_engine(), user_id=claims.sub) as conn:
+        assert_user_token_current(conn, claims)
+    return claims.sub
+
+
 def get_principal(
     request: Request,
     authorization: str | None = Header(default=None),
@@ -56,14 +83,7 @@ def get_principal(
         return Principal(claims.sub, "service", claims.tenant_id, row.role, row.edge_id)
 
     with scoped_connection(engine, user_id=claims.sub) as conn:
-        u = conn.execute(
-            text("SELECT is_active, extract(epoch FROM tokens_valid_after) AS valid_after FROM users_global WHERE id = :u"),
-            {"u": claims.sub},
-        ).first()
-        if not u or not u.is_active:
-            raise _unauth()
-        if u.valid_after is not None and claims.iat < float(u.valid_after):  # revoked: issued before the account was signed out everywhere
-            raise _unauth()
+        assert_user_token_current(conn, claims)
         memberships = {
             r.tenant_id: r.role
             for r in conn.execute(text("SELECT tenant_id, role FROM tenant_memberships WHERE user_id = :u"), {"u": claims.sub})
