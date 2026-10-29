@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"time"
 )
 
@@ -26,6 +27,8 @@ var (
 	ErrFormat    = errors.New("malformed envelope")
 )
 
+var targetRefRe = regexp.MustCompile(`^[A-Za-z0-9._%-]{3,200}$`)
+
 const (
 	maxLifetime = time.Hour
 	clockSkew   = 2 * time.Minute
@@ -37,6 +40,7 @@ type Envelope struct {
 	TenantID       string   `json:"tenant_id"`
 	EdgeID         string   `json:"edge_id"`
 	TargetID       string   `json:"target_id"`
+	TargetRef      string   `json:"target_ref,omitempty"` // refresh only: the ACS device id the Cloud signed for this job
 	Operation      string   `json:"operation"`
 	IdempotencyKey string   `json:"idempotency_key"`
 	IssuedAt       string   `json:"issued_at"`
@@ -116,6 +120,12 @@ func (v *Verifier) Verify(ctx context.Context, raw []byte) (*Envelope, error) {
 	}
 	if !ReadOnlyOps[env.Operation] || !v.Allowed[env.Operation] {
 		return nil, fmt.Errorf("%w: %s", ErrOperation, env.Operation)
+	}
+	if env.Operation == "refresh" && env.TargetRef != "" && !targetRefRe.MatchString(env.TargetRef) {
+		return nil, fmt.Errorf("%w: invalid target_ref", ErrFormat)
+	}
+	if env.Operation != "refresh" && env.TargetRef != "" {
+		return nil, fmt.Errorf("%w: target_ref only exists on refresh", ErrFormat)
 	}
 	if len(env.Nonce) < 16 {
 		return nil, fmt.Errorf("%w: nonce too short", ErrFormat)

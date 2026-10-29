@@ -16,3 +16,9 @@ O Edge é **outbound-only e somente leitura** (README em `agents/edge`). Aqui el
 
 ## Não coberto
 OLT (CLI, somente leitura): LIGADA em 2026-10-29 com autorização explícita (perfil `huawei_ma56_r015`, SSH em modo shell com algoritmos legados só para essa OLT, host key fixada, 32 PONs). O guard de ritmo (`olt-guard.json`, `edge.lock`) impõe uma coleta por vez, intervalo de 15 min e resfriamento de 15 min após falha, e sobrevive a restart; a primeira coleta completa levou ~156 s (775 ONUs). A OLT real tem throttle de SNMP (1 req/s, resfriamento de 5 min no transporte SNMP, não usado aqui). Credenciais só em arquivo 0600 no host do Edge. Fechar o NBI para fora: `GENIEACS_NBI_HARDENING.md` (precisa de root).
+
+## Leitura ativa de parâmetros do CPE (ADR-SD-002 item 4) — desligada por padrão
+- Autorizada pelo responsável em 2026-10-29 para a LAB. Só roda com `"jobs_enabled": true`, `"job_public_key"` e `"refresh_tasks": true` no `config.json` do Edge; a nuvem precisa ter a chave de assinatura de jobs.
+- Disparo: job `refresh` aprovado sobre UM CPE (R0, sem aprovação humana extra). Cada job faz até 5 tarefas `getParameterValues` (uma conexão ao CPE por tarefa), no máximo 1 por dispositivo a cada 10 min e 20 por hora.
+- Nunca em lote por PON. Para desligar: `"refresh_tasks": false` e reiniciar o Edge (o job passa a falhar fechado).
+- Verificação depois do primeiro teste: no GenieACS conferir (somente leitura) que não ficou tarefa nem falha pendente para o dispositivo (`GET /tasks`, `GET /faults` filtrando o `_id`).

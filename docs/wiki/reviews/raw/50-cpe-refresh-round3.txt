@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a188d0-dabe-7f42-a490-912b6cfbe551).
+[codex] Turn started (01a188d0-daf8-7d90-9f5e-7ca21531cbc0).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir especialmente o ciclo POST → limpeza → Hold/Res...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- agents/edge/internal/nbi/re...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- agents/edge/internal/nbi/re... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/nbi/refresh.go; nl -ba agents/edge/internal/nbi/re...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/nbi/refresh.go; nl -ba agents/edge/internal/nbi/re... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=8 main...HEAD -- agents/edge/internal/nbi/ref...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=8 main...HEAD -- agents/edge/internal/nbi/ref... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: o código ainda trata qualquer respost...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: o código ainda trata qualquer resposta 4xx ao POST como prova de que nenhuma tarefa foi criada, embora alguns 4xx possam ser ambíguos.
+
+Findings:
+- [high] Qualquer 4xx no POST evita o Hold (agents/edge/internal/nbi/refresh.go:107-113)
+  Este ramo considera todo status entre 400 e 499 uma rejeição segura e retorna sem `ErrRefreshUncleaned`; por isso, o chamador não aplica Hold. Respostas como 408 (timeout) ou 429 podem ser geradas por um proxy ou serviço intermediário depois que a requisição alcançou o ACS, sem provar que a tarefa não foi criada. Se isso ocorrer, o Edge pode aceitar um refresh posterior enquanto uma tarefa anterior ainda está pendente. Trate apenas códigos de rejeição cuja semântica de “não criado” esteja garantida pela configuração do ACS como seguros; classifique os demais como ambíguos e aplique Hold.
+  Recommendation: Restringir a exceção a uma lista explícita de códigos que comprovadamente rejeitam antes de criar a tarefa; tratar 408, 429 e outros códigos sem essa garantia como `ErrRefreshUncleaned`.

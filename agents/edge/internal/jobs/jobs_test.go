@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -146,4 +147,57 @@ func errorsIs(err, target error) bool {
 		e = u.Unwrap()
 	}
 	return false
+}
+
+func signedEnv(t *testing.T, priv ed25519.PrivateKey, base map[string]any, mutate func(map[string]any)) []byte {
+	t.Helper()
+	m := clone(base)
+	delete(m, "signature")
+	mutate(m)
+	canon, err := Canonical(raw(m))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m["signature"] = base64.StdEncoding.EncodeToString(ed25519.Sign(priv, canon))
+	return raw(m)
+}
+
+func TestRefreshTargetRefIsSignedValidatedAndRefreshOnly(t *testing.T) {
+	g, _ := loadGolden(t)
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	v := func() *Verifier { return verifier(pub, inWindow) }
+	ctx := context.Background()
+	ok := signedEnv(t, priv, g.Envelope, func(m map[string]any) {
+		m["operation"] = "refresh"
+		m["target_ref"] = "AAAA00-ONT-SN1"
+		m["nonce"] = "n1n1n1n1n1n1n1n1n1"
+	})
+	env, err := v().Verify(ctx, ok)
+	if err != nil || env.TargetRef != "AAAA00-ONT-SN1" || env.Operation != "refresh" {
+		t.Fatalf("%+v %v", env, err)
+	}
+	// legacy refresh without a ref still verifies
+	if _, err := v().Verify(ctx, signedEnv(t, priv, g.Envelope, func(m map[string]any) { m["operation"] = "refresh"; m["nonce"] = "n2n2n2n2n2n2n2n2n2" })); err != nil {
+		t.Fatalf("legacy refresh: %v", err)
+	}
+	// the ref is covered by the signature
+	var m map[string]any
+	_ = json.Unmarshal(ok, &m)
+	m["target_ref"] = "ZZZZ99-ONT-OTHER"
+	m["nonce"] = "n3n3n3n3n3n3n3n3n3"
+	if _, err := v().Verify(ctx, raw(m)); !errorsIs(err, ErrSignature) {
+		t.Fatalf("tampered ref: %v", err)
+	}
+	for name, mut := range map[string]func(map[string]any){
+		"ref on collect": func(m map[string]any) { m["target_ref"] = "AAAA00-ONT-SN1" },
+		"slash":          func(m map[string]any) { m["operation"] = "refresh"; m["target_ref"] = "../x" },
+		"space":          func(m map[string]any) { m["operation"] = "refresh"; m["target_ref"] = "a b c" },
+		"too long":       func(m map[string]any) { m["operation"] = "refresh"; m["target_ref"] = strings.Repeat("A", 201) },
+	} {
+		n := name
+		b := signedEnv(t, priv, g.Envelope, func(m map[string]any) { mut(m); m["nonce"] = "n4n4n4n4n4n4n4n4" + n })
+		if _, err := v().Verify(ctx, b); !errorsIs(err, ErrFormat) {
+			t.Errorf("%s: want ErrFormat got %v", name, err)
+		}
+	}
 }

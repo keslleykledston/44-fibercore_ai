@@ -117,3 +117,8 @@
 ## Unreleased — PR 49 (catálogo de consultas somente leitura da OLT, ADR-0026)
 - Edge: `olt.Queries`/`HuaweiR015.RunQuery` — 25 consultas `display` tipadas (global, slot, PON, ONU), parâmetros inteiros limitados, renderização no Edge, padrão estrito e proibição de verbos de escrita. Só as 4 já executadas na OLT real são aceitas por padrão; as demais exigem habilitação local para captura supervisionada.
 - `docs/operations/OLT_QUERY_CATALOG.md` (mapa runbook→ID e processo de promoção) e ADR-0026 (Proposed). Inerte: nenhum fluxo chama `RunQuery`, sem endpoint/job/migração.
+
+## Unreleased — PR 50 (leitura ativa de parâmetros do CPE, ADR-SD-002 item 4)
+- Edge: `nbi.RefreshParams` (tarefa `getParameterValues` por grupo, só nomes da lista fechada, detecção de modelo de dados, limpeza de tarefas pendentes) e `RefreshGuard` (1 por dispositivo/10 min, 20/h, persistido antes de pedir). Config `refresh_tasks` (padrão **desligado**; exige `nbi_url` + `jobs_enabled`).
+- Nuvem: o despacho de `refresh` de um CPE assina `target_ref` (id TR-069 do binding) no envelope; contrato `job-envelope` ganhou o campo opcional. `collect` e CPE sem binding seguem como antes.
+- ADR-SD-002 → Accepted (autorização do responsável em 2026-10-29).

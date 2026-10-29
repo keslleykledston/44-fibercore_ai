@@ -277,3 +277,25 @@ func TestR015ProfileLimitsPonPortsAtLoadTime(t *testing.T) {
 		t.Errorf("limits belong to the R015 profile only: %v", err)
 	}
 }
+
+func TestRefreshTasksNeedsNBIAndSignedJobsAndIsOffByDefault(t *testing.T) {
+	const nbi = `,"nbi_url":"http://10.0.0.5:7557","allowlist":["10.0.0.5:7557"]`
+	const jobs = `,"jobs_enabled":true,"job_public_key":"A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg="`
+	if c, err := Load(write(t, 0o600, good(nbi+jobs)), "v"); err != nil || c.RefreshTasks {
+		t.Fatalf("must be off unless asked: %+v %v", c, err)
+	}
+	if c, err := Load(write(t, 0o600, good(nbi+jobs+`,"refresh_tasks":true`)), "v"); err != nil || !c.RefreshTasks {
+		t.Fatalf("%+v %v", c, err)
+	}
+	for name, extra := range map[string]string{
+		"without jobs": nbi + `,"refresh_tasks":true`,
+		"without nbi":  jobs + `,"refresh_tasks":true`,
+	} {
+		if _, err := Load(write(t, 0o600, good(extra)), "v"); err == nil {
+			t.Errorf("%s: active reads must only exist behind signed jobs and an NBI", name)
+		}
+	}
+	if got := RefreshGuardFile("/var/lib/edge/queue.db"); got != "/var/lib/edge/refresh-guard.json" {
+		t.Fatalf("%s", got)
+	}
+}
