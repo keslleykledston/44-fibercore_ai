@@ -20,6 +20,8 @@ def upgrade() -> None:
     # Identity data is never merged automatically: two CPEs that only differ by case/spaces, or one CPE with several external ids for the
     # same (connector, protocol), may be different physical devices, and picking a survivor would silently re-point a management binding.
     # So the migration REFUSES to run over such data and says exactly what to fix (counts only; no identifiers in the message).
+    # Block concurrent WRITES (reads continue) for the whole diagnosis + rewrite, so no collision can appear between the check and the UPDATE.
+    op.execute("LOCK TABLE cpes, cpe_protocol_bindings IN SHARE ROW EXCLUSIVE MODE")
     op.execute(
         """
         DO $$

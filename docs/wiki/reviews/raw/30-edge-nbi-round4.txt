@@ -1,0 +1,30 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18547-1ed6-7241-8d5e-b8be939663b7).
+[codex] Turn started (01a18547-1f7a-7c33-a804-72e0e21efc85).
+[codex] Assistant message captured: Vou confrontar o diff com `main`, priorizando migração, ordenação dos advisory locks e os doc...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '185,310p'; nl -ba apps/api/alem...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '185,310p'; nl -ba apps/api/alem... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviaria ainda: a migração pode deixar dados parc...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviaria ainda: a migração pode deixar dados parcialmente canonicalizados após colisão e as travas por reivindicação não cobrem todos os caminhos de escrita. KNOWN_ISSUES registra exposição relevante do NBI sem autenticação; README usa apenas IPs de exemplo e não encontrei segredo real nos documentos revisados.
+
+Findings:
+- [high] A verificação da migração não garante que a canonicalização possa terminar (apps/api/alembic/versions/0013_cpe_claim_integrity.py:23-43)
+  O DO-block verifica colisões antes do UPDATE, mas não impede novas gravações enquanto a migração roda nem verifica se o resultado continuará livre de colisões quando o UPDATE executar. Uma escrita concorrente entre as duas etapas pode criar `abc` e `ABC`; o UPDATE então viola o índice único preexistente e aborta. Como as instruções são transacionais no PostgreSQL, a atualização/restrições da etapa posterior revertem, mas a migração continua falhando e bloqueia o upgrade. Faça a validação e canonicalização sob bloqueio que impeça essas escritas, ou use uma estratégia de migração que trate a concorrência e revalide atomicamente.
+  Recommendation: Bloquear escritas nas tabelas afetadas durante diagnóstico e alteração, ou instalar primeiro uma proteção contra novas colisões e revalidar dentro da mesma janela antes de canonicalizar.
+- [medium] Travas por reivindicação não incluem escritas que contornam este endpoint (apps/api/app/api/inventory.py:197-202)
+  A trava advisory serializa chamadas deste endpoint que formam a mesma chave. Ela não é adquirida por outras rotas, scripts ou SQL direto. A migração adiciona unicidade em `(tenant_id, cpe_id, connector_id, protocol)`, mas isso permite vários `external_id` diferentes para a mesma chave e não impõe a regra por serial que o endpoint verifica. Uma escrita alternativa pode, portanto, violar a invariável; chamadas futuras deste endpoint podem encontrar múltiplos bindings e o dicionário `stored` fica sujeito à escolha arbitrária de uma linha. Se todos os escritores não estiverem rigidamente confinados a esta rota, a regra não tem garantia persistente.
+  Recommendation: Faça a invariável valer no banco, por exemplo com uma tabela de reivindicações cuja chave única inclua tenant, serial, connector e protocol, e direcione todos os caminhos de escrita por essa garantia.
+
+Next steps:
+- Revisar se scripts, rotas ou operações administrativas escrevem bindings fora de `ingest_cpe_snapshot`; se sim, cobrir esses caminhos com a mesma garantia persistente.
+- Definir proteção contra gravações concorrentes durante a janela entre o DO-block e a canonicalização da migration 0013.
