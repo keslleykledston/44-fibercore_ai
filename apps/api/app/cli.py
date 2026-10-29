@@ -82,6 +82,10 @@ def main(argv: list[str] | None = None) -> None:
             from app.api.jobs import OPERATIONS  # the catalog is the job engine's operations: no invented names
             if a.operation not in OPERATIONS:
                 sys.exit(f"unknown operation {a.operation!r}; known: {', '.join(sorted(OPERATIONS))}")
+            from app.core.capabilities import catalog_for
+            valid = {(e.operation, e.protocol) for kind in ("cpe", "olt") for e in catalog_for(kind, OPERATIONS)}
+            if (a.operation, a.protocol) not in valid:  # a row the API could never show would hide the recorded state
+                sys.exit(f"{a.operation!r} is not catalogued over {a.protocol!r}; valid pairs: {sorted(valid)}")
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
             cid = c.execute(
                 text("INSERT INTO device_capabilities (tenant_id, vendor, model, firmware, protocol, operation, status, certification, "

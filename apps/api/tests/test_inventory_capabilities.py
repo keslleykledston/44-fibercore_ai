@@ -131,10 +131,15 @@ def test_cli_capability_set_requires_evidence_validates_the_catalog_and_emits_an
         cli.main(["capability-set", *base, "certified"])
     with pytest.raises(SystemExit, match="unknown operation"):
         cli.main(["capability-set", t, "CliCo", "C1", "2.0", "tr069", "invented_op", "supported", "identified"])
+    with pytest.raises(SystemExit, match="not catalogued"):  # OLT operation over a CPE protocol, and the other way round
+        cli.main(["capability-set", t, "CliCo", "C1", "2.0", "tr069", "collect", "supported", "identified"])
+    with pytest.raises(SystemExit, match="not catalogued"):
+        cli.main(["capability-set", t, "CliCo", "C1", "2.0", "olt", "set_wifi_ssid", "supported", "identified"])
+    cli.main(["capability-set", t, "CliCo", "C1", "2.0", "tr369", "refresh", "unknown", "identified"])  # a valid pair on the other CPE protocol
     cli.main(["capability-set", *base, "observed", "--evidence", "lab-cli-1", "--verified-at", "2026-10-29T12:00:00+00:00"])
     cli.main(["capability-set", *base, "certified", "--evidence", "lab-cli-2", "--verified-at", "2026-10-29T13:00:00+00:00"])  # upsert
     with migrated.begin() as c:
         rows = c.execute(text("SELECT certification, evidence_ref FROM device_capabilities WHERE vendor = 'CliCo'")).all()
         ev = c.execute(text("SELECT count(*) FROM events_outbox WHERE event_type = 'device.capabilities.changed' AND tenant_id = :t"),
                        {"t": seed["A"]}).scalar()
-    assert [(r.certification, r.evidence_ref) for r in rows] == [("certified", "lab-cli-2")] and ev >= 2
+    assert sorted((r.certification, r.evidence_ref) for r in rows) == [("certified", "lab-cli-2"), ("identified", None)] and ev >= 3

@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a185d5-2a0d-7e91-bd67-ebbc7c229c93).
+[codex] Turn started (01a185d5-38c2-7873-8726-c1cfb26c61db).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de autorização, escrita e estados d...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/capabilities.py; nl -ba apps/api/app/cli.py | sed -n ...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/capabilities.py; nl -ba apps/api/app/cli.py | sed -n ... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '40,85p;105,195p'; rg -n 'GRANT|CREAT...
+[codex] Command failed: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '40,85p;105,195p'; rg -n 'GRANT|CREAT... (exit 2)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: o CLI aceita combinações protocol/ope...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: o CLI aceita combinações protocol/operação incompatíveis e grava registros que a API nunca consegue exibir, tornando o catálogo inconsistente sem erro visível.
+
+Findings:
+- [medium] CLI aceita protocolo incompatível com a operação (apps/api/app/cli.py:82-93)
+  `capability-set` valida apenas se `operation` existe em `OPERATIONS`; não verifica se o protocolo pertence ao tipo do alvo. Assim, por exemplo, `collect` pode ser gravada com `tr069`, embora `collect` seja operação de OLT e a API só catalogue operações OLT sob `olt`. O upsert conclui e emite evento, mas `_capabilities` nunca retorna essa linha, ocultando o estado registrado e permitindo divergências silenciosas entre CLI, banco e API. Valide o par operação/protocolo contra o catálogo por tipo antes do INSERT e adicione cobertura para combinações inválidas.
+  Recommendation: Rejeitar pares que não existam em `catalog_for(kind, OPERATIONS)` antes de gravar; testar protocolo incompatível para operações CPE e OLT.
