@@ -230,10 +230,15 @@ def ingest_cpe_snapshot(
     claimed: dict[tuple, set[str]] = {}
     for c in fresh:
         claimed.setdefault((c.canonical_serial, c.binding.connector_id, c.binding.protocol), set()).add(c.binding.external_id)
+    owners_of_binding: dict[tuple, set[str]] = {}  # the same external id claimed by DIFFERENT serials in one batch: neither can be trusted
+    for c in fresh:
+        owners_of_binding.setdefault((c.binding.connector_id, c.binding.protocol, c.binding.external_id), set()).add(c.canonical_serial)
     kept = []
     for c in fresh:
         k = (c.canonical_serial, c.binding.connector_id, c.binding.protocol)
         if len(claimed[k]) > 1 or stored.get(k, c.binding.external_id) != c.binding.external_id:
+            continue
+        if len(owners_of_binding[(c.binding.connector_id, c.binding.protocol, c.binding.external_id)]) > 1:
             continue
         kept.append(c)
     conflicts = len(fresh) - len(kept)

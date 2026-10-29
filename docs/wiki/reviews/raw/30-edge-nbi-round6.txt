@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18548-ff5f-7711-a185-fda14836a6c2).
+[codex] Turn started (01a18548-ff9e-7650-b121-2a0d3690846e).
+[codex] Assistant message captured: Vou conferir o diff contra `main`, com atenção à migração de unicidade e ao caminho de ingest...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- apps/api/app/api/inventory....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- apps/api/app/api/inventory.... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '250,355p'; git diff --no-ext-di...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '250,355p'; git diff --no-ext-di... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: a ingestão ainda aceita duas CPEs no mesmo ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: a ingestão ainda aceita duas CPEs no mesmo lote que reivindicam o mesmo binding; a segunda pode persistir sem vínculo e a resposta conta ambas como aceitas.
+
+Findings:
+- [high] Binding duplicado no lote pode deixar CPE persistida sem vínculo (apps/api/app/api/inventory.py:278-285)
+  A validação de conflito em `claimed` agrupa por serial, connector e protocolo, mas não detecta o mesmo `(connector_id, protocol, external_id)` reivindicado por seriais diferentes no lote. A checagem de `existing` também ocorre antes dos inserts. Na execução dos parâmetros, o primeiro insert cria o binding; o seguinte encontra o mesmo alvo de `ON CONFLICT` e atualiza apenas `observed_at`, mantendo o binding ligado à primeira CPE. A segunda CPE continua persistida, mas sem esse binding, e `cpes` contabiliza ambas como aceitas. Isso pode criar registros órfãos e ocultar a associação efetivamente mantida. Valide unicidade dos bindings recebidos antes do upsert e descarte/contabilize todas as reivindicações conflitantes, ou rejeite o lote antes de qualquer gravação.
+  Recommendation: Detecte colisões por `(connector_id, protocol, external_id)` dentro do lote e não inclua no upsert as CPEs conflitantes; cubra o caso com um teste de dois seriais reivindicando o mesmo binding.
+
+Next steps:
+- Corrigir a detecção de colisões de binding no lote e adicionar regressão para confirmar que nenhuma CPE é aceita sem a associação esperada.

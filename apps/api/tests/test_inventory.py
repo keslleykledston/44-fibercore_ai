@@ -335,3 +335,16 @@ def test_duplicate_entries_in_one_batch_never_abort_the_snapshot(client, seed, i
     rows = {x["canonical_serial"]: x for x in client.get("/v1/cpes", headers=hdr(client, "alice", seed, "A")).json()}
     assert {"DUP-SAME-1", "DUP-BOTH-1", "DUP-OK-1"} <= set(rows)
     assert len(rows["DUP-SAME-1"]["bindings"]) == 1 and len(rows["DUP-BOTH-1"]["bindings"]) == 2
+
+
+def test_two_serials_claiming_the_same_binding_in_one_batch_are_both_ignored(client, seed, inv):
+    a = agent(client, inv, "a1")
+    c = "c-samebind"
+    body = {"edge_id": str(inv["a1"]["edge"]), "observed_at": _now(), "cpes": [
+        {"canonical_serial": "SAMEB-ONE-1", "binding": {"protocol": "tr069", "external_id": "shared-ext", "connector_id": c}},
+        {"canonical_serial": "SAMEB-TWO-1", "binding": {"protocol": "tr069", "external_id": "shared-ext", "connector_id": c}},
+        {"canonical_serial": "SAMEB-OK-1", "binding": {"protocol": "tr069", "external_id": "fine-ext", "connector_id": c}}]}
+    r = client.post("/v1/edge/cpe-snapshots", headers=a, json=body)
+    assert r.status_code == 202 and r.json()["conflicts"] == 2 and r.json()["cpes"] == 1, r.text
+    serials = {x["canonical_serial"] for x in client.get("/v1/cpes", headers=hdr(client, "alice", seed, "A")).json()}
+    assert "SAMEB-OK-1" in serials and not ({"SAMEB-ONE-1", "SAMEB-TWO-1"} & serials)  # no CPE persisted without its binding
