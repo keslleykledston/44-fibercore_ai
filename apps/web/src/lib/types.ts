@@ -15,6 +15,13 @@ export type Onu360 = {
   pon: { path: string | null; onus: number; online: number; observed_at: string | null; freshness: string } | null;
   incident: { id: string; kind: string; suspected_cause: string; opened_at: string } | null; incident_hidden: boolean;
   provenance: { state: Provenance; olt: Provenance; pon?: Provenance };
+  cpe?: CpeBlock; // só com a flag onu_cpe_links ligada para o provedor
+};
+export type CpeBlock = {
+  link: "confirmed" | "suggested" | "none" | "unavailable"; pending_suggestions: number; can_review: boolean;
+  suggestions: { id: string; confidence: number; rule: string | null; ambiguous: boolean }[];
+  device: { id: string; vendor: string | null; model: string | null; firmware: string | null; protocols: string[] } | null;
+  provenance: Provenance | null;
 };
 export type OnuCustomer = { association: "approved" | "suggested" | "none"; pending_suggestions: number; display_name?: string; document_last4?: string | null; contract_status?: string };
 export type Member = { user_id: string; email: string; display_name: string; role: string; mfa_enabled: boolean; is_self: boolean };

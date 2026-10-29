@@ -303,16 +303,16 @@ def ingest_cpe_snapshot(
 
 
 # ---- reads ------------------------------------------------------------------------------------
-def _prov(source: str, observed_at: datetime | None) -> dict:
+def _prov(source: str, observed_at: datetime | None, ttl: timedelta | None = None) -> dict:
     """Provenance envelope (ADR-0020): where a block came from, when it was observed, and how fresh that is NOW.
     quality is fresh|stale|unknown; `conflict` is reserved for a second source disagreeing and is never produced from a single source."""
-    return {"source": source, "observed_at": observed_at.isoformat() if observed_at else None, "quality": _fresh(observed_at)}
+    return {"source": source, "observed_at": observed_at.isoformat() if observed_at else None, "quality": _fresh(observed_at, ttl)}
 
 
-def _fresh(ts: datetime | None) -> str:
+def _fresh(ts: datetime | None, ttl: timedelta | None = None) -> str:
     if ts is None:
         return "unknown"
-    return "fresh" if datetime.now(UTC) - ts <= FRESH_FOR else "stale"
+    return "fresh" if datetime.now(UTC) - ts <= (ttl or FRESH_FOR) else "stale"
 
 
 @router.get("/v1/olts")
@@ -402,7 +402,12 @@ def onu_360(
         ),
         {"o": onu_id},
     ).first() if can_incidents else None
+    from app.api.context import cpe_block  # local: context imports helpers from this module
+
+    links_on = features.enabled(conn, p.tenant_id, "onu_cpe_links")
+    extra = {"cpe": cpe_block(conn, p.tenant_id, onu_id, p.can("associations:review"))} if links_on else {}
     return {
+        **extra,
         "id": str(u.id), "serial": u.serial, "status": u.status, "rx_dbm": float(u.rx_dbm) if u.rx_dbm is not None else None,
         "observed_at": u.observed_at.isoformat() if u.observed_at else None, "freshness": _fresh(u.observed_at),
         "last_online_at": u.last_online_at.isoformat() if u.last_online_at else None,

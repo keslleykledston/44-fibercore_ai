@@ -51,4 +51,4 @@ Edge-fleet: registro via CLI, `POST /v1/edge/heartbeat` (bearer edge_agent, inte
 | Proposta UX do Lovable | Solicitada (projeto Lovable criado); **não integrada** — UI atual segue os tokens do design system, revisão visual Lovable pendente | — |
 | Adendo v2.2 (FC22-001..018) | **Só planejamento** (PR 34): análise de GAP, conflitos, ADR-0019…0023, contrato reconciliado, backlog integrado. Nenhuma capacidade nova implementada | `python tests/validate_addendum_v22.py` PASS; mutações (adendo alterado, `implemented` sem existir, FC22/AC removidos) reprovadas |
 | FC22-002 Capability Registry — fatia mínima (PR 35) | **Parcial implementado** (mecanismo + leitura + UI mínima; registro vazio no LAB) | pytest 202 (7 novos: unknown padrão, perfil exato, escrita nunca liberada, A/B, RBAC, CHECK de evidência, CLI); E2E 41; 5 mutações reprovadas; capturas reais ONU 360 |
-
+| FC22-004 Vínculo ONU↔CPE + Customer Context (PR 37) | **Implementado, flags desligadas por padrão** (ligadas só no tenant demo); sem regra além de `serial_equal`; sem busca por cliente na UI | pytest 220 (10 novos); E2E 42; 7 mutações reprovadas; capturas reais ONU 360 com o card do roteador |

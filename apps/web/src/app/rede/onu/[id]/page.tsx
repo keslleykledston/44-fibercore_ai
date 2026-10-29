@@ -19,8 +19,11 @@ function Row({ k, children }: { k: string; children: React.ReactNode }) {
   return <div className="flex flex-wrap items-baseline justify-between gap-2 py-1 text-sm"><dt className="text-muted">{k}</dt><dd className="text-right">{children}</dd></div>;
 }
 
-export default async function Onu360Page({ params }: { params: Promise<{ id: string }> }) {
+const cpeErr: Record<string, string> = { "403": "Seu papel não permite revisar vínculos.", "409": "Este vínculo mudou ou é ambíguo; recarregue e confira o inventário." };
+
+export default async function Onu360Page({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ cpe?: string; cpe_erro?: string }> }) {
   const { id } = await params;
+  const { cpe: cpeDone, cpe_erro: cpeFail } = await searchParams;
   if (!UUID.test(id)) notFound();
   // O assinante é dado pessoal: rota própria (customers:read, auditada). 403 = papel sem acesso => o bloco simplesmente não aparece.
   const [r, cu] = await Promise.all([apiSafe<Onu360>(`/v1/onus/${id}`), apiSafe<OnuCustomer>(`/v1/onus/${id}/customer`)]);
@@ -85,6 +88,37 @@ export default async function Onu360Page({ params }: { params: Promise<{ id: str
               <p className="text-sm">Há {customer.pending_suggestions} sugestão(ões) de vínculo aguardando revisão. <Link href="/assinantes" className="text-accent underline underline-offset-2">Revisar em Assinantes</Link></p>
             ) : <p className="text-sm text-muted">Nenhum assinante vinculado a esta ONU.</p>}
             <p className="mt-3 text-xs text-muted">O acesso a dados de assinante fica registrado na auditoria.</p>
+          </Card>
+        )}
+        {o.cpe && o.cpe.link !== "unavailable" && (
+          <Card title="Roteador (CPE)" testid="onu360-cpe">
+            {cpeDone && <p role="status" className="mb-2 text-sm text-ok">{cpeDone === "confirm" ? "Vínculo confirmado." : "Sugestão rejeitada."}</p>}
+            {cpeFail && <p role="alert" className="mb-2 text-sm text-danger">{cpeErr[cpeFail] ?? "Não foi possível concluir a revisão."}</p>}
+            {o.cpe.link === "confirmed" && o.cpe.device ? (
+              <dl>
+                <Row k="Equipamento">{o.cpe.device.vendor ?? "—"} {o.cpe.device.model ?? ""}{o.cpe.device.firmware ? ` · ${o.cpe.device.firmware}` : ""}</Row>
+                <Row k="Gerência">{o.cpe.device.protocols.length ? o.cpe.device.protocols.join(", ").toUpperCase() : "—"}</Row>
+                {o.cpe.provenance && <Row k="Origem do dado"><SourceChip p={o.cpe.provenance} /></Row>}
+              </dl>
+            ) : o.cpe.link === "suggested" ? (
+              <ul className="space-y-3 text-sm">
+                {o.cpe.suggestions.map((s) => (
+                  <li key={s.id}>
+                    <p>Há um roteador com o <strong>mesmo serial</strong> desta ONU. Igualdade de serial é um indício, não uma prova (confiança {Math.round(s.confidence * 100)}%).</p>
+                    {s.ambiguous && <p className="mt-1 text-warn">Ambíguo: este serial existe em mais de uma OLT. Resolva o inventário antes de confirmar.</p>}
+                    {o.cpe?.can_review ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {!s.ambiguous && (
+                          <form action={`/bff/onu-cpe-links/${s.id}/confirm?onu=${o.id}`} method="post"><button data-testid="cpe-confirm" className="min-h-touch rounded-btn bg-accent px-3 text-[color:var(--on-accent)]">Confirmar vínculo</button></form>
+                        )}
+                        <form action={`/bff/onu-cpe-links/${s.id}/reject?onu=${o.id}`} method="post"><button data-testid="cpe-reject" className="min-h-touch rounded-btn border border-line px-3">Rejeitar</button></form>
+                      </div>
+                    ) : <p className="mt-1 text-muted">Seu papel não permite revisar vínculos.</p>}
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="text-sm text-muted">Nenhum roteador vinculado a esta ONU.</p>}
+            <p className="mt-3 text-xs text-muted">O vínculo ONU↔CPE só vale depois de confirmado por uma pessoa. Nada aqui altera a rede.</p>
           </Card>
         )}
         <Card title="Ações" testid="onu360-actions">

@@ -10,3 +10,11 @@ Existem `/v1/onus/{id}` e `/v1/onus/{id}/customer` (dado pessoal só com `custom
 
 ## Consequências
 Testes: A/B, 403 sem `customers:read`, auditoria registrada, vínculo ausente ≠ erro. Migração aditiva futura para o vínculo (não neste PR).
+
+## Nota de implementação (PR 37, 2026-10-29)
+- Vínculo em `onu_cpe_links` (migration 0017); o campo é `reviewed_by/reviewed_at` (não `confirmed_by`) porque rejeitar também é uma revisão humana. `CHECK`: sugestão não tem revisor.
+- Regra única hoje: `serial_equal` (confiança 0.50; 0.20 e **não confirmável** se o serial da ONU existe em mais de uma OLT). Igualdade de serial é indício, nunca prova.
+- Um vínculo confirmado por ONU e por CPE (índices únicos parciais); rejeitado não é re-sugerido.
+- O contexto só considera ONUs de associação **aprovada**; sem ONU aprovada ⇒ `unknown` (não se afirma nada). Incidente exige `incidents:read`, senão `incident_hidden`.
+- **Suposição a aprovar:** dado de ERP é "atualizado" por 7 dias (importação em lote, não telemetria).
+- Flags `onu_cpe_links` e `customer_context` nascem **desligadas** (ADR-0023); ligadas só no tenant demo pelo seed.

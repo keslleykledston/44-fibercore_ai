@@ -12,7 +12,8 @@ Os contratos listam caminhos relativos ao servidor público **`/api/v1`**. O cor
 
 | Proposto | Reconciliado (caminho público) | Estado |
 |---|---|---|
-| `GET /customers/{id}/context` | `GET /customers/{customer_id}/context` | planned (FC22-004) |
+| `GET /customers/{id}/context` | `GET /customers/{customer_id}/context` | **implemented** (FC22-004, PR 37) |
+| — (novo, ADR-0021) | `POST /onu-cpe-links/suggest`, `GET /onu-cpe-links`, `POST /onu-cpe-links/{link_id}/confirm\|reject` | **implemented** (FC22-004, PR 37) |
 | `GET /devices/{id}/capabilities` | **descartado** (não há recurso `devices`) → `GET /cpes/{cpeId}/capabilities` (**documentada sem handler; implementada no PR 35**) + `GET /olts/{oltId}/capabilities` | **implemented** (PR 35) |
 | `POST /diagnostics/runs` (200) | `POST /diagnostics/runs` (201 + `run_id`) | planned (FC22-006) |
 | `GET /network/topology` | idem | planned (FC22-010) |

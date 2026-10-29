@@ -14,13 +14,61 @@ paths:
     get:
       operationId: getCustomerContext
       x-fc22-id: FC22-004
-      x-status: planned
-      summary: Visão do cliente com fonte e frescor por campo (read-only; dado pessoal exige customers:read e é auditado)
+      x-status: implemented
+      summary: Visão do cliente com fonte e frescor por bloco (read-only; dado pessoal exige customers:read e é auditado; flag customer_context). Só ONUs de associação APROVADA; CPE só com vínculo CONFIRMADO por pessoa; incidente só com incidents:read (senão incident_hidden). status = unknown (sem ONU aprovada) > stale > partial (ONU sem CPE confirmado) > complete. Nunca expõe hmac do documento, ids do ERP nem segredos do CPE
       parameters: [{in: path, name: customer_id, required: true, schema: {type: string, format: uuid}}]
       responses:
         '200': {description: "CustomerContext (status complete|partial|stale|unknown)"}
-        '403': {description: Sem permissão}
+        '403': {description: "Sem permissão, ou feature_disabled (flag customer_context desligada para o provedor)"}
         '404': {description: Cliente inexistente ou de outro provedor}
+        '422': {description: customer_id inválido}
+  /onu-cpe-links/suggest:
+    post:
+      operationId: suggestOnuCpeLinks
+      x-fc22-id: FC22-004
+      x-status: implemented
+      summary: Cria SUGESTÕES ONU↔CPE onde serial da ONU = serial canônico do CPE (regra serial_equal, confiança 0.50; 0.20 se o serial existe em mais de uma OLT). Idempotente; nunca confirma. associations:review + flag onu_cpe_links
+      responses:
+        '201': {description: "{created, examined, limit_reached} (teto 1000 por chamada)"}
+        '403': {description: "Sem permissão ou feature_disabled"}
+  /onu-cpe-links:
+    get:
+      operationId: listOnuCpeLinks
+      x-fc22-id: FC22-004
+      x-status: implemented
+      summary: Lista vínculos ONU↔CPE (status suggested|confirmed|rejected, confiança, evidência). inventory:read + flag onu_cpe_links
+      parameters:
+        - {in: query, name: status, schema: {type: string, enum: [suggested, confirmed, rejected]}}
+        - {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 1000, default: 100}}
+        - {in: query, name: offset, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        '200': {description: Lista de vínculos}
+        '403': {description: "Sem permissão ou feature_disabled"}
+        '422': {description: Parâmetro inválido}
+  /onu-cpe-links/{link_id}/confirm:
+    post:
+      operationId: confirmOnuCpeLink
+      x-fc22-id: FC22-004
+      x-status: implemented
+      summary: Pessoa confirma a sugestão (auditado + evento onu_cpe_link.confirmed). 409 se já revisada, ambígua, ou se a ONU/CPE já tem vínculo confirmado (índices únicos parciais)
+      parameters: [{in: path, name: link_id, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: "{id, status}"}
+        '403': {description: "Sem permissão ou feature_disabled"}
+        '404': {description: Vínculo inexistente}
+        '409': {description: Conflito}
+  /onu-cpe-links/{link_id}/reject:
+    post:
+      operationId: rejectOnuCpeLink
+      x-fc22-id: FC22-004
+      x-status: implemented
+      summary: Pessoa rejeita a sugestão (auditado + evento onu_cpe_link.rejected); a regra não volta a sugerir o mesmo par
+      parameters: [{in: path, name: link_id, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: "{id, status}"}
+        '403': {description: "Sem permissão ou feature_disabled"}
+        '404': {description: Vínculo inexistente}
+        '409': {description: Já revisado}
   /cpes/{cpeId}/capabilities:
     get:
       operationId: getCpeCapabilities

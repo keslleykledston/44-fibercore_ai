@@ -100,3 +100,10 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - NOT_RUN: carga/p95 (AC-018); registro com dados reais de homologação (não há evidência real a registrar ainda).
 - Deploy no LAB (2026-10-29): backup verificado antes; Alembic 0015; `device_capabilities` com RLS forçada, 0 linhas, role da aplicação só `SELECT`; prodcheck sem issues. O LAB ainda não tem OLT coletada, então a tela com dados reais só foi exercitada no E2E sintético.
 
+## 2026-10-29 — Vínculo ONU↔CPE + Customer Context, PR 37 (FC22-004)
+- `pytest -q` (Postgres 17 + NATS descartáveis): **220 passed** (10 novos em `test_inventory_context.py`: tudo desligado por padrão; sugestão por evidência, idempotente e que nunca confirma; confirmar/rejeitar + auditoria + outbox + estado de mão única; rejeitado não reabre; ambíguo não confirma; índices únicos e CHECK no banco (assertando o tipo do erro); RBAC + isolamento A/B; precedência `unknown > stale > partial > complete` e ausência de segredos; auditoria de cada leitura do contexto; `incident_hidden`). `ruff check app tests`: PASS.
+- Mutações (todas reprovadas): ambiguidade confirmável; sem auditoria do contexto; sem flag no contexto; `incidents:read` ignorado; trava `NOT EXISTS` (sobrevivia → asserção `examined == 0` adicionada e o mutante morreu); estado de mão única; `unknown` virando `complete`.
+- `scripts/e2e.sh` completo (com capturas): **42 passed** (1 novo: sugestão por serial → confirmação humana na ONU 360 → equipamento e origem aparecem só depois); axe sem violações sérias. `validate_kit`, `validate_help`, `validate_addendum_v22`: PASS. `tsc --noEmit`: PASS.
+- Achado de isolamento nos testes: outros módulos deixam CPEs/ONUs de mesmo serial no tenant compartilhado; os testes novos filtram por prefixo `CTX-`.
+- NOT_RUN: carga/p95; ERP real (TTL de 7 dias é suposição); NBI real (ver KNOWN_ISSUES).
+

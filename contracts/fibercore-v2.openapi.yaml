@@ -369,6 +369,65 @@ paths:
         '200':
           description: Inventário CPE com fontes CWMP/USP
           content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Cpe'}}}}
+  /onu-cpe-links/suggest:
+    post:
+      tags: [Inventory]
+      operationId: suggestOnuCpeLinks
+      summary: Cria SUGESTÕES ONU↔CPE onde o serial da ONU = serial canônico do CPE (regra serial_equal, confiança 0.50; 0.20 se o serial existe em mais de uma OLT). Idempotente; nunca confirma. Exige associations:review e a flag onu_cpe_links (ADR-0021)
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      responses:
+        '201': {description: "{created, examined, limit_reached} (teto de 1000 pares por chamada)"}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /onu-cpe-links:
+    get:
+      tags: [Inventory]
+      operationId: listOnuCpeLinks
+      summary: Vínculos ONU↔CPE (suggested|confirmed|rejected) com confiança e evidência. inventory:read + flag onu_cpe_links
+      parameters:
+        - {$ref: '#/components/parameters/TenantId'}
+        - {name: status, in: query, schema: {type: string, enum: [suggested, confirmed, rejected]}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 1000, default: 100}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        '200': {description: Lista de vínculos, content: {application/json: {schema: {type: array, items: {type: object}}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /onu-cpe-links/{link_id}/confirm:
+    post:
+      tags: [Inventory]
+      operationId: confirmOnuCpeLink
+      summary: Uma pessoa confirma a sugestão (auditado + evento onu_cpe_link.confirmed). 409 se já revisada, ambígua, ou se a ONU/CPE já tem vínculo confirmado
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: link_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: "{id, status}"}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Vínculo inexistente ou de outro provedor}
+        '409': {description: Conflito}
+  /onu-cpe-links/{link_id}/reject:
+    post:
+      tags: [Inventory]
+      operationId: rejectOnuCpeLink
+      summary: Uma pessoa rejeita a sugestão (auditado + evento onu_cpe_link.rejected); a regra não volta a sugerir o mesmo par
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: link_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: "{id, status}"}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Vínculo inexistente ou de outro provedor}
+        '409': {description: Já revisado}
+  /customers/{customer_id}/context:
+    get:
+      tags: [ERP]
+      operationId: getCustomerContext
+      summary: Visão read-only de UM cliente (contrato + ONUs de associação APROVADA + CPE só com vínculo CONFIRMADO), cada bloco com fonte/data/qualidade. customers:read, auditado (customer.context.view), flag customer_context. status = unknown > stale > partial > complete. Incidente só com incidents:read (senão incident_hidden). Nunca expõe HMAC do documento, ids do ERP nem segredos do CPE
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: customer_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: CustomerContext, content: {application/json: {schema: {type: object}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Cliente inexistente ou de outro provedor}
   /cpes/{cpeId}/capabilities:
     get:
       tags: [CPE]

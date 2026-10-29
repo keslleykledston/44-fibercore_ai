@@ -102,6 +102,30 @@ test("ONU 360: painel lateral abre pelo serial, foco volta ao fechar e a página
   expect((await page.goto("/rede/onu/nao-e-uuid"))?.status()).toBe(404);
 });
 
+test("ONU↔CPE: serial igual só gera SUGESTÃO; vale depois da confirmação humana na ONU 360 (nada escreve na rede)", async ({ page, request }) => {
+  const tok = (await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json()).access_token as string;
+  const sug = await request.post(`${API_URL}/v1/onu-cpe-links/suggest`, { headers: { Authorization: `Bearer ${tok}` } });
+  expect(sug.status()).toBe(201);
+  await login(page);
+  await page.goto("/rede?serial=DEMOA0001");
+  await page.getByTestId("onu-open").click();
+  await page.getByTestId("onu-360-link").click();
+  const card = page.getByTestId("onu360-cpe");
+  await expect(card).toBeVisible();
+  if (await page.getByTestId("cpe-confirm").count()) {  // primeira execução: ainda sugerido
+    await expect(card).toContainText("mesmo serial");
+    await expect(card).toContainText("indício, não uma prova");
+    await expect(card).not.toContainText("Huawei HG8245H");  // nada do equipamento aparece antes da confirmação
+    await page.getByTestId("cpe-confirm").click();
+    await expect(page.getByTestId("onu360-cpe")).toContainText("Vínculo confirmado.");
+  }
+  await expect(page.getByTestId("onu360-cpe")).toContainText("Huawei HG8245H");
+  await expect(page.getByTestId("onu360-cpe")).toContainText("TR069");
+  await expect(page.getByTestId("onu360-cpe").getByTestId("source-chip")).toContainText("GenieACS (NBI)");
+  const res = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+  expect(res.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
+});
+
 for (const scheme of ["light", "dark"] as const) {
   test(`acessibilidade (axe) sem violações sérias - tema ${scheme}`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });

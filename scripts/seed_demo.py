@@ -33,6 +33,8 @@ def main() -> None:
     cli("add-member", tenant, EMAIL, "isp_admin")
     cli("create-user", AGENT_EMAIL, "Agente Demo", "--password-env", "DEMO_PW", env={"DEMO_PW": PW})  # second member: target of the MFA-reset E2E
     cli("add-member", tenant, AGENT_EMAIL, "engineer")
+    cli("feature-set", tenant, "onu_cpe_links", "on")  # FC22-004 (ADR-0021/0023): off by default in production, on for the demo tenant
+    cli("feature-set", tenant, "customer_context", "on")
     edge = cli("register-edge", tenant, "edge-demo", "--site", "POP Central (demo)")
     sa = subprocess.run([*COMPOSE, "run", "--rm", "-T", "--no-deps", "migrate", "python", "-m", "app.cli",
                          "create-service-account", tenant, "edge-demo-agent", "edge_agent", "--edge-id", edge],
@@ -69,7 +71,9 @@ def main() -> None:
             assert r.status_code == 202, r.text
     r = c.post("/v1/edge/cpe-snapshots", headers=h, json={"edge_id": edge, "observed_at": datetime.now(UTC).isoformat(), "cpes": [
         {"canonical_serial": f"DEMOCPE{i:03d}", "vendor": "Huawei", "model": "HG8245H",
-         "binding": {"protocol": "tr069", "external_id": f"DEMO-OUI-HG8245H-DEMOCPE{i:03d}", "connector_id": "genieacs-demo"}} for i in range(5)]})
+         "binding": {"protocol": "tr069", "external_id": f"DEMO-OUI-HG8245H-DEMOCPE{i:03d}", "connector_id": "genieacs-demo"}} for i in range(5)]
+        + [{"canonical_serial": "DEMOA0001", "vendor": "Huawei", "model": "HG8245H",  # same serial as an ONU: the link is only SUGGESTED, a person confirms
+            "binding": {"protocol": "tr069", "external_id": "DEMO-OUI-HG8245H-DEMOA0001", "connector_id": "genieacs-demo"}}]})
     assert r.status_code == 202, r.text
     # --- como administrador do provedor: importa clientes fictícios e cria operações ---
     u = httpx.Client(base_url=API, timeout=15)
