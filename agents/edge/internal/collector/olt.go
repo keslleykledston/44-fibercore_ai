@@ -30,6 +30,15 @@ type OLTSource struct {
 	Interval time.Duration
 	// Cooldown is how long the OLT is left alone after ANY failed collection. 0 = the transport default (snmpCooldown / cliCooldown).
 	Cooldown time.Duration
+	// Timeout overrides the wall-clock budget of one attempt (opening the session included). 0 = oltTimeout(len(Ports)).
+	Timeout time.Duration
+}
+
+func (s OLTSource) budget() time.Duration {
+	if s.Timeout > 0 {
+		return s.Timeout
+	}
+	return oltTimeout(len(s.Ports))
 }
 
 const (
@@ -140,14 +149,14 @@ func (o *OLT) collectOne(ctx context.Context, src OLTSource, observed string) ([
 }
 
 func (o *OLT) collectCLI(ctx context.Context, src OLTSource, observed string) ([]Item, error) {
+	// Per-OLT limits: wall-clock (the login included), commands and total bytes (bounded regardless of port count).
+	ctx, cancel := context.WithTimeout(ctx, src.budget())
+	defer cancel()
 	raw, closeFn, err := src.Open(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer closeFn()
-	// Per-OLT limits: wall-clock, commands and total bytes (worst case stays bounded regardless of port count).
-	ctx, cancel := context.WithTimeout(ctx, oltTimeout(len(src.Ports)))
-	defer cancel()
 	sess := olt.NewBudget(olt.ReadOnlySession{Inner: raw, Allowed: src.Driver.Allowed}, commandBudget(len(src.Ports)), maxBytesPerOLT)
 	id, err := src.Driver.Identify(ctx, sess)
 	if err != nil {
@@ -272,13 +281,13 @@ func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, er
 // collectSNMP reads an OLT over SNMP. The end of an SNMP table is unambiguous, so completeness is whatever the driver proved
 // in band (PON.Verified), and still requires an observed driver level.
 func (o *OLT) collectSNMP(ctx context.Context, src OLTSource, observed string) ([]Item, error) {
+	ctx, cancel := context.WithTimeout(ctx, src.budget())
+	defer cancel()
 	r, closeFn, err := src.OpenSNMP(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer closeFn()
-	ctx, cancel := context.WithTimeout(ctx, oltTimeout(len(src.Ports)))
-	defer cancel()
 	id, err := src.SNMPDriver.Identify(ctx, r, src.Ports)
 	if err != nil {
 		return nil, err

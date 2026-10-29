@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18817-3ebd-7b62-a057-d0318c2794ff).
+[codex] Turn started (01a18817-4121-7500-a5f9-8e3903b5cdee).
+[codex] Assistant message captured: Vou inspecionar o diff e os fluxos relacionados de guard, Agent e coleta, com foco nos limite...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,220p' agents/edge/internal/agent/agent.go; rg -n 'fmt\\.Errorf|error...
+[codex] Command completed: /bin/bash -lc "sed -n '1,220p' agents/edge/internal/agent/agent.go; rg -n 'fmt\\.Errorf|error... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '35,55p;235,290p'; nl -b...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '35,55p;235,290p'; nl -b... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o timeout por OLT começa depois da...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o timeout por OLT começa depois da abertura da sessão, deixando parte da tentativa fora do orçamento anunciado.
+
+Findings:
+- [medium] O orçamento por OLT não limita a abertura da sessão (agents/edge/internal/collector/olt.go:147-151)
+  `collectCLI` e `collectSNMP` só criam o timeout depois de `src.Open`/`src.OpenSNMP`. Assim, a tentativa pode gastar tempo adicional estabelecendo a conexão antes de receber o orçamento calculado; o tempo registrado pelo hook inclui essa abertura, mas o limite não. O contexto de 10 minutos do Agent pode limitar a coleta periódica, porém não faz o timeout por OLT cobrir toda a tentativa. Crie o contexto limitado antes de abrir a sessão e use-o tanto na abertura quanto na coleta.
+  Recommendation: Inicie `context.WithTimeout` no início da tentativa e passe esse contexto à abertura e às operações de coleta, em CLI e SNMP.
+finished

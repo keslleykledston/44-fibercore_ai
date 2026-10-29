@@ -792,3 +792,21 @@ func TestOnCollectedReportsOnlyAttemptsThatReachedTheDeviceAndNeverDeviceOutput(
 		t.Fatalf("calls=%+v", calls)
 	}
 }
+
+func TestTheTimeoutCoversOpeningTheSessionNotOnlyTheReads(t *testing.T) {
+	var opens, runs int
+	for _, snmp := range []bool{false, true} {
+		s := cliSrc(&opens, &runs, nil)
+		s.Timeout = 50 * time.Millisecond
+		s.Open = func(ctx context.Context) (olt.Session, func(), error) { <-ctx.Done(); return nil, nil, ctx.Err() } // a login that hangs
+		if snmp {
+			s = OLTSource{Name: "snmp", Ports: []string{"0/0/14"}, SNMPDriver: olt.HuaweiSNMP{}, Timeout: 50 * time.Millisecond,
+				OpenSNMP: func(ctx context.Context) (olt.SNMPReader, func(), error) { <-ctx.Done(); return nil, nil, ctx.Err() }}
+		}
+		start := time.Now()
+		_, err := (&OLT{Sources: []OLTSource{s}}).Collect(context.Background())
+		if err == nil || !errors.Is(err, context.DeadlineExceeded) || time.Since(start) > 2*time.Second {
+			t.Fatalf("snmp=%v: a hanging login must be cut by the per-OLT budget: err=%v after %s", snmp, err, time.Since(start))
+		}
+	}
+}
