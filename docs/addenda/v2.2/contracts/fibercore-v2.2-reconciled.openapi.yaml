@@ -21,17 +21,26 @@ paths:
         '200': {description: "CustomerContext (status complete|partial|stale|unknown)"}
         '403': {description: Sem permissão}
         '404': {description: Cliente inexistente ou de outro provedor}
-  /devices/{device_id}/capabilities:
+  /cpes/{cpeId}/capabilities:
     get:
-      operationId: getDeviceCapabilities
+      operationId: getCpeCapabilities
       x-fc22-id: FC22-002
       x-status: planned
-      summary: Capacidades do dispositivo (OLT ou CPE) pelo perfil vendor/model/firmware; operação sem registro = unknown
-      parameters: [{in: path, name: device_id, required: true, schema: {type: string, format: uuid}}]
+      summary: DOCUMENTADA no contrato vigente, SEM handler no código. Capacidades pelo perfil vendor/model/firmware do CPE; operação sem registro = unknown (schema Capability vigente)
+      parameters: [{in: path, name: cpeId, required: true, schema: {type: string, format: uuid}}]
       responses:
-        '200': {description: "{device_id, device_type, profile{vendor,model,firmware}, capabilities[{operation, protocol, support, certification, firmware, verified_at, evidence_ref}]}"}
-        '403': {description: Sem permissão}
-        '404': {description: Dispositivo inexistente ou de outro provedor}
+        '200': {description: "[Capability] do contrato vigente: name, status supported|unsupported|unknown, protocol, certification, model, firmware"}
+        '404': {description: CPE inexistente ou de outro provedor}
+  /olts/{oltId}/capabilities:
+    get:
+      operationId: getOltCapabilities
+      x-fc22-id: FC22-002
+      x-status: planned
+      summary: Mesmo contrato para OLT (perfil da OLT; ONU usa o perfil da sua OLT). Substitui o recurso genérico /devices/{id} da proposta, que não existe no modelo
+      parameters: [{in: path, name: oltId, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: "[Capability]"}
+        '404': {description: OLT inexistente ou de outro provedor}
   /diagnostics/runs:
     post:
       operationId: createDiagnosticRun
@@ -57,6 +66,14 @@ paths:
       parameters: [{in: path, name: subject_id, required: true, schema: {type: string, format: uuid}}]
       responses:
         '200': {description: Lista de QoeScore}
+  /jobs/preview:
+    post:
+      operationId: previewJob
+      x-fc22-id: FC22-014
+      x-status: implemented
+      summary: JÁ EXISTE. É o preview/aprovação de workflows (motor de jobs); a proposta /workflow-previews é descartada para não duplicar
+      responses:
+        '201': {description: Job em PREVIEWED}
   /workflow-definitions:
     get:
       operationId: listWorkflowDefinitions

@@ -1,0 +1,41 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a185c4-8ff0-7f61-9384-8383bcd20bcf).
+[codex] Turn started (01a185c4-9c89-7b00-a8f2-4989cecee935).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e rastrear cada afirmação do adendo até os arquivos e teste...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --name-only main...HEAD && git status ...
+[codex] Command failed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --name-only main...HEAD && git status ... (exit 2)
+[codex] Running command: /bin/bash -lc 'cat docs/addenda/v2.2/GAP_ANALYSIS.md docs/addenda/v2.2/README.md docs/addenda...
+[codex] Command completed: /bin/bash -lc 'cat docs/addenda/v2.2/GAP_ANALYSIS.md docs/addenda/v2.2/README.md docs/addenda... (exit 0)
+[codex] Assistant message captured: Já apareceu um risco central: a descrição do contrato diz que reconcilia o prefixo e o `x-sta...
+[codex] Running command: /bin/bash -lc 'cat docs/addenda/v2.2/contracts/fibercore-v2.2-reconciled.openapi.yaml docs/ad...
+[codex] Command failed: /bin/bash -lc 'cat docs/addenda/v2.2/contracts/fibercore-v2.2-reconciled.openapi.yaml docs/ad... (exit 2)
+[codex] Running command: /bin/bash -lc "pwd; ls -la; git ls-tree -r --name-only main | head -80; git ls-tree -r --name...
+[codex] Command completed: /bin/bash -lc "pwd; ls -la; git ls-tree -r --name-only main | head -80; git ls-tree -r --name... (exit 0)
+[codex] Assistant message captured: O cruzamento identificou incompatibilidades concretas: a API vigente contém rotas de capabili...
+[codex] Running command: /bin/bash -lc "nl -ba contracts/fibercore-v2.openapi.yaml | sed -n '330,410p'; nl -ba docs/ad...
+[codex] Command completed: /bin/bash -lc "nl -ba contracts/fibercore-v2.openapi.yaml | sed -n '330,410p'; nl -ba docs/ad... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/addenda/v2.2/GAP_ANALYSIS.md | sed -n '30,68p'; nl -ba docs/addend...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/addenda/v2.2/GAP_ANALYSIS.md | sed -n '30,68p'; nl -ba docs/addend... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: a reconciliação do contrato dá sta...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: a reconciliação do contrato dá status incorreto a rotas existentes, e o validador não comprova as afirmações que anuncia. Há também uma divergência material entre a GAP e os contratos para capabilities.
+
+Findings:
+- [high] Contrato reconciliado omite rotas existentes e valida apenas contra a própria spec (tests/validate_addendum_v22.py:39-49)
+  A spec vigente já contém `GET /cpes/{cpeId}/capabilities` e `POST /jobs/preview`, mas a reconciliação não lista a primeira e a tabela chama a segunda de “existe” sem incluí-la. O validador compara somente operações que aparecem na spec reconciliada com a spec vigente; portanto, não detecta operações existentes omitidas. Ele também não verifica rotas implementadas no código, apesar da descrição dizer “API real”. Isso deixa o inventário `x-status` incompleto e permite que o teste passe sem validar a promessa de cobertura.
+  Recommendation: Compare a lista reconciliada com o conjunto completo de operações vigentes, incluindo rotas implementadas mas ausentes da spec reconciliada; inclua as capabilities CPE e `/jobs/preview` com seus IDs e status apropriados.
+- [high] O validador aceita o prefixo `/api/v1` que a reconciliação diz remover (tests/validate_addendum_v22.py:42)
+  A GAP afirma que o core usa `/v1` e que o proxy remove `/api`; a própria RECONCILED_API exige caminhos sem `/api`. Porém, o contrato reconciliado e o contrato vigente declaram `/api/v1`, e o validador apenas compara os dois valores iguais. Assim o teste passa exatamente quando a contradição documental continua presente, podendo induzir consumidores a usar o prefixo incorreto para a API interna ou o inverso para a pública.
+  Recommendation: Defina e valide separadamente o prefixo público e o caminho interno conforme proxy/ADR-0012; alinhe a spec reconciliada e a RECONCILED_API com essa distinção, sem usar igualdade entre specs como prova.
+- [medium] A GAP declara que não há capabilities para CPE apesar de a API vigente documentá-las (docs/addenda/v2.2/GAP_ANALYSIS.md:12)
+  FC22-002 diz que falta cobertura de CPE e API de leitura, mas a spec vigente já tem `GET /cpes/{cpeId}/capabilities` com descrição de capacidades por protocolo/firmware e homologação. Isso pode distorcer o escopo da fatia PR 35 e ocultar a necessidade real: verificar a implementação e cobertura do contrato existente, em vez de tratar a rota como ausente. A matriz também descreve ausência do recurso genérico `devices`, sem reconciliar essa rota CPE existente.
+  Recommendation: Inspecione handler e testes da rota existente; registre-a como existente ou parcial conforme evidência e explique explicitamente a diferença entre capabilities CPE atuais e o novo registro por perfil que se propõe.
+
+Next steps:
+- Atualizar o contrato reconciliado e a matriz de GAP com as operações já documentadas na spec vigente.
+- Corrigir o validador para testar cobertura de operações e a distinção entre prefixo público e interno.

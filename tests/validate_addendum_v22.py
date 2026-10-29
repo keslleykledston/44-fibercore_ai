@@ -36,17 +36,62 @@ qoe = json.loads((ADD / "examples" / "qoe-insufficient.synthetic.json").read_tex
 jsonschema.validate({k: qoe[k] for k in ("score_type", "status", "score", "coverage", "algorithm_version")}, add_api["components"]["schemas"]["QoeScore"])
 assert qoe["score"] is None and qoe["status"] == "insufficient_data"
 
-# 4) contrato reconciliado × API real: implemented <=> existe no contrato vigente; planned não colide
+# 4) contrato reconciliado x API REAL (código FastAPI importado) x proxy
+import sys
+
+sys.path.insert(0, str(ROOT / "apps" / "api"))
+from fastapi.routing import APIRoute  # noqa: E402
+
+from app.main import app  # noqa: E402
+
+
+def _code_routes(routes):
+    for r in routes:
+        if isinstance(r, APIRoute):
+            for m in r.methods - {"HEAD", "OPTIONS"}:
+                yield m.lower(), r.path
+        elif hasattr(r, "original_router"):
+            yield from _code_routes(r.original_router.routes)
+
+
+norm = lambda p: re.sub(r"\{[^}]+\}", "{}", p)  # noqa: E731
+CODE = {(m, norm(p)) for m, p in _code_routes(app.routes)}
+assert all(p.startswith("/v1/") or p in ("/livez", "/readyz", "/version") for _, p in CODE), "rota do core fora de /v1"
+proxy = (ROOT / "infra" / "deploy" / "Caddyfile.upstream").read_text(encoding="utf-8")
+assert re.search(r"^\s*uri strip_prefix /api\s*$", proxy, re.M), "o proxy deveria remover exatamente o prefixo /api (ADR-0012)"
+
 real = yaml.safe_load((ROOT / "contracts" / "fibercore-v2.openapi.yaml").read_text(encoding="utf-8"))
 rec = yaml.safe_load((ADD / "contracts" / "fibercore-v2.2-reconciled.openapi.yaml").read_text(encoding="utf-8"))
-assert rec["servers"][0]["url"] == real["servers"][0]["url"] == "/api/v1", "prefixo de API divergente"
+assert rec["servers"][0]["url"] == real["servers"][0]["url"] == "/api/v1", "prefixo PÚBLICO divergente"
+HTTP = ("get", "post", "put", "delete", "patch")
+SPEC = {(m, norm("/v1" + p)) for p, ops in real["paths"].items() for m in ops if m in HTTP}  # público /api/v1 -> interno /v1
+
+# deriva contrato x código: tem de ser EXATAMENTE a conhecida (C-19 da GAP); deriva nova reprova
+KNOWN_DOCUMENTED_NOT_IMPLEMENTED = {
+    ("get", "/v1/cpes/{}/capabilities"), ("get", "/v1/integrations/erp"), ("post", "/v1/integrations/erp"),
+    ("post", "/v1/integrations/erp/{}/sync"), ("post", "/v1/copilot/suggestions"),
+}
+HEALTH = {("get", "/livez"), ("get", "/readyz"), ("get", "/version")}
+assert SPEC - CODE == KNOWN_DOCUMENTED_NOT_IMPLEMENTED, f"deriva contrato->código mudou: {sorted(SPEC - CODE)}"
+assert CODE - SPEC - HEALTH == set(), f"rota no código sem contrato: {sorted(CODE - SPEC - HEALTH)}"
+GAP_NORM = norm((ADD / "GAP_ANALYSIS.md").read_text(encoding="utf-8"))
+for m, p in KNOWN_DOCUMENTED_NOT_IMPLEMENTED:
+    assert p.replace("/v1", "", 1) in GAP_NORM, f"deriva sem registro na GAP_ANALYSIS: {p}"
+
+REC = {}
 for path, ops in rec["paths"].items():
     for method, op in ops.items():
         fid, status = op.get("x-fc22-id"), op.get("x-status")
         assert re.fullmatch(r"FC22-0\d\d", str(fid)), f"{method} {path}: x-fc22-id ausente"
         assert status in ("implemented", "planned"), f"{method} {path}: x-status inválido"
-        in_real = method in real["paths"].get(path, {})
-        assert (status == "implemented") == in_real, f"{method} {path}: x-status={status} mas existe_no_contrato_vigente={in_real}"
+        key = (method, norm("/v1" + path))
+        REC[key] = status
+        assert (status == "implemented") == (key in CODE), f"{method} {path}: x-status={status} mas rota no CÓDIGO={key in CODE}"
+        assert ((status == "planned") and key in SPEC) <= (key in KNOWN_DOCUMENTED_NOT_IMPLEMENTED), f"{method} {path}: planned colide com rota já documentada"
+# toda operação do contrato vigente sobre capabilities / jobs/preview precisa constar no reconciliado
+for m, p in SPEC:
+    if p.endswith("/capabilities") or p.endswith("/jobs/preview"):
+        assert (m, p) in REC, f"operação existente omitida do reconciliado: {m} {p}"
 
 # 5) rastreabilidade: todos os FC22 no backlog e na análise; todos os AC na matriz de testes; ADRs 0019-0023 com Status
 backlog = (ROOT / "docs" / "product" / "ROADMAP_BACKLOG.md").read_text(encoding="utf-8")

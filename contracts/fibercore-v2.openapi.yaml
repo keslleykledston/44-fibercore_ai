@@ -159,6 +159,15 @@ paths:
       responses:
         '200': {description: Token emitido, content: {application/json: {schema: {$ref: '#/components/schemas/TokenResponse'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
+  /auth/workspaces:
+    get:
+      tags: [Platform]
+      operationId: listMyWorkspaces
+      summary: Workspaces (tenants) do USUÁRIO autenticado; não exige seleção de tenant. Token revogado/conta inativa = 401
+      responses:
+        '200': {description: "[{tenant_id, name, role}]"}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {description: Token de serviço não se aplica}
   /auth/me:
     get:
       tags: [Platform]

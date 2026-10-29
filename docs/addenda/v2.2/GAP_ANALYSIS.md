@@ -9,7 +9,7 @@ Legenda: **existe** = código + teste no repo; **parcial** = há base, falta par
 | ID | Requisito v2.2 | Estado | Evidência real no repo | O que falta | Dependências | Decisão |
 |---|---|---|---|---|---|---|
 | FC22-001 | Audit + matriz de gaps | **este PR** | — | — | — | Entregue como documento; nada declarado pronto |
-| FC22-002 | Capability Registry (modelo+firmware+protocolo, `unknown` por padrão) | **parcial** | Edge `olt.Registry` (vendor/model/firmware → `identified/observed/certified`); `olts.support_level`; `jobs.OPERATIONS` + `HOMOLOGATED_WRITES` (vazio, gate global) | Tabela no Cloud; cobertura de CPE/TR-069/TR-369; API de leitura; gate por perfil nos jobs | 001 | **ADR-0019**; slice P0 desta entrega (tabela + leitura + UI mínima; escrita só por CLI do dono) |
+| FC22-002 | Capability Registry (modelo+firmware+protocolo, `unknown` por padrão) | **parcial** | Edge `olt.Registry` (vendor/model/firmware → `identified/observed/certified`); `olts.support_level`; `jobs.OPERATIONS` + `HOMOLOGATED_WRITES` (vazio, gate global); **contrato vigente documenta `GET /cpes/{cpeId}/capabilities` + schema `Capability`, mas não há handler no código** | Tabela no Cloud; implementar a rota **já documentada** (CPE) e a equivalente de OLT; cobertura TR-069/TR-369; gate por perfil nos jobs | 001 | **ADR-0019**; slice P0 desta entrega (tabela + leitura + UI mínima; escrita só por CLI do dono) |
 | FC22-003 | Freshness/provenance em snapshots | **parcial** | `observed_at` em olts/onus/cpes/bindings; `_fresh()` (15 min) → `fresh/stale/unknown`; `DataFreshness` na UI; ONU 360 diz `source` | Campo `source`/`quality` padronizado nas respostas; `conflict` (2 fontes divergem); tabela `observations` | 001 | **ADR-0020**: envelope de proveniência nas respostas; `observations` só quando houver telemetria (P1) |
 | FC22-004 | Customer Context API read-only | **parcial** | `GET /v1/onus/{id}`, `/v1/onus/{id}/customer` (customers:read, auditado), `/v1/customers`, `/v1/associations` | Agregador centrado no cliente (`/v1/customers/{id}/context`); vínculo ONU↔CPE | 002, 003 | **ADR-0021** |
 | FC22-005 | Subscriber 360 | **parcial** | Tela ONU 360 (`/rede/onu/[id]`) com Estado/Localização/Incidente/Assinante/Ações; how-to `rede/onu-360` | Entrada por cliente/contrato; abas Conexão/Óptica/Wi-Fi/Cliente/Histórico/Ações; CPE; timeline | 004 | Evoluir a ONU 360 (mesma rota), não criar tela paralela |
@@ -32,9 +32,9 @@ Legenda: **existe** = código + teste no repo; **parcial** = há base, falta par
 
 | # | Ponto | Adendo diz | Repo faz | Decisão |
 |---|---|---|---|---|
-| C-01 | Prefixo de API | `/api/v1` | Core `/v1`, proxy remove `/api` (ADR-0012) | Sem conflito |
+| C-01 | Prefixo de API | `/api/v1` | **Público** `/api/v1/*`; **interno** do core `/v1/*` (o proxy faz `uri strip_prefix /api`, `infra/deploy/Caddyfile.upstream`; ADR-0012). Os contratos listam caminhos relativos ao servidor público | Sem conflito; validador confere código (`/v1`) e proxy (strip) separadamente |
 | C-02 | `X-Workspace-ID` | obrigatório | Opcional com 1 só membership; valida contra memberships | Manter o do repo (compatível) |
-| C-03 | `/devices/{id}` | recurso único | **Não existe `devices`**: ids em `olts`, `cpes`, `onus` | `GET /v1/devices/{id}/capabilities` resolve OLT ou CPE por UUID; ONU usa o perfil da sua OLT |
+| C-03 | `/devices/{id}` | recurso único | **Não existe `devices`**: ids em `olts`, `cpes`, `onus`; o contrato vigente já tem `/cpes/{cpeId}/capabilities` | **Descartar `/devices/{id}`**: implementar a rota CPE já documentada + `/olts/{oltId}/capabilities`; ONU usa o perfil da sua OLT |
 | C-04 | `Observation.quality` | `fresh/stale/unknown/conflict` | `fresh/stale/unknown` | Adicionar `conflict` só quando houver 2ª fonte (ADR-0020) |
 | C-05 | Customer Context | `GET /customers/{id}/context` | `/v1/customers` lista com auditoria; dado pessoal só `customers:read` | Sub-rota nova; mantém RBAC + auditoria de PII (ADR-0021) |
 | C-06 | `POST /diagnostics/runs` | responde 200 | POST que cria devolve 201 + id | 201 com id da execução (auditável) |
@@ -51,10 +51,12 @@ Legenda: **existe** = código + teste no repo; **parcial** = há base, falta par
 | C-17 | Migração | expand/contract | Alembic aditivo; backup + restore verificado antes de migrar | Mantido |
 | C-18 | `unknown` | nunca virar offline | ONU `status` já tem `unknown` | Mantido; teste existente |
 
+| C-19 | Contrato × código (deriva existente) | — | Contrato vigente documenta e o código **não** implementa: `GET /cpes/{cpeId}/capabilities`, `GET/POST /integrations/erp`, `POST /integrations/erp/{erpId}/sync`, `POST /copilot/suggestions`. O código tem `GET /v1/auth/workspaces` que o contrato **não** documentava | `/auth/workspaces` passou a constar no contrato (este PR). As 5 rotas documentadas e não implementadas ficam **registradas como deriva conhecida**; o validador falha se surgir deriva nova |
+
 ## 3. Proposta de implementação incremental
 
 1. **PR 34 (este)** — só docs/contratos/fixtures/teste de schema; sem código de produto.
-2. **PR 35 — FC22-002, fatia mínima** — migração `device_capabilities` (RLS, CHECKs, default `unknown`), `GET /v1/devices/{id}/capabilities`, CLI do dono para registrar evidência, bloco "Capacidades" no card **Ações** da ONU 360, testes (isolamento A/B, `unknown` padrão, escrita nunca liberada), how-to + capturas atualizados, Codex.
+2. **PR 35 — FC22-002, fatia mínima** — migração `device_capabilities` (RLS, CHECKs, default `unknown`), `GET /v1/cpes/{cpeId}/capabilities` (já documentada no contrato, sem handler) e `GET /v1/olts/{oltId}/capabilities`, CLI do dono para registrar evidência, bloco "Capacidades" no card **Ações** da ONU 360, testes (isolamento A/B, `unknown` padrão, escrita nunca liberada), how-to + capturas atualizados, Codex.
 3. **S1** — FC22-003 (envelope `source`/`quality`), 004 (context + vínculo ONU↔CPE), 005 (Subscriber 360; Lovable em lote).
 4. **S2** — 006 (R-D001 extraída, runs), 007, 009; 008 validada.
 5. **S3/S4** — 010–013 só com dado real; 014–016.
