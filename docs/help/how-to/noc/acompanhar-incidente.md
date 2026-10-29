@@ -23,7 +23,8 @@ ui_route: "/noc"
 4. Em cada incidente, leia o título (OLT e PON), as evidências (ONUs fora, LOS, falta de energia) e o **impacto**: "N cliente(s) afetado(s) · fonte: associações aprovadas".
 5. Clique no título para abrir o **painel lateral** com as evidências, o impacto e as ONUs do incidente (**Abrir** leva à ONU 360). **Esc** ou **Fechar** volta para a fila, sem trocar de tela.
 6. Leia a **causa suspeita**: é uma hipótese, não um diagnóstico.
-7. Se aparecer o aviso **Edge silencioso**, o estado exibido é o último conhecido e não está confirmado agora.
+7. Para assumir a análise, clique em **Reconhecer incidente** no painel lateral. Isso só registra, com seu nome e a hora (na auditoria), que alguém assumiu; **não altera nada na rede**. A fila passa a mostrar **Reconhecido** e o indicador **Não reconhecidos** diminui. Se outra pessoa reconhecer antes, a tela só mostra o estado final. Sem a permissão `incidents:ack`, a tela avisa que seu papel não permite.
+8. Se aparecer o aviso **Edge silencioso**, o estado exibido é o último conhecido e não está confirmado agora.
 
 ![Tela em desktop 1440×900 — Como acompanhar um incidente no NOC](../../assets/noc/acompanhar-incidente/desktop.png)
 
@@ -53,5 +54,5 @@ Incidentes abertos aparecem primeiro, com o estado, a contagem de evidências e 
 
 - Build/commit: 1d9fb94 (árvore de trabalho do PR)
 - Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844
-- Caso de teste E2E: help-screenshots.spec.ts › noc/acompanhar-incidente; app.spec.ts › dados defasados
+- Caso de teste E2E: help-screenshots.spec.ts › noc/acompanhar-incidente; app.spec.ts › dados defasados; noc-ack-and-search.spec.ts › reconhecer incidente pelo painel
 - Dados: fictícios (seed `scripts/seed_demo.py`); sem informações reais de clientes

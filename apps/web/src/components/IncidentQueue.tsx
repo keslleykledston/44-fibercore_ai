@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { EntityDetailDrawer } from "@/components/EntityDetailDrawer";
 import { StatusPill } from "@/components/ui";
@@ -18,11 +19,26 @@ export function ImpactText({ i }: { i: Impact }) {
 type Load = { state: "idle" } | { state: "loading" } | { state: "error"; msg: string } | { state: "ok"; d: IncidentDetail };
 
 /** Fila de incidentes na ordem de prioridade do servidor; o incidente abre em painel lateral (sem trocar de tela). Só leitura. */
+type Ack = { state: "idle" } | { state: "sending" } | { state: "error"; msg: string };
+
 export function IncidentQueue({ incidents }: { incidents: Incident[] }) {
+  const router = useRouter();
   const [sel, setSel] = useState<Incident | null>(null);
+  const [acked, setAcked] = useState<Set<string>>(new Set());
+  const [ack, setAck] = useState<Ack>({ state: "idle" });
   const [load, setLoad] = useState<Load>({ state: "idle" });
   const trigger = useRef<HTMLElement | null>(null);
-  const close = () => { setSel(null); setLoad({ state: "idle" }); trigger.current?.focus(); };
+  const close = () => { setSel(null); setLoad({ state: "idle" }); setAck({ state: "idle" }); trigger.current?.focus(); };
+  const isAcked = (i: Incident) => i.acknowledged || acked.has(i.id);
+  const reconhecer = async (id: string) => {
+    setAck({ state: "sending" });
+    try {
+      const r = await fetch(`/bff/incidents/${id}/ack`, { method: "POST", cache: "no-store" });
+      if (r.ok || r.status === 409) { // 409: outra pessoa já reconheceu; o estado final é o mesmo
+        setAcked((s) => new Set(s).add(id)); setAck({ state: "idle" }); router.refresh(); // atualiza os indicadores do servidor
+      } else setAck({ state: "error", msg: r.status === 403 ? "Seu papel não permite reconhecer incidentes." : "Não foi possível reconhecer o incidente. Tente de novo." });
+    } catch { setAck({ state: "error", msg: "Não foi possível reconhecer o incidente. Tente de novo." }); }
+  };
   const open = async (i: Incident, el: HTMLElement) => {
     trigger.current = el; setSel(i); setLoad({ state: "loading" });
     try {
@@ -43,7 +59,7 @@ export function IncidentQueue({ incidents }: { incidents: Incident[] }) {
             <p className="text-sm" data-testid="incident-impact"><ImpactText i={i.impact} /></p>
             <p className="text-sm text-muted">{cause[i.suspected_cause] ?? cause.unknown} — hipótese, não diagnóstico.</p>
             {i.edge_silent && <p className="mt-1 text-sm text-warn">Edge silencioso: este é o último estado conhecido, não confirmado agora.</p>}
-            <p className="mt-1 text-xs text-muted">{i.acknowledged ? "Reconhecido" : "Não reconhecido"}</p>
+            <p className="mt-1 text-xs text-muted">{isAcked(i) ? "Reconhecido" : "Não reconhecido"}</p>
           </li>
         ))}
       </ul>
@@ -61,6 +77,18 @@ export function IncidentQueue({ incidents }: { incidents: Incident[] }) {
             </dl>
             <p data-testid="drawer-impact"><strong><ImpactText i={load.d.impact} /></strong></p>
             <p className="text-muted">{cause[load.d.suspected_cause] ?? cause.unknown} — hipótese, não diagnóstico. Nenhuma ação na rede é feita aqui.</p>
+            {load.d.status === "open" && (
+              <div data-testid="incident-ack">
+                {isAcked(load.d) ? <p className="font-medium" data-testid="ack-done">Reconhecido</p> : (
+                  <button type="button" disabled={ack.state === "sending"} onClick={() => reconhecer(load.d.id)} data-testid="ack-button"
+                    className="min-h-touch rounded-btn border border-line bg-surface-2 px-4 font-medium hover:bg-accent-soft disabled:opacity-60">
+                    {ack.state === "sending" ? "Reconhecendo…" : "Reconhecer incidente"}
+                  </button>
+                )}
+                <p className="mt-1 text-xs text-muted">Registra que alguém assumiu a análise. Não altera nada na rede.</p>
+                {ack.state === "error" && <p role="alert" className="mt-1 text-sm text-danger">{ack.msg}</p>}
+              </div>
+            )}
             <div>
               <h3 className="mb-1 font-medium">ONUs do incidente ({load.d.members_total})</h3>
               {load.d.members.length === 0 ? <p className="text-muted">Sem ONUs registradas neste incidente.</p> : (

@@ -11,12 +11,13 @@ const PAGES: Hit[] = [
   { kind: "Tela", label: "Central de Ajuda", href: "/ajuda" },
 ];
 
-/** Busca global (⌘/Ctrl+K): telas e atalho para buscar ONU por serial. Sem chamada de API própria. */
+/** Busca global (⌘/Ctrl+K): telas, atalho para buscar ONU por serial e clientes por nome (a partir de 3 letras, pelo BFF; só id e nome). */
 export function CommandPalette() {
   const ref = useRef<HTMLDialogElement>(null);
   const [q, setQ] = useState("");
   const [idx, setIdx] = useState(0);
   const router = useRouter();
+  const [people, setPeople] = useState<Hit[]>([]);
 
   const open = () => { setQ(""); setIdx(0); ref.current?.showModal(); };
   useEffect(() => {
@@ -25,11 +26,26 @@ export function CommandPalette() {
     return () => window.removeEventListener("keydown", h);
   }, []);
 
+  useEffect(() => {
+    const s = q.trim();
+    setPeople([]); // um resultado de outra digitação nunca fica na lista
+    if (s.length < 3) return;
+    const ctl = new AbortController();
+    const t = setTimeout(async () => { // espera o usuário parar de digitar: uma consulta auditada por pausa, não por tecla
+      try {
+        const r = await fetch(`/bff/search/customers?q=${encodeURIComponent(s)}`, { signal: ctl.signal, cache: "no-store" });
+        const d = (await r.json()) as { items?: { id: string; display_name: string }[] };
+        setPeople((d.items ?? []).map((c) => ({ kind: "Cliente", label: c.display_name, href: `/assinantes/${c.id}` })));
+      } catch { /* cancelada ou indisponível: a busca de telas/ONU continua */ }
+    }, 300);
+    return () => { clearTimeout(t); ctl.abort(); };
+  }, [q]);
+
   const hits = useMemo<Hit[]>(() => {
     const s = q.trim();
     const pages = PAGES.filter((p) => p.label.toLowerCase().includes(s.toLowerCase()));
-    return s ? [{ kind: "ONU", label: `Buscar ONU “${s}”`, href: `/rede?serial=${encodeURIComponent(s)}` }, ...pages] : pages;
-  }, [q]);
+    return s ? [{ kind: "ONU", label: `Buscar ONU “${s}”`, href: `/rede?serial=${encodeURIComponent(s)}` }, ...people, ...pages] : pages;
+  }, [q, people]);
   const go = (h?: Hit) => { if (!h) return; ref.current?.close(); router.push(h.href); };
 
   return (
@@ -41,7 +57,7 @@ export function CommandPalette() {
       <dialog ref={ref} aria-label="Busca global" className="m-0 mx-auto mt-[12vh] w-[calc(100%-32px)] max-w-xl rounded-modal border border-line bg-surface p-0 text-text shadow-2xl backdrop:bg-black/30">
         <div className="flex items-center gap-2 border-b border-line px-4">
           <Icon name="search" className="size-4 text-muted" />
-          <input autoFocus value={q} aria-label="Buscar telas ou ONU por serial" placeholder="Digite um serial ou o nome de uma tela" role="combobox" aria-expanded="true" aria-controls="cp-list"
+          <input autoFocus value={q} aria-label="Buscar telas, ONU por serial ou cliente por nome" placeholder="Digite um serial, um nome de cliente ou de tela" role="combobox" aria-expanded="true" aria-controls="cp-list"
             aria-activedescendant={hits[idx] ? `cp-${idx}` : undefined}
             onChange={(e) => { setQ(e.target.value); setIdx(0); }}
             onKeyDown={(e) => {

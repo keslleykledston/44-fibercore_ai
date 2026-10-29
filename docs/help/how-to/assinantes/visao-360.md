@@ -18,7 +18,7 @@ ui_route: "/assinantes/[id]"
 ## Passo a passo
 
 1. Abra **Assinantes**. Com o recurso ligado, aparece a lista **Clientes · visão 360** (20 por página; use a caixa de busca para filtrar pelo nome, sem diferenciar maiúsculas).
-2. Clique no cliente (**Ver 360 →**).
+2. Clique no cliente (**Ver 360 →**). Atalho: em qualquer tela, **Ctrl/⌘ + K**, digite pelo menos 3 letras do nome e escolha o item **Cliente**. A busca mostra só o nome e cada consulta fica na auditoria.
 3. Leia o **Estado geral** no topo: **Completo**, **Parcial**, **Defasado** ou **Desconhecido**, com a frase que explica o motivo.
 4. Se o cliente tiver mais de uma ONU, escolha a ONU pelo serial.
 5. Navegue pelas abas: **Conexão**, **Óptica**, **Roteador (CPE)**, **Cliente** e **Ações**. Cada bloco mostra a **fonte**, a **idade** do dado e se está **Atualizado** ou **defasado**.
