@@ -93,8 +93,8 @@ Fonte: `docs/addenda/v2.2/` (pacote intacto). Análise: `docs/addenda/v2.2/GAP_A
 | ID | Pri | Estado (verificado no repo) | Sprint | Depende de |
 |---|---|---|---|---|
 | FC22-001 | P0 | [x] análise de GAP/conflitos/ADRs (PR 34) | S0 | — |
-| FC22-002 | P0 | [~] **fatia mínima implementada (PR 35)**: tabela `device_capabilities` (RLS, leitura-only p/ a app), `GET /cpes/{cpeId}/capabilities` e `/olts/{oltId}/capabilities`, CLI `capability-set` com evidência, bloco na ONU 360. **Faltam**: flag por tenant, cobertura TR-369/Wi-Fi, gate por perfil nos jobs, Edge alimentando o registro | S0/S1 | 001 |
-| FC22-003 | P0 | [ ] parcial: `observed_at` + frescor na leitura; falta envelope `source/quality` | S1 | 001 |
+| FC22-002 | P0 | [~] **fatia mínima implementada (PR 35)**: tabela `device_capabilities` (RLS, leitura-only p/ a app), `GET /cpes/{cpeId}/capabilities` e `/olts/{oltId}/capabilities`, CLI `capability-set` com evidência, bloco na ONU 360. **Faltam**: cobertura TR-369/Wi-Fi, gate por perfil nos jobs, Edge alimentando o registro | S0/S1 | 001 |
+| FC22-003 | P0 | [~] envelope `provenance{source,observed_at,quality}` na ONU 360 (PR 36); falta nas demais respostas/telas | S1 | 001 |
 | FC22-004 | P0 | [ ] parcial: `/v1/onus/{id}/customer`; falta `/v1/customers/{id}/context` e vínculo ONU↔CPE | S1 | 002, 003 |
 | FC22-005 | P0 | [ ] parcial: ONU 360 publicada (`rede/onu-360`); falta entrada por cliente/abas | S1 | 004 |
 | FC22-006 | P0 | [ ] parcial: regra `pon_mass_outage` fixa; falta registro versionado/runs | S2 | 002–004 |
@@ -110,5 +110,5 @@ Fonte: `docs/addenda/v2.2/` (pacote intacto). Análise: `docs/addenda/v2.2/GAP_A
 | FC22-016 | P1 | [ ] parcial: módulos/versões; falta changelog/canary | S4 | — |
 | FC22-017 | P1 | [x] prática vigente (gate por PR de tela) | contínuo | — |
 | FC22-018 | P2 | [ ] adiado (ADR-0015) | pós-S4 | 004, 006 |
-| (DoD) flags por tenant | — | [ ] falta (ADR-0023) | S1 | — |
+| (DoD) flags por tenant | — | [x] PR 36: `tenant_features`, `feature-set`, `/v1/tenant/features`, kill switch do registro | S1 | — |
 

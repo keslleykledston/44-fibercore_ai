@@ -186,6 +186,16 @@ paths:
         '200': {description: Tenant atual (RLS), content: {application/json: {schema: {type: object}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /tenant/features:
+    get:
+      tags: [Platform]
+      operationId: listTenantFeatures
+      summary: Flags de funcionalidade deste provedor (padrão do código, com override por tenant feito pelo dono via CLI). source = default | tenant
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}]
+      responses:
+        '200': {description: "[{feature, enabled, source}]"}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /audit:
     get:
       tags: [Platform]
@@ -304,11 +314,11 @@ paths:
     get:
       tags: [Network]
       operationId: getOnu360
-      summary: ONU 360 — estado, OLT/PON e incidente aberto (incidents:read; sem a permissão, incident_hidden=true). Nunca traz dados pessoais
+      summary: ONU 360 — estado, OLT/PON e incidente aberto (incidents:read; sem a permissão, incident_hidden=true). Cada bloco externo traz provenance{source, observed_at, quality fresh|stale|unknown}. Nunca traz dados pessoais
       parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: onu_id, in: path, required: true, schema: {type: string, format: uuid}}]
       responses:
         '200':
-          description: "{id, serial, status, rx_dbm, freshness, last_online_at, down_since, olt{}, pon{path,onus,online}, incident{}|null, incident_hidden, source}"
+          description: "{id, serial, status, rx_dbm, freshness, last_online_at, down_since, olt{}, pon{path,onus,online}, incident{}|null, incident_hidden, provenance{state,olt,pon?}, source}"
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {description: ONU inexistente ou de outro provedor}

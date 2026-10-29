@@ -105,3 +105,18 @@ def test_pon_counts_carry_their_age_so_stale_is_not_shown_as_current(client, see
     h = hdr(client, "alice", seed, "A")
     d = client.get(f"/v1/onus/{_onu(client, h, 'O360-5')['id']}", headers=h).json()
     assert d["pon"]["online"] == 1 and d["pon"]["freshness"] == "stale" and d["pon"]["observed_at"]
+
+
+def test_provenance_envelope_says_source_time_and_quality_per_block(client, seed, inv):
+    _seed_onu(client, inv, "OLT-360P", "O360-P1")
+    h = hdr(client, "alice", seed, "A")
+    d = client.get(f"/v1/onus/{_onu(client, h, 'O360-P1')['id']}", headers=h).json()
+    for block in ("state", "olt", "pon"):
+        b = d["provenance"][block]
+        assert b["source"] == "olt_snapshot" and b["quality"] == "fresh" and b["observed_at"]
+    old = snap(inv, name="OLT-360Q", observed=_now(-3600), pons=[{"pon_path": "0/5/0", "status": "up"}],
+               onus=[{"serial": "O360-P2", "pon_path": "0/5/0", "status": "online", "rx_dbm": -20.0}])
+    assert client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a1"), json=old).status_code == 202
+    d2 = client.get(f"/v1/onus/{_onu(client, h, 'O360-P2')['id']}", headers=h).json()
+    assert {d2["provenance"][b]["quality"] for b in ("state", "olt", "pon")} == {"stale"}  # an old snapshot is stale, never "fresh" nor "offline"
+    assert d2["status"] == "online" and d2["provenance"]["state"]["observed_at"]

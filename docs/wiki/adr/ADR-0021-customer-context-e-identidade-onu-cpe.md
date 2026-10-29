@@ -1,6 +1,6 @@
 # ADR-0021: Customer Context / Subscriber 360 e vínculo ONU↔CPE
 
-Status: Proposed | Data: 2026-10-29 | Owner: equipe | Origem: adendo v2.2, FC22-004/005, AC-003
+Status: Accepted (2026-10-29, aprovado pelo responsável; implementação em PR 37/38) | Data: 2026-10-29 | Owner: equipe | Origem: adendo v2.2, FC22-004/005, AC-003
 
 ## Contexto
 Existem `/v1/onus/{id}` e `/v1/onus/{id}/customer` (dado pessoal só com `customers:read`, auditado), `/v1/customers` e associações ERP↔ONU aprovadas por humano. **Não há vínculo ONU↔CPE**: `cpes.canonical_serial` (CWMP) e `onus.serial` (OLT) são identidades de fontes diferentes, e igualdade de string não é prova (o serial CWMP é uma reivindicação do dispositivo — ver ADR-0017/PR 30).

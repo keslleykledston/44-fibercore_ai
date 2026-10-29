@@ -51,6 +51,8 @@ def main(argv: list[str] | None = None) -> None:
     cs.add_argument("certification", choices=["identified", "observed", "certified"])
     cs.add_argument("--evidence", help="reference to the evidence (doc/commit/ticket); REQUIRED for observed/certified")
     cs.add_argument("--verified-at", help="ISO-8601 time the evidence was verified; REQUIRED for observed/certified")
+    fs = sub.add_parser("feature-set", help="turn a per-tenant feature flag on/off (owner-only; overrides the code default)")
+    fs.add_argument("tenant_id"); fs.add_argument("feature"); fs.add_argument("state", choices=["on", "off", "default"])
     sp = sub.add_parser("set-password", help="set a user's password (owner-only); ends all their sessions")
     sp.add_argument("email"); sp.add_argument("--password-env")
     ul = sub.add_parser("unlock-login"); ul.add_argument("key", help="e-mail, or svc:<client_id>, or ip:<addr>")
@@ -104,6 +106,25 @@ def main(argv: list[str] | None = None) -> None:
                     "status": a.status, "certification": a.certification})},
             )
             print(f"capability {a.operation}/{a.protocol} on {a.vendor} {a.model} {a.firmware}: {a.status}/{a.certification}")
+        elif a.cmd == "feature-set":
+            from app.core.features import FEATURES
+            if a.feature not in FEATURES:
+                sys.exit(f"unknown feature {a.feature!r}; known: {', '.join(sorted(FEATURES))}")
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            if a.state == "default":
+                c.execute(text("DELETE FROM tenant_features WHERE tenant_id = :t AND feature = :f"), {"t": a.tenant_id, "f": a.feature})
+            else:
+                c.execute(
+                    text("INSERT INTO tenant_features (tenant_id, feature, enabled) VALUES (:t,:f,:e) "
+                         "ON CONFLICT (tenant_id, feature) DO UPDATE SET enabled = EXCLUDED.enabled, updated_at = now()"),
+                    {"t": a.tenant_id, "f": a.feature, "e": a.state == "on"},
+                )
+            c.execute(
+                text("INSERT INTO events_outbox (tenant_id, aggregate_type, aggregate_id, event_type, schema_version, payload) "
+                     "VALUES (:t,'tenant',:t,'tenant.feature.changed','1',CAST(:p AS jsonb))"),
+                {"t": a.tenant_id, "p": json.dumps({"feature": a.feature, "state": a.state})},
+            )
+            print(f"feature {a.feature}: {a.state}")
         elif a.cmd == "set-password":
             h = hash_secret(_password(a.password_env))
             uid = c.execute(text("SELECT id FROM users_global WHERE lower(email)=lower(:e)"), {"e": a.email}).scalar()

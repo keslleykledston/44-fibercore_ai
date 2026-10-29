@@ -26,7 +26,7 @@ Legenda: **existe** = código + teste no repo; **parcial** = há base, falta par
 | FC22-016 | Module health/version/changelog UX | **parcial** | `/v1/platform/modules`, `/versions`, aba Administração › Módulos | Changelog por módulo, canary | — | S4 |
 | FC22-017 | Help screenshots/How-to por tela | **existe** (prática) | `validate_help.py`, manifesto, `help-screenshots.spec.ts`, 10 artigos publicados | Manter como gate de cada PR de tela | — | Já é regra; segue |
 | FC22-018 | Copilot read-only | **bloqueado** | ADR-0015 adia; `docs/ai/COPILOT_SPEC.md` | Tudo | 004, 006 | Trilha posterior (P2) |
-| (DoD) | **Feature flag por tenant** | **falta** | Só `feature_flag` global por módulo em `configs/modules.yaml` | Flags por tenant | — | **ADR-0023**; sem isso, DoD da v2.2 fica *parcial* e declarado |
+| (DoD) | **Feature flag por tenant** | **implementado (PR 36)** — antes: falta | Só `feature_flag` global por módulo em `configs/modules.yaml` | Flags por tenant | — | **ADR-0023**; sem isso, DoD da v2.2 fica *parcial* e declarado |
 
 ## 2. Matriz de conflitos (adendo × repositório)
 

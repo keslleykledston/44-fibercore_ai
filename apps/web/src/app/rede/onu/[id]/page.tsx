@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
+import { SourceChip } from "@/components/SourceChip";
 import { DataFreshness, ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
 import { CapabilityGate } from "@/components/CapabilityGate";
@@ -43,7 +44,7 @@ export default async function Onu360Page({ params }: { params: Promise<{ id: str
             <Row k="Último dado"><DataFreshness freshness={o.freshness} observedAt={o.observed_at} /></Row>
             <Row k="Visto online pela última vez">{when(o.last_online_at)}</Row>
             {o.down_since && <Row k="Fora do ar desde">{when(o.down_since)}</Row>}
-            <Row k="Origem do dado"><span className="text-muted">Leitura da OLT pelo Edge (somente leitura)</span></Row>
+            <Row k="Origem do dado"><SourceChip p={o.provenance.state} /></Row>
           </dl>
         </Card>
         <Card title="Localização" testid="onu360-location">
@@ -52,8 +53,8 @@ export default async function Onu360Page({ params }: { params: Promise<{ id: str
             <Row k="Equipamento">{o.olt.vendor} {o.olt.model ?? ""}{o.olt.firmware ? ` · ${o.olt.firmware}` : ""}</Row>
             <Row k="Nível do driver"><StatusPill value={o.olt.support_level} /></Row>
             <Row k="PON">{o.pon?.path ?? "—"}</Row>
-            {o.pon && <Row k="ONUs na PON"><span>{o.pon.online} online de {o.pon.onus}</span> <DataFreshness freshness={o.pon.freshness} observedAt={o.pon.observed_at} />{o.pon.freshness === "stale" && <span className="block text-xs text-warn">Último estado conhecido, não o atual.</span>}</Row>}
-            <Row k="Coleta da OLT"><DataFreshness freshness={o.olt.freshness} observedAt={o.olt.observed_at} /></Row>
+            {o.pon && <Row k="ONUs na PON"><span>{o.pon.online} online de {o.pon.onus}</span> {o.provenance.pon && <SourceChip p={o.provenance.pon} />}{o.pon.freshness === "stale" && <span className="block text-xs text-warn">Último estado conhecido, não o atual.</span>}</Row>}
+            <Row k="Coleta da OLT"><SourceChip p={o.provenance.olt} /></Row>
           </dl>
         </Card>
         <Card title="Incidente" testid="onu360-incident">
@@ -91,6 +92,7 @@ export default async function Onu360Page({ params }: { params: Promise<{ id: str
           <p className="mt-1 text-sm text-muted">Reinício, troca de Wi-Fi e outras escritas na rede ficam bloqueadas até a homologação do driver e a política de aprovação. Gerência remota TR-069/TR-369: não homologada.</p>
           <Link href="/operacoes" className="mt-3 inline-flex min-h-touch items-center rounded-btn text-accent underline underline-offset-2">Ver Operações</Link>
           {caps.data ? <CapabilityGate caps={caps.data} title="Capacidades da OLT desta ONU" />
+            : caps.status === 403 ? null  /* recurso desligado para este provedor (flag) ou sem permissão: o bloco simplesmente não existe */
             : <p role="alert" className="mt-4 border-t border-line pt-3 text-sm text-danger" data-testid="capability-error">Não foi possível carregar as capacidades. Isso não significa que sejam suportadas.</p>}
         </Card>
       </div>

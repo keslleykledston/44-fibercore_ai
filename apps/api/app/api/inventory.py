@@ -14,6 +14,7 @@ from sqlalchemy import Connection, text
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.noc import evaluate_pons
 from app.api.routes import audit
+from app.core import features
 from app.core.capabilities import catalog_for
 from app.events import outbox
 
@@ -302,6 +303,12 @@ def ingest_cpe_snapshot(
 
 
 # ---- reads ------------------------------------------------------------------------------------
+def _prov(source: str, observed_at: datetime | None) -> dict:
+    """Provenance envelope (ADR-0020): where a block came from, when it was observed, and how fresh that is NOW.
+    quality is fresh|stale|unknown; `conflict` is reserved for a second source disagreeing and is never produced from a single source."""
+    return {"source": source, "observed_at": observed_at.isoformat() if observed_at else None, "quality": _fresh(observed_at)}
+
+
 def _fresh(ts: datetime | None) -> str:
     if ts is None:
         return "unknown"
@@ -375,7 +382,7 @@ def onu_360(
     ).first()
     if u is None:
         raise HTTPException(404, "onu not found")
-    pon = None
+    pon, pon_seen = None, None
     if u.pon_id:
         t = conn.execute(
             text("SELECT count(*) AS total, count(*) FILTER (WHERE status = 'online') AS online, max(observed_at) AS seen "
@@ -383,6 +390,7 @@ def onu_360(
             {"p": u.pon_id},
         ).one()
         # the counts are the LAST KNOWN state of the port, so they carry the age of the newest observation they rest on
+        pon_seen = t.seen
         pon = {"path": u.pon_path, "onus": t.total, "online": t.online,
                "observed_at": t.seen.isoformat() if t.seen else None, "freshness": _fresh(t.seen)}
     can_incidents = p.can("incidents:read")
@@ -406,6 +414,11 @@ def onu_360(
         "incident": ({"id": str(inc.id), "kind": inc.kind, "suspected_cause": inc.suspected_cause,
                       "opened_at": inc.opened_at.isoformat()} if inc else None),
         "incident_hidden": not can_incidents,
+        "provenance": {
+            "state": _prov("olt_snapshot", u.observed_at),
+            "olt": _prov("olt_snapshot", u.olt_observed_at),
+            **({"pon": _prov("olt_snapshot", pon_seen)} if pon else {}),
+        },
         "source": "olt_snapshot",  # where status/rx came from (CLI/SNMP read by the Edge); nothing here is written to the network
     }
 
@@ -462,6 +475,7 @@ def _capabilities(conn: Connection, tenant_id: UUID, kind: str, vendor: str | No
 
 @router.get("/v1/cpes/{cpe_id}/capabilities")
 def cpe_capabilities(cpe_id: UUID, p: Principal = Depends(require("inventory:read")), conn: Connection = TENANT_CONN) -> list[dict]:
+    features.ensure(conn, p.tenant_id, "capability_registry")
     c = conn.execute(text("SELECT vendor, model, firmware FROM cpes WHERE id = :i"), {"i": cpe_id}).first()
     if c is None:
         raise HTTPException(404, "cpe not found")
@@ -470,6 +484,7 @@ def cpe_capabilities(cpe_id: UUID, p: Principal = Depends(require("inventory:rea
 
 @router.get("/v1/olts/{olt_id}/capabilities")
 def olt_capabilities(olt_id: UUID, p: Principal = Depends(require("inventory:read")), conn: Connection = TENANT_CONN) -> list[dict]:
+    features.ensure(conn, p.tenant_id, "capability_registry")
     o = conn.execute(text("SELECT vendor, model, firmware FROM olts WHERE id = :i"), {"i": olt_id}).first()
     if o is None:
         raise HTTPException(404, "olt not found")

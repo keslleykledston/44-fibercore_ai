@@ -65,3 +65,6 @@
 - Migration 0015 `device_capabilities` (por tenant, RLS forçada, CHECKs; `observed/certified` exigem evidência+data; app só lê), `GET /cpes/{cpeId}/capabilities` (documentada no contrato sem handler) e `GET /olts/{oltId}/capabilities`, catálogo = operações reais do motor de jobs, CLI `capability-set` (evidência obrigatória, evento `device.capabilities.changed`), bloco "Capacidades" no card Ações da ONU 360 + how-to e capturas. Registro vazio ⇒ tudo `Desconhecida/Identificado`; o registro NUNCA libera escrita (o gate é o do motor de jobs).
 - **Não feito (declarado)**: flag por tenant (DoD parcial), gate de jobs ligado ao registro, Edge alimentando o registro, capacidades TR-369/Wi-Fi.
 
+## Unreleased — Flags por tenant + envelope de proveniência (PR 36, FC22-003/ADR-0023)
+- Migration 0016 `tenant_features`; `app/core/features.py` (catálogo+padrões no código); `GET /v1/tenant/features`; CLI `feature-set`; `403 feature_disabled` (kill switch do registro de capacidades). ONU 360: `provenance{state,olt,pon}` + `SourceChip`. ADR-0020/0021/0023 → Accepted (0021 aprovado pelo responsável em 2026-10-29).
+

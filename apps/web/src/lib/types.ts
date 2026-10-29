@@ -7,12 +7,14 @@ export type Mod = { id: string; version: string; status: string; reason: string 
 export type Workspace = { tenant_id: string; name: string; role: string };
 export type Association = { id: string; status: string; score: number; evidence: { ambiguous_serial?: boolean; conflicts_with_approved?: string | null; match?: string }; onu_serial: string; customer_name: string };
 export type Job = { id: string; operation: string; target_type: string; risk: string; status: string; required_approvals: number; blocked_reason: string | null; expires_at: string | null; created_at: string };
+export type Provenance = { source: string; observed_at: string | null; quality: "fresh" | "stale" | "unknown" | "conflict" };
 export type Onu360 = {
   id: string; serial: string; status: string; rx_dbm: number | null; observed_at: string | null; freshness: string;
   last_online_at: string | null; down_since: string | null; source: string;
   olt: { id: string; name: string; vendor: string; model: string | null; firmware: string | null; support_level: string; observed_at: string | null; freshness: string };
   pon: { path: string | null; onus: number; online: number; observed_at: string | null; freshness: string } | null;
   incident: { id: string; kind: string; suspected_cause: string; opened_at: string } | null; incident_hidden: boolean;
+  provenance: { state: Provenance; olt: Provenance; pon?: Provenance };
 };
 export type OnuCustomer = { association: "approved" | "suggested" | "none"; pending_suggestions: number; display_name?: string; document_last4?: string | null; contract_status?: string };
 export type Member = { user_id: string; email: string; display_name: string; role: string; mfa_enabled: boolean; is_self: boolean };

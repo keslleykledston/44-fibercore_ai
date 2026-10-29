@@ -208,6 +208,13 @@ def current_tenant(p: Principal = Depends(require("tenant:read")), conn: Connect
     return {"id": str(row.id), "name": row.name, "status": row.status, "created_at": row.created_at.isoformat()}
 
 
+@router.get("/v1/tenant/features")
+def tenant_features(p: Principal = Depends(require("tenant:read")), conn: Connection = TENANT_CONN) -> list[dict]:
+    """Feature flags as THIS tenant sees them (code default unless the owner overrode it)."""
+    from app.core import features
+    return [{"feature": f, **v} for f, v in features.resolve(conn, p.tenant_id).items()]
+
+
 @router.get("/v1/audit")
 def list_audit(
     limit: int = Query(50, ge=1, le=200),
