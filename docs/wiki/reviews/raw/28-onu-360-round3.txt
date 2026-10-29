@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1852a-26ce-75a3-aee0-5a36f604e8a3).
+[codex] Turn started (01a1852a-35b7-76d1-b3f9-7eae108a8f39).
+[codex] Assistant message captured: Vou comparar o branch com `main` e seguir os fluxos da ONU 360, com atenção especial aos esta...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/inventory....
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/inventory.... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=15 main...HEAD -- apps/api/tests/test_onu360....
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=15 main...HEAD -- apps/api/tests/test_onu360.... (exit 0)
+[codex] Running command: /bin/bash -lc "cat apps/web/src/lib/api.ts; nl -ba apps/web/src/app/rede/onu/\\[id\\]/page.ts...
+[codex] Command completed: /bin/bash -lc "cat apps/web/src/lib/api.ts; nl -ba apps/web/src/app/rede/onu/\\[id\\]/page.ts... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: a contagem da PON pode apresentar ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: a contagem da PON pode apresentar estado antigo como atual, sem indicar a defasagem dos dados usados.
+
+Findings:
+- [medium] Contagem da PON omite a defasagem do snapshot (apps/api/app/api/inventory.py:361-367)
+  A contagem inclui ONUs com `status = 'online'` sem considerar a idade do snapshot, e a resposta não informa a atualização usada para essa contagem. A página a exibe como “X online de Y”, embora os dados possam estar stale — justamente quando a página já sinaliza a defasagem da ONU e da OLT. Isso pode levar a equipe a interpretar uma contagem histórica como estado atual da PON.
+  Recommendation: Inclua na resposta a atualização/freshness da contagem e rotule-a explicitamente como último estado conhecido quando estiver defasada; ou omita a contagem como atual até haver snapshot recente.

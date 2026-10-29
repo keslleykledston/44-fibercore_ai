@@ -1,7 +1,7 @@
 """ONU 360: one ONU with its origin, PON context, open incident and (only for customers:read roles, audited) its subscriber."""
 from sqlalchemy import text
 
-from tests.conftest import agent, hdr, snap
+from tests.conftest import _now, agent, hdr, snap
 
 
 def _onu(client, h, serial):
@@ -29,7 +29,7 @@ def test_onu360_basic_with_pon_context_and_origin(client, seed, inv):
     d = client.get(f"/v1/onus/{u['id']}", headers=h).json()
     assert d["serial"] == "O360-1" and d["status"] == "online" and d["rx_dbm"] == -19.25 and d["freshness"] == "fresh"
     assert d["olt"]["name"] == "OLT-360" and d["olt"]["support_level"] == "observed"
-    assert d["pon"] == {"path": "0/3/0", "onus": 2, "online": 1}
+    assert (d["pon"]["path"], d["pon"]["onus"], d["pon"]["online"], d["pon"]["freshness"]) == ("0/3/0", 2, 1, "fresh")
     assert d["incident"] is None and d["incident_hidden"] is False and d["source"] == "olt_snapshot"
     assert "customer" not in d  # personal data never rides on the inventory route
 
@@ -96,3 +96,12 @@ def test_onu360_open_incident_and_tenant_isolation(client, seed, inv, migrated):
     assert client.get("/v1/onus/00000000-0000-0000-0000-000000000000", headers=ha).status_code == 404
     assert client.get("/v1/onus/not-a-uuid", headers=ha).status_code == 422
     assert client.get(f"/v1/onus/{onu['id']}", headers=agent(client, inv, "a1")).status_code == 403  # agents never read
+
+
+def test_pon_counts_carry_their_age_so_stale_is_not_shown_as_current(client, seed, inv):
+    old = snap(inv, name="OLT-360E", observed=_now(-3600), pons=[{"pon_path": "0/4/0", "status": "up"}],
+               onus=[{"serial": "O360-5", "pon_path": "0/4/0", "status": "online", "rx_dbm": -20.0}])
+    assert client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a1"), json=old).status_code == 202
+    h = hdr(client, "alice", seed, "A")
+    d = client.get(f"/v1/onus/{_onu(client, h, 'O360-5')['id']}", headers=h).json()
+    assert d["pon"]["online"] == 1 and d["pon"]["freshness"] == "stale" and d["pon"]["observed_at"]

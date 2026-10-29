@@ -326,10 +326,13 @@ def onu_360(
     pon = None
     if u.pon_id:
         t = conn.execute(
-            text("SELECT count(*) AS total, count(*) FILTER (WHERE status = 'online') AS online FROM onus WHERE pon_id = :p"),
+            text("SELECT count(*) AS total, count(*) FILTER (WHERE status = 'online') AS online, max(observed_at) AS seen "
+                 "FROM onus WHERE pon_id = :p"),
             {"p": u.pon_id},
         ).one()
-        pon = {"path": u.pon_path, "onus": t.total, "online": t.online}
+        # the counts are the LAST KNOWN state of the port, so they carry the age of the newest observation they rest on
+        pon = {"path": u.pon_path, "onus": t.total, "online": t.online,
+               "observed_at": t.seen.isoformat() if t.seen else None, "freshness": _fresh(t.seen)}
     can_incidents = p.can("incidents:read")
     inc = conn.execute(
         text(

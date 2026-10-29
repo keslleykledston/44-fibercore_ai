@@ -50,7 +50,7 @@ export default async function Onu360Page({ params }: { params: Promise<{ id: str
             <Row k="Equipamento">{o.olt.vendor} {o.olt.model ?? ""}{o.olt.firmware ? ` · ${o.olt.firmware}` : ""}</Row>
             <Row k="Nível do driver"><StatusPill value={o.olt.support_level} /></Row>
             <Row k="PON">{o.pon?.path ?? "—"}</Row>
-            {o.pon && <Row k="ONUs na PON">{o.pon.online} online de {o.pon.onus}</Row>}
+            {o.pon && <Row k="ONUs na PON"><span>{o.pon.online} online de {o.pon.onus}</span> <DataFreshness freshness={o.pon.freshness} observedAt={o.pon.observed_at} />{o.pon.freshness === "stale" && <span className="block text-xs text-warn">Último estado conhecido, não o atual.</span>}</Row>}
             <Row k="Coleta da OLT"><DataFreshness freshness={o.olt.freshness} observedAt={o.olt.observed_at} /></Row>
           </dl>
         </Card>
