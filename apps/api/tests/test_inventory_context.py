@@ -321,3 +321,36 @@ def test_context_is_bounded_and_says_when_it_cut(client, seed, inv, migrated, mo
     d = client.get(f"/v1/customers/{cid}/context", headers=h).json()
     assert [o["cpe"]["link"] for o in d["onus"]] == ["confirmed", "confirmed"]
     assert len(d["onus"]) == 2 and d["onus_truncated"] is True and d["status"] == "partial"  # never `complete` for ONUs not examined
+
+
+def test_context_query_count_does_not_grow_with_the_number_of_onus(client, seed, inv, migrated):
+    """No N+1: the cost of the context is constant, so the 50-ONU cap bounds the response size AND the database load."""
+    from sqlalchemy import event
+
+    from app.core.db import get_engine
+    h = _setup(client, inv, seed, migrated)
+    onus = [{"serial": f"CTX-Q{i:02d}", "pon_path": "0/7/0", "status": "online", "rx_dbm": -20.0} for i in range(12)]
+    assert client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a1"),
+                       json=snap(inv, "a1", name="OLT-CTX-Q", pons=[{"pon_path": "0/7/0", "status": "up"}], onus=onus)).status_code == 202
+    cid = _customer(migrated, seed["A"], None, seed["alice"])
+
+    def count(n_assoc):
+        with migrated.begin() as c:
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+            c.execute(text("DELETE FROM associations WHERE customer_id = :c"), {"c": cid})
+            for o in c.execute(text("SELECT id FROM onus WHERE serial LIKE 'CTX-Q%' ORDER BY serial LIMIT :n"), {"n": n_assoc}).all():
+                c.execute(text("INSERT INTO associations(tenant_id, onu_id, customer_id, status, score, evidence, reviewed_by, reviewed_at) "
+                               "VALUES (:t,:o,:c,'approved',100,CAST('{}' AS jsonb),:r,now())"),
+                          {"t": seed["A"], "o": o.id, "c": cid, "r": seed["alice"]})
+        seen: list[str] = []
+        eng = get_engine()
+
+        def spy(conn, cursor, statement, *rest):
+            seen.append(statement)
+        event.listen(eng, "before_cursor_execute", spy)
+        try:
+            assert len(client.get(f"/v1/customers/{cid}/context", headers=h).json()["onus"]) == n_assoc
+        finally:
+            event.remove(eng, "before_cursor_execute", spy)
+        return len(seen)
+    assert count(10) == count(1)  # an N+1 would add queries per ONU

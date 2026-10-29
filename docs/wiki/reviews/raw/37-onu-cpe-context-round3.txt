@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a185f8-d909-7c02-b0c6-f04ce5191310).
+[codex] Turn started (01a185f8-dc07-7103-93ed-afe48287c99a).
+[codex] Assistant message captured: Vou comparar a branch com `main` e seguir os fluxos de concorrência, isolamento por tenant, m...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=70 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=70 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,260p' apps/api/app/api/context.py; rg -n \"def cpe_block|cpe_block\\...
+[codex] Command completed: /bin/bash -lc "sed -n '1,260p' apps/api/app/api/context.py; rg -n \"def cpe_block|cpe_block\\... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '380,430p' apps/api/app/api/inventory.py; sed -n '1,140p' apps/api/app/...
+[codex] Command completed: /bin/bash -lc "sed -n '380,430p' apps/api/app/api/inventory.py; sed -n '1,140p' apps/api/app/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o contexto pode fazer até 150 cons...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o contexto pode fazer até 150 consultas extras por cliente com 50 ONUs, tornando o limite de payload insuficiente para controlar a carga no banco.
+
+Findings:
+- [medium] Customer Context mantém N+1 por ONU (apps/api/app/api/context.py:187-188)
+  `customer_context` percorre até 50 ONUs e chama `cpe_block` para cada uma. Cada chamada consulta a flag, depois busca o vínculo confirmado e, se não houver, busca sugestões. Um cliente com 50 ONUs sem vínculo pode gerar cerca de 150 consultas adicionais por requisição. Sob uso concorrente, isso multiplica a carga no banco e pode degradar ou esgotar conexões; o limite de ONUs restringe o tamanho da resposta, mas não elimina esse custo.
+  Recommendation: Substitua as consultas por ONU por uma ou poucas consultas em lote para vínculos confirmados e sugestões; consulte a flag uma vez por requisição.
+
+Next steps:
+- Buscar o vínculo e as sugestões de todas as ONUs do cliente em lote antes de montar a resposta.

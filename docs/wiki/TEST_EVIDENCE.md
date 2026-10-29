@@ -105,6 +105,7 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - Mutações (todas reprovadas): ambiguidade confirmável; sem auditoria do contexto; sem flag no contexto; `incidents:read` ignorado; trava `NOT EXISTS` (sobrevivia → asserção `examined == 0` adicionada e o mutante morreu); estado de mão única; `unknown` virando `complete`.
 - `scripts/e2e.sh` completo (com capturas): **42 passed** (1 novo: sugestão por serial → confirmação humana na ONU 360 → equipamento e origem aparecem só depois); axe sem violações sérias. `validate_kit`, `validate_help`, `validate_addendum_v22`: PASS. `tsc --noEmit`: PASS.
 - Codex rodadas 1–2 (ver `docs/wiki/reviews/raw/37-*`): CHECK de evidência (e bug de NULL no CHECK pego por teste), RLS provada por `pg_class`/`pg_policies`, ambiguidade com a mesma normalização do match, contexto limitado a 50 ONUs (`onus_truncated`). pytest **224 passed**; mutações extras (contagem crua, truncado ainda `complete` — sobrevivia até o teste ficar discriminante —, sem corte) reprovadas.
+- Codex round 3: N+1 no `cpe_block` → `cpe_blocks` em lote (flag 1×, confirmados 1×, sugestões 1×); teste conta as queries (10 ONUs = 1 ONU) e o mutante N+1 reprova. pytest **225 passed**.
 - Achado de isolamento nos testes: outros módulos deixam CPEs/ONUs de mesmo serial no tenant compartilhado; os testes novos filtram por prefixo `CTX-`.
 - NOT_RUN: carga/p95; ERP real (TTL de 7 dias é suposição); NBI real (ver KNOWN_ISSUES).
 
