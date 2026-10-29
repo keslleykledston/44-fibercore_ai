@@ -25,14 +25,15 @@ def upgrade() -> None:
           cpe_id uuid NOT NULL,
           status text NOT NULL DEFAULT 'suggested' CHECK (status IN ('suggested','confirmed','rejected')),
           confidence numeric(3,2) NOT NULL CHECK (confidence BETWEEN 0 AND 1),
-          evidence jsonb NOT NULL DEFAULT '{{}}'::jsonb,
+          evidence jsonb NOT NULL,   -- no default: a link without the rule that produced it cannot exist
           created_at timestamptz NOT NULL DEFAULT now(),
           reviewed_by uuid,
           reviewed_at timestamptz,
           PRIMARY KEY (tenant_id, id),
           FOREIGN KEY (tenant_id, onu_id) REFERENCES onus(tenant_id, id),
           FOREIGN KEY (tenant_id, cpe_id) REFERENCES cpes(tenant_id, id),
-          CHECK ((status = 'suggested') = (reviewed_by IS NULL))
+          CHECK ((status = 'suggested') = (reviewed_by IS NULL)),
+          CHECK ((jsonb_typeof(evidence->'rule') = 'string') IS TRUE)  -- NULL (rule absent) must not pass a CHECK
         );
         CREATE UNIQUE INDEX onu_cpe_links_pair_uq ON onu_cpe_links (tenant_id, onu_id, cpe_id);
         CREATE UNIQUE INDEX onu_cpe_links_one_confirmed_per_onu ON onu_cpe_links (tenant_id, onu_id) WHERE status = 'confirmed';

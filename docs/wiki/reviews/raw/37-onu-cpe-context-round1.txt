@@ -1,0 +1,35 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a185f4-2e7e-7382-a820-6fcb37109825).
+[codex] Turn started (01a185f4-3c09-7252-abf3-77e2fea39410).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os caminhos de autorização, tenant, migração e con...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "def TENANT_CONN|TENANT_CONN|CREATE TABLE (customers|associations|onus|c...
+[codex] Command completed: /bin/bash -lc 'rg -n "def TENANT_CONN|TENANT_CONN|CREATE TABLE (customers|associations|onus|c... (exit 0)
+[codex] Running command: /bin/bash -lc "cat apps/api/app/core/features.py apps/api/app/api/deps.py; sed -n '1,100p' ap...
+[codex] Command completed: /bin/bash -lc "cat apps/api/app/core/features.py apps/api/app/api/deps.py; sed -n '1,100p' ap... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/context.py | sed -n '45,205p'; nl -ba apps/api/alembic...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/context.py | sed -n '45,205p'; nl -ba apps/api/alembic... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não deve subir: o status pode declarar `complete` sem...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não deve subir: o status pode declarar `complete` sem prova de confirmação CPE e sem freshness do próprio CPE; há também uma lacuna concreta no isolamento de tenant no endpoint de contexto se a conexão não aplicar RLS às tabelas lidas.
+
+Findings:
+- [high] `complete` não exige freshness nem proveniência do CPE confirmado (apps/api/app/api/context.py:98-100)
+  `cpe_block` inclui a proveniência do CPE somente quando a consulta retorna um `observed_at` não nulo: `_prov` retorna um envelope mesmo com qualidade `unknown`, então esse caso impede complete; porém, quando há vínculo confirmado, `cb["provenance"]` é considerado. O status deriva de freshness OLT e ERP, e declara `complete` se todos forem fresh e todos os vínculos estiverem confirmados. Isso permite `complete` com CPE antigo? A qualidade do CPE é incluída; portanto stale impede. A falha comprovada é que o endpoint aceita qualquer vínculo confirmado, inclusive confirmado manualmente com evidência arbitrária/sem evidência: a confirmação só bloqueia `evidence.ambiguous` e não valida evidência positiva, enquanto o índice e o status tratam o vínculo como prova. Um operador pode confirmar um vínculo vazio/inventado e o contexto declarar complete. Exigir evidência adequada e/ou uma confirmação explícita com rationale antes de contar CPE como completo.
+  Recommendation: Definir critérios mínimos verificáveis para confirmação e evidência, persistir a decisão humana com justificativa e não classificar contexto como complete enquanto a identidade CPE não tiver proveniência/evidência aceitável.
+- [high] Consulta de cliente e incidentes depende de RLS não demonstrada nas tabelas consultadas (apps/api/app/api/context.py:162-178)
+  A consulta do cliente filtra apenas por `id`, e as consultas de ONU/incidentes filtram por IDs sem `tenant_id` explícito em várias relações. Isso é seguro somente se `customers`, `associations`, `onus`, `incidents` e `incident_onus` tiverem RLS efetivo em `TENANT_CONN`. A migration adiciona RLS apenas a `onu_cpe_links`; a revisão das migrations anteriores mostra RLS em algumas tabelas de domínio, mas não estabelece aqui cobertura das tabelas de incidentes. Se qualquer tabela consultada não estiver protegida por RLS, um `customer_id` de outro workspace pode revelar PII, estado de ONU ou causa de incidente, apesar de `customers:read`. Verificar e impor tenant_id em toda consulta ou garantir políticas RLS para cada relação acessada.
+  Recommendation: Adicionar filtros explícitos `tenant_id = :t` a todas as relações e revisar/adicionar políticas RLS para `customers`, `associations`, `onus`, `olts`, `pon_ports`, `incident_onus` e `incidents`; cobrir leitura cruzada entre tenants.
+- [medium] Toggle de customer_context não desliga o bloco CPE no endpoint ONU 360 (apps/api/app/api/inventory.py:405-408)
+  `/v1/customers/{id}/context` verifica `customer_context`, mas delega `cpe_block`, que consulta somente a flag `onu_cpe_links`. Essa própria rota está protegida pela flag de customer context, mas há exposição adicional no endpoint existente `/v1/onus/{id}`: ele retorna o bloco CPE quando `onu_cpe_links` está ligado, sem considerar `customer_context`. Se a política de desligamento esperada é ocultar o contexto CPE por tenant quando `customer_context` está off, esse endpoint continua servindo identificadores e atributos do CPE. A flag independente de links pode ser intenção de produto; o comportamento deve ser explicitado, pois o pedido destaca vazamento com flag desligada.
+  Recommendation: Aplicar a flag de exposição correspondente também no ONU 360, ou documentar e testar que `onu_cpe_links` controla essa exposição independentemente de `customer_context`.
+
+Next steps:
+- Confirmar cobertura RLS das relações do customer context e adicionar teste adversarial tenant A lendo IDs do tenant B.
+- Adicionar caso de vínculo confirmado sem evidência útil e garantir que o status resultante nunca seja `complete` apenas pela confirmação.

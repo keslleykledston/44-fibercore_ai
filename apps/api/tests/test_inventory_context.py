@@ -164,8 +164,9 @@ def test_database_allows_only_one_confirmed_per_onu_and_per_cpe(client, seed, in
         c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
         ids = {r.serial: r.id for r in c.execute(text("SELECT id, serial FROM onus WHERE serial IN ('CTX-0001','CTX-0003')"))}
         cpes = {r.canonical_serial: r.id for r in c.execute(text("SELECT id, canonical_serial FROM cpes WHERE canonical_serial LIKE 'CTX-%'"))}
-        ins = ("INSERT INTO onu_cpe_links(tenant_id, onu_id, cpe_id, status, confidence, reviewed_by, reviewed_at) "
-               "VALUES (:t,:o,:c,'confirmed',0.9,:r,now())")
+        ev = "CAST('{\"rule\":\"serial_equal\"}' AS jsonb)"
+        ins = ("INSERT INTO onu_cpe_links(tenant_id, onu_id, cpe_id, status, confidence, evidence, reviewed_by, reviewed_at) "  # noqa: S608
+               f"VALUES (:t,:o,:c,'confirmed',0.9,{ev},:r,now())")
         c.execute(text(ins), {"t": seed["A"], "o": ids["CTX-0001"], "c": cpes["CTX-0001"], "r": seed["alice"]})
     for onu, cpe in (("CTX-0001", "CTX-0002"), ("CTX-0003", "CTX-0001")):  # same ONU / same CPE again
         with pytest.raises(DBAPIError) as ex, migrated.begin() as c:
@@ -174,10 +175,17 @@ def test_database_allows_only_one_confirmed_per_onu_and_per_cpe(client, seed, in
         assert "unique" in str(ex.value).lower(), ex.value  # the one-confirmed index, not some other error
     with pytest.raises(DBAPIError) as ex, migrated.begin() as c:  # a suggestion cannot carry a reviewer
         c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
-        c.execute(text("INSERT INTO onu_cpe_links(tenant_id, onu_id, cpe_id, status, confidence, reviewed_by) "
-                       "VALUES (:t,:o,:c,'suggested',0.5,:r)"),
+        c.execute(text("INSERT INTO onu_cpe_links(tenant_id, onu_id, cpe_id, status, confidence, evidence, reviewed_by) "
+                       "VALUES (:t,:o,:c,'suggested',0.5,CAST('{\"rule\":\"serial_equal\"}' AS jsonb),:r)"),
                   {"t": seed["A"], "o": ids["CTX-0003"], "c": cpes["CTX-0002"], "r": seed["alice"]})
     assert "check" in str(ex.value).lower(), ex.value
+    for evidence in ("{}", '{"rule": 7}', '{"other": "x"}'):  # a link must carry the rule that produced it: no evidence, no link (any status)
+        with pytest.raises(DBAPIError) as ex, migrated.begin() as c:
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+            c.execute(text("INSERT INTO onu_cpe_links(tenant_id, onu_id, cpe_id, status, confidence, evidence) "
+                           "VALUES (:t,:o,:c,'suggested',0.5,CAST(:e AS jsonb))"),
+                      {"t": seed["A"], "o": ids["CTX-0003"], "c": cpes["CTX-0002"], "e": evidence})
+        assert "check" in str(ex.value).lower(), ex.value
 
 
 def test_rbac_and_tenant_isolation(client, seed, inv, migrated):
@@ -252,3 +260,26 @@ def test_incident_needs_incidents_read_and_is_marked_hidden_otherwise(client, se
     support = client.get(f"/v1/customers/{cid}/context", headers=hdr(client, "dave", seed, "B"))
     assert support.status_code == 200
     assert support.json()["onus"][0]["incident_hidden"] is True  # absence of the field must not read as "no incident"
+
+
+def test_every_table_the_context_reads_has_forced_rls_and_a_tenant_policy(migrated):
+    """The context queries filter by id only; the isolation is the database's. Prove it for each relation, not by assumption."""
+    tables = ["customers", "associations", "onus", "olts", "pon_ports", "incidents", "incident_onus", "cpes", "cpe_protocol_bindings",
+              "onu_cpe_links", "tenant_features"]
+    with migrated.begin() as c:
+        rows = {r.relname: (r.relrowsecurity, r.relforcerowsecurity) for r in c.execute(
+            text("SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = ANY(:t) AND relkind = 'r'"), {"t": tables})}
+        pols = {r.tablename for r in c.execute(text("SELECT DISTINCT tablename FROM pg_policies WHERE tablename = ANY(:t)"), {"t": tables})}
+    assert set(rows) == set(tables)
+    assert all(v == (True, True) for v in rows.values()), rows
+    assert pols == set(tables)
+
+
+def test_flags_are_independent_links_show_the_cpe_on_onu360_while_the_customer_context_stays_off(client, seed, inv, migrated):
+    _flags(migrated, seed["A"], "onu_cpe_links")  # customer_context stays at its default (off)
+    _olt(client, inv, "a1", "OLT-CTX-A", "CTX-IND1")
+    h = hdr(client, "alice", seed, "A")
+    assert client.get(f"/v1/onus/{_onu(client, h, 'CTX-IND1')['id']}", headers=h).json()["cpe"]["link"] == "none"
+    cid = _customer(migrated, seed["A"], None, seed["alice"])
+    r = client.get(f"/v1/customers/{cid}/context", headers=h)
+    assert r.status_code == 403 and r.json()["detail"] == "feature_disabled"
