@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18534-998c-75c1-9934-ea824caeba86).
+[codex] Turn started (01a18534-9af5-72b2-a9a4-0d30e6206637).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os estados de autenticação e acessibilidade nos co...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/e2e/app.spec.ts ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/e2e/app.spec.ts ap... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --check main...HEAD && nl -ba apps/web/src/components/LoginSteps.tsx ...
+[codex] Command completed: /bin/bash -lc "git diff --check main...HEAD && nl -ba apps/web/src/components/LoginSteps.tsx ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o indicador anuncia etapas condici...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o indicador anuncia etapas condicionais como se fossem obrigatórias, deixando usuários de MFA desativado com uma sequência de acesso enganosa.
+
+Findings:
+- [medium] Indicador apresenta etapas que podem ser puladas como obrigatórias (apps/web/src/components/LoginSteps.tsx:3-7)
+  A lista sempre exibe credenciais, verificação e workspace. Pelo fluxo descrito no próprio comentário, verificação só ocorre com MFA e workspace só quando há mais de um. Assim, quem não usa MFA vê “Verificação” como etapa futura e depois pula direto para a visão geral; isso também é anunciado a leitores de tela como parte da sequência. O texto fixo não parece revelar o estado de MFA, mas fornece orientação incorreta sobre o fluxo.
+  Recommendation: Renderize apenas as etapas aplicáveis ao fluxo atual, usando estado disponível sem expor informação de conta antes da autenticação; valide também a sequência anunciada em cada fluxo.
