@@ -27,3 +27,5 @@
 | feat/42-noc-command-center (PR 42, FC22-009) | 4 | approve | (brutos em `raw/42-*`) prioridade aplicada depois do limite (agora antes, com varredura dos abertos e `truncated`); classificação de Edge silencioso limitada a 100 (agora todos); contestados com evidência: `edge_id` NULL (coluna NOT NULL) e impacto oculto na ordem (nunca entra) |
 
 Riscos aceitos e documentados (não corrigidos): DoS direcionado por lockout de conta (KNOWN_ISSUES); postcss embutido no Next (build-time).
+
+| feat/edge-olt-cli-pacing (PR 43) | 6 | approve | (brutos em `raw/43-*-round1..6.txt`) estado do guard perdido no restart (agora persistido antes da E/S, reserva pessimista); chaves CLI×SNMP distintas (agora host canônico, config recusa duplicata, IP literal); dois processos (lock por diretório de estado); arquivo `null`/corrompido esfria qualquer transporte; timestamps absurdos normalizados e persistidos. Aceito/documentado: dois Edges em diretórios diferentes no mesmo host não são detectáveis (regra operacional: um Edge por OLT). |

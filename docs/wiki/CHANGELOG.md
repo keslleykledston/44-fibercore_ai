@@ -90,3 +90,8 @@
 - API: `GET /v1/incidents` ganhou `impact` por incidente (clientes distintos via associações APROVADAS; sem `customers:read` = `hidden`, nunca 0; sem membros = desconhecido), `summary` (4 números sobre TODOS os abertos; clientes afetados não inclui Edge silencioso) e `order=priority` (ordem documentada, sem score; o padrão `recent` não mudou); `GET /v1/incidents/{id}` para o painel (evidências, impacto, até 50 ONUs-membro, sem nomes de clientes).
 - UI `/noc`: 4 KPIs, filtro "só não reconhecidos", fila na ordem do servidor, impacto com fonte, incidente em painel lateral (foco/Esc) via BFF `GET /bff/incidents/[id]`. How-to atualizado, capturas reais.
 - **Não feito (declarado):** reconhecer incidente pela UI (ack existe na API), correlação com dados de Edge além do silêncio, R-D003 como regra.
+
+## Unreleased — PR 43 (Edge → OLT, ritmo seguro)
+- Edge: a coleta de OLT (SSH/CLI e SNMP) passa por UM guard por equipamento físico: uma coleta por vez, intervalo mínimo (`collect_seconds`, padrão 15 min no CLI), resfriamento após falha (`cooldown_seconds`, padrão 15 min CLI / 5 min SNMP).
+- O estado do guard (última tentativa + resfriamento) é gravado em `olt-guard.json` (0600, atômico) ANTES de qualquer E/S e sobrevive a restart; falha ao gravar = não toca na OLT; arquivo corrompido (inclusive `null`) = assume que a OLT acabou de ser tocada; timestamps >24 h à frente são normalizados e persistidos.
+- Instância única por diretório de estado (`edge.lock`, flock). Chave do guard = host físico (`config.DeviceKey`), independente de transporte/porta; a config recusa duas entradas para o mesmo equipamento e exige IP literal no endereço de OLT por CLI.

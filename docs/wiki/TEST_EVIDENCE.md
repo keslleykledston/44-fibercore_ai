@@ -139,3 +139,8 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - Codex PR 42: (1) `edge_id` NULL contestado (`olts.edge_id` é NOT NULL, travado por teste); (2) impacto oculto nunca entra na ordem (teste); (3) **prioridade era aplicada depois do limite de recência** → agora varre todos os abertos (teto 1000, `truncated`) e só então corta; teste com incidente antigo importante e 3 mais novos; mutante que volta ao limite antes da prioridade reprova. pytest **250 passed**.
 - Codex PR 42 round 3: a classificação de Edge silencioso usava `LIMIT 100`; agora usa TODOS os Edges silenciosos (classificação e totais) e só a lista visual de alertas é limitada (`ALERTS_SHOWN`); teste com a lista cortada em 1 e dois Edges silenciosos; mutante que classifica só pelos exibidos reprova. pytest **251 passed**.
 - Deploy no LAB (2026-10-29, PR 42): backup verificado antes (20261029T064505Z); web+api reconstruídos (sem migration nova, Alembic 0018); prodcheck sem issues; Edge do GenieACS continua coletando a cada 5 min (6 CPEs; 37 placeholders descartados).
+
+## 2026-10-29 — Edge → OLT, guard de ritmo (PR 43)
+- `cd agents/edge && go vet ./... && go test ./...`: PASS (novos: intervalo/cooldown CLI, restart com arquivo de estado, tentativa morta no meio, arquivo corrompido/`null`, timestamps absurdos com restart repetido, falha ao gravar = não disca, CLI+SNMP do mesmo host compartilham o guard, config `collect_seconds`/`cooldown_seconds`, `DeviceKey`, duplicidade de equipamento, IP literal, `StateFiles`, singleton).
+- Mutation check: sem persistência do guard → 2 testes de restart falham; chave por nome em vez de host → 3 testes falham.
+- Codex PR 43: 6 rodadas até approve (ver CODEX_REVIEW_LOG).
