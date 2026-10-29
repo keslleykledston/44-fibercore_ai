@@ -13,11 +13,13 @@ log() { echo "$(date -Is) $*" >> "$DIR/backup.log"; }
 trap 'rc=$?; [[ $rc -eq 0 ]] || log "FALHA rc=$rc"' EXIT
 export ENV_FILE=.env.prod COMPOSE_PROJECT=fibercore-prod
 OUT="$DIR/fibercore-prod-$(date -u +%Y%m%dT%H%M%SZ).dump"
-./scripts/backup.sh "$OUT" >/dev/null
+[[ -n "${BACKUP_GPG_RECIPIENT:-}" ]] || log "AVISO: backup SEM cifra (BACKUP_GPG_RECIPIENT não definido); manter só neste host, 0600, e NÃO copiar para fora sem cifrar"
+./scripts/backup.sh "$OUT" >/dev/null 2>>"$DIR/backup.log" || { log "FALHA no pg_dump/publicação (detalhe acima)"; exit 1; }
 VERIFY="$OUT"; [[ -n "${BACKUP_GPG_RECIPIENT:-}" ]] && VERIFY="$OUT.gpg"
 ./scripts/restore-verify.sh "$VERIFY" > "$DIR/.last-verify.txt" 2>&1 || { cat "$DIR/.last-verify.txt" >> "$DIR/backup.log"; exit 1; }
 grep -q '^restore OK' "$DIR/.last-verify.txt" || { log "verificação sem 'restore OK'"; exit 1; }
-# retenção: mantém os KEEP conjuntos mais novos (dump ou .gpg + .sha256); só apaga o que este script produz
-mapfile -t OLD < <(ls -1 "$DIR"/fibercore-prod-*.sha256 2>/dev/null | sort | head -n -"$KEEP")
-for s in "${OLD[@]}"; do base="${s%.sha256}"; rm -f -- "$s" "$base" "$base.gpg"; done
-log "OK $(basename "$VERIFY") $(stat -c %s "$VERIFY") bytes; mantidos: $(ls -1 "$DIR"/fibercore-prod-*.sha256 | wc -l); removidos: ${#OLD[@]}"
+: > "$OUT.done"   # marcador: só conjuntos que ESTA rotina concluiu e verificou entram na retenção
+# retenção: mantém os KEEP conjuntos concluídos mais novos; apaga só <base>, <base>.gpg, <base>.sha256 e <base>.done desses conjuntos
+mapfile -t OLD < <(ls -1 "$DIR"/fibercore-prod-????????T??????Z.dump.done 2>/dev/null | sort | head -n -"$KEEP")
+for m in "${OLD[@]}"; do base="${m%.done}"; rm -f -- "$m" "$base" "$base.gpg" "$base.sha256"; done
+log "OK $(basename "$VERIFY") $(stat -c %s "$VERIFY") bytes; mantidos: $(ls -1 "$DIR"/fibercore-prod-????????T??????Z.dump.done | wc -l); removidos: ${#OLD[@]}"

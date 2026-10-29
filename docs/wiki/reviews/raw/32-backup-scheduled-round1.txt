@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a185a2-ca8d-7d10-8342-b49f94c9d5e0).
+[codex] Turn started (01a185a2-cee8-7cf1-84e4-79b16a23c825).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os caminhos de backup, retenção e verificação de r...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- scripts/backup-scheduled.sh...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- scripts/backup-scheduled.sh... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba scripts/backup-scheduled.sh; nl -ba scripts/backup.sh | sed -n '8,27p';...
+[codex] Command completed: /bin/bash -lc "nl -ba scripts/backup-scheduled.sh; nl -ba scripts/backup.sh | sed -n '8,27p';... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: o backup em claro é o padrão e fal...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: o backup em claro é o padrão e falhas no dump podem ficar sem detalhe no único log persistente; retenção também confia em qualquer checksum com o mesmo prefixo.
+
+Findings:
+- [high] Backups de produção ficam sem cifra por padrão (scripts/backup-scheduled.sh:16-17)
+  Sem `BACKUP_GPG_RECIPIENT`, `backup.sh` publica diretamente o dump completo com PII (`backup.sh:28-30`); o script agendado aceita esse caminho por padrão. As permissões 0600 reduzem exposição local, mas qualquer cópia ou acesso ao diretório expõe os dados em claro. O checklist registra a cifra como pendente. Exija configuração de cifra para execução agendada ou proteja o dump com cifra obrigatória antes de publicá-lo.
+  Recommendation: Falhe antes de iniciar se `BACKUP_GPG_RECIPIENT` não estiver configurado e confirme que somente o arquivo cifrado é retido.
+- [medium] Falha no dump pode não deixar diagnóstico no log configurado (scripts/backup-scheduled.sh:13-16)
+  A saída padrão de `backup.sh` é descartada, e o `trap` registra apenas `FALHA rc=<código>`. Erros de `pg_dump` vão para stderr; o script não os acrescenta a `backup.log`. Como o procedimento documenta esse arquivo como log da rotina, um operador que consulte apenas o log não consegue identificar a causa da falha. Preserve stderr no log e/ou grave uma mensagem com contexto antes de sair.
+  Recommendation: Redirecione stdout e stderr de `backup.sh` para um log persistente com timestamp, sem descartar o diagnóstico da falha.
+- [medium] Retenção pode apagar arquivos alheios com checksum de prefixo compatível (scripts/backup-scheduled.sh:20-22)
+  A lista de exclusão é derivada de todo `fibercore-prod-*.sha256` presente no diretório; para cada um, o script remove o checksum e arquivos homônimos `.dump` e `.gpg`. Portanto, qualquer checksum com esse prefixo, mesmo sem ter sido criado pela rotina, autoriza a remoção dos arquivos correspondentes quando exceder a retenção. O lock cobre somente execuções deste script, não outros escritores. Use uma identidade verificável dos conjuntos produzidos e valide os artefatos antes de removê-los.
+  Recommendation: Restringir a retenção a manifestos criados pela rotina e validar que cada artefato pertence a um conjunto concluído antes de apagá-lo.
