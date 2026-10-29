@@ -97,7 +97,7 @@ func main() {
 					// local log only (device id stays on the site): the operator must look for pending tasks on this device in the ACS
 					log.Error("refresh left an unfinished task on the ACS; device held for 24h", "device", ref, "groups", rep.Groups, "uncleaned", rep.Uncleaned)
 					if herr := guard.Hold(ref, 24*time.Hour); herr != nil {
-						log.Error("could not persist the hold", "err", herr)
+						log.Error("could not persist the hold (kept in memory for this process; refreshes also fail closed while the state cannot be written)", "err", herr)
 					}
 				}
 				if err != nil {

@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a188cf-b35a-7153-992b-49ff6f5bfb35).
+[codex] Turn started (01a188cf-bab0-7de0-9afe-12fec61bdbc3).
+[codex] Assistant message captured: Vou comparar a branch com `main` e seguir especialmente as sequências POST/DELETE sob timeout...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/nbi/re...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/nbi/re... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/nbi/refresh.go | sed -n '88,145p'; nl -ba agents/e...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/nbi/refresh.go | sed -n '88,145p'; nl -ba agents/e... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: um POST pode criar tarefa no ACS e ainda as...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: um POST pode criar tarefa no ACS e ainda assim retornar timeout/erro de transporte; esse caminho não gera ErrRefreshUncleaned nem aciona o Hold de 24h.
+
+Findings:
+- [high] Resultado ambíguo do POST pode deixar tarefa sem Hold (agents/edge/internal/nbi/refresh.go:105-107)
+  Se o ACS criar a tarefa e a resposta se perder ou expirar, `postTask` retorna erro de transporte sem ID. `RefreshParams` propaga esse erro diretamente, e o chamador só persiste Hold quando `errors.Is(err, ErrRefreshUncleaned)`. O job falha com a categoria genérica de erro ACS, mas o dispositivo não fica retido; uma nova tentativa pode ocorrer após apenas 10 minutos enquanto a tarefa anterior ainda está pendente. O mesmo caminho também cobre respostas HTTP não-2xx, nas quais uma criação parcial não pode ser descartada com segurança. Inferência: o ACS pode aceitar a criação antes de a conexão falhar.
+  Recommendation: Trate erros de POST e respostas ambíguas como estado potencialmente não limpo: retorne ErrRefreshUncleaned (com contagem apropriada) para acionar o Hold e a categoria de falha, ou implemente reconciliação no ACS que determine se a tarefa foi criada antes de liberar o dispositivo.
+- [high] Falha ao persistir Hold reduz retenção a 10 minutos (agents/edge/cmd/fibercore-edge/main.go:99-101)
+  Quando a tarefa não é limpa, `guard.Hold` pode falhar ao gravar o estado. O erro é apenas logado; o job continua falhando, mas o Hold de 24h não existe no disco. A reserva anterior limita novas tentativas por dispositivo por 10 minutos, após os quais outra tarefa pode ser enviada enquanto a tarefa órfã ainda pode disparar no CPE.
+  Recommendation: Não trate o dispositivo como retido quando a gravação falhar. Faça o caminho de falha permanecer fechado, por exemplo persistindo um estado de bloqueio durável antes de permitir que o agente continue, ou tornando a falha de Hold uma condição operacional que impede novas reservas até recuperação.

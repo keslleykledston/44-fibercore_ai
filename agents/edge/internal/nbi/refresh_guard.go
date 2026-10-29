@@ -28,7 +28,8 @@ type RefreshGuard struct {
 	MaxPerHour   int
 	Now          func() time.Time
 
-	mu sync.Mutex
+	mu      sync.Mutex
+	memHold map[string]int64 // same as Held but kept in memory too: a failed write must not shorten a hold
 }
 
 type refreshState struct {
@@ -68,6 +69,11 @@ func (g *RefreshGuard) Hold(deviceID string, d time.Duration) error {
 		return ErrRefreshNoReserve
 	}
 	now := g.now()
+	sum0 := sha256.Sum256([]byte(deviceID))
+	if g.memHold == nil {
+		g.memHold = map[string]int64{}
+	}
+	g.memHold[hex.EncodeToString(sum0[:])] = now.Add(d).Unix() // in force for this process even if the write below fails
 	st := g.load(now)
 	if st.Held == nil {
 		st.Held = map[string]int64{}
@@ -98,6 +104,9 @@ func (g *RefreshGuard) Reserve(deviceID string) error {
 	}
 	sum := sha256.Sum256([]byte(deviceID))
 	key := hex.EncodeToString(sum[:])
+	if until := g.memHold[key]; until > nowS {
+		return ErrRefreshHeld
+	}
 	if until, ok := st.Held[key]; ok && until > nowS {
 		return ErrRefreshHeld
 	}

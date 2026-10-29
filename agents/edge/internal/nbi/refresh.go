@@ -104,7 +104,13 @@ func (c *Client) RefreshParams(ctx context.Context, deviceID string) (RefreshRep
 		rep.Groups++
 		status, taskID, faulted, err := c.postTask(ctx, deviceID, g)
 		if err != nil {
-			return rep, err
+			// A lost response, a timeout or a 5xx does not prove the ACS did NOT create the task. Only an explicit 4xx rejection does.
+			var rej *rejectedError
+			if errors.As(err, &rej) && rej.status >= 400 && rej.status < 500 {
+				return rep, err
+			}
+			rep.Uncleaned++
+			return rep, fmt.Errorf("%w: %v", ErrRefreshUncleaned, err)
 		}
 		switch {
 		case status == http.StatusOK && !faulted:
@@ -172,7 +178,7 @@ func (c *Client) postTask(ctx context.Context, deviceID string, names []string) 
 		return 0, "", false, err
 	}
 	if st != http.StatusOK && st != http.StatusAccepted {
-		return st, "", false, fmt.Errorf("nbi: task rejected with status %d", st)
+		return st, "", false, &rejectedError{status: st}
 	}
 	var t struct {
 		ID    string          `json:"_id"`
@@ -183,6 +189,12 @@ func (c *Client) postTask(ctx context.Context, deviceID string, names []string) 
 		t.ID = ""
 	}
 	return st, t.ID, len(t.Fault) > 0 && string(t.Fault) != "null", nil
+}
+
+type rejectedError struct{ status int }
+
+func (e *rejectedError) Error() string {
+	return fmt.Sprintf("nbi: task rejected with status %d", e.status)
 }
 
 func (c *Client) deleteTask(ctx context.Context, taskID string) error {

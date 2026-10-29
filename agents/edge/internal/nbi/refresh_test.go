@@ -185,10 +185,37 @@ func TestRefreshRefusesBeforeAnyTaskWhenTheDeviceOrModelIsNotClear(t *testing.T)
 	}
 }
 
-func TestRefreshStopsOnARejectedTask(t *testing.T) {
-	f := &fakeACS{devices: igd, taskCode: 500, taskBody: `x`}
-	if _, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1"); err == nil || len(f.tasks) != 1 {
-		t.Fatalf("err=%v tasks=%d (must stop at the first rejected task)", err, len(f.tasks))
+func TestRefreshAmbiguousPostOutcomesAreTreatedAsPossiblyUncleanButExplicit4xxIsNot(t *testing.T) {
+	for _, code := range []int{500, 502, 503} {
+		f := &fakeACS{devices: igd, taskCode: code, taskBody: `x`}
+		rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
+		if !errors.Is(err, ErrRefreshUncleaned) || rep.Uncleaned != 1 || len(f.tasks) != 1 {
+			t.Fatalf("%d: %+v %v tasks=%d (the ACS may have created the task)", code, rep, err, len(f.tasks))
+		}
+	}
+	for _, code := range []int{400, 403, 404, 422} {
+		f := &fakeACS{devices: igd, taskCode: code, taskBody: `x`}
+		_, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
+		if err == nil || errors.Is(err, ErrRefreshUncleaned) || len(f.tasks) != 1 {
+			t.Fatalf("%d: an explicit rejection created nothing, stop without a hold: %v tasks=%d", code, err, len(f.tasks))
+		}
+	}
+	// transport failure on the POST (connection dropped after the request was sent)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(igd))
+			return
+		}
+		if hj, ok := w.(http.Hijacker); ok {
+			conn, _, _ := hj.Hijack()
+			conn.Close()
+		}
+	}))
+	defer srv.Close()
+	c, _ := New(srv.URL, srv.Client(), "")
+	rep, err := c.RefreshParams(context.Background(), "AAAA00-ONT-SN1")
+	if !errors.Is(err, ErrRefreshUncleaned) || rep.Uncleaned != 1 {
+		t.Fatalf("%+v %v", rep, err)
 	}
 }
 
@@ -266,6 +293,29 @@ func TestRefreshGuardHoldBlocksOnlyThatDeviceAndSurvivesRestart(t *testing.T) {
 	}
 	if err := (&RefreshGuard{}).Hold("A", time.Hour); !errors.Is(err, ErrRefreshNoReserve) {
 		t.Fatalf("%v", err)
+	}
+}
+
+func TestRefreshGuardHoldSurvivesAFailedWriteForTheLifeOfTheProcess(t *testing.T) {
+	now := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	g := &RefreshGuard{Path: filepath.Join(dir, "g.json"), MinPerDevice: time.Minute, MaxPerHour: 5, Now: func() time.Time { return now }}
+	if err := g.Reserve("A"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o500); err != nil { // the state can no longer be written
+		t.Fatal(err)
+	}
+	defer os.Chmod(dir, 0o700)
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	if err := g.Hold("A", 24*time.Hour); err == nil {
+		t.Fatal("the write was expected to fail")
+	}
+	now = now.Add(30 * time.Minute) // far past the per-device window
+	if err := g.Reserve("A"); !errors.Is(err, ErrRefreshHeld) {
+		t.Fatalf("a hold whose write failed must still be in force: %v", err)
 	}
 }
 
