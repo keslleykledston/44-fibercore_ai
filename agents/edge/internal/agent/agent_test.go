@@ -2,7 +2,10 @@ package agent
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -17,6 +20,7 @@ import (
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/collector"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/gateway"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/jobs"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/nbi"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/queue"
 )
 
@@ -297,5 +301,96 @@ func TestJobResultSurvivesCloudOutageAndIsRetried(t *testing.T) {
 	defer mu.Unlock()
 	if len(results) != 2 || !strings.Contains(results[0], "accepted") || !strings.Contains(results[1], "state") {
 		t.Fatalf("results after recovery=%v", results)
+	}
+}
+
+type countingCollector struct{ runs *int }
+
+func (c countingCollector) Name() string { return "counting" }
+func (c countingCollector) Collect(context.Context) ([]collector.Item, error) {
+	*c.runs++
+	return []collector.Item{{Kind: "cpe_snapshot", Payload: []byte(`{"n":1}`)}}, nil
+}
+
+func signRefresh(t *testing.T, priv ed25519.PrivateKey, ref string) []byte {
+	t.Helper()
+	m := map[string]any{
+		"schema_version": "1.0", "job_id": "11111111-1111-4111-8111-111111111111", "tenant_id": "22222222-2222-4222-8222-222222222222",
+		"edge_id": "33333333-3333-4333-8333-333333333333", "target_id": "44444444-4444-4444-8444-444444444444", "operation": "refresh",
+		"idempotency_key": "refresh-key-0001", "issued_at": "2026-10-28T10:00:00+00:00", "expires_at": "2026-10-28T10:15:00+00:00",
+		"nonce": "abcdef0123456789abcdef0123456789", "intent_sha256": strings.Repeat("a", 64), "policy_version": "p", "approval_ids": []string{},
+	}
+	if ref != "" {
+		m["target_ref"] = ref
+	}
+	raw, _ := json.Marshal(m)
+	canon, err := jobs.Canonical(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m["signature"] = base64.StdEncoding.EncodeToString(ed25519.Sign(priv, canon))
+	out, _ := json.Marshal(m)
+	return out
+}
+
+func TestRefreshJobThatNamesADeviceRunsTheRefresherFirstAndFailsClosed(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	now := time.Date(2026, 10, 28, 10, 5, 0, 0, time.UTC)
+	type outcome struct {
+		results  []string
+		runs     int
+		refreshs []string
+	}
+	run := func(ref string, rf RefreshFunc) outcome {
+		srv, results := goldenJobServer(t, signRefresh(t, priv, ref))
+		q, _ := queue.Open(filepath.Join(t.TempDir(), "q.db"))
+		defer q.Close()
+		q.Now = func() time.Time { return now }
+		var o outcome
+		a := &Agent{EdgeID: "33333333-3333-4333-8333-333333333333", TenantID: "22222222-2222-4222-8222-222222222222", Version: "v",
+			GW: gateway.New(srv.URL, "c", "s", srv.Client()), Q: q, Collectors: []collector.Collector{countingCollector{&o.runs}},
+			Jobs: &jobs.Verifier{Pub: pub, EdgeID: "33333333-3333-4333-8333-333333333333", TenantID: "22222222-2222-4222-8222-222222222222",
+				Allowed: map[string]bool{"refresh": true}, Nonces: q, Now: func() time.Time { return now }},
+			Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+		if rf != nil {
+			a.Refresher = func(ctx context.Context, r string) (string, error) {
+				o.refreshs = append(o.refreshs, r)
+				return rf(ctx, r)
+			}
+		}
+		a.PollJob(context.Background())
+		o.results = *results
+		return o
+	}
+	// success: the refresher gets the signed ref, then the round runs, and the detail (counts only) is reported
+	o := run("AAAA00-ONT-SN1", func(context.Context, string) (string, error) { return "acs refresh: groups=5 completed=5", nil })
+	if len(o.refreshs) != 1 || o.refreshs[0] != "AAAA00-ONT-SN1" || o.runs != 1 || len(o.results) != 2 ||
+		!strings.Contains(o.results[1], `"succeeded"`) || !strings.Contains(o.results[1], "groups=5") {
+		t.Fatalf("%+v", o)
+	}
+	// refresher error: no collection, failed with a category and NOTHING of the raw error or the device id
+	o = run("AAAA00-ONT-SN1", func(context.Context, string) (string, error) {
+		return "", errors.New("dial tcp 10.1.2.3:7557: secret-token AAAA00-ONT-SN1")
+	})
+	if o.runs != 0 || len(o.results) != 2 || !strings.Contains(o.results[1], `"failed"`) ||
+		strings.Contains(o.results[1], "10.1.2.3") || strings.Contains(o.results[1], "secret-token") || strings.Contains(o.results[1], "AAAA00") {
+		t.Fatalf("%+v", o)
+	}
+	o = run("AAAA00-ONT-SN1", func(context.Context, string) (string, error) { return "", nbi.ErrRefreshTooSoon })
+	if o.runs != 0 || !strings.Contains(o.results[1], "refreshed too recently") {
+		t.Fatalf("%+v", o)
+	}
+	// feature off: a refresh that names a device fails closed, never degrades into a plain collection
+	o = run("AAAA00-ONT-SN1", nil)
+	if o.runs != 0 || len(o.results) != 2 || !strings.Contains(o.results[1], `"failed"`) || !strings.Contains(o.results[1], "not enabled") {
+		t.Fatalf("%+v", o)
+	}
+	// legacy refresh (no ref) keeps behaving as a plain collection and never calls the refresher
+	o = run("", func(context.Context, string) (string, error) {
+		t.Fatal("refresher must not run without a ref")
+		return "", nil
+	})
+	if o.runs != 1 || len(o.refreshs) != 0 || !strings.Contains(o.results[1], `"succeeded"`) {
+		t.Fatalf("%+v", o)
 	}
 }

@@ -69,6 +69,34 @@ def test_r0_collect_full_lifecycle_with_signed_envelope(client, seed, inv, targe
     assert client.get(f"/v1/jobs/{jid}", headers=h).json()["status"] == "SUCCEEDED"
 
 
+def test_refresh_of_a_cpe_carries_the_signed_acs_reference_and_collect_does_not(client, seed, inv, targets):
+    h = hdr(client, "alice", seed, "A")
+    a = agent(client, inv, "a1")
+    jid = preview(client, h, "refresh", targets["cpe"]).json()["id"]
+    assert client.post(f"/v1/jobs/{jid}/submit", headers=h).json()["status"] == "APPROVED"
+    env = client.get("/v1/edge/jobs/next", headers=a).json()
+    assert env["operation"] == "refresh" and env["target_ref"] == "job-ext-1"
+    assert not list(Draft202012Validator(SCHEMA).iter_errors(env))
+    assert jobsign.verify(_pub_b64(), env)
+    assert not jobsign.verify(_pub_b64(), {**env, "target_ref": "other-device-1"})  # the ref is covered by the signature
+    c = preview(client, h, "collect", targets["olt"]).json()["id"]
+    client.post(f"/v1/jobs/{c}/submit", headers=h)
+    assert "target_ref" not in client.get("/v1/edge/jobs/next", headers=a).json()
+
+
+def test_refresh_without_a_tr069_binding_has_no_reference(client, seed, inv, targets, migrated):
+    h = hdr(client, "alice", seed, "A")
+    with migrated.begin() as c:
+        c.execute(text("UPDATE cpe_protocol_bindings SET protocol = 'tr369' WHERE cpe_id = :i"), {"i": targets["cpe"]})
+    try:
+        jid = preview(client, h, "refresh", targets["cpe"]).json()["id"]
+        client.post(f"/v1/jobs/{jid}/submit", headers=h)
+        assert "target_ref" not in client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1")).json()
+    finally:
+        with migrated.begin() as c:
+            c.execute(text("UPDATE cpe_protocol_bindings SET protocol = 'tr069' WHERE cpe_id = :i"), {"i": targets["cpe"]})
+
+
 def test_success_without_postcheck_is_unknown_not_succeeded(client, seed, inv, targets):
     h = hdr(client, "alice", seed, "A")
     jid = preview(client, h, "collect", targets["olt"]).json()["id"]

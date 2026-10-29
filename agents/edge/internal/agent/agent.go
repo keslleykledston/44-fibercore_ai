@@ -12,8 +12,12 @@ import (
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/collector"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/gateway"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/jobs"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/nbi"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/queue"
 )
+
+// RefreshFunc performs the authorised active read of ONE device (ADR-SD-002 item 4) and returns a counts-only detail.
+type RefreshFunc func(ctx context.Context, deviceRef string) (detail string, err error)
 
 type Agent struct {
 	EdgeID, TenantID, Version string
@@ -21,6 +25,7 @@ type Agent struct {
 	Q                         *queue.Queue
 	Collectors                []collector.Collector
 	Jobs                      *jobs.Verifier // nil => job polling disabled
+	Refresher                 RefreshFunc    // nil => refresh jobs that name a device fail closed
 	JobPollEvery              time.Duration
 	HeartbeatEvery            time.Duration
 	CollectEvery              time.Duration
@@ -124,12 +129,32 @@ func (a *Agent) PollJob(ctx context.Context) {
 	// Outcomes go through the durable queue (ordered after the data they refer to, retried until the Cloud acknowledges;
 	// the Cloud treats repeats of the same outcome as no-ops). A lost response can no longer strand a job.
 	a.reportJob(ctx, env.JobID, "accepted", "", false)
+	// A refresh that names a device asks the ACS to read it first (rate-limited, allowlisted). Without a configured Refresher it fails closed.
+	refreshDetail := ""
+	if env.Operation == "refresh" && env.TargetRef != "" {
+		if a.Refresher == nil {
+			a.reportJob(ctx, env.JobID, "failed", "active refresh is not enabled on this edge", false)
+			a.Flush(ctx)
+			return
+		}
+		d, rerr := a.Refresher(ctx, env.TargetRef)
+		if rerr != nil {
+			a.Log.Warn("refresh failed", "job_id", env.JobID, "err", rerr)
+			a.reportJob(ctx, env.JobID, "failed", "refresh not performed: "+refreshReason(rerr), false)
+			a.Flush(ctx)
+			return
+		}
+		refreshDetail = d
+	}
 	// collect/refresh are the only operations that pass Verify: a fresh read-only round, then delivery.
 	cerr := a.CollectOnce(ctx)
 	a.Flush(ctx)
 	pending, _, qerr := a.Q.Counts(ctx)
 	ok := cerr == nil && qerr == nil && pending == 0 // post-check: round complete AND everything delivered
 	state, detail := "succeeded", "collection round delivered"
+	if refreshDetail != "" {
+		detail = refreshDetail + "; " + detail
+	}
 	if !ok {
 		state, detail = "failed", "collection incomplete or delivery pending"
 	}
@@ -206,5 +231,21 @@ func (a *Agent) Run(ctx context.Context) {
 		case <-retry.C:
 			collect()
 		}
+	}
+}
+
+// refreshReason is what may travel to the Cloud about a refused/failed refresh: a short category, never device ids or raw errors.
+func refreshReason(err error) string {
+	switch {
+	case errors.Is(err, nbi.ErrRefreshTooSoon):
+		return "device refreshed too recently"
+	case errors.Is(err, nbi.ErrRefreshBudget):
+		return "hourly refresh budget exhausted"
+	case errors.Is(err, nbi.ErrRefreshNoReserve):
+		return "pacing state unavailable"
+	case errors.Is(err, nbi.ErrBadDeviceID), errors.Is(err, nbi.ErrNoDataModel):
+		return "device unknown or data model unsupported"
+	default:
+		return "acs request failed"
 	}
 }

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -50,6 +51,9 @@ OPERATIONS: dict[str, Operation] = {
 }
 # (operation) names whose firmware/model/transport homologation is complete. EMPTY by design in Sprint 3.
 HOMOLOGATED_WRITES: frozenset[str] = frozenset()
+
+# the ACS device ids the Edge accepts as a refresh target (same pattern as agents/edge/internal/jobs)
+TARGET_REF_RE = re.compile(r"[A-Za-z0-9._%-]{3,200}")
 
 TRANSITIONS: dict[str, frozenset[str]] = {
     "PREVIEWED": frozenset({"PENDING_APPROVAL", "APPROVED", "CANCELLED", "EXPIRED"}),
@@ -258,6 +262,16 @@ def next_job(
         "issued_at": datetime.now(UTC).isoformat(), "expires_at": row.expires_at.isoformat(), "nonce": row.nonce,
         "intent_sha256": row.intent_hash.strip(), "policy_version": POLICY_VERSION, "approval_ids": approvals,
     }
+    if row.operation == "refresh" and row.target_type == "cpe":
+        # The ACS device id the Edge may ask about (ADR-SD-002 item 4), covered by the signature. A CPE without a TR-069 binding keeps the
+        # old behaviour (a plain collection round); the Edge validates the value again and only acts when active reads are enabled.
+        ref = conn.execute(
+            text("SELECT external_id FROM cpe_protocol_bindings WHERE cpe_id = :c AND protocol = 'tr069' "
+                 "ORDER BY observed_at DESC NULLS LAST, id LIMIT 1"),
+            {"c": row.target_id},
+        ).scalar()
+        if ref and TARGET_REF_RE.fullmatch(ref):
+            envelope["target_ref"] = ref
     envelope["signature"] = jobsign.sign(jobsign.load_private(settings.job_signing_key), envelope)
     cas(conn, row.id, "DISPATCHED")
     outbox.enqueue(conn, tenant_id=p.tenant_id, aggregate_type="job", aggregate_id=row.id, event_type="job.dispatched",

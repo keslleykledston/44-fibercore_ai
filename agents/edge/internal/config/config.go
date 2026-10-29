@@ -35,6 +35,7 @@ type Config struct {
 	JobsEnabled      bool        `json:"jobs_enabled"`       // poll the Cloud for signed read-only jobs
 	JobPublicKey     string      `json:"job_public_key"`     // base64 Ed25519 public key of the Cloud, pinned locally
 	AllowedOps       []string    `json:"allowed_operations"` // narrows the compile-time read-only set (collect, refresh)
+	RefreshTasks     bool        `json:"refresh_tasks"`      // ADR-SD-002 item 4: let signed refresh jobs ask the ACS to read ONE CPE (needs nbi_url + jobs_enabled)
 	Version          string      `json:"-"`
 }
 
@@ -117,6 +118,9 @@ func (c *Config) Validate() error {
 		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
 			errs = append(errs, errors.New("nbi_url invalid"))
 		}
+	}
+	if c.RefreshTasks && (c.NBIURL == "" || !c.JobsEnabled) {
+		errs = append(errs, errors.New("refresh_tasks requires nbi_url and jobs_enabled (active reads only run from signed jobs)"))
 	}
 	if c.JobsEnabled && c.JobPublicKey == "" {
 		errs = append(errs, errors.New("jobs_enabled requires job_public_key (pinned locally, never fetched from the Cloud)"))
@@ -239,6 +243,11 @@ func DeviceKey(addr string) string {
 func StateFiles(queuePath string) (lock, guard string) {
 	d := filepath.Dir(queuePath)
 	return filepath.Join(d, "edge.lock"), filepath.Join(d, "olt-guard.json")
+}
+
+// RefreshGuardFile is the pacing state of the active CPE reads; it lives next to the other state files.
+func RefreshGuardFile(queuePath string) string {
+	return filepath.Join(filepath.Dir(queuePath), "refresh-guard.json")
 }
 
 // OLTInterval is the minimum time between two collections of one OLT. A CLI session is a login on a real device (and the pager

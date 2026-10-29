@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/url"
@@ -70,6 +71,7 @@ func main() {
 	defer lock.Close()
 
 	var collectors []collector.Collector
+	var refresher agent.RefreshFunc
 	if cfg.NBIURL != "" {
 		nbiAuth := ""
 		if cfg.NBISecretFile != "" {
@@ -82,6 +84,25 @@ func main() {
 		if err != nil {
 			log.Error("nbi", "err", err)
 			os.Exit(2)
+		}
+		if cfg.RefreshTasks {
+			guard := &nbi.RefreshGuard{Path: config.RefreshGuardFile(cfg.QueuePath), MinPerDevice: 10 * time.Minute, MaxPerHour: 20}
+			refresher = func(ctx context.Context, ref string) (string, error) {
+				if err := guard.Reserve(ref); err != nil { // persisted BEFORE anything is sent
+					return "", err
+				}
+				rep, err := nbiClient.RefreshParams(ctx, ref)
+				if err != nil {
+					return "", err
+				}
+				res, rerr := nbiClient.CachedParams(ctx, []string{ref})
+				readable, rejected := 0, 0
+				if rerr == nil && len(res) == 1 {
+					readable, rejected = len(res[0].Metrics), res[0].Rejected
+				}
+				return fmt.Sprintf("acs refresh (%s): groups=%d completed=%d faulted=%d queued=%d cleaned=%d; readable_metrics=%d rejected=%d",
+					rep.DataModel, rep.Groups, rep.Completed, rep.Faulted, rep.Queued, rep.Cleaned, readable, rejected), nil
+			}
 		}
 		collectors = append(collectors, &collector.GenieACS{EdgeID: cfg.EdgeID, ConnectorID: cfg.ConnectorID, Client: nbiClient,
 			OnSkip: func(reason string, n int) { log.Info("genieacs: devices left out", "reason", reason, "count", n) }})
@@ -167,7 +188,7 @@ func main() {
 	defer stop()
 	ag := &agent.Agent{
 		EdgeID: cfg.EdgeID, TenantID: cfg.TenantID, Version: cfg.Version, GW: gw, Q: q, Collectors: collectors,
-		Jobs: verifier, JobPollEvery: 15 * time.Second, HeartbeatEvery: cfg.HeartbeatEvery(), CollectEvery: cfg.CollectEvery(), Log: log,
+		Jobs: verifier, Refresher: refresher, JobPollEvery: 15 * time.Second, HeartbeatEvery: cfg.HeartbeatEvery(), CollectEvery: cfg.CollectEvery(), Log: log,
 	}
 	log.Info("fibercore-edge starting", "version", cfg.Version, "edge_id", cfg.EdgeID, "collectors", len(collectors))
 	ag.Run(ctx)
