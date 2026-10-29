@@ -78,3 +78,5 @@
 ## Atualização 2026-10-29 (leitura ativa)
 - Leitura ativa de parâmetros (ADR-SD-002 item 4) implantada na LAB e ensaiada com falha limpa; falta um CPE que responda à conexão para ver dado real. Ligar o transporte `cpe_state` (migração) só depois disso.
 - Operador: o NBI do GenieACS continua aberto; fechar conforme `docs/operations/GENIEACS_NBI_HARDENING.md`.
+- (2026-10-29) NBI do GenieACS FECHADO pelo responsável (bind em loopback + firewall); verificado de fora e de dentro, Edge segue com heartbeat. Pendente do responsável: autenticação CWMP e um CPE real alcançável (`_id` com Inform recente + Connection Request alcançável) para o refresh real e o transporte `cpe_state`.
+

@@ -1,5 +1,7 @@
 # GenieACS — fechar o NBI (runbook para quem tem root)
 
+**APLICADO em 2026-10-29 pelo responsável (root).** Verificação posterior por mim, somente leitura: de fora, 7557/3000/7567 recusam conexão e 7547 (CWMP) segue aberta; no host o NBI escuta só em loopback e responde; o heartbeat do Edge continua avançando. Sobra a autenticação CWMP (decisão do responsável, exige janela e plano de rollout para as ONTs). O texto abaixo é o estado anterior e o procedimento, mantidos para reversão e auditoria.
+
 **Estado (2026-10-29, inspeção somente leitura + autorização do responsável para corrigir):** o NBI (7557) responde sem autenticação e escuta em todas as interfaces; a UI (3000), o FS (7567) e o CWMP (7547) também. O NBI **escreve** no GenieACS.
 **Por que não foi aplicado por mim:** a conta SSH disponível ao projeto não tem root (`sudo` nem está instalado) e o arquivo de ambiente do serviço pertence ao usuário do serviço (modo 0600). Nada foi alterado no GenieACS. Isto é um passo para um administrador com root.
 
