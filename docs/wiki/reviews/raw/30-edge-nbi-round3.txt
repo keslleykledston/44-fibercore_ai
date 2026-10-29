@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18543-2f26-7143-b724-27f86393688c).
+[codex] Turn started (01a18543-3365-7ab0-964c-5e69598cd932).
+[codex] Assistant message captured: Vou comparar a branch com `main` e seguir especialmente a migração, a sequência das travas e ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=40 main...HEAD -- apps/api/tests/test_invento...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=40 main...HEAD -- apps/api/tests/test_invento... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/alembic/versions/0013_cpe_claim_integrity.py; nl -ba apps/api/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/alembic/versions/0013_cpe_claim_integrity.py; nl -ba apps/api/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: a migração pode falhar em dados vál...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: a migração pode falhar em dados válidos já existentes, e o bloqueio por advisory não garante a ordem de aquisição que o código pressupõe.
+
+Findings:
+- [high] Migração pode falhar ao canonicalizar dados existentes (apps/api/alembic/versions/0013_cpe_claim_integrity.py:22-24)
+  O `UPDATE` pode colapsar dois registros do mesmo tenant, como `abc` e `ABC`, na mesma chave coberta pelo `UNIQUE (tenant_id, canonical_serial)` existente; a atualização então falha e interrompe a migração. O índice novo também falha se já houver múltiplos `external_id` para um mesmo `(tenant_id, cpe_id, connector_id, protocol)`, estado permitido pelo esquema anterior. Não há verificação nem tratamento dessas colisões, então uma base de produção com qualquer um desses casos não consegue avançar para 0013. Faça uma migração explícita de colisões com política de preservação/reconciliação e valide ambas as invariantes antes de criar as restrições.
+  Recommendation: Adicionar etapa de diagnóstico e reconciliação determinística para colisões de serial e bindings antes das restrições; abortar com relatório claro se não houver política segura de resolução.
+- [medium] Aquisição dos advisory locks não tem ordenação garantida pelo SQL (apps/api/app/api/inventory.py:199-201)
+  A lista `keys` é ordenada em Python, mas o `SELECT ... FROM unnest(...)` não contém `ORDER BY`. SQL não garante a ordem das linhas sem ordenação explícita, portanto duas transações com conjuntos sobrepostos podem adquirir os mesmos advisory locks em ordens distintas e entrar em deadlock. Isso contradiz a garantia usada para evitar deadlocks em lotes concorrentes e pode abortar ingestões sob carga. Ordene explicitamente a relação e assegure que a chamada de lock seja avaliada nessa ordem.
+  Recommendation: Adquirir locks por chave em ordem explicitamente garantida pelo banco, por exemplo iterando chamadas de lock sobre uma subconsulta ordenada, e cobrir lotes parcialmente sobrepostos em teste concorrente.

@@ -269,3 +269,52 @@ def test_concurrent_snapshots_cannot_attach_two_external_ids_to_one_new_serial(c
                            "WHERE p.canonical_serial = 'RACE-CLAIM-1' AND p.tenant_id = :t"), {"t": seed["A"]}).scalar()
     assert n == 1  # exactly one claim won; the others were ignored, none merged
     assert sum(r.json()["conflicts"] for r in out.values()) == 3
+
+
+def test_overlapping_batches_in_parallel_do_not_deadlock(client, seed, inv):
+    import random
+    import threading
+
+    a = agent(client, inv, "a1")
+    serials = [f"OVERLAP-{i:03d}" for i in range(12)]
+    obs = _now()
+    out: list = []
+
+    def post(seed_n):
+        rnd = random.Random(seed_n)  # noqa: S311 - deterministic test data, not security
+        pick = rnd.sample(serials, 8)  # different, partially overlapping subsets; the API must order the locks itself
+        body = {"edge_id": str(inv["a1"]["edge"]), "observed_at": obs, "cpes": [
+            {"canonical_serial": s, "binding": {"protocol": "tr069", "external_id": f"ov-{s}", "connector_id": "c-overlap"}} for s in pick]}
+        out.append(client.post("/v1/edge/cpe-snapshots", headers=a, json=body).status_code)
+
+    ts = [threading.Thread(target=post, args=(n,)) for n in range(8)]
+    [t.start() for t in ts]
+    [t.join(60) for t in ts]
+    assert out == [202] * 8, out
+
+
+def test_claim_locks_are_taken_in_sorted_order(client, seed, inv):
+    """The deadlock guarantee is the ORDER of acquisition: the advisory lock statements must run sorted by claim key whatever the order
+    of the CPEs in the request."""
+    from sqlalchemy import event
+
+    from app.core.db import get_engine
+
+    seen: list = []
+
+    def spy(conn, cursor, statement, parameters, context, executemany):
+        if "pg_advisory_xact_lock" in statement:
+            seen.append(parameters)
+
+    eng = get_engine()
+    event.listen(eng, "before_cursor_execute", spy)
+    try:
+        serials = [f"ORDER-{c}" for c in "ZYXWVUTSRQ"]  # deliberately reverse-sorted in the request
+        body = {"edge_id": str(inv["a1"]["edge"]), "observed_at": _now(), "cpes": [
+            {"canonical_serial": s, "binding": {"protocol": "tr069", "external_id": f"o-{s}", "connector_id": "c-order"}} for s in serials]}
+        assert client.post("/v1/edge/cpe-snapshots", headers=agent(client, inv, "a1"), json=body).status_code == 202
+    finally:
+        event.remove(eng, "before_cursor_execute", spy)
+    ks = [p["k"] for params in seen for p in (params if isinstance(params, list) else [params])]
+    ks = [k for k in ks if "|c-order|" in k]  # the login throttle takes advisory locks too (ip:/svc: keys); only the claim keys matter here
+    assert len(ks) == 10 and ks == sorted(ks), ks

@@ -195,10 +195,11 @@ def ingest_cpe_snapshot(
     _bound_edge(p, body.edge_id)
     all_serials = [c.canonical_serial for c in body.cpes]
     # Serialise concurrent snapshots per CLAIM key (tenant, serial, connector, protocol) — also for serials that do not exist yet, which
-    # row locks cannot cover. Sorted, so two overlapping batches take the locks in the same order. The unique index is the backstop.
+    # row locks cannot cover. Sorted and taken sequentially, so two overlapping batches acquire them in the same order (no deadlock).
+    # The unique index is the backstop.
     keys = sorted({f"{p.tenant_id}|{c.canonical_serial}|{c.binding.connector_id}|{c.binding.protocol}" for c in body.cpes})
-    if keys:
-        conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(k, 0)) FROM unnest(CAST(:ks AS text[])) AS k"), {"ks": keys})
+    if keys:  # one statement per key, run by the driver in this exact order (a single SELECT over unnest() would not guarantee it)
+        conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), [{"k": k} for k in keys])
     owners = {  # row locks serialise concurrent snapshots touching the same CPEs
         r.canonical_serial: (r.edge_id, r.observed_at)
         for r in conn.execute(

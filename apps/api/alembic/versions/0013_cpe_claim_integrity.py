@@ -17,6 +17,25 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Identity data is never merged automatically: two CPEs that only differ by case/spaces, or one CPE with several external ids for the
+    # same (connector, protocol), may be different physical devices, and picking a survivor would silently re-point a management binding.
+    # So the migration REFUSES to run over such data and says exactly what to fix (counts only; no identifiers in the message).
+    op.execute(
+        """
+        DO $$
+        DECLARE serial_collisions int; binding_collisions int;
+        BEGIN
+          SELECT count(*) INTO serial_collisions FROM (
+            SELECT 1 FROM cpes GROUP BY tenant_id, upper(btrim(canonical_serial)) HAVING count(*) > 1) x;
+          SELECT count(*) INTO binding_collisions FROM (
+            SELECT 1 FROM cpe_protocol_bindings GROUP BY tenant_id, cpe_id, connector_id, protocol HAVING count(*) > 1) y;
+          IF serial_collisions > 0 OR binding_collisions > 0 THEN
+            RAISE EXCEPTION '0013 refused: % CPE serial group(s) differ only by case/spaces and % CPE(s) have several external ids for the same connector+protocol. Reconcile them by hand (decide which device is real), then re-run.',
+              serial_collisions, binding_collisions;
+          END IF;
+        END $$;
+        """
+    )
     op.execute(
         """
         UPDATE cpes SET canonical_serial = upper(btrim(canonical_serial)) WHERE canonical_serial <> upper(btrim(canonical_serial));
