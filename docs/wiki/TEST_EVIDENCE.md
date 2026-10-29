@@ -144,3 +144,8 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - `cd agents/edge && go vet ./... && go test ./...`: PASS (novos: intervalo/cooldown CLI, restart com arquivo de estado, tentativa morta no meio, arquivo corrompido/`null`, timestamps absurdos com restart repetido, falha ao gravar = não disca, CLI+SNMP do mesmo host compartilham o guard, config `collect_seconds`/`cooldown_seconds`, `DeviceKey`, duplicidade de equipamento, IP literal, `StateFiles`, singleton).
 - Mutation check: sem persistência do guard → 2 testes de restart falham; chave por nome em vez de host → 3 testes falham.
 - Codex PR 43: 6 rodadas até approve (ver CODEX_REVIEW_LOG).
+
+## 2026-10-29 — Reconhecer incidente e busca de cliente no ⌘K (PR 45)
+- `scripts/e2e.sh`: **51 passed** (2 novos em `noc-ack-and-search.spec.ts`, projeto `posteriores`: reconhecer pelo painel com axe, botão some, fila e indicador "Não reconhecidos" diminuem e persistem após reload; busca de cliente só com 3+ letras, sem documento na lista, abre a Visão 360). Reexecução após a correção do Codex: 27 passed no modo funcional.
+- Nota: o spec novo não rodava no primeiro intento porque o `playwright.config.ts` só casava `app.spec.ts`/`help-screenshots.spec.ts`; corrigido com o projeto `posteriores` (depende de `funcional`).
+- NOT_RUN: teste com papel sem `incidents:ack` pela UI (a API tem teste de 403); teste de carga da busca.

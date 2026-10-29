@@ -98,3 +98,7 @@
 
 ## Unreleased — PR 44 (Edge → OLT, observabilidade)
 - Edge: cada tentativa que chega à OLT registra `olt collected`/`olt collection failed` com duração (nunca saída do equipamento); o orçamento de tempo vira proporcional às PONs (1 min + 15 s/PON, entre 5 e 9 min) e cobre também o login.
+
+## Unreleased — PR 45 (itens pequenos do v2.2)
+- NOC: **Reconhecer incidente** no painel lateral (BFF `POST /bff/incidents/{id}/ack`; só registra a ciência, auditada; 403/409 tratados).
+- Busca global (⌘K): clientes por nome a partir de 3 letras (BFF `GET /bff/search/customers`, só id e nome; a API audita o acesso).
