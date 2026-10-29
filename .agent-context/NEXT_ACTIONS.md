@@ -80,4 +80,5 @@
 - Operador: o NBI do GenieACS continua aberto; fechar conforme `docs/operations/GENIEACS_NBI_HARDENING.md`.
 - (2026-10-29) NBI do GenieACS FECHADO pelo responsável (bind em loopback + firewall); verificado de fora e de dentro, Edge segue com heartbeat. Pendente do responsável: autenticação CWMP e um CPE real alcançável (`_id` com Inform recente + Connection Request alcançável) para o refresh real e o transporte `cpe_state`.
 - (2026-10-29) ONT de bancada Huawei no ACS (Inform ok, com auth CWMP). Connection Request manual funciona; o refresh via NBI (`connection_request`) enfileira (202 em ~30 ms) mas a ONT não abre sessão — causa a investigar com root (log de erro do NBI) ou mudar o fluxo para esperar o Inform periódico (ADR + Codex). Sem dado real até lá.
+- (2026-10-29) Refresh sem dado: causa = credencial de Connection Request da ONT difere de `cwmp.connectionRequestAuth` do ACS (401). Responsável iguala na ONT; depois repetir o ensaio supervisionado. Acesso: `sudo` funciona no host do ACS com a senha do próprio usuário (a `ROOT_PASSWORD` do .env não é aceita; removê-la do .env).
 
