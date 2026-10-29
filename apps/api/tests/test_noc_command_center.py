@@ -223,3 +223,20 @@ def test_priority_scan_says_when_it_hit_its_ceiling(client, seed, inv, migrated,
     monkeypatch.setattr(noc, "PRIORITY_SCAN", 1000)
     assert client.get("/v1/incidents", headers=h, params={"order": "priority"}).json()["truncated"] is False
     assert client.get("/v1/incidents", headers=h).json()["truncated"] is False   # the default (recent) listing never claims truncation
+
+
+def test_every_silent_edge_classifies_its_incidents_even_when_the_alert_list_is_cut(client, seed, inv, migrated, monkeypatch):
+    from app.api import noc
+    h = hdr(client, "alice", seed, "A")
+    _outage(client, inv, "OLT-NCC-E1", n=6, key="a1")
+    _outage(client, inv, "OLT-NCC-E2", n=6, key="a2")
+    _approve(migrated, seed["A"], seed["alice"], "OLT-NCC-E1-00", "e1")
+    _approve(migrated, seed["A"], seed["alice"], "OLT-NCC-E2-00", "e2")
+    with migrated.begin() as c:
+        c.execute(text("UPDATE edges SET last_heartbeat_at = now() - interval '1 day' WHERE id = ANY(:e)"), {"e": [inv["a1"]["edge"], inv["a2"]["edge"]]})
+    monkeypatch.setattr(noc, "ALERTS_SHOWN", 1)
+    d = client.get("/v1/incidents", headers=h, params={"order": "priority", "limit": 500}).json()
+    assert len(d["alerts"]) == 1                                   # the visible list is bounded...
+    mine = {i["olt"]: i for i in d["incidents"] if i["olt"] in ("OLT-NCC-E1", "OLT-NCC-E2")}
+    assert mine["OLT-NCC-E1"]["edge_silent"] is True and mine["OLT-NCC-E2"]["edge_silent"] is True   # ...the classification is not
+    assert d["summary"]["silent_edges"] >= 2 and d["summary"]["open_suppressed"] >= 2

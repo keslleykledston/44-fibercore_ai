@@ -174,14 +174,17 @@ def _j(d: dict) -> str:
 
 IMPACT_SOURCE = "associations_approved"   # customers are counted ONLY through associations a person approved (ADR-0021 / customers:read)
 MEMBERS_SHOWN = 50
+ALERTS_SHOWN = 100     # the visible alert list is bounded; the silent-edge classification and totals are not
 PRIORITY_SCAN = 1000   # most open incidents ranked for one priority listing; beyond it the response says `truncated`
 
 
 def _silent_edges(conn: Connection) -> list:
+    """ALL silent edges (tenant scoped by RLS), oldest first. Classification and totals need every one: an edge left out of this list would
+    make its incidents look like drops confirmed now. Only the alert LIST shown to the user is bounded (ALERTS_SHOWN)."""
     cutoff = datetime.now(UTC) - EDGE_OFFLINE_AFTER
-    return conn.execute(  # filtered and bounded in SQL (tenant scoped by RLS)
+    return conn.execute(
         text("SELECT id, name, last_heartbeat_at FROM edges WHERE status <> 'revoked' AND last_heartbeat_at IS NOT NULL "
-             "AND last_heartbeat_at < :c ORDER BY last_heartbeat_at LIMIT 100"),
+             "AND last_heartbeat_at < :c ORDER BY last_heartbeat_at"),
         {"c": cutoff},
     ).all()
 
@@ -256,7 +259,7 @@ def list_incidents(
         incidents = incidents[:limit]
     alerts = [{"kind": "edge_silent", "edge": e.name, "last_heartbeat_at": e.last_heartbeat_at.isoformat(),
                "note": "no data from this edge; ONU/OLT states behind it are last-known, not offline"}
-              for e in silent]
+              for e in silent[:ALERTS_SHOWN]]
     summary = _summary(conn, can_customers, [e.id for e in silent])
     return {"incidents": incidents, "alerts": alerts, "truncated": truncated, "summary": summary}
 
