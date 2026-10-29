@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1888a-c8dc-7c61-bc1a-419f3cf87689).
+[codex] Turn started (01a1888a-cc23-7a13-b2e5-5755dace01d6).
+[codex] Assistant message captured: Vou comparar a branch com `main` e rastrear, nos contratos e testes, todo campo que possa ace...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- contracts/sd001 apps/api/te...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- contracts/sd001 apps/api/te... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'type: string|type: \\[|requestBody:|SafeText|reason_code|description:' ...
+[codex] Command completed: /bin/bash -lc "rg -n 'type: string|type: \\[|requestBody:|SafeText|reason_code|description:' ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: o corpo de aprovação está fechado, ma...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: o corpo de aprovação está fechado, mas o contrato ainda aceita texto arbitrário no cabeçalho Idempotency-Key, que os testes não exercitam.
+
+Findings:
+- [medium] Idempotency-Key continua aceitando texto livre (contracts/sd001/smart-diagnostics.openapi.yaml:154-158)
+  O cabeçalho só impõe tamanho mínimo e máximo; não restringe caracteres nem formato. Assim, um cliente pode enviar texto arbitrário, inclusive conteúdo sensível, por esse campo de entrada. Como o contrato exige a chave em operações de escrita, se a implementação a persistir ou registrar para deduplicação, esse conteúdo pode acabar armazenado ou em logs. O teste verifica que o parâmetro existe, mas não valida seus valores. Restrinja a chave a um formato opaco definido (por exemplo, UUID) e cubra valores fora do formato.
+  Recommendation: Restringir o schema de IdempotencyKey a um formato opaco e adicionar teste que rejeite texto livre.

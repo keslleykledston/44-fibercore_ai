@@ -138,6 +138,14 @@ def test_request_bodies_have_no_unbounded_free_text():
     assert _v(_component("ActiveTestRequest"), {**test, "consent_id": "aceito: senha=1"})
 
 
+def test_idempotency_key_is_an_opaque_token():
+    schema = OVERLAY["components"]["parameters"]["IdempotencyKey"]["schema"]
+    for good in ("7f9c2b1e-4a6d-4c1e-9d0b-1a2b3c4d5e6f", "diag_2026-10-29.0001"):
+        assert not _v(schema, good), good
+    for bad in ("senha do cliente 1234", "aa:bb:cc:dd:ee:ff", "curto", "x" * 129, "a b c d e f g h", "token=abcdef12"):
+        assert _v(schema, bad), bad
+
+
 def test_action_parameters_are_strict_per_kind():
     base = {"proposal_id": "11111111-1111-4111-8111-111111111111", "cpe_id": "22222222-2222-4222-8222-222222222222", "risk": "R2",
             "proposal_hash": "a" * 64, "expires_at": "2026-10-30T00:00:00Z", "status": "proposed"}
