@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18527-2562-7152-8a0a-b01aca80a5a5).
+[codex] Turn started (01a18527-372c-7da1-a63c-6ffdcc349fd5).
+[codex] Assistant message captured: Vou comparar `HEAD` com `main` e rastrear especialmente a separação entre resposta técnica e ...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/inventory....
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/inventory.... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- apps/web/src/app/rede/onu/'...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- apps/web/src/app/rede/onu/'... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '300,390p'; sed -n '1,180p' apps...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '300,390p'; sed -n '1,180p' apps... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,60p' apps/api/app/api/routes.py; sed -n '1,120p' apps/api/app/api/de...
+[codex] Command completed: /bin/bash -lc "sed -n '1,60p' apps/api/app/api/routes.py; sed -n '1,120p' apps/api/app/api/de... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: se a consulta do assinante falhar,...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: se a consulta do assinante falhar, a página omite o bloco sem indicar erro, podendo fazer uma falha de API parecer falta de permissão ou ausência de vínculo.
+
+Findings:
+- [medium] Falha ao carregar assinante é apresentada como bloco inexistente (apps/web/src/app/rede/onu/[id]/page.tsx:29-32)
+  A página só renderiza o bloco quando `/customer` retorna 200. Qualquer outro status — incluindo 500/503 — vira `customer = null` e é descartado; a ONU 360 continua carregando como se estivesse completa. O usuário não consegue distinguir indisponibilidade da API de falta de permissão ou de um bloco ausente, e pode deixar de investigar um vínculo existente. Trate 403 separadamente e mostre um estado de erro/repetição para falhas inesperadas.
+  Recommendation: Inspecione `cu.status`: reserve a omissão para 403 e apresente erro explícito com opção de tentar novamente para respostas inesperadas.
+
+Next steps:
+- Distinguir falha de autorização de falha de carregamento do bloco Assinante antes de liberar.

@@ -26,6 +26,7 @@ export default async function Onu360Page({ params }: { params: Promise<{ id: str
   if (r.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver o inventário." /></AppShell>;
   const o = r.data;
   const customer = cu.status === 200 ? cu.data : null;
+  const customerFailed = cu.status !== 200 && cu.status !== 403; // só 403 (papel sem acesso) omite o bloco; o resto é falha e aparece
   if (!o) return <AppShell active="/rede" user="1"><ErrorState title="Falha ao carregar a ONU" hint="Tente novamente em instantes." /></AppShell>;
   return (
     <AppShell active="/rede" user="1">
@@ -63,6 +64,12 @@ export default async function Onu360Page({ params }: { params: Promise<{ id: str
           ) : o.incident_hidden ? <p className="text-sm text-muted">Seu papel não permite ver incidentes.</p>
             : <p className="text-sm text-muted">Nenhum incidente aberto envolve esta ONU.</p>}
         </Card>
+        {customerFailed && (
+          <Card title="Assinante" testid="onu360-customer-error">
+            <div role="alert"><p className="text-sm font-medium text-danger">Não foi possível carregar o assinante desta ONU.</p>
+              <p className="mt-1 text-sm text-muted">Isso não significa que não haja vínculo. Recarregue a página para tentar de novo.</p></div>
+          </Card>
+        )}
         {customer && (
           <Card title="Assinante" testid="onu360-customer">
             {customer.association === "approved" ? (
