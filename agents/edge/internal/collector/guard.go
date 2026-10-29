@@ -35,9 +35,9 @@ func (f FileGuard) Load() (map[string]GuardState, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrGuardCorrupt, err)
 	}
-	m := map[string]GuardState{}
-	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrGuardCorrupt, err)
+	var m map[string]GuardState
+	if err := json.Unmarshal(b, &m); err != nil || m == nil { // a literal JSON null decodes fine into a nil map
+		return nil, fmt.Errorf("%w: not a JSON object (%v)", ErrGuardCorrupt, err)
 	}
 	return m, nil
 }

@@ -710,3 +710,40 @@ func TestAFailureWhoseCooldownCannotBeSavedStillLeavesTheReservationOnDisk(t *te
 		t.Fatalf("restart must still be cooling: err=%v opens=%d", err, opens)
 	}
 }
+
+func TestGuardFilesThatAreValidJSONButNotAnObjectAreCorruptNotACrash(t *testing.T) {
+	for _, body := range []string{"null", "[]", `"x"`, "42", ""} {
+		path := filepath.Join(t.TempDir(), "g.json")
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		clock := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+		var opens, runs int
+		s := cliSrc(&opens, &runs, nil)
+		s.Interval = 15 * time.Minute
+		o := &OLT{Sources: []OLTSource{s}, Guard: FileGuard{Path: path}, Now: func() time.Time { return clock }}
+		if items, err := o.Collect(context.Background()); err != nil || len(items) != 0 || opens != 0 {
+			t.Fatalf("%q: corrupt => quiet wait, no panic, no dial: items=%d err=%v opens=%d", body, len(items), err, opens)
+		}
+	}
+}
+
+func TestATimestampFarInTheFutureCannotBlockTheDeviceForever(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "g.json")
+	clock := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	far := clock.Add(400 * 24 * time.Hour)
+	if err := (FileGuard{Path: path}).Save(map[string]GuardState{"OLT-CLI": {Last: far, CoolUntil: far}}); err != nil {
+		t.Fatal(err)
+	}
+	var opens, runs int
+	s := cliSrc(&opens, &runs, nil)
+	s.Interval = 15 * time.Minute
+	o := &OLT{Sources: []OLTSource{s}, Guard: FileGuard{Path: path}, Now: func() time.Time { return clock }}
+	if _, err := o.Collect(context.Background()); err == nil || opens != 0 {
+		t.Fatalf("pulled back to a normal cooldown, not trusted: err=%v opens=%d", err, opens)
+	}
+	clock = clock.Add(16 * time.Minute)
+	if items, err := o.Collect(context.Background()); err != nil || len(items) != 1 || opens != 1 {
+		t.Fatalf("and then it works: items=%d err=%v opens=%d", len(items), err, opens)
+	}
+}

@@ -196,6 +196,12 @@ func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, er
 		return nil, errors.New("collection already running for this olt")
 	}
 	cur, known := o.st[key]
+	// A clock that jumped (or a tampered file) must neither block the device forever nor be trusted blindly: a timestamp more than
+	// a day ahead is pulled back to a normal cooldown from now.
+	if limit := now.Add(24 * time.Hour); cur.CoolUntil.After(limit) || cur.Last.After(limit) {
+		cur = GuardState{Last: now, CoolUntil: now.Add(cooldown)}
+		o.st[key] = cur
+	}
 	if now.Before(cur.CoolUntil) {
 		o.mu.Unlock()
 		return nil, fmt.Errorf("olt cooling down after a failure (%s left)", cur.CoolUntil.Sub(now).Round(time.Second))

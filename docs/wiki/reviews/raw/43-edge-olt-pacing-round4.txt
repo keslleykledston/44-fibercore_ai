@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18811-7714-7e52-83b0-1c514ef55e08).
+[codex] Turn started (01a18811-798e-7260-b17d-092d06e85042).
+[codex] Assistant message captured: I’ll inspect the branch diff against `main`, then trace the queue-path-derived lock/guard beh...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --find-copies main...HE...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --find-copies main...HE... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"QueuePath|queue_path|StateFiles|CollectSeconds|collect_seconds|func \\...
+[codex] Command completed: /bin/bash -lc "rg -n \"QueuePath|queue_path|StateFiles|CollectSeconds|collect_seconds|func \\... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff main...HEAD -- agents/edge/internal/collector/olt_test.go agents/edge...
+[codex] Command completed: /bin/bash -lc "git diff main...HEAD -- agents/edge/internal/collector/olt_test.go agents/edge... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: a valid JSON `null` guard file loads...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: a valid JSON `null` guard file loads as a nil map and panics on the next collection, causing Edge to restart instead of recovering safely.
+
+Findings:
+- [high] A `null` guard file causes a nil-map panic (agents/edge/internal/collector/guard.go:42-44)
+  `json.Unmarshal("null", &m)` succeeds but sets `m` to nil. `Load` returns it without validation, then `guarded` assigns `o.st[key]` at line 215, which panics. A damaged or externally replaced guard file containing valid JSON `null` therefore crashes the Edge on collection instead of following the corrupt-state fail-closed path. Reject nil maps as corrupt or normalize them to an empty map before use.
+  Recommendation: Treat a nil decoded map as `ErrGuardCorrupt` (or replace it with a non-nil empty map) before returning from `Load`.
