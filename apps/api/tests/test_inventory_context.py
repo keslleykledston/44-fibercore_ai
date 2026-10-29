@@ -108,7 +108,8 @@ def test_suggest_is_evidence_based_idempotent_and_never_confirms(client, seed, i
     assert link["onu"]["serial"] == "CTX-0001" and link["cpe"]["canonical_serial"] == "CTX-0001"
     onu = _onu(client, h, "CTX-0001")
     blk = client.get(f"/v1/onus/{onu['id']}", headers=h).json()["cpe"]
-    assert blk == {"link": "suggested", "pending_suggestions": 1, "can_review": True, "device": None, "provenance": None,
+    assert blk == {"link": "suggested", "pending_suggestions": 1, "has_more_suggestions": False, "can_review": True, "device": None,
+                   "provenance": None,
                    "suggestions": [{"id": link["id"], "confidence": 0.5, "rule": "serial_equal", "ambiguous": False}]}
     assert client.get(f"/v1/onus/{onu['id']}", headers=hdr(client, "dave", seed, "A")).json()["cpe"]["can_review"] is False  # noc_n1 reads only
     assert _links(client, h, status="confirmed") == []
@@ -354,3 +355,18 @@ def test_context_query_count_does_not_grow_with_the_number_of_onus(client, seed,
             event.remove(eng, "before_cursor_execute", spy)
         return len(seen)
     assert count(10) == count(1)  # an N+1 would add queries per ONU
+
+
+def test_pending_count_is_the_true_total_even_when_the_list_is_capped(client, seed, inv, migrated):
+    h = _setup(client, inv, seed, migrated)
+    onu = _onu(client, h, "CTX-0001")
+    ev = "CAST('{\"rule\":\"serial_equal\"}' AS jsonb)"
+    with migrated.begin() as c:  # more candidates than the list shows (future rules may produce them); inserted directly
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        for i in range(12):
+            cid = c.execute(text("INSERT INTO cpes(tenant_id, edge_id, canonical_serial) VALUES (:t,:e,:s) RETURNING id"),
+                            {"t": seed["A"], "e": inv["a1"]["edge"], "s": f"CTX-MANY{i:02d}"}).scalar()
+            c.execute(text(f"INSERT INTO onu_cpe_links(tenant_id, onu_id, cpe_id, confidence, evidence) VALUES (:t,:o,:c,0.3,{ev})"),  # noqa: S608
+                      {"t": seed["A"], "o": onu["id"], "c": cid})
+    blk = client.get(f"/v1/onus/{onu['id']}", headers=h).json()["cpe"]
+    assert blk["pending_suggestions"] == 12 and len(blk["suggestions"]) == 10 and blk["has_more_suggestions"] is True

@@ -18,7 +18,7 @@ export type Onu360 = {
   cpe?: CpeBlock; // só com a flag onu_cpe_links ligada para o provedor
 };
 export type CpeBlock = {
-  link: "confirmed" | "suggested" | "none" | "unavailable"; pending_suggestions: number; can_review: boolean;
+  link: "confirmed" | "suggested" | "none" | "unavailable"; pending_suggestions: number; has_more_suggestions: boolean; can_review: boolean;
   suggestions: { id: string; confidence: number; rule: string | null; ambiguous: boolean }[];
   device: { id: string; vendor: string | null; model: string | null; firmware: string | null; protocols: string[] } | null;
   provenance: Provenance | null;

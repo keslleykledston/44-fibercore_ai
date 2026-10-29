@@ -116,6 +116,7 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
                     ) : <p className="mt-1 text-muted">Seu papel não permite revisar vínculos.</p>}
                   </li>
                 ))}
+                {o.cpe.has_more_suggestions && <li className="text-warn" data-testid="cpe-more">Há {o.cpe.pending_suggestions} sugestões no total; esta tela mostra as {o.cpe.suggestions.length} de maior confiança. Revise estas para ver as demais.</li>}
               </ul>
             ) : <p className="text-sm text-muted">Nenhum roteador vinculado a esta ONU.</p>}
             <p className="mt-3 text-xs text-muted">O vínculo ONU↔CPE só vale depois de confirmado por uma pessoa. Nada aqui altera a rede.</p>

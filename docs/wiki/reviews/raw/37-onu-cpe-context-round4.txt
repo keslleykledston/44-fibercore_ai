@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a185fb-a3b9-7dc1-ac0d-55ca519f892e).
+[codex] Turn started (01a185fb-a424-7153-a32e-456f48099812).
+[codex] Assistant message captured: Vou revisar o diff de `HEAD` contra `main`, rastreando especialmente o fluxo de leitura em lo...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=25 main...HEAD -- apps/api/app/api/inventory....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=25 main...HEAD -- apps/api/app/api/inventory.... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '340,440p'; nl -ba apps/api/app/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '340,440p'; nl -ba apps/api/app/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: o ONU 360 oculta sugestões além das p...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: o ONU 360 oculta sugestões além das primeiras 10 e informa esse limite como se fosse o total, deixando vínculos pendentes sem revisão visível.
+
+Findings:
+- [medium] Sugestões excedentes ficam invisíveis no ONU 360 (apps/api/app/api/context.py:153-156)
+  O loop limita `bucket` a 10 itens, mas `pending_suggestions` é preenchido com `len(sug)`, que também fica limitado a 10. Se uma ONU tiver mais de 10 sugestões, a resposta reporta 10 como total e a interface só renderiza essas 10; as demais não podem ser revisadas por essa tela. Isso pode deixar candidatos sem revisão e induzir o operador a acreditar que não há mais pendências. Retorne a contagem real separadamente do conjunto limitado, e ofereça paginação ou uma indicação navegável para revisar o restante.
+  Recommendation: Conte todas as sugestões por ONU e limite apenas os itens retornados; exponha `has_more` ou paginação para que as sugestões excedentes possam ser revisadas.

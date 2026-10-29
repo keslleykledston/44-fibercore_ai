@@ -24,6 +24,7 @@ router = APIRouter()
 
 ERP_FRESH_FOR = timedelta(days=7)   # ASSUMPTION (to be approved): ERP imports are batch jobs, not minute-level telemetry
 SUGGEST_LIMIT = 1000
+SUGGESTIONS_SHOWN = 10             # per ONU; the true count and `has_more_suggestions` are always reported
 CONTEXT_ONU_LIMIT = 50              # a customer with more approved ONUs is reported as truncated, never silently cut
 CONF_SERIAL_EQUAL = 0.50            # equality of serials is only an indication
 CONF_SERIAL_EQUAL_AMBIGUOUS = 0.20  # the same ONU serial exists on more than one OLT
@@ -133,7 +134,8 @@ def cpe_blocks(conn: Connection, tenant_id: UUID, onu_ids: list[UUID], can_revie
     Constant number of queries however many ONUs: flag once, confirmed links once, suggestions once.
     `suggestions` (ids + evidence, no device identifiers) lets the UI offer confirm/reject; `can_review` says whether the role may."""
     if not features.enabled(conn, tenant_id, "onu_cpe_links"):
-        off = {"link": "unavailable", "pending_suggestions": 0, "suggestions": [], "can_review": False, "device": None, "provenance": None}
+        off = {"link": "unavailable", "pending_suggestions": 0, "suggestions": [], "has_more_suggestions": False, "can_review": False,
+               "device": None, "provenance": None}
         return {i: off for i in onu_ids}
     confirmed = {
         r.onu_id: r for r in conn.execute(
@@ -145,27 +147,31 @@ def cpe_blocks(conn: Connection, tenant_id: UUID, onu_ids: list[UUID], can_revie
             {"ids": onu_ids})
     }
     pending: dict[UUID, list[dict]] = {}
+    pending_total: dict[UUID, int] = {}
     for r in conn.execute(
         text("SELECT l.onu_id, l.id, l.confidence, l.evidence FROM onu_cpe_links l WHERE l.onu_id = ANY(:ids) AND l.status = 'suggested' "
              "ORDER BY l.onu_id, l.confidence DESC, l.id"),
         {"ids": onu_ids},
     ):
         bucket = pending.setdefault(r.onu_id, [])
-        if len(bucket) < 10:
+        pending_total[r.onu_id] = pending_total.get(r.onu_id, 0) + 1  # the TRUE count; only the items shown are capped
+        if len(bucket) < SUGGESTIONS_SHOWN:
             bucket.append({"id": str(r.id), "confidence": float(r.confidence), "rule": (r.evidence or {}).get("rule"),
                            "ambiguous": bool((r.evidence or {}).get("ambiguous"))})
     out: dict[UUID, dict] = {}
     for i in onu_ids:
         c = confirmed.get(i)
         if c is not None:
-            out[i] = {"link": "confirmed", "pending_suggestions": 0, "suggestions": [], "can_review": can_review,
+            out[i] = {"link": "confirmed", "pending_suggestions": 0, "suggestions": [], "has_more_suggestions": False,
+                      "can_review": can_review,
                       "device": {"id": str(c.id), "vendor": c.vendor, "model": c.model, "firmware": c.firmware,
                                  "protocols": list(c.protocols)},
                       "provenance": _prov("genieacs_nbi", c.observed_at)}
         else:
             sug = pending.get(i, [])
-            out[i] = {"link": "suggested" if sug else "none", "pending_suggestions": len(sug), "suggestions": sug,
-                      "can_review": can_review, "device": None, "provenance": None}
+            total = pending_total.get(i, 0)
+            out[i] = {"link": "suggested" if sug else "none", "pending_suggestions": total, "suggestions": sug,
+                      "has_more_suggestions": total > len(sug), "can_review": can_review, "device": None, "provenance": None}
     return out
 
 
