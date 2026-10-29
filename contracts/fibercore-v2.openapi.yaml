@@ -303,6 +303,32 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {description: ONU inexistente ou de outro provedor}
+  /members:
+    get:
+      tags: [Platform]
+      operationId: listMembers
+      summary: Membros do workspace (members:read) com o estado do MFA de cada um; can_reset_mfa indica se o chamador pode redefinir
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}]
+      responses:
+        '200':
+          description: "{can_reset_mfa, members[{user_id, email, display_name, role, mfa_enabled, is_self}]}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /members/{user_id}/mfa/reset:
+    post:
+      tags: [Platform]
+      operationId: resetMemberMfa
+      summary: Redefine o MFA de outro membro (members:mfa_reset). Exige a senha E o segundo fator do próprio administrador (que precisa ter MFA ativo); apaga MFA e códigos do alvo, revoga as sessões dele e audita
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: user_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [password, code], properties: {password: {type: string}, code: {type: string, description: TOTP ou código de recuperação do ADMINISTRADOR}}}}}}
+      responses:
+        '200':
+          description: "{status: reset, revoked_sessions}"
+        '401': {description: Senha ou código do administrador inválidos}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Pessoa não pertence a este workspace}
+        '409': {description: "A si mesmo; conta que também pertence a outros workspaces (MFA é da conta); ou administrador sem MFA ativo"}
+        '429': {description: Bloqueio temporário por tentativas falhas}
   /cpes:
     get:
       tags: [CPE]

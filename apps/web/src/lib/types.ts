@@ -15,3 +15,5 @@ export type Onu360 = {
   incident: { id: string; kind: string; suspected_cause: string; opened_at: string } | null; incident_hidden: boolean;
 };
 export type OnuCustomer = { association: "approved" | "suggested" | "none"; pending_suggestions: number; display_name?: string; document_last4?: string | null; contract_status?: string };
+export type Member = { user_id: string; email: string; display_name: string; role: string; mfa_enabled: boolean; is_self: boolean };
+export type MemberList = { can_reset_mfa: boolean; members: Member[] };

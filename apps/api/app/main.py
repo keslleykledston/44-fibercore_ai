@@ -10,6 +10,7 @@ from app import __version__
 from app.api.erp import router as erp_router
 from app.api.inventory import router as inventory_router
 from app.api.jobs import router as jobs_router
+from app.api.members import router as members_router
 from app.api.noc import router as noc_router
 from app.api.routes import router
 from app.api.session import router as session_router
@@ -48,3 +49,4 @@ app.include_router(inventory_router)
 app.include_router(erp_router)
 app.include_router(noc_router)
 app.include_router(jobs_router)
+app.include_router(members_router)

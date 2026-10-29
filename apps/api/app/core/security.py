@@ -18,6 +18,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "isp_admin": frozenset({
         "customers:read", "customers:import", "associations:review", "incidents:read", "incidents:ack",
         "jobs:read", "jobs:request", "jobs:approve", "inventory:read", "tenant:read", "audit:read", "members:read", "edge:read",
+        "members:mfa_reset",
     }),
     "engineer": frozenset({
         "customers:read", "associations:review", "incidents:read", "incidents:ack", "jobs:read", "jobs:request",

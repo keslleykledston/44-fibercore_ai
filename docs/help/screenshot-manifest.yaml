@@ -44,6 +44,14 @@ articles:
   - assets/administracao/saude-modulos/mobile.png
   e2e_test: help-screenshots.spec.ts › administracao/saude-modulos
   last_verified: '2026-10-28'
+- slug: administracao/membros-e-mfa
+  ui_route: /administracao/membros
+  status: published
+  images:
+  - assets/administracao/membros-e-mfa/desktop.png
+  - assets/administracao/membros-e-mfa/mobile.png
+  e2e_test: help-screenshots.spec.ts › administracao/membros-e-mfa; app.spec.ts › Membros
+  last_verified: '2026-10-29'
 - slug: conta/ativar-verificacao-em-duas-etapas
   ui_route: /conta/seguranca
   status: published

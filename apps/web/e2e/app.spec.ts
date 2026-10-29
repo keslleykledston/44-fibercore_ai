@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { API_URL, EMAIL, PASSWORD, login, totp } from "./helpers";
 
-const routes = ["/", "/rede", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/conta/seguranca", "/ajuda", "/ajuda/rede/consultar-onu"];
+const routes = ["/", "/rede", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/administracao/membros", "/conta/seguranca", "/ajuda", "/ajuda/rede/consultar-onu"];
 
 test("login inválido mostra erro e não cria sessão", async ({ page, context }) => {
   await page.goto("/login");
@@ -26,7 +26,7 @@ test("login: etapa atual indicada e sem violações sérias de acessibilidade", 
 });
 
 test("telas protegidas redirecionam para login sem sessão", async ({ page }) => {
-  for (const r of ["/", "/rede", "/rede/onu/00000000-0000-0000-0000-000000000000", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/conta/seguranca", "/ajuda"]) {
+  for (const r of ["/", "/rede", "/rede/onu/00000000-0000-0000-0000-000000000000", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/administracao/membros", "/conta/seguranca", "/ajuda"]) {
     await page.goto(r);
     await expect(page).toHaveURL(/\/login/);
   }
@@ -280,5 +280,51 @@ test("Segurança da conta: ativa o MFA pela tela, mostra os códigos uma única 
         await request.post(`${API_URL}/v1/auth/mfa/disable`, { headers: { Authorization: `Bearer ${tok}` }, data: { password: PASSWORD, code: recovery[2] ?? totp(secret, 3) } });
       }
     }
+  }
+});
+
+
+test("Membros: administrador redefine o MFA de outra pessoa com senha + segundo fator, e a ação tem efeito", async ({ page, request }) => {
+  const AGENT = "agente@demo.example.com";
+  const tokenOf = async (email: string) => (await (await request.post(`${API_URL}/v1/auth/token`, { data: { email, password: PASSWORD } })).json()).access_token as string;
+  const enable = async (email: string) => {
+    const h = { Authorization: `Bearer ${await tokenOf(email)}` };
+    const secret = (await (await request.post(`${API_URL}/v1/auth/mfa/enroll`, { headers: h, data: { password: PASSWORD } })).json()).secret as string;
+    const act = await request.post(`${API_URL}/v1/auth/mfa/activate`, { headers: h, data: { code: totp(secret) } });
+    expect(act.status()).toBe(200);
+    return { h, secret, recovery: (await act.json()).recovery_codes as string[] };
+  };
+  const admin = await enable(EMAIL);
+  await enable(AGENT);
+  try {
+    await page.goto("/login");
+    await page.getByLabel("E-mail").fill(EMAIL);
+    await page.getByLabel("Senha").fill(PASSWORD);
+    await page.getByRole("button", { name: "Entrar" }).click();
+    await page.getByLabel(/Código do aplicativo/).fill(totp(admin.secret, 1)); // o do ativamento já foi consumido
+    await page.getByRole("button", { name: "Verificar" }).click();
+    await expect(page.getByRole("heading", { name: "Visão Geral" })).toBeVisible();
+
+    await page.goto("/administracao/membros");
+    const row = page.getByTestId(`member-${AGENT}`);
+    await expect(row).toContainText("Ativo");
+    await expect(page.getByTestId(`member-${EMAIL}`).getByTestId("mfa-reset-open")).toHaveCount(0); // ninguém redefine o próprio por aqui
+    await row.getByTestId("mfa-reset-open").click();
+    await expect(page.getByTestId("mfa-reset-form")).toContainText("As sessões abertas");
+    await page.getByLabel("Sua senha").fill("senha-errada");
+    await page.getByLabel(/Seu código/).fill(admin.recovery[0]);
+    await page.getByRole("button", { name: "Redefinir MFA" }).last().click();
+    await expect(page.getByTestId("mfa-reset-error")).toContainText("incorretos");
+    await page.getByLabel("Sua senha").fill(PASSWORD);
+    await page.getByLabel(/Seu código/).fill(admin.recovery[1]);
+    await page.getByRole("button", { name: "Redefinir MFA" }).last().click();
+    await expect(page.getByTestId("entity-drawer")).toBeHidden();
+    await expect(row).toContainText("Desativado");
+    await expect(row.getByTestId("mfa-reset-open")).toHaveCount(0);
+    expect((await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: AGENT, password: PASSWORD } })).json()).mfa_required).toBe(false);
+    const axe = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect(axe.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(" | ")}`)).toEqual([]);
+  } finally {
+    await request.post(`${API_URL}/v1/auth/mfa/disable`, { headers: admin.h, data: { password: PASSWORD, code: admin.recovery[2] } });
   }
 });

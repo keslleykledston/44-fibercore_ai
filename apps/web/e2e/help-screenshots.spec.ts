@@ -16,6 +16,7 @@ const screens: { slug: string; route: string; ready: string; steps?: (page: Page
   { slug: "assinantes/importar-e-revisar-vinculos", route: "/assinantes", ready: "association-list" },
   { slug: "operacoes/acompanhar-operacoes", route: "/operacoes", ready: "jobs-table" },
   { slug: "administracao/saude-modulos", route: "/administracao/modulos", ready: "modules-table" },
+  { slug: "administracao/membros-e-mfa", route: "/administracao/membros", ready: "members-table" },
   { slug: "conta/ativar-verificacao-em-duas-etapas", route: "/conta/seguranca", ready: "security-page" },
   { slug: "ajuda/central-de-ajuda", route: "/ajuda", ready: "help-list" },
 ];

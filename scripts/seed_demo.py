@@ -16,6 +16,7 @@ import httpx
 API = os.environ.get("API_URL", "http://127.0.0.1:18420")
 PW = os.environ.get("DEMO_PASSWORD", "demo-password-123")
 EMAIL = "admin@demo.example.com"
+AGENT_EMAIL = "agente@demo.example.com"
 COMPOSE = ["docker", "compose", "--env-file", ".env.dev", "-f", "infra/compose/compose.yaml"]
 
 
@@ -30,6 +31,8 @@ def main() -> None:
     tenant = cli("create-tenant", "ISP Demo (dados fictícios)")
     cli("create-user", EMAIL, "Admin Demo", "--password-env", "DEMO_PW", env={"DEMO_PW": PW})
     cli("add-member", tenant, EMAIL, "isp_admin")
+    cli("create-user", AGENT_EMAIL, "Agente Demo", "--password-env", "DEMO_PW", env={"DEMO_PW": PW})  # second member: target of the MFA-reset E2E
+    cli("add-member", tenant, AGENT_EMAIL, "engineer")
     edge = cli("register-edge", tenant, "edge-demo", "--site", "POP Central (demo)")
     sa = subprocess.run([*COMPOSE, "run", "--rm", "-T", "--no-deps", "migrate", "python", "-m", "app.cli",
                          "create-service-account", tenant, "edge-demo-agent", "edge_agent", "--edge-id", edge],

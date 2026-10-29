@@ -1,3 +1,4 @@
+import { AdminTabs } from "@/components/AdminTabs";
 import { AppShell } from "@/components/AppShell";
 import { ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
@@ -8,6 +9,7 @@ export default async function Modulos() {
   return (
     <AppShell active="/administracao/modulos" user="1">
       <PageHeader title="Módulos" subtitle="Estado real por sondagem; módulo sem implementação aparece como desconhecido" helpSlug="administracao/saude-modulos" />
+      <AdminTabs current="/administracao/modulos" />
       {r.data === null ? <ErrorState title="Falha ao carregar módulos" /> : (
         <div className="panel overflow-x-auto" data-testid="modules-table">
           <table className="w-full min-w-[560px] text-sm">

@@ -48,3 +48,6 @@
 - Coletor GenieACS descarta identidades provisórias `DISCOVERYSERVICE` (37 de 43 dispositivos no servidor real) e reporta só contagens (`no_serial`, `placeholder_identity`). Teste com fixture sintética da estrutura real; mutação verificada.
 - Identidade de CPE como REIVINDICAÇÃO do dispositivo: serial canônico (trim + maiúsculas) no Edge e na API, migration 0013 (CHECK de forma canônica + único `(tenant, cpe, connector, protocol)`; recusa dados colidentes com diagnóstico), ingestão que IGNORA e conta (`conflicts`) reivindicações conflitantes sem derrubar o lote, travas advisory em ordem por chave de serial e de binding. Contrato OpenAPI (`CpeSnapshotAck`). Codex: 11 rodadas, approve (4 alegações contestadas com medição/teste; pareceres em `docs/wiki/reviews/raw/30-*`).
 
+## Unreleased — Redefinição de MFA por administrador (PR 31)
+- `GET /v1/members` e `POST /v1/members/{id}/mfa/reset` (senha + segundo fator do administrador, guarda de conta multi-workspace, auditoria, sessões revogadas, fail closed). Tela Administração › Membros com abas, how-to com captura, E2E do fluxo completo. ADR-0017 (adendo).
+
