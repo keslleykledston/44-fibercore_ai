@@ -18,3 +18,5 @@
 
 - [ ] MFA obrigatório: cada `isp_admin` cadastra o MFA em **Conta › Segurança da conta**; só então definir `FIBERCORE_MFA_REQUIRED_ROLES=isp_admin` no `.env.prod` e reiniciar a API. Guardar os códigos de recuperação fora do sistema. (Sem fluxo de redefinição ainda: perda de celular + códigos exige intervenção no banco.)
 - [x] Ensaio de restauração em banco descartável: PASS em 2026-10-29 (ver `docs/operations/RESTORE_REHEARSAL_2026-10-29.md`). Falta: rotina agendada, cópia fora do host, restauração do NATS e guarda da chave do MFA fora do host.
+- [x] Backup agendado do LAB: `scripts/backup-scheduled.sh` (cron 03:15; pg_dump -Fc + verificação de restauração em banco descartável + retenção 14; log em `~/fibercore-backups/backup.log`; arquivos 0600). Falta: cópia FORA do host (definir destino) e cifra (`BACKUP_GPG_RECIPIENT`).
+
