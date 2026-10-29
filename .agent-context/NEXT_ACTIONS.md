@@ -74,3 +74,7 @@
 - Dono: fechar o NBI do GenieACS (`docs/operations/GENIEACS_NBI_HARDENING.md`) — tem root.
 
 - Catálogo de consultas da OLT pronto e inerte (PR 49). Próximo: ADR do canal (params no envelope assinado, resultado só parseado, orçamento de consultas sob demanda respeitando o guard) e capturas supervisionadas para promover as consultas N.
+
+## Atualização 2026-10-29 (leitura ativa)
+- Leitura ativa de parâmetros (ADR-SD-002 item 4) implantada na LAB e ensaiada com falha limpa; falta um CPE que responda à conexão para ver dado real. Ligar o transporte `cpe_state` (migração) só depois disso.
+- Operador: o NBI do GenieACS continua aberto; fechar conforme `docs/operations/GENIEACS_NBI_HARDENING.md`.
