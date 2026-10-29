@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a188ca-ce4f-7be1-88ed-293a77efebbc).
+[codex] Turn started (01a188ca-e591-7e52-b1c4-1a35505b397b).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e rastrear os fluxos de despacho, validação, reserva do gua...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/nbi/re...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/nbi/re... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=40 main...HEAD -- agents/edge/internal/nbi/re...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=40 main...HEAD -- agents/edge/internal/nbi/re... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/nbi/refresh.go | sed -n '77,120p'; nl -ba agents/e...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/nbi/refresh.go | sed -n '77,120p'; nl -ba agents/e... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: falha na limpeza pode deixar taref...
+[codex] Turn completion inferred after the main thread finished and subagent work drained.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: falha na limpeza pode deixar tarefas ativas no ACS sem que o job seja marcado como falho.
+
+Findings:
+- [high] Falha ao apagar tarefa enfileirada é ignorada (agents/edge/internal/nbi/refresh.go:113-117)
+  Quando o ACS aceita uma tarefa como enfileirada ou reporta fault, o código tenta apagá-la, mas descarta qualquer erro de `deleteTask` e retorna sucesso de `RefreshParams`. O job pode então ser reportado como concluído mesmo com uma tarefa pendente no ACS; ela pode executar depois e iniciar uma conexão inesperada com o CPE do cliente. Isso contradiz a garantia documentada de que tarefas incompletas não ficam pendentes. Trate a falha de limpeza como falha do refresh e reporte explicitamente que a tarefa pode continuar no ACS, com dados suficientes para investigação sem expor valores sensíveis.
+  Recommendation: Propague a falha de `deleteTask` como erro e impeça o resultado de sucesso do job quando uma tarefa enfileirada ou faulted não puder ser removida; registre um estado de limpeza pendente para recuperação operacional.

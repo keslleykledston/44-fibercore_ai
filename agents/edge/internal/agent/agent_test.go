@@ -380,6 +380,10 @@ func TestRefreshJobThatNamesADeviceRunsTheRefresherFirstAndFailsClosed(t *testin
 	if o.runs != 0 || !strings.Contains(o.results[1], "refreshed too recently") {
 		t.Fatalf("%+v", o)
 	}
+	o = run("AAAA00-ONT-SN1", func(context.Context, string) (string, error) { return "", nbi.ErrRefreshUncleaned })
+	if o.runs != 0 || !strings.Contains(o.results[1], `"failed"`) || !strings.Contains(o.results[1], "operator check required") {
+		t.Fatalf("an unclean refresh must fail the job and say an operator must check: %+v", o)
+	}
 	// feature off: a refresh that names a device fails closed, never degrades into a plain collection
 	o = run("AAAA00-ONT-SN1", nil)
 	if o.runs != 0 || len(o.results) != 2 || !strings.Contains(o.results[1], `"failed"`) || !strings.Contains(o.results[1], "not enabled") {

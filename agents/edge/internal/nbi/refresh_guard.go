@@ -16,6 +16,7 @@ var (
 	ErrRefreshTooSoon   = errors.New("nbi refresh: this device was refreshed too recently")
 	ErrRefreshBudget    = errors.New("nbi refresh: hourly refresh budget exhausted")
 	ErrRefreshNoReserve = errors.New("nbi refresh: could not persist the reservation; refusing")
+	ErrRefreshHeld      = errors.New("nbi refresh: this device is on hold until an operator checks the ACS for pending tasks")
 )
 
 // RefreshGuard paces the active reads: at most one per device per MinPerDevice and MaxPerHour in total (all devices). The reservation is
@@ -31,8 +32,9 @@ type RefreshGuard struct {
 }
 
 type refreshState struct {
-	Devices map[string]int64 `json:"devices"` // sha256(device id) -> unix seconds of the last reservation
-	Recent  []int64          `json:"recent"`  // unix seconds of reservations in the last hour
+	Devices map[string]int64 `json:"devices"`        // sha256(device id) -> unix seconds of the last reservation
+	Recent  []int64          `json:"recent"`         // unix seconds of reservations in the last hour
+	Held    map[string]int64 `json:"held,omitempty"` // sha256(device id) -> unix seconds until which refreshes are refused
 }
 
 func (g *RefreshGuard) now() time.Time {
@@ -57,6 +59,27 @@ func (g *RefreshGuard) load(now time.Time) refreshState {
 	return st
 }
 
+// Hold refuses every refresh of deviceID for d (persisted). It is what a refresh that could not clean up after itself calls, so nothing new
+// is asked of a CPE that may still have a task queued on the ACS. An operator clears it by checking the ACS and removing the entry.
+func (g *RefreshGuard) Hold(deviceID string, d time.Duration) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.Path == "" || d <= 0 {
+		return ErrRefreshNoReserve
+	}
+	now := g.now()
+	st := g.load(now)
+	if st.Held == nil {
+		st.Held = map[string]int64{}
+	}
+	sum := sha256.Sum256([]byte(deviceID))
+	st.Held[hex.EncodeToString(sum[:])] = now.Add(d).Unix()
+	if err := g.save(st); err != nil {
+		return fmt.Errorf("%w: %v", ErrRefreshNoReserve, err)
+	}
+	return nil
+}
+
 // Reserve admits (and records) one refresh of deviceID, or says why not.
 func (g *RefreshGuard) Reserve(deviceID string) error {
 	g.mu.Lock()
@@ -75,6 +98,9 @@ func (g *RefreshGuard) Reserve(deviceID string) error {
 	}
 	sum := sha256.Sum256([]byte(deviceID))
 	key := hex.EncodeToString(sum[:])
+	if until, ok := st.Held[key]; ok && until > nowS {
+		return ErrRefreshHeld
+	}
 	if last, ok := st.Devices[key]; ok && nowS-last < int64(g.MinPerDevice.Seconds()) && last <= nowS+60 {
 		return ErrRefreshTooSoon
 	}

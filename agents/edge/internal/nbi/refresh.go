@@ -33,9 +33,12 @@ var (
 	deviceIDRe = regexp.MustCompile(`^[A-Za-z0-9._%-]{3,200}$`)
 	taskIDRe   = regexp.MustCompile(`^[A-Za-z0-9]{8,64}$`)
 
-	ErrBadDeviceID    = errors.New("nbi refresh: invalid device id")
-	ErrNoDataModel    = errors.New("nbi refresh: device exposes neither InternetGatewayDevice nor Device; nothing requested")
-	errNotAllowlisted = errors.New("nbi refresh: parameter outside the allowlist")
+	ErrBadDeviceID = errors.New("nbi refresh: invalid device id")
+	ErrNoDataModel = errors.New("nbi refresh: device exposes neither InternetGatewayDevice nor Device; nothing requested")
+	// ErrRefreshUncleaned: a task that did not complete could not be removed, so it may still be queued on the ACS (and fire a connection to
+	// the customer's CPE later). The caller must treat the refresh as FAILED and hold the device.
+	ErrRefreshUncleaned = errors.New("nbi refresh: an unfinished task could not be removed from the ACS")
+	errNotAllowlisted   = errors.New("nbi refresh: parameter outside the allowlist")
 )
 
 // refreshGroups are the objects asked for, one task each, instance 1 (and the 5 GHz radio). A task that targets an object the CPE does not
@@ -72,6 +75,7 @@ type RefreshReport struct {
 	Faulted   int
 	Queued    int
 	Cleaned   int
+	Uncleaned int // unfinished tasks that could NOT be removed (also counted when the ACS gave no usable task id)
 }
 
 // RefreshParams asks the ACS to read the allowlisted groups from one device. Nothing is requested unless the data model is detected first.
@@ -113,6 +117,9 @@ func (c *Client) RefreshParams(ctx context.Context, deviceID string) (RefreshRep
 		if status != http.StatusOK || faulted { // never leave a queued/faulted task retrying on a customer CPE
 			if taskID != "" && c.deleteTask(ctx, taskID) == nil {
 				rep.Cleaned++
+			} else {
+				rep.Uncleaned++
+				return rep, ErrRefreshUncleaned // stop: no further task is created while one may still be pending
 			}
 		}
 	}

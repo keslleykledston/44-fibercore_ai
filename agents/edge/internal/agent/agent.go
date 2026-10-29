@@ -241,6 +241,10 @@ func refreshReason(err error) string {
 		return "device refreshed too recently"
 	case errors.Is(err, nbi.ErrRefreshBudget):
 		return "hourly refresh budget exhausted"
+	case errors.Is(err, nbi.ErrRefreshUncleaned):
+		return "a pending task may remain on the ACS; operator check required"
+	case errors.Is(err, nbi.ErrRefreshHeld):
+		return "device on hold after an unclean refresh"
 	case errors.Is(err, nbi.ErrRefreshNoReserve):
 		return "pacing state unavailable"
 	case errors.Is(err, nbi.ErrBadDeviceID), errors.Is(err, nbi.ErrNoDataModel):

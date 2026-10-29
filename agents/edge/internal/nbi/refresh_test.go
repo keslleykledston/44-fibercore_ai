@@ -16,15 +16,16 @@ import (
 )
 
 type fakeACS struct {
-	mu        sync.Mutex
-	devices   string // JSON array returned by GET /devices
-	taskCode  int
-	taskBody  string
-	methods   []string
-	taskPaths []string
-	tasks     []map[string]any
-	deleted   []string
-	query     string
+	mu         sync.Mutex
+	devices    string // JSON array returned by GET /devices
+	taskCode   int
+	taskBody   string
+	methods    []string
+	taskPaths  []string
+	tasks      []map[string]any
+	deleted    []string
+	deleteCode int
+	query      string
 }
 
 func (f *fakeACS) handler() http.Handler {
@@ -46,6 +47,10 @@ func (f *fakeACS) handler() http.Handler {
 			_, _ = w.Write([]byte(f.taskBody))
 		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/tasks/"):
 			f.deleted = append(f.deleted, strings.TrimPrefix(r.URL.Path, "/tasks/"))
+			if f.deleteCode != 0 {
+				w.WriteHeader(f.deleteCode)
+				return
+			}
 			w.WriteHeader(200)
 		default:
 			w.WriteHeader(404)
@@ -137,12 +142,22 @@ func TestRefreshCleansUpQueuedAndFaultedTasksButOnlyThoseItCreated(t *testing.T)
 	if err != nil || rep.Faulted != 5 || rep.Completed != 0 || len(f2.deleted) != 5 {
 		t.Fatalf("%+v %v", rep, err)
 	}
-	// an id the ACS invents (path traversal, oversized) is never turned into a DELETE
+	// an id the ACS invents (path traversal, oversized) is never turned into a DELETE: the refresh FAILS instead of claiming a clean state
 	for _, bad := range []string{`{"_id":"../devices"}`, `{"_id":"a/b"}`, `{"_id":""}`, `not json`} {
 		f3 := &fakeACS{devices: igd, taskCode: 202, taskBody: bad}
 		rep, err = newACS(t, f3).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-		if err != nil || len(f3.deleted) != 0 || rep.Cleaned != 0 {
-			t.Fatalf("%s: %+v %v deleted=%v", bad, rep, err, f3.deleted)
+		if !errors.Is(err, ErrRefreshUncleaned) || len(f3.deleted) != 0 || rep.Cleaned != 0 || rep.Uncleaned != 1 || len(f3.tasks) != 1 {
+			t.Fatalf("%s: %+v %v deleted=%v tasks=%d", bad, rep, err, f3.deleted, len(f3.tasks))
+		}
+	}
+}
+
+func TestRefreshFailsAndStopsWhenAnUnfinishedTaskCannotBeRemoved(t *testing.T) {
+	for _, code := range []int{500, 404, 403} {
+		f := &fakeACS{devices: igd, taskCode: 202, taskBody: `{"_id":"task1234abcd"}`, deleteCode: code}
+		rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
+		if !errors.Is(err, ErrRefreshUncleaned) || rep.Uncleaned != 1 || rep.Cleaned != 0 || len(f.tasks) != 1 {
+			t.Fatalf("delete=%d: %+v %v tasks=%d (no further task may be created while one may be pending)", code, rep, err, len(f.tasks))
 		}
 	}
 }
@@ -229,6 +244,28 @@ func TestRefreshGuardPacesPerDeviceAndPerHourAndPersists(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(g.Path); strings.Contains(string(b), `"A"`) {
 		t.Fatal("device ids must not be stored in clear")
+	}
+}
+
+func TestRefreshGuardHoldBlocksOnlyThatDeviceAndSurvivesRestart(t *testing.T) {
+	now := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	g := guard(t, &now)
+	if err := g.Hold("A", 24*time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	g2 := &RefreshGuard{Path: g.Path, MinPerDevice: g.MinPerDevice, MaxPerHour: g.MaxPerHour, Now: g.Now}
+	if err := g2.Reserve("A"); !errors.Is(err, ErrRefreshHeld) {
+		t.Fatalf("%v", err)
+	}
+	if err := g2.Reserve("B"); err != nil {
+		t.Fatalf("a hold is per device: %v", err)
+	}
+	now = now.Add(25 * time.Hour)
+	if err := g2.Reserve("A"); err != nil {
+		t.Fatalf("hold must expire: %v", err)
+	}
+	if err := (&RefreshGuard{}).Hold("A", time.Hour); !errors.Is(err, ErrRefreshNoReserve) {
+		t.Fatalf("%v", err)
 	}
 }
 
