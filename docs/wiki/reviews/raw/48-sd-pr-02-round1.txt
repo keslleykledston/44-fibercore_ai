@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18896-f580-7ce3-9415-d9b98b5109ea).
+[codex] Turn started (01a18897-05e4-77f1-9be2-22082eef4db4).
+[codex] Assistant message captured: Vou inspecionar o diff e os arquivos de contexto relacionados, em modo somente leitura, prior...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/nbi/pa...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/nbi/pa... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"maxBody|type Client|func New|CachedParams|ProjectionPaths|ReadOnlyOps|...
+[codex] Command completed: /bin/bash -lc "rg -n \"maxBody|type Client|func New|CachedParams|ProjectionPaths|ReadOnlyOps|... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: a consulta aceita uma lista de IDs...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: a consulta aceita uma lista de IDs sem limite, permitindo gerar requisições NBI arbitrariamente grandes e consumir recursos do Edge/ACS.
+
+Findings:
+- [medium] IDs sem limite permitem sobrecarregar a consulta NBI (agents/edge/internal/nbi/params.go:232-242)
+  `CachedParams` serializa todos os IDs recebidos em `$in` e monta a URL sem limitar quantidade ou tamanho. Uma chamada com uma lista grande pode produzir uma URL muito longa, falhar em proxies/GenieACS ou consumir CPU e memória no Edge ao serializar e processar a resposta. O limite de 16 MiB da resposta não limita o tamanho da requisição.
+  Recommendation: Impor limites explícitos para a quantidade e o comprimento dos IDs antes de serializar; rejeitar a chamada quando ultrapassá-los ou dividir em lotes limitados.

@@ -227,12 +227,43 @@ type DeviceParams struct {
 	Rejected int
 }
 
-// CachedParams reads the allowlisted leaves GenieACS ALREADY holds for the given device ids. GET only: it does not ask the CPE for anything
-// (a getParameterValues task is a different, separately authorised operation).
+const (
+	maxIDsPerRequest = 25   // keeps the URL small (the projection alone is ~4 KB) and each ACS query cheap
+	maxIDsPerCall    = 5000 // same ceiling as a cloud snapshot
+	maxIDLen         = 200
+)
+
+// CachedParams reads the allowlisted leaves GenieACS ALREADY holds for the given device ids, in bounded batches. GET only: it does not ask
+// the CPE for anything (a getParameterValues task is a different, separately authorised operation). Fails closed, before any request, when
+// the list is too long or an id is empty, oversized or has control characters.
 func (c *Client) CachedParams(ctx context.Context, ids []string) ([]DeviceParams, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
+	if len(ids) > maxIDsPerCall {
+		return nil, fmt.Errorf("nbi: %d ids exceeds the %d per call limit", len(ids), maxIDsPerCall)
+	}
+	for _, id := range ids {
+		if id == "" || len(id) > maxIDLen || strings.ContainsFunc(id, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+			return nil, fmt.Errorf("nbi: invalid device id")
+		}
+	}
+	var out []DeviceParams
+	for start := 0; start < len(ids); start += maxIDsPerRequest {
+		end := start + maxIDsPerRequest
+		if end > len(ids) {
+			end = len(ids)
+		}
+		part, err := c.cachedBatch(ctx, ids[start:end])
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, part...)
+	}
+	return out, nil
+}
+
+func (c *Client) cachedBatch(ctx context.Context, ids []string) ([]DeviceParams, error) {
 	q, err := json.Marshal(map[string]any{"_id": map[string]any{"$in": ids}})
 	if err != nil {
 		return nil, err

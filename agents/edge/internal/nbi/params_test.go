@@ -175,3 +175,48 @@ func TestCachedParamsFailsClosedOnBadStatusAndOversizeOrGarbage(t *testing.T) {
 		srv.Close()
 	}
 }
+
+func TestCachedParamsBatchesAndRejectsUnboundedOrInvalidIDs(t *testing.T) {
+	var reqs, maxURL, maxIDs int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqs++
+		if n := len(r.URL.String()); n > maxURL {
+			maxURL = n
+		}
+		var q struct {
+			ID struct {
+				In []string `json:"$in"`
+			} `json:"_id"`
+		}
+		_ = json.Unmarshal([]byte(r.URL.Query().Get("query")), &q)
+		if len(q.ID.In) > maxIDs {
+			maxIDs = len(q.ID.In)
+		}
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+	c, _ := New(srv.URL, srv.Client(), "")
+	ids := make([]string, 60)
+	for i := range ids {
+		ids[i] = "OUI-CLASS-SERIAL" + strings.Repeat("X", 100)
+	}
+	if _, err := c.CachedParams(context.Background(), ids); err != nil {
+		t.Fatal(err)
+	}
+	if reqs != 3 || maxIDs > 25 || maxURL > 16<<10 {
+		t.Fatalf("requests=%d max ids per request=%d max url=%d", reqs, maxIDs, maxURL)
+	}
+	reqs = 0
+	big := make([]string, maxIDsPerCall+1)
+	for i := range big {
+		big[i] = "A"
+	}
+	for name, in := range map[string][]string{"too many": big, "empty id": {"A", ""}, "oversized id": {strings.Repeat("A", maxIDLen+1)}, "control char": {"A\nB"}} {
+		if _, err := c.CachedParams(context.Background(), in); err == nil {
+			t.Fatalf("%s must be rejected", name)
+		}
+	}
+	if reqs != 0 {
+		t.Fatalf("a rejected call must not reach the network (requests=%d)", reqs)
+	}
+}
