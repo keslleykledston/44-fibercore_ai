@@ -40,3 +40,6 @@
 - Tela `/conta/seguranca` (ativar/desativar MFA, QR, códigos de recuperação mostrados uma vez) e política `MFA_REQUIRED_ROLES` (403 `mfa_enrolment_required`, sem auto-downgrade, boot falha com papel desconhecido). ADR-0017 (adendo).
 - Correção: `tenant_conn` confirma a transação ANTES de enviar a resposta (`scope="function"`; fastapi >= 0.121) — corrigia um `job not found` intermitente logo após o preview.
 - Correção: ativação do MFA serializada (`FOR UPDATE`) e enroll com upsert condicional (não sobrescreve MFA ativo); 409 para quem perde a corrida. Codex: 4 rodadas, approve final (pareceres em `docs/wiki/reviews/raw/27-*`).
+
+## Unreleased — ONU 360 (PR 28)
+- `GET /v1/onus/{id}` (estado, OLT/PON com idade do dado, incidente com `incidents:read`) e `GET /v1/onus/{id}/customer` (dado pessoal: `customers:read`, auditado). Página `/rede/onu/[id]`, painel lateral `EntityDetailDrawer` (dialog) na tabela de Rede, how-to com capturas. Codex: 4 rodadas, approve.
