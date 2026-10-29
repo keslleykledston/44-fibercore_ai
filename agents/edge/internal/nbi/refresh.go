@@ -87,6 +87,8 @@ type RefreshReport struct {
 
 // RefreshParams asks the ACS to read the allowlisted groups from one device. Nothing is requested unless the data model is detected first.
 func (c *Client) RefreshParams(ctx context.Context, deviceID string) (RefreshReport, error) {
+	c.refreshMu.Lock() // one active read at a time through this client (the Edge runs one job at a time and is a single instance per state dir)
+	defer c.refreshMu.Unlock()
 	var rep RefreshReport
 	if !deviceIDRe.MatchString(deviceID) || strings.HasPrefix(deviceID, "DISCOVERYSERVICE") { // placeholder identities are not inventory
 		return rep, ErrBadDeviceID

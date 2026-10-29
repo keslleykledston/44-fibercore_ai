@@ -99,6 +99,9 @@ func (f *fakeACS) handler() http.Handler {
 			if f.onPost != nil {
 				f.onPost(f)
 			}
+			if f.taskCode == 200 && !f.faultBody && !f.hangup && !f.dropCreate && len(f.db) > 0 { // a completed task leaves the ACS queue
+				f.db = f.db[:len(f.db)-1]
+			}
 			if f.hangup {
 				if hj, ok := w.(http.Hijacker); ok {
 					conn, _, _ := hj.Hijack()
@@ -609,5 +612,35 @@ func TestRefreshPreflightRefusesWhileAnAllowlistedTaskIsPending(t *testing.T) {
 	f = &fakeACS{devices: igd, taskCode: 200, listCode: 500}
 	if _, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1"); err == nil || len(f.posted) != 0 {
 		t.Fatalf("%v posted=%d", err, len(f.posted))
+	}
+}
+
+func TestRefreshCallsThroughOneClientNeverInterleave(t *testing.T) {
+	var mu sync.Mutex
+	inflight, maxInflight := 0, 0
+	f := &fakeACS{devices: igd, taskCode: 200}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			mu.Lock()
+			inflight++
+			if inflight > maxInflight {
+				maxInflight = inflight
+			}
+			mu.Unlock()
+			time.Sleep(15 * time.Millisecond)
+			defer func() { mu.Lock(); inflight--; mu.Unlock() }()
+		}
+		f.handler().ServeHTTP(w, r)
+	}))
+	defer srv.Close()
+	c, _ := New(srv.URL, srv.Client(), "")
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); _, _ = c.RefreshParams(context.Background(), "AAAA00-ONT-SN1") }()
+	}
+	wg.Wait()
+	if maxInflight != 1 || len(f.posted) != 20 {
+		t.Fatalf("max concurrent POSTs=%d posted=%d (calls must be serialised)", maxInflight, len(f.posted))
 	}
 }

@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a188e3-70d3-7fa0-98a4-635b2c456305).
+[codex] Turn started (01a188e3-73b1-7062-b328-2b388e04d742).
+[codex] Assistant message captured: Vou conferir o diff completo contra `main` e seguir, em especial, o caminho de pré-checagem a...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=70 main...HEAD -- agents/edg...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=70 main...HEAD -- agents/edg... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"type RefreshGuard|func \\(.*RefreshGuard|func \\(.*Reserve|func \\(.*H...
+[codex] Command completed: /bin/bash -lc "rg -n \"type RefreshGuard|func \\(.*RefreshGuard|func \\(.*Reserve|func \\(.*H... (exit 0)
+[codex] Running command: /bin/bash -lc "cat agents/edge/internal/nbi/refresh_guard.go && rg -n \"refresher|Refresh\\(\...
+[codex] Command completed: /bin/bash -lc "cat agents/edge/internal/nbi/refresh_guard.go && rg -n \"refresher|Refresh\\(\... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/nbi/refresh.go | sed -n '102,130p'; nl -ba agents/...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/nbi/refresh.go | sed -n '102,130p'; nl -ba agents/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não embarcaria ainda: a pré-checagem não reserva o di...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não embarcaria ainda: a pré-checagem não reserva o dispositivo, então chamadas concorrentes podem passar juntas e criar tarefas duplicadas.
+
+Findings:
+- [medium] A pré-checagem tem uma janela de corrida antes do POST (agents/edge/internal/nbi/refresh.go:111-123)
+  A listagem e os POSTs são operações separadas, sem exclusão por dispositivo entre elas. Duas chamadas concorrentes podem ambas ver a lista vazia na linha 111 e começar a criar tarefas nas linhas 120–123; a segunda não volta a listar antes de cada grupo. O guard do Edge registra a reserva, mas isso não serializa a operação NBI e, conforme a configuração, processos com diretórios de estado distintos também podem alcançar o mesmo ACS. Isso pode duplicar refreshes e carga no CPE, apesar da garantia pretendida de bloquear quando já há tarefa pendente. Serialize o ciclo pré-checagem/criação por dispositivo com coordenação compartilhada entre todos os workers que usam o ACS, ou use uma operação atômica equivalente no ACS.
+  Recommendation: Adicionar exclusão mútua por dispositivo que cubra a pré-checagem e toda a criação dos grupos, compartilhada entre processos que apontam para o mesmo ACS; incluir um caso concorrente que demonstre que apenas uma chamada cria tarefas.
