@@ -43,3 +43,5 @@ Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetido
 - R-D001 v1 extraída (pura, versionada), `diagnostic_runs` append-only, `/v1/diagnostics/*`; Codex approve em 1 rodada; pytest 237. Edge instalado no host do GenieACS (cron, sem root), 6 CPEs no LAB; NBI não fechado (sem root; runbook). Flags do LAB ligadas por autorização do responsável.
 ## 2026-10-29 — PR 40 (FC22-007)
 - `/assinantes/diagnostico/[id]`, BFF de execução, `onu_id` no escopo, `pon_id` no contexto; Codex 5 rodadas → approve; pytest 238, E2E 48; Lovable 2º lote (4,7 créditos). Deploy no LAB feito.
+## 2026-10-29 — PRs 41 e 42
+- FC22-008: `AC_VALIDATION_FC22-008.md` (+2 testes, mutante reprovado; Codex achou citação errada de teste). FC22-009: `/v1/incidents` com `impact`/`summary`/`order=priority` (prioridade ANTES do limite; todos os Edges silenciosos classificam), `/v1/incidents/{id}`, `/noc` com 4 KPIs e painel lateral. Lovable 3º lote (5,2 créditos). pytest 251, E2E 49. Deploy no LAB feito.
