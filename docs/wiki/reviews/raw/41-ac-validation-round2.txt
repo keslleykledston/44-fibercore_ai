@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18653-5802-77d0-90e2-d219e8edb906).
+[codex] Turn started (01a18653-5b0a-7082-864c-64c98da982c3).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e rastrear cada linha do AC_VALIDATION até o teste citado, ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/tests/test_invento...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/tests/test_invento... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"def test_(silence_means_stale_not_offline|stale_heartbeat_reads_offlin...
+[codex] Command completed: /bin/bash -lc "rg -n \"def test_(silence_means_stale_not_offline|stale_heartbeat_reads_offlin... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: a linha sobre snapshot velho que não ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: a linha sobre snapshot velho que não abre incidente atribui uma das afirmações ao caso errado; o teste citado não prova o que a matriz declara.
+
+Findings:
+- [medium] Teste citado não prova que snapshot velho não abre incidente (docs/addenda/v2.2/AC_VALIDATION_FC22-008.md:11)
+  A linha diz que snapshots antigos nunca abrem incidentes e cita `test_a_drop_that_already_ended_in_the_backlog_does_not_open_either`. Esse cenário prova que uma queda já encerrada no backlog não abre incidente; por si só, não prova que um snapshot velho que ainda mostra ONUs em queda é ignorado. A linha também cita `test_ongoing_outage_discovered_after_a_backlog_opens_on_the_fresh_snapshot`, que prova a abertura no snapshot fresco, mas não afirma diretamente que o snapshot antigo não abriu. Assim, a evidência listada não sustenta integralmente a regra geral da linha, apesar de existir um teste separado para o snapshot velho saudável não fechar incidente. Ajuste a matriz para citar o teste específico que verifica que ingestão velha com queda ativa deixa a lista de incidentes vazia, se houver; caso contrário, restrinja a afirmação ao cenário coberto ou adicione essa asserção.
+  Recommendation: Inspecione os três testes citados e faça a matriz apontar apenas cenários cuja asserção demonstre explicitamente que o snapshot além do limite de frescor não abriu incidente.
