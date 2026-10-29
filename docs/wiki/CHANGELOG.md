@@ -102,3 +102,6 @@
 ## Unreleased — PR 45 (itens pequenos do v2.2)
 - NOC: **Reconhecer incidente** no painel lateral (BFF `POST /bff/incidents/{id}/ack`; só registra a ciência, auditada; 403/409 tratados).
 - Busca global (⌘K): clientes por nome a partir de 3 letras (BFF `GET /bff/search/customers`, só id e nome; a API audita o acesso).
+
+## Unreleased — PR 46 (SD-001 gate B0, só documentação)
+- `docs/feature-packs/SD-001/`: relatório de compatibilidade com a base v2.2, README do pacote; ADR-0025 (Proposed); ligação ao backlog sem renumerar. Nenhum código, contrato, migração ou versão alterado.
