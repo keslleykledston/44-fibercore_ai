@@ -1,0 +1,35 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18643-24aa-7b42-858d-01fff44e8a57).
+[codex] Turn started (01a18643-281c-79e0-9505-358fe03b81c8).
+[codex] Assistant message captured: Vou inspecionar o diff e os pontos de autorização/escopo no fluxo inteiro: tela, BFF e endpoi...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/diagnostic...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/diagnostic... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/app/assinantes/diagnostico/'[id]'/page.tsx; nl -ba apps/we...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/app/assinantes/diagnostico/'[id]'/page.tsx; nl -ba apps/we... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/security.py | sed -n '1,55p'; nl -ba apps/web/src/lib...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/security.py | sed -n '1,55p'; nl -ba apps/web/src/lib... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/context.py | sed -n '40,180p'; rg -n \"document_last4|...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/context.py | sed -n '40,180p'; rg -n \"document_last4|... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: o diagnóstico pode rotular uma ONU ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: o diagnóstico pode rotular uma ONU com status desconhecido como fora do ar e confirmado; o resumo também exporta PII e afirma um sintoma que não foi verificado.
+
+Findings:
+- [high] Status desconhecido é apresentado como ONU fora do ar e confirmado (apps/web/src/lib/troubleshoot.ts:29-32)
+  Quando a proveniência é recente, `trustOf` marca o passo como confirmado. A expressão só distingue `online` de qualquer outro status, então valores como `unknown` são resumidos como “fora do ar”; a própria tela também mostra o status bruto. Isso transforma ausência ou estado não reconhecido em uma afirmação operacional falsa, inclusive no resumo para ticket.
+  Recommendation: Mapeie explicitamente os estados conhecidos (`online`, `offline`, `los`, `dying_gasp`) e trate os demais como indisponíveis, sem os rotular como confirmados ou fora do ar.
+- [medium] Resumo do ticket inclui dado pessoal sem necessidade diagnóstica (apps/web/src/lib/troubleshoot.ts:21)
+  O texto exportável inclui sempre o nome do cliente e, quando disponível, os quatro últimos dígitos do documento. Como o resumo é destinado a ser copiado para um ticket, esses identificadores podem ser replicados fora do contexto de acesso da Visão 360; o fluxo não pede que sejam necessários para o atendimento.
+  Recommendation: Remova `document_last4` do resumo exportável e inclua nome ou outro identificador pessoal apenas se o fluxo de tickets exigir explicitamente.
+- [medium] Ticket registra como fato um sintoma que não foi informado nem verificado (apps/web/src/lib/troubleshoot.ts:65-66)
+  O resumo gerado sempre declara “Sintoma relatado: cliente sem conexão”, embora esta tela não receba nem valide um sintoma relatado. Isso pode levar suporte ou NOC a tratar uma premissa inventada como informação fornecida pelo cliente e orientar a investigação na direção errada.
+  Recommendation: Remova essa linha fixa ou só inclua um sintoma obtido de uma entrada explícita, identificando sua origem.
+
+Next steps:
+- Corrigir o mapeamento de estados desconhecidos antes de exibir confiança ou conclusão.
+- Revisar o conteúdo do resumo exportável para limitar PII e separar sintomas informados de fatos observados.

@@ -192,6 +192,8 @@ test("Diagnóstico guiado: conclusão só após executar, hipótese com a PON em
   expect(txt).toContain("nenhuma alteração foi feita na rede");
   expect(txt).toContain("Hipótese");
   expect(txt).not.toMatch(/\d{3}\.\d{3}\.\d{3}/);                                              // nenhum documento completo
+  expect(txt).not.toContain("Documento");                                                     // nem os últimos dígitos
+  expect(txt).toContain("premissa deste fluxo, não verificada");                              // o sintoma não é apresentado como fato informado
   const res = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
   expect(res.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
   await open("Cliente Demo Três");                                                            // PON saudável: sem padrão, nunca "saudável"

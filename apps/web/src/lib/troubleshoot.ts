@@ -8,6 +8,10 @@ export const TRUST_LABEL: Record<Trust, { label: string; icon: string }> = {
 };
 const contract: Record<string, string> = { active: "ativo", suspended: "suspenso", cancelled: "cancelado", unknown: "não informado" };
 const cause: Record<string, string> = { fiber_or_los: "suspeita de perda de sinal / fibra", power: "suspeita de falta de energia", unknown: "causa não determinada" };
+/** Estados que a OLT realmente informa; qualquer outro valor (inclusive `unknown`) NÃO é lido como online nem como fora do ar. */
+const UP = ["online"], DOWN = ["offline", "los", "dying_gasp"];
+export const onuState = (status: string): "up" | "down" | "unrecognised" => (UP.includes(status) ? "up" : DOWN.includes(status) ? "down" : "unrecognised");
+const stateText = (status: string) => ({ up: "online", down: "fora do ar", unrecognised: "em estado não reconhecido" })[onuState(status)];
 const trustOf = (p: Provenance | null): Trust => (p && p.quality === "fresh" ? "confirmado" : "indisponivel");
 const why = (p: Provenance | null) => (!p ? "sem coleta" : p.quality === "stale" ? "dado defasado" : p.quality === "unknown" ? "sem coleta" : "");
 
@@ -26,9 +30,9 @@ export function buildSteps(ctx: CustomerContext, onu: CustomerOnu | undefined, r
   }
   const s2: Step = { id: 2, title: "ONU aprovada", trust: "confirmado", provenance: null, summary: "Há uma ONU aprovada por uma pessoa para este cliente.",
     facts: [["Serial", onu.serial], ["OLT · PON", `${onu.olt}${onu.pon_path ? ` · ${onu.pon_path}` : ""}`]], action: { kind: "link", label: "Abrir a ONU 360", href: `/rede/onu/${onu.id}` } };
-  const t3 = trustOf(onu.provenance);
+  const t3: Trust = onuState(onu.status) === "unrecognised" ? "indisponivel" : trustOf(onu.provenance);
   const s3: Step = { id: 3, title: "Estado e óptica da ONU", trust: t3, provenance: onu.provenance,
-    summary: t3 === "confirmado" ? `ONU ${onu.status === "online" ? "online" : "fora do ar"} na última leitura da OLT.` : `Último estado conhecido (${why(onu.provenance)}): ${onu.status === "online" ? "online" : "fora do ar"}. A idade do dado não indica que a ONU esteja offline. Rx ausente não comprova a causa da queda.`,
+    summary: onuState(onu.status) === "unrecognised" ? "A OLT não informou um estado reconhecido para esta ONU: nada é afirmado." : t3 === "confirmado" ? `ONU ${stateText(onu.status)} na última leitura da OLT. Rx ausente não comprova a causa da queda.` : `Último estado conhecido (${why(onu.provenance)}): ${stateText(onu.status)}. A idade do dado não indica que a ONU esteja offline.`,
     facts: [["Status", onu.status], ["Rx", onu.rx_dbm !== null ? `${onu.rx_dbm} dBm` : "—"]], action: { kind: "link", label: "Abrir a ONU 360", href: `/rede/onu/${onu.id}` } };
   const f = run.finding;
   const s4: Step = { id: 4, title: "Padrão coletivo na PON (R-D001)", provenance: null,
@@ -63,10 +67,10 @@ const age = (p: Provenance, now: Date) => {
 };
 
 export function ticketSummary(customerName: string, steps: Step[], c: { trust: Trust; text: string }, now: Date): string {
-  const lines = [`Diagnóstico guiado — ${customerName}`, "Sintoma relatado: cliente sem conexão", `Gerado em ${now.toISOString()} (somente leitura; nenhuma alteração foi feita na rede).`, `Conclusão [${TRUST_LABEL[c.trust].label}]: ${c.text}`, ""];
+  const lines = [`Diagnóstico guiado — ${customerName}`, "Sintoma a investigar (premissa deste fluxo, não verificada): cliente sem conexão", `Gerado em ${now.toISOString()} (somente leitura; nenhuma alteração foi feita na rede).`, `Conclusão [${TRUST_LABEL[c.trust].label}]: ${c.text}`, ""];
   for (const s of steps) {
     lines.push(`${s.id}. ${s.title} [${TRUST_LABEL[s.trust].label}] — ${s.summary}`);
-    for (const [k, v] of s.facts) lines.push(`   - ${k}: ${v}`);
+    for (const [k, v] of s.facts) if (k !== "Documento") lines.push(`   - ${k}: ${v}`);  // o documento (mesmo parcial) não é necessário ao ticket
     if (s.provenance) lines.push(`   - Fonte: ${s.provenance.source}; observado em ${s.provenance.observed_at ?? "sem coleta"} (${s.provenance.quality}; idade: ${age(s.provenance, now)})`);
   }
   return lines.join("\n");
