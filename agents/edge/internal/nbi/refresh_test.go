@@ -18,18 +18,19 @@ import (
 
 type fakeACS struct {
 	mu           sync.Mutex
-	devices      string // JSON array returned by GET /devices
-	taskCode     int    // status of POST .../tasks
-	taskBody     string // when set, replaces the body of the POST response (e.g. to hide the id)
-	faultBody    bool   // answer 200 with a fault object
-	dropCreate   bool   // the POST fails WITHOUT creating a task
-	hangup       bool   // the POST creates the task and then closes the connection (what the real ACS did)
-	listCode     int    // status of GET /tasks (0 = 200)
-	deleteCode   int    // status of DELETE (0 = 200); a non-2xx deletes nothing
-	deleteNoop   bool   // DELETE answers 200 but deletes nothing
-	lateAfter    int    // tasks created by POST only show up in GET /tasks from the Nth list call on
-	omitFromList bool   // GET /tasks hides the tasks created by POST
-	wrongDevice  bool   // GET /tasks reports them under another device
+	devices      string           // JSON array returned by GET /devices
+	taskCode     int              // status of POST .../tasks
+	taskBody     string           // when set, replaces the body of the POST response (e.g. to hide the id)
+	faultBody    bool             // answer 200 with a fault object
+	dropCreate   bool             // the POST fails WITHOUT creating a task
+	hangup       bool             // the POST creates the task and then closes the connection (what the real ACS did)
+	listCode     int              // status of GET /tasks (0 = 200)
+	deleteCode   int              // status of DELETE (0 = 200); a non-2xx deletes nothing
+	deleteNoop   bool             // DELETE answers 200 but deletes nothing
+	onPost       func(f *fakeACS) // runs (under the lock) right after a POST created its task: concurrent changes on the ACS
+	lateAfter    int              // tasks created by POST only show up in GET /tasks from the Nth list call on
+	omitFromList bool             // GET /tasks hides the tasks created by POST
+	wrongDevice  bool             // GET /tasks reports them under another device
 	methods      []string
 	taskPaths    []string
 	posted       []map[string]any
@@ -94,6 +95,9 @@ func (f *fakeACS) handler() http.Handler {
 			if !f.dropCreate {
 				f.db = append(f.db, map[string]any{"_id": id, "name": m["name"], "device": dev, "parameterNames": m["parameterNames"],
 					"timestamp": f.clock().UTC().Format("2006-01-02T15:04:05.000Z")})
+			}
+			if f.onPost != nil {
+				f.onPost(f)
 			}
 			if f.hangup {
 				if hj, ok := w.(http.Hijacker); ok {
@@ -170,7 +174,7 @@ func TestRefreshOnlyPostsGetParameterValuesOfAllowlistedLeaves(t *testing.T) {
 	if err != nil || rep.DataModel != "InternetGatewayDevice" || rep.Groups != 5 || rep.Completed != 5 || rep.Queued+rep.Faulted+rep.Cleaned != 0 {
 		t.Fatalf("%+v %v", rep, err)
 	}
-	if len(f.deleted) != 0 || f.listCalls != 0 {
+	if len(f.deleted) != 0 || f.listCalls != 1 { // only the pre-flight check
 		t.Fatalf("completed tasks need no cleanup: deleted=%v lists=%d", f.deleted, f.listCalls)
 	}
 	for _, task := range f.posted {
@@ -244,14 +248,13 @@ func TestRefreshReconcilesWhenTheConnectionDropsAfterTheTaskWasCreated(t *testin
 }
 
 func TestRefreshOnlyDeletesTasksThisCallCreated(t *testing.T) {
-	old := time.Now().Add(-48 * time.Hour).UTC().Format("2006-01-02T15:04:05.000Z")
 	names := refreshGroups["InternetGatewayDevice"][0]
 	other := func(id, dev, name string, pn []string, ts string) map[string]any {
 		return map[string]any{"_id": id, "name": name, "device": dev, "parameterNames": pn, "timestamp": ts}
 	}
+	old := time.Now().Add(-48 * time.Hour).UTC().Format("2006-01-02T15:04:05.000Z")
 	f := &fakeACS{devices: igd, taskCode: 202, db: []map[string]any{
-		other("oldtask0001", "AAAA00-ONT-SN1", "getParameterValues", toAny(names), old),                                   // same shape, but old
-		other("othernames1", "AAAA00-ONT-SN1", "getParameterValues", []string{"Device.DeviceInfo.UpTime"}, old),           // different names
+		other("othernames1", "AAAA00-ONT-SN1", "getParameterValues", []string{"Device.DeviceInfo.SerialNumber"}, old),     // not an allowlisted read
 		other("otherdevice", "BBBB00-ONT-SN2", "getParameterValues", toAny(names), time.Now().UTC().Format(time.RFC3339)), // other device
 		other("othername01", "AAAA00-ONT-SN1", "reboot", nil, time.Now().UTC().Format(time.RFC3339)),                      // other task kind
 	}}
@@ -259,7 +262,7 @@ func TestRefreshOnlyDeletesTasksThisCallCreated(t *testing.T) {
 	if err != nil || rep.Cleaned != 5 {
 		t.Fatalf("%+v %v", rep, err)
 	}
-	if len(f.db) != 4 {
+	if len(f.db) != 3 {
 		t.Fatalf("tasks that were not ours must stay untouched: %d left", len(f.db))
 	}
 	for _, id := range f.deleted {
@@ -276,8 +279,6 @@ func TestRefreshFailsAndStopsWhenCleanupCannotBeProven(t *testing.T) {
 		"delete 500":       {devices: igd, taskCode: 202, deleteCode: 500},
 		"delete 404":       {devices: igd, taskCode: 202, deleteCode: 404},
 		"delete is a noop": {devices: igd, taskCode: 202, deleteNoop: true}, // 200 but the task is still there: verification catches it
-		"list 500":         {devices: igd, taskCode: 202, listCode: 500},
-		"list 403":         {devices: igd, taskCode: 202, listCode: 403},
 	}
 	for name, f := range cases {
 		rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
@@ -321,12 +322,12 @@ func TestRefreshAmbiguousStatusesAreCleanedUpAndExplicitRefusalsAreNot(t *testin
 	for _, code := range []int{400, 401, 403, 404, 405, 422} {
 		f := &fakeACS{devices: igd, taskCode: code, taskBody: `x`, dropCreate: true}
 		_, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-		if err == nil || errors.Is(err, ErrRefreshUncleaned) || len(f.posted) != 1 || f.listCalls != 0 {
+		if err == nil || errors.Is(err, ErrRefreshUncleaned) || len(f.posted) != 1 || f.listCalls != 1 {
 			t.Fatalf("%d: a refusal the NBI makes before creating anything needs no cleanup: %v lists=%d", code, err, f.listCalls)
 		}
 	}
 	// ambiguous AND the cleanup is impossible => hold
-	f := &fakeACS{devices: igd, taskCode: 503, listCode: 500}
+	f := &fakeACS{devices: igd, taskCode: 503, onPost: func(f *fakeACS) { f.listCode = 500 }} // the list works for the pre-flight, then breaks
 	rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
 	if !errors.Is(err, ErrRefreshUncleaned) || rep.Uncleaned != 1 {
 		t.Fatalf("%+v %v", rep, err)
@@ -466,13 +467,17 @@ func itoa(n int64) string { b, _ := json.Marshal(n); return string(b) }
 
 func TestRefreshOwnershipTheACSIdIsTheProofAndLookAlikesAreNeverTouched(t *testing.T) {
 	names := refreshGroups["InternetGatewayDevice"][0]
-	lookalike := func(id string) map[string]any {
-		return map[string]any{"_id": id, "name": "getParameterValues", "device": "AAAA00-ONT-SN1", "parameterNames": toAny(names),
-			"timestamp": time.Now().UTC().Format(time.RFC3339)}
+	// someone else creates an identical task at the same moment we do (it appears right after our POST)
+	rival := func(f *fakeACS) {
+		f.db = append(f.db, map[string]any{"_id": "operator0001", "name": "getParameterValues", "device": "AAAA00-ONT-SN1",
+			"parameterNames": toAny(names), "timestamp": time.Now().UTC().Format("2006-01-02T15:04:05.000Z")})
 	}
-	// the ACS returned our id but an identical task by someone else sits in the same window: nothing can be attributed, nothing is
-	// deleted from the look-alike, and the call fails closed
-	f := &fakeACS{devices: igd, taskCode: 202, db: []map[string]any{lookalike("operator0001")}}
+	// the ACS returned our id but the rival sits next to it: nothing can be attributed => fail closed, the rival is never deleted
+	f := &fakeACS{devices: igd, taskCode: 202, onPost: func(f *fakeACS) {
+		if len(f.posted) == 1 {
+			rival(f)
+		}
+	}}
 	rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
 	if !errors.Is(err, ErrRefreshUncleaned) || rep.Uncleaned != 1 {
 		t.Fatalf("%+v %v", rep, err)
@@ -495,7 +500,11 @@ func TestRefreshOwnershipTheACSIdIsTheProofAndLookAlikesAreNeverTouched(t *testi
 		}
 	}
 	// no id and TWO candidates: ownership cannot be shown => nothing deleted, fail closed
-	f = &fakeACS{devices: igd, taskCode: 202, taskBody: `{}`, db: []map[string]any{lookalike("operator0001")}}
+	f = &fakeACS{devices: igd, taskCode: 202, taskBody: `{}`, onPost: func(f *fakeACS) {
+		if len(f.posted) == 1 {
+			rival(f)
+		}
+	}}
 	rep, err = newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
 	if !errors.Is(err, ErrRefreshUncleaned) || len(f.deleted) != 0 || rep.Uncleaned != 1 {
 		t.Fatalf("%+v %v deleted=%v", rep, err, f.deleted)
@@ -503,12 +512,16 @@ func TestRefreshOwnershipTheACSIdIsTheProofAndLookAlikesAreNeverTouched(t *testi
 }
 
 func TestRefreshCleanupRefusesAPartialView(t *testing.T) {
-	huge := make([]map[string]any, 0, 60000)
-	for i := 0; i < 60000; i++ {
-		huge = append(huge, map[string]any{"_id": fmt.Sprintf("other%08d", i), "name": "getParameterValues", "device": "AAAA00-ONT-SN1",
-			"parameterNames": []string{"Device.DeviceInfo.UpTime"}, "timestamp": "2026-01-01T00:00:00Z"})
-	}
-	f := &fakeACS{devices: igd, taskCode: 202, db: huge}
+	// the list becomes too large to read in full only after our POST (the pre-flight saw a small one)
+	f := &fakeACS{devices: igd, taskCode: 202, onPost: func(f *fakeACS) {
+		if len(f.posted) != 1 {
+			return
+		}
+		for i := 0; i < 60000; i++ {
+			f.db = append(f.db, map[string]any{"_id": fmt.Sprintf("other%08d", i), "name": "getParameterValues", "device": "AAAA00-ONT-SN1",
+				"parameterNames": []string{"Device.DeviceInfo.SerialNumber"}, "timestamp": "2026-01-01T00:00:00Z"})
+		}
+	}}
 	rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
 	if !errors.Is(err, ErrRefreshUncleaned) || rep.Uncleaned != 1 || len(f.deleted) != 0 {
 		t.Fatalf("a list too large to read in full must not be treated as clean: %+v %v", rep, err)
@@ -570,5 +583,31 @@ func TestRefreshKnownIDVisibleOnlyOnALaterLook(t *testing.T) {
 	f = &fakeACS{devices: igd, taskCode: 202, omitFromList: true}
 	if _, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1"); !errors.Is(err, ErrRefreshUncleaned) || f.listCalls < settleChecks {
 		t.Fatalf("an id that never appears must fail closed after the bounded window: %v lists=%d", err, f.listCalls)
+	}
+}
+
+func TestRefreshPreflightRefusesWhileAnAllowlistedTaskIsPending(t *testing.T) {
+	names := refreshGroups["InternetGatewayDevice"][1]
+	mk := func(id string, pn []string, name string) map[string]any {
+		return map[string]any{"_id": id, "name": name, "device": "AAAA00-ONT-SN1", "parameterNames": pn, "timestamp": "2026-01-01T00:00:00Z"}
+	}
+	// a leftover (from a late, unproven attempt or anyone else) of any age blocks the next refresh, with zero POSTs
+	f := &fakeACS{devices: igd, taskCode: 200, db: []map[string]any{mk("leftover0001", names, "getParameterValues")}}
+	rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
+	if !errors.Is(err, ErrRefreshPending) || len(f.posted) != 0 || rep.Groups != 0 {
+		t.Fatalf("%+v %v posted=%d", rep, err, len(f.posted))
+	}
+	// tasks that are not allowlisted reads do not block (and are never touched)
+	f = &fakeACS{devices: igd, taskCode: 200, db: []map[string]any{
+		mk("other0000001", []string{"Device.DeviceInfo.SerialNumber"}, "getParameterValues"),
+		mk("other0000002", names, "reboot"),
+		mk("other0000003", nil, "getParameterValues")}}
+	if _, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1"); err != nil || len(f.deleted) != 0 || len(f.posted) != 5 {
+		t.Fatalf("%v deleted=%v posted=%d", err, f.deleted, len(f.posted))
+	}
+	// the check itself failing is not "no pending": nothing is created
+	f = &fakeACS{devices: igd, taskCode: 200, listCode: 500}
+	if _, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1"); err == nil || len(f.posted) != 0 {
+		t.Fatalf("%v posted=%d", err, len(f.posted))
 	}
 }

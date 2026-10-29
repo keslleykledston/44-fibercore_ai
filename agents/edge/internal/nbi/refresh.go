@@ -42,7 +42,10 @@ var (
 	// ErrRefreshUnproven: after an ambiguous request nothing of ours was found on the ACS, but absence cannot be proven (the task could still
 	// become visible). Always wrapped together with ErrRefreshUncleaned; the caller holds the device for less time than for a proven leftover.
 	ErrRefreshUnproven = errors.New("nbi refresh: could not prove that no task was created")
-	errNotAllowlisted  = errors.New("nbi refresh: parameter outside the allowlist")
+	// ErrRefreshPending: the device already has an unfinished getParameterValues task for allowlisted names (left by an earlier unproven
+	// attempt, an operator or another process). Nothing new is created until it is gone; the check runs before every refresh.
+	ErrRefreshPending = errors.New("nbi refresh: an unfinished allowlisted task already exists on this device")
+	errNotAllowlisted = errors.New("nbi refresh: parameter outside the allowlist")
 )
 
 // refreshGroups are the objects asked for, one task each, instance 1 (and the 5 GHz radio). A task that targets an object the CPE does not
@@ -102,6 +105,16 @@ func (c *Client) RefreshParams(ctx context.Context, deviceID string) (RefreshRep
 			if _, ok := allowlist[p]; !ok {
 				return rep, fmt.Errorf("%w: %s", errNotAllowlisted, p)
 			}
+		}
+	}
+	// Evidence instead of a timer: a task that became visible late (or was left by anyone) shows up here, and blocks, on the next attempt.
+	pending, err := c.deviceTasks(ctx, deviceID)
+	if err != nil {
+		return rep, fmt.Errorf("nbi refresh: cannot check for pending tasks: %w", err)
+	}
+	for _, d := range pending {
+		if d.Name == "getParameterValues" && allAllowlisted(d.Names) {
+			return rep, ErrRefreshPending
 		}
 	}
 	for _, g := range groups {
@@ -353,6 +366,18 @@ func (c *Client) deviceTasks(ctx context.Context, deviceID string) ([]taskDoc, e
 		}
 	}
 	return out, nil
+}
+
+func allAllowlisted(names []string) bool {
+	if len(names) == 0 {
+		return false
+	}
+	for _, n := range names {
+		if _, ok := allowlist[n]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func hasID(docs []taskDoc, id string) bool {
