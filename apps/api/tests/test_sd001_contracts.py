@@ -122,6 +122,20 @@ def test_narrative_text_rejects_credentials_and_macs_and_is_bounded():
     assert not _v(AI_OUT, {**ai, "summary_pt_br": "O cliente deve testar perto do roteador e anotar a senha nova no cadastro."})  # a palavra sozinha é legítima
 
 
+def test_request_bodies_have_no_unbounded_free_text():
+    approve = {"proposal_hash": "a" * 64, "decision": "approve", "reason": "Cliente confirmou a janela de manutenção"}
+    assert not _v(_component("ApprovalDecision"), approve)
+    for leak in ("senha: abc123", "token=xyz", "mac aa:bb:cc:dd:ee:ff", "curto", "x" * 1200):
+        assert _v(_component("ApprovalDecision"), {**approve, "reason": leak}), leak
+    job = {"customer_id": "11111111-1111-4111-8111-111111111111", "mode": "passive", "ticket_id": "TCK-123"}
+    assert not _v(_component("CreateDiagnosticJob"), job)
+    assert _v(_component("CreateDiagnosticJob"), {**job, "ticket_id": "cliente joao senha 1"})
+    assert _v(_component("CreateDiagnosticJob"), {**job, "ticket_id": "aa:bb:cc:dd:ee:ff"})
+    test = {"test_kind": "ping", "origin": "edge", "server_profile_id": "perfil-1", "max_bytes": 1000, "max_duration_seconds": 10, "consent_id": "c-1"}
+    assert not _v(_component("ActiveTestRequest"), test)
+    assert _v(_component("ActiveTestRequest"), {**test, "consent_id": "aceito: senha=1"})
+
+
 def test_action_parameters_are_strict_per_kind():
     base = {"proposal_id": "11111111-1111-4111-8111-111111111111", "cpe_id": "22222222-2222-4222-8222-222222222222", "risk": "R2",
             "proposal_hash": "a" * 64, "expires_at": "2026-10-30T00:00:00Z", "status": "proposed"}

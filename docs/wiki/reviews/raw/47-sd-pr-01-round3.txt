@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18886-2424-7da1-bd2a-488180e339dc).
+[codex] Turn started (01a18886-274a-72a0-b74a-dfee8f02e915).
+[codex] Assistant message captured: Vou conferir o diff completo contra `main`, com foco nos limites de texto e nos testes que al...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- contracts/sd001/ai-diagnost...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- contracts/sd001/ai-diagnost... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=12 main...HEAD -- contracts/sd001/ai-diagnost...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=12 main...HEAD -- contracts/sd001/ai-diagnost... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba contracts/sd001/smart-diagnostics.openapi.yaml | sed -n '65,90p;325,342...
+[codex] Command completed: /bin/bash -lc "nl -ba contracts/sd001/smart-diagnostics.openapi.yaml | sed -n '65,90p;325,342... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não bloquearia os quatro campos narrativos citados pa...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não bloquearia os quatro campos narrativos citados para este PR de contratos: a própria descrição deixa claro que os padrões são apenas filtros parciais e exige redação na origem e antes de persistir no PR que habilitará o copiloto, com a flag desligada. Há, porém, um campo livre novo no contrato HTTP que pode carregar segredo sem essa ressalva.
+
+Findings:
+- [medium] Motivo de aprovação aceita e pode persistir credenciais sem controle de redação (contracts/sd001/smart-diagnostics.openapi.yaml:337)
+  `ApprovalDecision.reason` aceita texto arbitrário de até 2048 caracteres e não aplica `SafeText` nem declara a mesma exigência de redação descrita para os textos narrativos do copiloto. Um operador pode incluir senha, token ou MAC no motivo; se o runtime persistir a decisão conforme o contrato sugere, o segredo entra no registro de aprovação. Isso é uma brecha concreta no escopo de texto do contrato, independente de a flag do copiloto estar desligada. Use um campo de códigos/enums, ou aplique o tipo seguro e documente a redação antes de persistência/exibição.
+  Recommendation: Restringir `reason` a códigos permitidos ou referenciar `SafeText` e explicitar que o runtime deve redigir antes de persistir ou exibir.
+
+Next steps:
+- Fechar a superfície de texto livre em `ApprovalDecision.reason` antes de aprovar o contrato.

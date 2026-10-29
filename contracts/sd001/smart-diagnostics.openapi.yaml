@@ -180,7 +180,7 @@ components:
           type: array
           uniqueItems: true
           items: {type: string, enum: [pon, wan, wifi, lan, internet, erp, bng]}
-        ticket_id: {type: string, maxLength: 128}
+        ticket_id: {$ref: '#/components/schemas/OpaqueRef'}
     DiagnosticJobReceipt:
       type: object
       required: [job_id, status, created_at]
@@ -272,10 +272,10 @@ components:
       properties:
         test_kind: {type: string, enum: [download, upload, ping, traceroute, ip_capacity]}
         origin: {type: string, enum: [cpe, edge, customer_endpoint]}
-        server_profile_id: {type: string, maxLength: 128}
+        server_profile_id: {$ref: '#/components/schemas/OpaqueRef'}
         max_bytes: {type: integer, minimum: 1, maximum: 1073741824}
         max_duration_seconds: {type: integer, minimum: 1, maximum: 120}
-        consent_id: {type: string, minLength: 1}
+        consent_id: {$ref: '#/components/schemas/OpaqueRef'}
     ActionProposal:
       type: object
       additionalProperties: false
@@ -334,7 +334,11 @@ components:
       properties:
         proposal_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
         decision: {type: string, enum: [approve, reject]}
-        reason: {type: string, minLength: 8, maxLength: 2048}
+        reason:
+          description: Motivo da decisão, texto narrativo (redigir antes de persistir e exibir; ver SafeText)
+          allOf:
+            - {$ref: '#/components/schemas/SafeText'}
+            - {minLength: 8}
     ApprovalReceipt:
       type: object
       required: [approval_id, status, proposal_id, approved_at, expires_at]
