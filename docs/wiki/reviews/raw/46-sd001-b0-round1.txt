@@ -1,0 +1,30 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1882f-8b13-7e22-85be-cb4edc951a1a).
+[codex] Turn started (01a1882f-9da3-7101-b8f1-be3c4d7a3125).
+[codex] Assistant message captured: I’ll inspect the branch diff and then trace each SD-001 compatibility claim to the relevant i...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff -- main...HEAD -- docs/feature-packs/S...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff -- main...HEAD -- docs/feature-packs/S... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff main...HEAD -- docs/feature-packs/SD-001/BASELINE_COMPATIBILITY_REPOR...
+[codex] Command completed: /bin/bash -lc 'git diff main...HEAD -- docs/feature-packs/SD-001/BASELINE_COMPATIBILITY_REPOR... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/feature-packs/SD-001/BASELINE_COMPATIBILITY_REPORT.md | sed -n '20...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/feature-packs/SD-001/BASELINE_COMPATIBILITY_REPORT.md | sed -n '20... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"SCOPE|scopes|audit|diagnostics:run|jobs:|copilot|feature_flag|allowed_...
+[codex] Command completed: /bin/bash -lc "rg -n \"SCOPE|scopes|audit|diagnostics:run|jobs:|copilot|feature_flag|allowed_... (exit 0)
+[codex] Running command: /bin/bash -lc "git rev-parse main HEAD; nl -ba apps/api/app/core/security.py | sed -n '12,42p...
+[codex] Command completed: /bin/bash -lc "git rev-parse main HEAD; nl -ba apps/api/app/core/security.py | sed -n '12,42p... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship this reconciliation as a verified baselin...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship this reconciliation as a verified baseline: its recorded branch anchor does not match `main` in the reviewed checkout, so the report does not identify the baseline it claims to assess.
+
+Findings:
+- [high] Baseline commit recorded for `main` is stale (docs/feature-packs/SD-001/BASELINE_COMPATIBILITY_REPORT.md:11)
+  The report says its baseline is `main @ db78068`, but in the reviewed checkout `main` resolves to `933bf71c31ccd38bbe8dd2c8bc85cfbff6b556a8` and the reviewed branch is `37898af`. That makes the compatibility matrix and its claims unauditable against the stated baseline; changes between those commits could alter the statuses, collisions, or proposed reuse plan. Regenerate the report against the actual merge base or current `main` and record the exact commit inspected.
+  Recommendation: Update the baseline commit and rerun the claim-by-claim reconciliation against that commit before treating this report as a B0 gate.
+
+Next steps:
+- Reconcile the report against the actual `main` commit, then recheck the compatibility matrix and proposed work against that baseline.

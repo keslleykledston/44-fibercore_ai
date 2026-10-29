@@ -8,10 +8,10 @@
 | Item | Valor |
 |---|---|
 | Repositório | `keslleykledston/44-fibercore_ai` (remoto `origin`), checkout `44-FiberCore`. O pacote cita `120-OLT_SaaS` como destino; **este é o repositório real do projeto** |
-| Branch / commit | `main` @ `db78068`; sem tags; versão do produto inalterada |
+| Branch / commit | `main` @ `933bf71` (inclui PR 45); o branch deste relatório parte desse commit; sem tags; versão do produto inalterada |
 | Build Kit v2.2 original | `FiberCoreAI_BuildKit_v2_Claude_Codex_Lovable.zip` na raiz (SHA em `SHA256SUMS.txt`) e adendo v2.2 em `docs/addenda/v2.2/` (README, GAP_ANALYSIS, RECONCILED_API, BACKLOG_V2_2, ACCEPTANCE_MATRIX) |
 | Pacote SD-001 | `FiberCore_FeaturePack_SD001_SmartDiagnostics.zip` (sha256 `92322ca29d59e914…`); os 42 arquivos do manifesto conferem com `MANIFEST_SHA256.txt`; extraído **fora** do checkout; nenhum script do pacote foi executado |
-| Estado real (2026-10-29) | pytest 251 passed; Playwright 49 passed; `go test ./...` PASS; ruff/tsc/validate_* PASS; Alembic 0018; estado do ambiente: LAB (nenhum estado de produção declarado) |
+| Estado real (2026-10-29) | pytest 251 passed; Playwright 51 passed; `go test ./...` PASS; ruff/tsc/validate_* PASS; Alembic 0018; estado do ambiente: LAB (nenhum estado de produção declarado) |
 | Comandos de inspeção | `git status/branch/log/tag`; leitura de ADR-0001…0024, `configs/modules.yaml`, `contracts/*`, `apps/api/alembic/versions`, `apps/api/app/{api,core,workers}`, `agents/edge/internal/*`, `docs/wiki/IMPLEMENTATION_STATUS.md`, `docs/product/ROADMAP_BACKLOG.md`, `.agent-context/*` |
 
 ## 2. Matriz de capacidades (template do pacote)
@@ -22,7 +22,7 @@ Legenda: `implemented_verified` · `partially_implemented` · `specified_only` �
 |---|---|---|---|---|---|
 | Subscriber 360 | **implemented_verified** (FC22-005) | `apps/web/src/app/assinantes/[id]/page.tsx`; `GET /v1/customers/{id}/context`; flags `subscriber_360`+`customer_context` | `tests/test_inventory_context.py`; E2E Visão 360 com axe e capturas reais; how-to `assinantes/visao-360` | aba/atalho "Diagnóstico completo" reaproveitando o bloco de proveniência | extend |
 | Guided Troubleshooting | **implemented_verified** (FC22-007, `cac16fe`) | `/assinantes/diagnostico/[id]`, `lib/troubleshoot.ts`, `POST /v1/diagnostics/runs` com escopo `onu_id` | `test_inventory_diagnostics.py`; E2E; Codex approve (5 rodadas) | passos automáticos de WAN/LAN/Wi-Fi quando houver fonte | extend (bloqueado por dados, §4) |
-| NOC Command Center | **implemented_verified** (FC22-009, `8d61560`) | `/noc`, `GET /v1/incidents(?order=priority)`, `/incidents/{id}`, `/ack`, painel lateral | `test_noc.py`, `test_noc_command_center.py`; E2E | `stop_on_mass_outage` da política SD-001 consome "PON com incidente aberto" daqui | reuse |
+| NOC Command Center | **implemented_verified** (FC22-009, `8d61560`) | `/noc`, `GET /v1/incidents(?order=priority)`, `/incidents/{id}`, `/ack` (também pela UI, PR 45), painel lateral | `test_noc.py`, `test_noc_command_center.py`; E2E (inclui `noc-ack-and-search.spec.ts`) | `stop_on_mass_outage` da política SD-001 consome "PON com incidente aberto" daqui | reuse |
 | Capability Registry | **partially_implemented** (FC22-002, ADR-0019) | migração 0015 `device_capabilities`; `app/core/capabilities.py`; `GET /v1/cpes/{id}/capabilities`, `/olts/{id}/capabilities`; CLI `capability-set`; flag `capability_registry` | `test_inventory_capabilities.py` | `parameter_paths`/`path_candidates`, TTL, prova de laboratório; alimentação pelo Edge e ligação ao gate de jobs (já listadas como **não feitas** no ADR-0019) | extend |
 | Wi-Fi Experience/QoE | **absent / blocked** (ADR-0022) | — (a API responde `insufficient_data` por desenho) | — | telemetria de estação, interferência, testes CPE × dispositivo | new, **bloqueado por dados** |
 | Automation Studio | **partially_implemented** | `apps/api/app/api/jobs.py` + migração 0008: preview→submit→approve→dispatch (envelope Ed25519)→resultado; `job_approvals`; `HOMOLOGATED_WRITES` vazio; `agents/edge/internal/jobs` | `test_jobs.py` | intents tipados com parâmetros, diff, pré/pós-check, catálogo de operações (FC22-014/015/016 ainda não feitos); hoje `preview` **rejeita qualquer parâmetro** por desenho | extend |
