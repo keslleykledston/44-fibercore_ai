@@ -257,3 +257,23 @@ func TestLockAndGuardBelongToTheStateDirectoryNotToTheQueueFileName(t *testing.T
 		t.Fatalf("same directory must share lock and guard: %s %s %s %s %s", l1, l2, g1, g2, l3)
 	}
 }
+
+func TestR015ProfileLimitsPonPortsAtLoadTime(t *testing.T) {
+	mk := func(ports, extra string) string {
+		return `,"allowlist":["10.0.0.9:22"],"olts":[{"name":"A","vendor":"huawei","address":"10.0.0.9:22","username":"ro","secret_file":"/s","host_key_sha256":"SHA256:abc","pon_ports":[` + ports + `]` + extra + `}]`
+	}
+	r015 := `,"ssh_mode":"shell","ssh_pager_space":true,"legacy_ssh":true,"profile":"huawei_ma56_r015"`
+	for _, ports := range []string{`"0/0/0"`, `"0/17/15"`, `"0/0/14","0/1/15"`} {
+		if _, err := Load(write(t, 0o600, good(mk(ports, r015))), "v"); err != nil {
+			t.Errorf("%s must load: %v", ports, err)
+		}
+	}
+	for _, ports := range []string{`"1/0/14"`, `"0/18/14"`, `"0/0/16"`, `"0/00/1"`, `"0/0/14","0/18/1"`} {
+		if _, err := Load(write(t, 0o600, good(mk(ports, r015))), "v"); err == nil {
+			t.Errorf("%s must be refused at load, not fail every collection round", ports)
+		}
+	}
+	if _, err := Load(write(t, 0o600, good(mk(`"1/0/14"`, ""))), "v"); err != nil {
+		t.Errorf("limits belong to the R015 profile only: %v", err)
+	}
+}

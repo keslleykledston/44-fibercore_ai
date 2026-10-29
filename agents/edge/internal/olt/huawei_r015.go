@@ -25,6 +25,12 @@ var (
 	r015CLIError = regexp.MustCompile(`(?m)^\s*%\s|Unknown command|Parameter error|Too many parameters|Incomplete command`)
 )
 
+// ValidR015Port reports whether a PON path F/S/P is one this profile may touch: frame 0, slot 0..maxSlot, port 0..maxPort, canonical numbers.
+// Config loading and the snapshot use it so a bad port is a configuration error, not a collection that fails (and cools down) every round.
+func ValidR015Port(p string) bool { return r015PortRe.MatchString(p) }
+
+var r015PortRe = regexp.MustCompile(`^0/([0-9]|1[0-7])/([0-9]|1[0-5])$`)
+
 func isMA56(id Identity) bool { return strings.HasPrefix(strings.ToUpper(id.Model), "MA56") }
 
 // r015Firmware is the only release this profile was validated on; the CLI-mode commands are never sent to another one.
@@ -63,8 +69,8 @@ func (h Huawei) snapshotR015(ctx context.Context, s Session, id Identity, ports 
 	var order []string
 	bySlot := map[string][]r015Port{}
 	for _, p := range ports {
-		if !hwPort.MatchString(p) {
-			return Snapshot{}, fmt.Errorf("invalid pon port %q", p)
+		if !hwPort.MatchString(p) || !ValidR015Port(p) {
+			return Snapshot{}, fmt.Errorf("invalid pon port %q for huawei_ma56_r015", p)
 		}
 		f := strings.Split(p, "/")
 		slot := f[0] + "/" + f[1]
