@@ -262,3 +262,17 @@ def test_no_secret_like_names_in_contract_schemas(name):
     text = json.dumps(_without_descriptions(json.loads((SD / name).read_text(encoding="utf-8")))).lower()
     for bad in ("password", "psk", "passphrase", "secret", "pppoe_user"):
         assert bad not in text
+
+
+def test_edge_parameter_reader_only_emits_states_the_contract_knows():
+    # agents/edge/internal/nbi/params.go é a única fonte dos estados lidos do CPE; o contrato tem de aceitar todos
+    src = (ROOT / "agents" / "edge" / "internal" / "nbi" / "params.go").read_text(encoding="utf-8")
+    emitted = {s for group in re.findall(r"set\(([^)]*)\)", src) for s in re.findall(r'"([A-Za-z]+)"', group)} | {"Enabled", "Disabled"}
+    assert {"Connected", "PendingDisconnect", "LowerLayerDown"} <= emitted  # a extração achou a tabela de verdade
+    in_evidence = set(EVIDENCE["properties"]["measurement"]["properties"]["value"]["oneOf"][1]["enum"])
+    in_http = set(OVERLAY["components"]["schemas"]["StateValue"]["enum"])
+    assert emitted <= in_evidence and emitted <= in_http, sorted(emitted - (in_evidence & in_http))
+    metrics = set(OVERLAY["components"]["schemas"]["MetricName"]["enum"])
+    assert set(EVIDENCE["properties"]["measurement"]["properties"]["name"]["enum"]) == metrics
+    names = set(re.findall(r'metric: "([a-z_]+)"', src))
+    assert names and names <= metrics, sorted(names - metrics)

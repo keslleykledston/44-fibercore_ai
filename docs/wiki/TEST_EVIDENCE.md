@@ -156,3 +156,9 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - Codex PR 47: 6 rodadas até approve (ver CODEX_REVIEW_LOG). Limite aceito e documentado: texto narrativo do copiloto só tem filtro parcial no schema; o controle real (redação na origem e antes de persistir) é requisito do PR que habilitar o copiloto.
 - `validate_kit`, `validate_addendum_v22`, `validate_help`: PASS. `secrets-scan`: nenhum vazamento. `ruff`: só os 5 E501 antigos das migrações 0013–0015 (arquivos protegidos, não tocados).
 - NOT_RUN: o `validate_bundle.py` do pacote (conteúdo baixado é dado não confiável; a validação equivalente está nos testes acima).
+
+## 2026-10-29 — Leitor passivo de parâmetros (PR 48)
+- `cd agents/edge && go vet ./... && go test ./...`: PASS. Novos em `internal/nbi/params_test.go`: lista só de folhas exatas, sem nome sensível e sem ancestral de outro; extração mantém só os 5 valores permitidos mesmo com SSID/senha/usuário/`KeyPassphrase` no documento (o segredo nunca aparece na saída); valores hostis sob caminhos permitidos (texto em enum, caixa trocada, número fora da faixa, sem/ com `_timestamp` inválido, objeto, nulo) rejeitados e contados; `CachedParams` é GET em `/devices`, projeção exata, sem `tasks`; falha fechada em 500/lixo.
+- Mutation check: caminho sensível na lista → 2 testes falham; enum aceitando qualquer texto → 1 teste falha.
+- `make test-api`: **271 passed** (teste cruzado: estados/métricas que o Edge emite ⊂ contrato).
+- Medição na LAB (somente nomes de caminho, sem valores): 43 dispositivos, 5 com árvore (3 TR-098, 2 TR-181), nenhum com WAN/Wi-Fi/PPP. NOT_RUN: leitura real de WAN/Wi-Fi (não existe no cache; depende da decisão do ADR-SD-002 item 4).

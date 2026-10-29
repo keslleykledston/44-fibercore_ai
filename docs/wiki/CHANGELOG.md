@@ -109,3 +109,7 @@
 ## Unreleased — PR 47 (SD-PR-01: contratos e mocks do SD-001, flags desligadas)
 - ADR-0025 aceito pelo Tech Lead (2026-10-29). `contracts/sd001/`: schemas de evidência e de saída consultiva do copiloto, sobreposição OpenAPI **proposta** (`diagnostic_jobs`, propostas, aprovação, execução) e eventos no formato do outbox; fixtures sintéticas em `tests/fixtures/sd001/`.
 - Flags por provedor `smart_diagnostics_jobs|active_tests|remediation|copilot`, todas desligadas (`features.py`). Nenhum endpoint, migração, tabela, evento emitido ou mudança no contrato canônico; `/devices/{id}/capabilities` do pacote não foi criado (já existe `/cpes/{id}/capabilities`).
+
+## Unreleased — PR 48 (SD-PR-02: leitor passivo de parâmetros do CPE, ADR-SD-002)
+- Edge: `nbi.CachedParams` lê, por GET, folhas exatas de uma lista fechada (WAN/enlace, uptime, rádio Wi-Fi habilitado/canal) do que o GenieACS já tem em cache, com validação de tipo e descarte do que não é esperado. Não é usado pelo coletor: nada novo vai à nuvem, sem endpoint nem migração.
+- ADR-SD-002 (Proposed): evidência da LAB mostra que o cache só tem dados do Inform (sem WAN/Wi-Fi); a leitura ativa (`getParameterValues`) ficou separada e depende de autorização explícita. Estados novos no contrato de evidência.
