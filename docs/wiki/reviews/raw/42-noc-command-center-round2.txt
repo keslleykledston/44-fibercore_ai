@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18660-d082-7451-a6da-9fe1dd173061).
+[codex] Turn started (01a18660-d0bc-7e33-bd36-977ce95d7122).
+[codex] Assistant message captured: Vou revisar o diff completo contra `main`, seguindo o fluxo API → BFF → tela e verificando se...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/app/api/noc.py app...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/app/api/noc.py app... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=15 main...HEAD -- apps/web/src/app/bff/incide...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=15 main...HEAD -- apps/web/src/app/bff/incide... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/noc.py | sed -n '214,275p'; git status --short; git di...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/noc.py | sed -n '214,275p'; git status --short; git di... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: a ordenação `priority` só prioriza ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: a ordenação `priority` só prioriza os incidentes já selecionados pelo limite de recência; incidentes abertos antigos podem desaparecer da fila, embora o resumo os conte.
+
+Findings:
+- [medium] A prioridade é aplicada depois do limite de recência (apps/api/app/api/noc.py:224-245)
+  A consulta seleciona primeiro os `limit` incidentes mais recentes e só então ordena esses resultados por prioridade. A tela pede 50 itens, então um incidente aberto antigo — inclusive não reconhecido e com alto impacto — pode ficar fora da fila se houver 50 incidentes mais recentes. O resumo ainda o conta, criando uma diferença visível entre os KPIs e os itens que a equipe pode atender. Para `order=priority`, priorize no banco antes do limite ou implemente paginação que preserve a ordenação global.
+  Recommendation: Faça a ordenação de prioridade antes do `LIMIT` (incluindo impacto e estado silencioso) ou ofereça paginação globalmente ordenada; adicione um caso com mais de 50 incidentes recentes e um incidente antigo prioritário.
+
+Next steps:
+- Corrigir a seleção para que a fila contenha os incidentes de maior prioridade globalmente, não apenas os mais recentes.

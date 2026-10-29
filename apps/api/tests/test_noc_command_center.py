@@ -193,3 +193,33 @@ def test_an_incident_behind_a_silent_edge_goes_after_a_confirmed_drop_even_with_
     finally:
         with migrated.begin() as c:
             c.execute(text("UPDATE edges SET last_heartbeat_at = now() WHERE id = :e"), {"e": inv["a2"]["edge"]})
+
+
+def test_priority_is_applied_before_the_limit_so_an_old_important_incident_is_not_cut(client, seed, inv, migrated):
+    h = hdr(client, "alice", seed, "A")
+    _outage(client, inv, "OLT-NCC-OLD", n=10)
+    for k in range(3):
+        _approve(migrated, seed["A"], seed["alice"], f"OLT-NCC-OLD-{k:02d}", f"o{k}")           # 3 customers: the one that matters
+    for k in range(3):
+        _outage(client, inv, f"OLT-NCC-NEW{k}", n=6)                                            # three NEWER incidents, no customers
+    recent = [i["olt"] for i in client.get("/v1/incidents", headers=h, params={"limit": 2}).json()["incidents"]]
+    assert "OLT-NCC-OLD" not in recent                                                           # by recency alone the old one is cut
+    d = client.get("/v1/incidents", headers=h, params={"order": "priority", "limit": 2}).json()
+    assert len(d["incidents"]) == 2 and d["incidents"][0]["olt"] == "OLT-NCC-OLD" and d["truncated"] is False   # ...by priority it comes first
+    # status filters keep working in priority mode
+    only_open = client.get("/v1/incidents", headers=h, params={"order": "priority", "status": "open", "limit": 500}).json()
+    assert all(i["status"] == "open" for i in only_open["incidents"])
+    only_resolved = client.get("/v1/incidents", headers=h, params={"order": "priority", "status": "resolved", "limit": 500}).json()
+    assert all(i["status"] == "resolved" for i in only_resolved["incidents"])
+
+
+def test_priority_scan_says_when_it_hit_its_ceiling(client, seed, inv, migrated, monkeypatch):
+    from app.api import noc
+    h = hdr(client, "alice", seed, "A")
+    for k in range(3):
+        _outage(client, inv, f"OLT-NCC-C{k}", n=6)
+    monkeypatch.setattr(noc, "PRIORITY_SCAN", 1)
+    assert client.get("/v1/incidents", headers=h, params={"order": "priority"}).json()["truncated"] is True
+    monkeypatch.setattr(noc, "PRIORITY_SCAN", 1000)
+    assert client.get("/v1/incidents", headers=h, params={"order": "priority"}).json()["truncated"] is False
+    assert client.get("/v1/incidents", headers=h).json()["truncated"] is False   # the default (recent) listing never claims truncation

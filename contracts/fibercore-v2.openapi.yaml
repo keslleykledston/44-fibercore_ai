@@ -284,7 +284,7 @@ paths:
         do incidente por associações APROVADAS (sem `customers:read` = `hidden`, nunca 0; incidente sem membros = desconhecido, nunca 0).
         `summary` (sobre TODOS os abertos): open, unacknowledged, silent_edges, open_suppressed e customers_affected (não inclui incidentes
         atrás de Edge silencioso). `order=priority`: abertos; não reconhecidos; queda confirmada antes de edge_silent; maior impacto (desconhecido
-        por último); mais ONUs fora; mais recente. Padrão `recent` (mais recente primeiro) inalterado (FC22-009).
+        por último); mais ONUs fora; mais recente. A prioridade vale ANTES do `limit` (varre todos os abertos, teto 1000; `truncated`=true se o teto agir). Padrão `recent` (mais recente primeiro) inalterado (FC22-009).
       parameters:
         - {$ref: '#/components/parameters/WorkspaceOptional'}
         - {$ref: '#/components/parameters/Limit'}

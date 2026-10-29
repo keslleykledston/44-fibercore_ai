@@ -34,6 +34,9 @@ export default async function Noc({ searchParams }: { searchParams: Promise<{ f?
         <a href="/noc" aria-current={!onlyUnack ? "page" : undefined} className={`inline-flex min-h-touch items-center rounded-btn px-3 ${!onlyUnack ? "bg-accent-soft font-medium text-accent" : "text-muted hover:underline"}`}>Todos</a>
         <a href="/noc?f=nao-reconhecidos" aria-current={onlyUnack ? "page" : undefined} data-testid="filter-unack" className={`inline-flex min-h-touch items-center rounded-btn px-3 ${onlyUnack ? "bg-accent-soft font-medium text-accent" : "text-muted hover:underline"}`}>Só não reconhecidos</a>
       </nav>
+      {s && all.filter((i) => i.status === "open").length < s.open && (
+        <p role="status" className="mb-2 text-sm text-warn" data-testid="queue-cut">Mostrando {all.filter((i) => i.status === "open").length} dos {s.open} incidentes abertos, os de maior prioridade.{r.data?.truncated ? " Há mais do que a fila consegue ordenar." : ""}</p>
+      )}
       <div data-testid="incident-queue">
         {r.data === null ? <ErrorState title="Falha ao carregar incidentes" /> : list.length === 0 ? <EmptyState title={onlyUnack ? "Nenhum incidente não reconhecido" : "Nenhum incidente"} /> : <IncidentQueue incidents={list} />}
       </div>

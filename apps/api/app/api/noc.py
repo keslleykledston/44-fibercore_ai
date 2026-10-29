@@ -174,6 +174,7 @@ def _j(d: dict) -> str:
 
 IMPACT_SOURCE = "associations_approved"   # customers are counted ONLY through associations a person approved (ADR-0021 / customers:read)
 MEMBERS_SHOWN = 50
+PRIORITY_SCAN = 1000   # most open incidents ranked for one priority listing; beyond it the response says `truncated`
 
 
 def _silent_edges(conn: Connection) -> list:
@@ -221,15 +222,24 @@ def list_incidents(
 ) -> dict:
     silent = _silent_edges(conn)
     silent_ids = {e.id for e in silent}
-    rows = conn.execute(
-        text(
-            "SELECT i.id, i.kind, i.status, i.suspected_cause, i.evidence, i.opened_at, i.resolved_at, i.acknowledged_at, "
-            "o.name AS olt_name, o.edge_id, o.observed_at AS olt_observed_at FROM incidents i "
-            "JOIN olts o ON o.id = i.olt_id AND o.tenant_id = i.tenant_id "
-            "WHERE (CAST(:s AS text) IS NULL OR i.status = :s) ORDER BY i.opened_at DESC LIMIT :l"
-        ),
-        {"s": status, "l": limit},
-    ).all()
+    select = ("SELECT i.id, i.kind, i.status, i.suspected_cause, i.evidence, i.opened_at, i.resolved_at, i.acknowledged_at, "
+              "o.name AS olt_name, o.edge_id, o.observed_at AS olt_observed_at FROM incidents i "
+              "JOIN olts o ON o.id = i.olt_id AND o.tenant_id = i.tenant_id ")
+
+    def fetch(st: str | None, n: int) -> list:
+        return conn.execute(text(select + "WHERE (CAST(:s AS text) IS NULL OR i.status = :s) ORDER BY i.opened_at DESC LIMIT :l"),  # noqa: S608
+                            {"s": st, "l": n}).all()
+    truncated = False
+    if order == "priority":
+        # Priority must hold BEFORE the limit: an old, unacknowledged, high-impact incident must not fall off because newer ones exist.
+        # So every OPEN incident is ranked (bounded by PRIORITY_SCAN, reported as `truncated` if it ever binds), then cut to `limit`.
+        rows = fetch("open", PRIORITY_SCAN + 1) if status in (None, "open") else []
+        truncated = len(rows) > PRIORITY_SCAN
+        rows = rows[:PRIORITY_SCAN]
+        if status in (None, "resolved"):
+            rows += fetch("resolved", limit)
+    else:
+        rows = fetch(status, limit)
     can_customers = p.can("customers:read")
     impact = _impact(conn, [r.id for r in rows], can_customers)
     incidents = [
@@ -243,10 +253,12 @@ def list_incidents(
     ]
     if order == "priority":
         incidents.sort(key=_priority_key)
+        incidents = incidents[:limit]
     alerts = [{"kind": "edge_silent", "edge": e.name, "last_heartbeat_at": e.last_heartbeat_at.isoformat(),
                "note": "no data from this edge; ONU/OLT states behind it are last-known, not offline"}
               for e in silent]
-    return {"incidents": incidents, "alerts": alerts, "summary": _summary(conn, can_customers, [e.id for e in silent])}
+    summary = _summary(conn, can_customers, [e.id for e in silent])
+    return {"incidents": incidents, "alerts": alerts, "truncated": truncated, "summary": summary}
 
 
 def _summary(conn: Connection, can_customers: bool, silent_edge_ids: list[UUID]) -> dict:
