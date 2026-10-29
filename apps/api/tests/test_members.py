@@ -243,3 +243,22 @@ def test_refresh_that_races_a_reset_cannot_mint_a_session_after_it(client, seed,
         holder.execute(text("UPDATE users_global SET tokens_valid_after = clock_timestamp() WHERE id = :u"), {"u": target["id"]})
     t.join(15)
     assert out["r"].status_code == 401, out["r"].text
+
+
+def test_cli_set_password_changes_the_login_and_ends_old_sessions(client, make, migrated, admin_url, monkeypatch, capsys):
+    from app import cli
+
+    who = make("engineer")
+    old = _login(client, who)
+    monkeypatch.setenv("ADMIN_DATABASE_URL", admin_url)
+    monkeypatch.setenv("NEW_PW_FOR_TEST", "a-brand-new-password-1!")
+    cli.main(["set-password", who["email"], "--password-env", "NEW_PW_FOR_TEST"])
+    out = capsys.readouterr().out
+    assert "password updated" in out and "a-brand-new-password-1!" not in out  # the password is never printed
+    assert client.post("/v1/auth/token", json={"email": who["email"], "password": PW}).status_code == 401  # old password dead
+    assert client.post("/v1/auth/token", json={"email": who["email"], "password": "a-brand-new-password-1!"}).status_code == 200
+    assert client.post("/v1/auth/refresh", json={"refresh_token": old["refresh_token"]}).status_code == 401  # old session ended
+    assert client.get("/v1/auth/mfa/status", headers=_bearer(old["access_token"])).status_code == 401
+    monkeypatch.setenv("NEW_PW_FOR_TEST", "short")
+    with pytest.raises(SystemExit):
+        cli.main(["set-password", who["email"], "--password-env", "NEW_PW_FOR_TEST"])  # same >= 12 rule as create-user

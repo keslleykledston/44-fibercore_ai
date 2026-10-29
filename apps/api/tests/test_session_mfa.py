@@ -260,3 +260,44 @@ def test_key_rotation_kid(client, user, monkeypatch):
         assert client.get("/v1/auth/workspaces", headers=_bearer(wrong)).status_code == 401
     finally:
         monkeypatch.undo(); st.get_settings.cache_clear()
+
+
+def test_regenerate_recovery_codes_replaces_the_whole_set_and_is_proof_gated(client, user, migrated):
+    secret, old, step = _enable_mfa(client, user)
+    tok = _login(client, user).json()
+    ch = client.post("/v1/auth/mfa/verify", json={"mfa_token": tok["mfa_token"], "code": old[0]})  # a session (consumes old[0])
+    h = _bearer(ch.json()["access_token"])
+    url = "/v1/auth/mfa/recovery-codes"
+    assert client.post(url, json={"password": "wrong", "code": old[1]}, headers=h).status_code == 401
+    assert client.post(url, json={"password": PW, "code": "000000"}, headers=h).status_code == 401
+    assert client.get("/v1/auth/mfa/status", headers=h).json()["recovery_codes_left"] == 7  # failures changed nothing
+    r = client.post(url, json={"password": PW, "code": old[1]}, headers=h)  # a current recovery code is accepted as the second factor
+    assert r.status_code == 200, r.text
+    new = r.json()["recovery_codes"]
+    assert len(new) == 8 and not (set(new) & set(old))
+    assert client.get("/v1/auth/mfa/status", headers=h).json()["recovery_codes_left"] == 8
+    with migrated.begin() as c:  # EVERY old code is gone from the table (checked in the DB: eight wrong guesses would trip the throttle)
+        hashes = [mfa.hash_recovery(x) for x in old]
+        assert c.execute(text("SELECT count(*) FROM mfa_recovery_codes WHERE user_id=:u AND code_hash = ANY(:h)"), {"u": user["id"], "h": hashes}).scalar() == 0
+    t = _login(client, user).json()
+    assert client.post("/v1/auth/mfa/verify", json={"mfa_token": t["mfa_token"], "code": old[5]}).status_code == 401  # and one never-used old code fails
+    t = _login(client, user).json()
+    assert client.post("/v1/auth/mfa/verify", json={"mfa_token": t["mfa_token"], "code": new[0]}).status_code == 200  # a new one works
+    with migrated.begin() as c:  # only hashes are stored: the clear code is not in the table
+        assert c.execute(text("SELECT count(*) FROM mfa_recovery_codes WHERE user_id=:u AND code_hash = convert_to(:h,'UTF8')"),
+                         {"u": user["id"], "h": new[1]}).scalar() == 0
+
+
+def test_regenerate_needs_mfa_enabled_and_a_valid_session(client, user):
+    h = _bearer(_login(client, user).json()["access_token"])
+    assert client.post("/v1/auth/mfa/recovery-codes", json={"password": PW, "code": "123456"}, headers=h).status_code == 409
+    assert client.post("/v1/auth/mfa/recovery-codes", json={"password": PW, "code": "123456"}).status_code == 401
+
+
+def test_regenerate_is_throttled_like_a_login(client, user):
+    _secret, old, _ = _enable_mfa(client, user)
+    tok = _login(client, user).json()
+    h = _bearer(client.post("/v1/auth/mfa/verify", json={"mfa_token": tok["mfa_token"], "code": old[0]}).json()["access_token"])
+    codes = [client.post("/v1/auth/mfa/recovery-codes", json={"password": PW, "code": "000000"}, headers=h).status_code for _ in range(12)]
+    assert codes[0] == 401 and 429 in codes
+    assert client.post("/v1/auth/mfa/recovery-codes", json={"password": PW, "code": old[1]}, headers=h).status_code == 429

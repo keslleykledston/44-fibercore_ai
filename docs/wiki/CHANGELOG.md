@@ -54,3 +54,6 @@
 
 ## Unreleased — Backup agendado
 - `scripts/backup-scheduled.sh` (cron diário 03:15) reaproveita `backup.sh`/`restore-verify.sh` (agora com `COMPOSE_PROJECT` p/ a stack `fibercore-prod`), verifica cada dump restaurando num banco descartável e mantém os 14 mais recentes.
+
+## Unreleased — Regeneração de códigos de recuperação (PR 33)
+- `POST /v1/auth/mfa/recovery-codes` (senha + segundo fator; troca o conjunto inteiro na mesma transação, serializado com disable/reset) e botão em Conta › Segurança da conta. How-to e contrato atualizados.

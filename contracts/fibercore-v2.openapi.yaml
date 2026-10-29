@@ -122,6 +122,18 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '409': {description: MFA já ativo (ativações concorrentes são serializadas; só a primeira recebe os códigos)}
         '429': {description: Bloqueio temporário por tentativas falhas}
+  /auth/mfa/recovery-codes:
+    post:
+      tags: [Platform]
+      operationId: regenerateRecoveryCodes
+      summary: Substitui TODOS os códigos de recuperação por um conjunto novo, exibido uma única vez. Exige a senha e um segundo fator (código do autenticador ou de recuperação); os antigos deixam de valer na mesma transação
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [password, code], properties: {password: {type: string}, code: {type: string}}}}}}
+      responses:
+        '200':
+          description: "{recovery_codes[]}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '409': {description: MFA não está ativo}
+        '429': {description: Bloqueio temporário por tentativas falhas}
   /auth/mfa/disable:
     post:
       tags: [Platform]

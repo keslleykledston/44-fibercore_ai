@@ -260,6 +260,23 @@ test("Segurança da conta: ativa o MFA pela tela, mostra os códigos uma única 
     // o login agora exige o segundo fator
     const t = await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json();
     expect(t.mfa_required).toBe(true);
+    // gerar novos códigos: senha errada falha; senha + código de recuperação troca o conjunto inteiro, exibido uma única vez
+    await page.getByText("Gerar novos códigos de recuperação").click();
+    await page.getByTestId("mfa-regen-password").fill("senha-errada");
+    await page.getByTestId("mfa-regen-code").fill(recovery[0]);
+    await page.getByTestId("mfa-regen").click();
+    await expect(page.getByTestId("mfa-regen-error")).toContainText("incorretos");
+    await page.getByTestId("mfa-regen-password").fill(PASSWORD);
+    await page.getByTestId("mfa-regen").click();
+    await expect(page.getByTestId("mfa-codes-step")).toContainText("novos códigos");
+    const fresh = await page.getByTestId("mfa-recovery-codes").locator("li").allInnerTexts();
+    expect(fresh).toHaveLength(8);
+    expect(fresh.filter((c) => recovery.includes(c))).toEqual([]); // nenhum igual aos anteriores
+    await page.getByTestId("mfa-saved").check();
+    await page.getByTestId("mfa-done").click();
+    await expect(page.getByTestId("mfa-left")).toContainText("8");
+    await expect(page.getByTestId("mfa-recovery-codes")).toHaveCount(0);
+    recovery = fresh;
     // desativar: senha errada falha; senha + código de recuperação funciona
     await page.getByText("Desativar verificação em duas etapas").click();
     await page.getByTestId("mfa-disable-password").fill("senha-errada");

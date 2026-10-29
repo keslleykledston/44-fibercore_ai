@@ -44,7 +44,8 @@ Em **Segurança da conta**, abra **Desativar verificação em duas etapas**, inf
 - **Código incorreto:** confira se a hora do celular está automática; o código muda a cada 30 segundos e cada código só vale uma vez.
 - **Muitas tentativas:** aguarde 15 minutos antes de tentar de novo.
 - **Cadastro indisponível:** o ambiente não tem a chave de criptografia configurada; avise o administrador da plataforma.
-- **Perdi o celular e os códigos:** peça ao administrador para redefinir a sua verificação.
+- **Poucos códigos de recuperação sobrando:** em **Conta › Segurança da conta**, abra **Gerar novos códigos de recuperação**, informe sua senha e um código (do aplicativo ou de recuperação). O conjunto inteiro é trocado: os antigos deixam de valer e os novos aparecem **uma única vez**.
+- **Perdi o celular e os códigos:** peça a um administrador do provedor para redefinir a sua verificação (Administração › Membros). Depois, cadastre de novo.
 
 ## Evidências de documentação
 

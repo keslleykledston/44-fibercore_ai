@@ -303,3 +303,42 @@ def mfa_disable(
     if outcome == "bad":
         raise HTTPException(401, "invalid credentials")
     return Response(status_code=204)
+
+
+@router.post("/v1/auth/mfa/recovery-codes")
+def mfa_regenerate_recovery_codes(
+    body: DisableIn, request: Request, authorization: str | None = Header(default=None), settings: Settings = Depends(get_settings)
+) -> dict:
+    """Replace ALL recovery codes by a fresh set (shown once). Same proof as disabling MFA: password + a second factor (the authenticator
+    code or one of the current recovery codes). Old codes stop working in the same transaction."""
+    uid = _user_id(authorization, settings)
+    key, ip = f"mfa:{uid}", _client_ip(request, settings)
+    codes: list[str] = []
+    with scoped_connection(get_engine(), user_id=uid) as conn:
+        if _gate(conn, key, ip):
+            outcome = "locked"
+        elif _reauth(conn, request, settings, uid, body.password) is None:
+            outcome = "bad"
+        else:
+            # row lock: serialises with a concurrent disable / administrator reset / re-enrol; the state is re-read AFTER the wait
+            row = conn.execute(text("SELECT enabled FROM user_mfa WHERE user_id = :u FOR UPDATE"), {"u": uid}).first()
+            if not (row and row.enabled):
+                outcome = "not_enabled"
+            else:
+                ok = _check_second_factor(conn, settings, uid, body.code)
+                _record(conn, key, ip, ok)
+                outcome = "ok" if ok else "bad"
+                if ok:
+                    codes = mfa.new_recovery_codes()
+                    conn.execute(text("DELETE FROM mfa_recovery_codes WHERE user_id = :u"), {"u": uid})
+                    for c in codes:
+                        conn.execute(text("INSERT INTO mfa_recovery_codes (user_id, code_hash) VALUES (:u, :h)"),
+                                     {"u": uid, "h": mfa.hash_recovery(c)})
+    if outcome == "locked":
+        raise _throttled()
+    if outcome == "not_enabled":
+        raise HTTPException(409, "MFA is not enabled")
+    if outcome == "bad":
+        raise HTTPException(401, "invalid credentials")
+    return {"recovery_codes": codes}  # shown once; only hashes are stored
+

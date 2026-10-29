@@ -29,6 +29,7 @@ export function MfaPanel({ enabled, recoveryLeft, required, available }: Props) 
   const [codes, setCodes] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [regen, setRegen] = useState(false);
 
   async function run(e: FormEvent<HTMLFormElement>, fn: (f: FormData) => Promise<void>) {
     e.preventDefault();
@@ -47,6 +48,11 @@ export function MfaPanel({ enabled, recoveryLeft, required, available }: Props) 
     const r = await post("/bff/security/mfa/activate", { code: String(f.get("code") ?? "") });
     if (r.status !== 200) return setError(explain(r.json));
     setSecret(""); setQr(""); setCodes(r.json.recovery_codes as string[]); setStep("codes");
+  });
+  const regenerate = (e: FormEvent<HTMLFormElement>) => run(e, async (f) => {
+    const r = await post("/bff/security/mfa/recovery-codes", { password: String(f.get("password") ?? ""), code: String(f.get("code") ?? "") });
+    if (r.status !== 200) return setError(explain(r.json));
+    setRegen(true); setCodes(r.json.recovery_codes as string[]); setStep("codes");
   });
   const disable = (e: FormEvent<HTMLFormElement>) => run(e, async (f) => {
     const r = await post("/bff/security/mfa/disable", { password: String(f.get("password") ?? ""), code: String(f.get("code") ?? "") });
@@ -70,7 +76,7 @@ export function MfaPanel({ enabled, recoveryLeft, required, available }: Props) 
     return (
       <section className="panel grid gap-4 p-6" aria-labelledby="mfa-titulo" data-testid="mfa-codes-step">
         <h2 id="mfa-titulo" className="text-lg font-semibold">Guarde seus códigos de recuperação</h2>
-        <p className="text-sm text-muted">Verificação em duas etapas ativada. Cada código funciona <strong>uma única vez</strong> e serve se você perder o aplicativo autenticador. Eles <strong>não serão mostrados de novo</strong>.</p>
+        <p className="text-sm text-muted">{regen ? "Estes são os seus novos códigos; os anteriores deixaram de valer." : "Verificação em duas etapas ativada."} Cada código funciona <strong>uma única vez</strong> e serve se você perder o aplicativo autenticador. Eles <strong>não serão mostrados de novo</strong>.</p>
         <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2" data-testid="mfa-recovery-codes">
           {codes.map((c) => <li key={c} className="rounded-btn border border-line bg-surface-2 px-3 py-2 font-mono text-sm tabular-nums">{c}</li>)}
         </ul>
@@ -128,6 +134,20 @@ export function MfaPanel({ enabled, recoveryLeft, required, available }: Props) 
         </div>
         <p className="text-sm text-muted">Ao entrar, além da senha, você informa um código do aplicativo autenticador.</p>
         <p className="text-sm" data-testid="mfa-left">Códigos de recuperação restantes: <strong>{recoveryLeft}</strong>{recoveryLeft <= 2 && <span className="ml-2 text-warn">▲ Poucos códigos restantes. Peça ao administrador para reconfigurar se acabarem.</span>}</p>
+        <details className="rounded-btn border border-line p-3">
+          <summary className="min-h-touch cursor-pointer text-sm font-medium">Gerar novos códigos de recuperação</summary>
+          <form onSubmit={regenerate} className="mt-3 grid gap-3" data-testid="mfa-regen-form">
+            <p className="text-sm text-muted">Os códigos atuais deixam de valer. Os novos aparecem uma única vez.</p>
+            <label className="grid gap-1 text-sm">Senha atual
+              <input name="password" type="password" required autoComplete="current-password" className={input} data-testid="mfa-regen-password" />
+            </label>
+            <label className="grid gap-1 text-sm">Código do aplicativo ou código de recuperação
+              <input name="code" required autoComplete="one-time-code" className={`${input} tabular-nums`} data-testid="mfa-regen-code" />
+            </label>
+            {error && <p role="alert" className="text-sm text-danger" data-testid="mfa-regen-error">{error}</p>}
+            <button type="submit" disabled={busy} className="min-h-touch rounded-btn border border-line px-4 font-medium disabled:opacity-50" data-testid="mfa-regen">Gerar novos códigos</button>
+          </form>
+        </details>
         {required ? (
           <p className="rounded-btn bg-accent-soft p-3 text-sm" data-testid="mfa-required-note">Esta verificação é <strong>obrigatória para o seu perfil</strong> e não pode ser desativada.</p>
         ) : (

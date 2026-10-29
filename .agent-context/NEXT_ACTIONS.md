@@ -52,3 +52,4 @@
 - MFA (2026-10-29): redefinição por administrador FEITA (ver ADR-0017). Pendente: aprovação por segundo administrador, e-mail ao alvo (sem canal de e-mail), regeneração de códigos, eventos de segurança globais.
 - R015 → `observed` (2026-10-29): NÃO é possível comprovar o item (a) do checklist com captura real: as 32 PONs da OLT homologada têm 6 a 60 ONTs (nenhuma vazia). Mantido `identified`. Causas de queda: o caminho SNMP já mapeia 13→dying_gasp, 2→los (validado 10/10); o CLI não traz causa na tabela (só em `register-info` por ONT, caro) e o `suspected_cause` do Cloud já usa dying_gasp/los quando o transporte os entrega. Falta: Edge SNMP rodando na produção (throttle da OLT: 1 req/s, 5 min de resfriamento).
 - Restore (2026-10-29): ensaio PASS (LAB). Pendente: backup agendado + cópia fora do host; chave do MFA guardada à parte.
+- MFA: regeneração de códigos FEITA (2026-10-29). Backup agendado FEITO (cron 03:15; falta cópia fora do host + cifra).

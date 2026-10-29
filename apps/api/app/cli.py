@@ -43,6 +43,8 @@ def main(argv: list[str] | None = None) -> None:
     s = sub.add_parser("create-service-account")
     s.add_argument("tenant_id"); s.add_argument("name"); s.add_argument("role", choices=ROLES); s.add_argument("--edge-id")
     e = sub.add_parser("register-edge"); e.add_argument("tenant_id"); e.add_argument("name"); e.add_argument("--site")
+    sp = sub.add_parser("set-password", help="set a user's password (owner-only); ends all their sessions")
+    sp.add_argument("email"); sp.add_argument("--password-env")
     ul = sub.add_parser("unlock-login"); ul.add_argument("key", help="e-mail, or svc:<client_id>, or ip:<addr>")
     a = ap.parse_args(argv)
     eng = _engine()
@@ -66,6 +68,26 @@ def main(argv: list[str] | None = None) -> None:
                 text("INSERT INTO tenant_memberships(tenant_id,user_id,role) "
                      "SELECT :t, id, :r FROM users_global WHERE lower(email)=lower(:e)"),
                 {"t": a.tenant_id, "r": a.role, "e": a.email})
+        elif a.cmd == "set-password":
+            h = hash_secret(_password(a.password_env))
+            uid = c.execute(text("SELECT id FROM users_global WHERE lower(email)=lower(:e)"), {"e": a.email}).scalar()
+            if uid is None:
+                sys.exit("user not found")
+            c.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended('account:' || CAST(:u AS text), 0))"), {"u": str(uid)}
+            )
+            c.execute(
+                text("UPDATE users_global SET password_hash = :h, tokens_valid_after = clock_timestamp() WHERE id = :u"),
+                {"h": h, "u": uid},
+            )
+            n = c.execute(
+                text("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = :u AND revoked_at IS NULL"), {"u": uid}
+            ).rowcount
+            c.execute(
+                text("DELETE FROM login_attempts WHERE key = lower(:e) OR key = 'reauth:' || CAST(:u AS text)"),
+                {"e": a.email, "u": str(uid)}
+            )
+            print(f"password updated; {n} session(s) revoked")  # never prints the password
         elif a.cmd == "unlock-login":  # recovery path for a locked account (owner-only)
             n = c.execute(text("DELETE FROM login_attempts WHERE key = :k"), {"k": a.key.lower() if "@" in a.key else a.key}).rowcount
             print(f"cleared {n} attempt(s) for {a.key}")
