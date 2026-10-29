@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-var r015ID = Identity{Vendor: "huawei", Model: "MA5608T", Firmware: "MA5600V800R015C00"}
-
 // queryRec is a Session that answers from a table and records everything sent, behind the SAME allowlist the real session enforces.
 type queryRec struct {
 	allowed func(string) bool
@@ -29,8 +27,10 @@ func (r *queryRec) Run(_ context.Context, cmd string) (string, error) {
 	return r.reply[cmd], nil
 }
 
+const r015VersionText = "  VERSION : MA5600V800R015C00\n  PRODUCT : MA5608T\n"
+
 func newQueryRec(h HuaweiR015) *queryRec {
-	return &queryRec{allowed: h.Allowed, reply: map[string]string{}}
+	return &queryRec{allowed: h.Allowed, reply: map[string]string{"display version": r015VersionText}}
 }
 
 func TestCatalogIsReadOnlyByConstruction(t *testing.T) {
@@ -140,23 +140,23 @@ func TestRunQueryWalksModesAndAlwaysLeavesTheInterface(t *testing.T) {
 	h := HuaweiR015{Queries: QueryPolicy{Enabled: map[string]bool{"onu.register": true}}}
 	r := newQueryRec(h)
 	r.reply["display ont register-info 0 5"] = "  ONT registration times : 3\n"
-	res, err := h.RunQuery(context.Background(), r, r015ID, "onu.register", Params{Slot: 1, Port: 0, ONT: 5})
+	res, err := h.RunQuery(context.Background(), r, "onu.register", Params{Slot: 1, Port: 0, ONT: 5})
 	if err != nil || !strings.Contains(res.Output, "registration times") || res.Truncated {
 		t.Fatalf("%+v %v", res, err)
 	}
-	want := []string{"enable", "config", "interface gpon 0/1", "display ont register-info 0 5", "quit"}
+	want := []string{"display version", "enable", "config", "interface gpon 0/1", "display ont register-info 0 5", "quit"}
 	if fmt.Sprint(r.sent) != fmt.Sprint(want) {
 		t.Fatalf("sent %v want %v", r.sent, want)
 	}
 	// global query: no interface context, no quit
 	r = newQueryRec(h)
-	if _, err := h.RunQuery(context.Background(), r, r015ID, "olt.board", Params{}); err != nil || fmt.Sprint(r.sent) != "[enable config display board 0]" {
+	if _, err := h.RunQuery(context.Background(), r, "olt.board", Params{}); err != nil || fmt.Sprint(r.sent) != "[display version enable config display board 0]" {
 		t.Fatalf("%v %v", r.sent, err)
 	}
 	// a failing query still leaves the interface
 	r = newQueryRec(h)
 	r.failOn = "display ont register-info 0 5"
-	if _, err := h.RunQuery(context.Background(), r, r015ID, "onu.register", Params{Slot: 1, Port: 0, ONT: 5}); err == nil || r.sent[len(r.sent)-1] != "quit" {
+	if _, err := h.RunQuery(context.Background(), r, "onu.register", Params{Slot: 1, Port: 0, ONT: 5}); err == nil || r.sent[len(r.sent)-1] != "quit" {
 		t.Fatalf("err=%v sent=%v", err, r.sent)
 	}
 }
@@ -166,20 +166,41 @@ func TestRunQueryRefusesBeforeTouchingTheDevice(t *testing.T) {
 	for name, tc := range map[string]struct {
 		id  string
 		p   Params
-		idn Identity
 		err error
 	}{
-		"unknown id":        {"onu.reboot", Params{}, r015ID, ErrUnknownQuery},
-		"not enabled":       {"onu.register", Params{Slot: 1, ONT: 5}, r015ID, ErrQueryNotEnabled},
-		"bad params":        {"pon.ont.info", Params{Slot: 99, Port: 0}, r015ID, ErrBadQueryParams},
-		"other firmware":    {"olt.board", Params{}, Identity{Vendor: "huawei", Model: "MA5608T", Firmware: "MA5600V800R018C10"}, ErrQueryFirmware},
-		"other model":       {"olt.board", Params{}, Identity{Vendor: "huawei", Model: "MA5800-X7", Firmware: "MA5600V800R015C00"}, ErrQueryFirmware},
-		"free-form command": {"display version; reload", Params{}, r015ID, ErrUnknownQuery},
+		"unknown id":        {"onu.reboot", Params{}, ErrUnknownQuery},
+		"not enabled":       {"onu.register", Params{Slot: 1, ONT: 5}, ErrQueryNotEnabled},
+		"bad params":        {"pon.ont.info", Params{Slot: 99, Port: 0}, ErrBadQueryParams},
+		"free-form command": {"display version; reload", Params{}, ErrUnknownQuery},
 	} {
 		r := newQueryRec(h)
-		if _, err := h.RunQuery(context.Background(), r, tc.idn, tc.id, tc.p); !errors.Is(err, tc.err) || len(r.sent) != 0 {
+		if _, err := h.RunQuery(context.Background(), r, tc.id, tc.p); !errors.Is(err, tc.err) || len(r.sent) != 0 {
 			t.Fatalf("%s: err=%v sent=%v", name, err, r.sent)
 		}
+	}
+}
+
+func TestRunQueryTrustsTheSessionNotTheCaller(t *testing.T) {
+	h := HuaweiR015{}
+	for name, version := range map[string]string{
+		"other release": "  VERSION : MA5600V800R018C10\n  PRODUCT : MA5608T\n",
+		"other model":   "  VERSION : MA5600V800R015C00\n  PRODUCT : MA5800-X7\n",
+		"unreadable":    "garbage\n",
+	} {
+		r := newQueryRec(h)
+		r.reply["display version"] = version
+		_, err := h.RunQuery(context.Background(), r, "olt.board", Params{})
+		if err == nil || (name != "unreadable" && !errors.Is(err, ErrQueryFirmware)) { // unreadable: refused by Identify itself
+			t.Fatalf("%s: %v", name, err)
+		}
+		if fmt.Sprint(r.sent) != "[display version]" {
+			t.Fatalf("%s: only the identification may be sent to an unverified device, sent %v", name, r.sent)
+		}
+	}
+	r := newQueryRec(h)
+	r.failOn = "display version"
+	if _, err := h.RunQuery(context.Background(), r, "olt.board", Params{}); err == nil || len(r.sent) != 1 {
+		t.Fatalf("identification failure must stop the query: %v %v", err, r.sent)
 	}
 }
 
@@ -187,17 +208,17 @@ func TestRunQueryFailsClosedOnDeviceRejectionPaginationAndCapsOutput(t *testing.
 	h := HuaweiR015{}
 	r := newQueryRec(h)
 	r.reply["display board 0"] = "  Unknown command, the error locates at '^'\n"
-	if _, err := h.RunQuery(context.Background(), r, r015ID, "olt.board", Params{}); !errors.Is(err, ErrDeviceRejected) {
+	if _, err := h.RunQuery(context.Background(), r, "olt.board", Params{}); !errors.Is(err, ErrDeviceRejected) {
 		t.Fatalf("%v", err)
 	}
 	r = newQueryRec(h)
 	r.reply["display board 0"] = "line\n---- More ( Press 'Q' to break ) ----"
-	if _, err := h.RunQuery(context.Background(), r, r015ID, "olt.board", Params{}); !errors.Is(err, ErrPaginated) {
+	if _, err := h.RunQuery(context.Background(), r, "olt.board", Params{}); !errors.Is(err, ErrPaginated) {
 		t.Fatalf("%v", err)
 	}
 	r = newQueryRec(h)
 	r.reply["display board 0"] = strings.Repeat("x", MaxQueryOutput+10)
-	res, err := h.RunQuery(context.Background(), r, r015ID, "olt.board", Params{})
+	res, err := h.RunQuery(context.Background(), r, "olt.board", Params{})
 	if err != nil || !res.Truncated || len(res.Output) != MaxQueryOutput {
 		t.Fatalf("truncated=%v len=%d err=%v", res.Truncated, len(res.Output), err)
 	}

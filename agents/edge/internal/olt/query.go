@@ -197,9 +197,9 @@ type QueryResult struct {
 	Truncated bool
 }
 
-// RunQuery executes one catalog query on a MA5600 R015 session: enable, config, [interface gpon 0/<slot>], the command, [quit]. It always
+// RunQuery executes one catalog query on a MA5600 R015 session: display version (identity, checked here), enable, config, [interface gpon 0/<slot>], the command, [quit]. It always
 // leaves an opened interface context (best effort) and never sends anything but the rendered command and those mode words.
-func (h HuaweiR015) RunQuery(ctx context.Context, s Session, id Identity, queryID string, p Params) (QueryResult, error) {
+func (h HuaweiR015) RunQuery(ctx context.Context, s Session, queryID string, p Params) (QueryResult, error) {
 	q, ok := QueryByID(queryID)
 	if !ok {
 		return QueryResult{}, ErrUnknownQuery
@@ -208,6 +208,11 @@ func (h HuaweiR015) RunQuery(ctx context.Context, s Session, id Identity, queryI
 		return QueryResult{}, ErrQueryNotEnabled
 	}
 	plan, err := q.Render(p)
+	if err != nil {
+		return QueryResult{}, err
+	}
+	// The device identifies itself through THIS session; a caller-supplied identity would be a claim, not a proof.
+	id, err := h.Identify(ctx, s)
 	if err != nil {
 		return QueryResult{}, err
 	}
