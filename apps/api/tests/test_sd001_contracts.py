@@ -123,10 +123,12 @@ def test_narrative_text_rejects_credentials_and_macs_and_is_bounded():
 
 
 def test_request_bodies_have_no_unbounded_free_text():
-    approve = {"proposal_hash": "a" * 64, "decision": "approve", "reason": "Cliente confirmou a janela de manutenção"}
+    approve = {"proposal_hash": "a" * 64, "decision": "approve", "reason_code": "within_maintenance_window"}
     assert not _v(_component("ApprovalDecision"), approve)
-    for leak in ("senha: abc123", "token=xyz", "mac aa:bb:cc:dd:ee:ff", "curto", "x" * 1200):
-        assert _v(_component("ApprovalDecision"), {**approve, "reason": leak}), leak
+    for leak in ("a senha é abc123", "abc123", "mac aa:bb:cc:dd:ee:ff", "senha: abc123"):  # frase livre, com ou sem separador
+        assert _v(_component("ApprovalDecision"), {**approve, "reason_code": leak}), leak
+    assert _v(_component("ApprovalDecision"), {k: v for k, v in approve.items() if k != "reason_code"})
+    assert _v(_component("ApprovalDecision"), {**approve, "reason": "texto livre ainda aceito?"})  # campo antigo não existe mais
     job = {"customer_id": "11111111-1111-4111-8111-111111111111", "mode": "passive", "ticket_id": "TCK-123"}
     assert not _v(_component("CreateDiagnosticJob"), job)
     assert _v(_component("CreateDiagnosticJob"), {**job, "ticket_id": "cliente joao senha 1"})

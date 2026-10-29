@@ -330,15 +330,17 @@ components:
     ApprovalDecision:
       type: object
       additionalProperties: false
-      required: [proposal_hash, decision, reason]
+      required: [proposal_hash, decision, reason_code]
       properties:
         proposal_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
         decision: {type: string, enum: [approve, reject]}
-        reason:
-          description: Motivo da decisão, texto narrativo (redigir antes de persistir e exibir; ver SafeText)
-          allOf:
-            - {$ref: '#/components/schemas/SafeText'}
-            - {minLength: 8}
+        reason_code:
+          description: >-
+            Motivo da decisão como CÓDIGO de lista fechada. Não há campo de texto livre no pedido de aprovação: um padrão de texto não prova
+            ausência de segredo, então o contrato simplesmente não oferece onde escrevê-lo. Observação humana, se vier a existir, será outro
+            recurso com redação própria.
+          type: string
+          enum: [evidence_reviewed, within_maintenance_window, customer_consented, risk_accepted, rejected_insufficient_evidence, rejected_risk_too_high, rejected_outside_window, rejected_other]
     ApprovalReceipt:
       type: object
       required: [approval_id, status, proposal_id, approved_at, expires_at]
