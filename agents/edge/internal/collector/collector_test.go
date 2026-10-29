@@ -94,7 +94,7 @@ func TestRealNBIShapeSkipsPlaceholdersAndReportsOnlyCounts(t *testing.T) {
 	for _, c := range snap.CPEs {
 		got[c.CanonicalSerial] = c.Binding.ExternalID
 	}
-	want := map[string]string{"SYN0000001": "AAAA00-HG8245H-SYN0000001", "SYN-00000002": "BBBB11-G3000E-SYN-00000002", "SYN0000003": "CCCC22-hAP%20lite-SYN0000003"}
+	want := map[string]string{"SYNLOW00001": "6666FF-ONT-SYNLOW", "SYN0000001": "AAAA00-HG8245H-SYN0000001", "SYN-00000002": "BBBB11-G3000E-SYN-00000002", "SYN0000003": "CCCC22-hAP%20lite-SYN0000003"}
 	if len(got) != len(want) {
 		t.Fatalf("got %v", got)
 	}
@@ -103,7 +103,7 @@ func TestRealNBIShapeSkipsPlaceholdersAndReportsOnlyCounts(t *testing.T) {
 			t.Fatalf("serial %s: external_id %q want %q", k, got[k], v)
 		}
 	}
-	for _, bad := range []string{"SYNDUP0001", "<script>", "INJECT01"} {
+	for _, bad := range []string{"SYNDUP0001", "<script>", "INJECT01", "SYNCASE0001", "synlow"} {
 		if strings.Contains(string(items[0].Payload), bad) {
 			t.Fatalf("hostile or conflicting claim %q reached the snapshot", bad)
 		}
@@ -111,7 +111,7 @@ func TestRealNBIShapeSkipsPlaceholdersAndReportsOnlyCounts(t *testing.T) {
 	if strings.Contains(string(items[0].Payload), "DISCOVERYSERVICE") {
 		t.Fatal("placeholder identity leaked into the snapshot")
 	}
-	if skips["placeholder_identity"] != 2 || skips["no_serial"] != 1 || skips["invalid_serial"] != 3 || skips["conflicting_serial"] != 2 {
+	if skips["placeholder_identity"] != 2 || skips["no_serial"] != 1 || skips["invalid_serial"] != 3 || skips["conflicting_serial"] != 4 {
 		t.Fatalf("skips=%v", skips)
 	}
 }

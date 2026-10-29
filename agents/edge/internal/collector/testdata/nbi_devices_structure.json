@@ -108,5 +108,35 @@
    "_ProductClass": "ONT",
    "_SerialNumber": "SYN\nINJECT01"
   }
+ },
+ {
+  "_id": "4444DD-ONT-SYNCASEA",
+  "_lastInform": "2026-10-28T10:00:11.000Z",
+  "_deviceId": {
+   "_Manufacturer": "X",
+   "_OUI": "4444DD",
+   "_ProductClass": "ONT",
+   "_SerialNumber": "syncase0001"
+  }
+ },
+ {
+  "_id": "5555EE-ONT-SYNCASEB",
+  "_lastInform": "2026-10-28T10:00:12.000Z",
+  "_deviceId": {
+   "_Manufacturer": "Y",
+   "_OUI": "5555EE",
+   "_ProductClass": "ONT",
+   "_SerialNumber": " SYNCASE0001 "
+  }
+ },
+ {
+  "_id": "6666FF-ONT-SYNLOW",
+  "_lastInform": "2026-10-28T10:00:13.000Z",
+  "_deviceId": {
+   "_Manufacturer": "X",
+   "_OUI": "6666FF",
+   "_ProductClass": "ONT",
+   "_SerialNumber": "synlow00001"
+  }
  }
 ]

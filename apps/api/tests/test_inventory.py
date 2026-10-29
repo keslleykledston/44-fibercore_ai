@@ -232,3 +232,40 @@ def test_a_serial_claim_with_another_external_id_is_ignored_not_merged(client, s
     assert "CLAIM-OTHER-1" in rows and "CLAIM-DUP-1" not in rows
     again = {**base, "observed_at": _now(2)}  # the legitimate device re-informing keeps updating normally
     assert client.post("/v1/edge/cpe-snapshots", headers=a, json=again).json()["conflicts"] == 0
+
+
+def test_serial_is_stored_in_one_canonical_form_and_the_database_enforces_it(client, seed, inv, migrated):
+    a = agent(client, inv, "a1")
+    body = {"edge_id": str(inv["a1"]["edge"]), "observed_at": _now(), "cpes": [
+        {"canonical_serial": "  canon-case-1 ", "vendor": "V", "binding": {"protocol": "tr069", "external_id": "canon-ext", "connector_id": "c-canon"}}]}
+    assert client.post("/v1/edge/cpe-snapshots", headers=a, json=body).status_code == 202
+    again = {**body, "observed_at": _now(3), "cpes": [{**body["cpes"][0], "canonical_serial": "CANON-CASE-1"}]}
+    assert client.post("/v1/edge/cpe-snapshots", headers=a, json=again).json()["conflicts"] == 0  # same device, not a second one
+    rows = [c for c in client.get("/v1/cpes", headers=hdr(client, "alice", seed, "A")).json() if c["canonical_serial"].startswith("CANON-CASE")]
+    assert [c["canonical_serial"] for c in rows] == ["CANON-CASE-1"]
+    with pytest.raises(DBAPIError), migrated.begin() as c:  # even a bypass of the API cannot store a non-canonical serial
+        c.execute(text("INSERT INTO cpes (tenant_id, edge_id, canonical_serial) VALUES (:t,:e,'lower-case-x')"),
+                  {"t": seed["A"], "e": inv["a1"]["edge"]})
+
+
+def test_concurrent_snapshots_cannot_attach_two_external_ids_to_one_new_serial(client, seed, inv, migrated):
+    import threading
+
+    a = agent(client, inv, "a1")
+    out: dict = {}
+    obs = _now()  # one instant for all: none of them can be "stale" relative to the others
+
+    def post(ext):
+        body = {"edge_id": str(inv["a1"]["edge"]), "observed_at": obs, "cpes": [
+            {"canonical_serial": "RACE-CLAIM-1", "binding": {"protocol": "tr069", "external_id": ext, "connector_id": "c-race"}}]}
+        out[ext] = client.post("/v1/edge/cpe-snapshots", headers=a, json=body)
+
+    ts = [threading.Thread(target=post, args=(e,)) for e in ("race-a", "race-b", "race-c", "race-d")]
+    [t.start() for t in ts]
+    [t.join(30) for t in ts]
+    assert all(r.status_code == 202 for r in out.values()), {k: r.text for k, r in out.items()}
+    with migrated.begin() as c:
+        n = c.execute(text("SELECT count(*) FROM cpe_protocol_bindings b JOIN cpes p ON p.id = b.cpe_id "
+                           "WHERE p.canonical_serial = 'RACE-CLAIM-1' AND p.tenant_id = :t"), {"t": seed["A"]}).scalar()
+    assert n == 1  # exactly one claim won; the others were ignored, none merged
+    assert sum(r.json()["conflicts"] for r in out.values()) == 3

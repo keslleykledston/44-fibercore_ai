@@ -68,11 +68,19 @@ class CpeBinding(BaseModel):
 
 
 class CpeIn(BaseModel):
-    canonical_serial: Short
+    canonical_serial: Short  # canonical form: trimmed + upper case (the device chooses its own serial; the ERP matches on upper())
     vendor: Short | None = None
     model: Short | None = None
     firmware: Short | None = None
     binding: CpeBinding
+
+    @field_validator("canonical_serial")
+    @classmethod
+    def _canonical(cls, v: str) -> str:
+        v = v.strip().upper()
+        if not v:
+            raise ValueError("canonical_serial is empty")
+        return v
 
 
 class CpeSnapshot(BaseModel):
@@ -186,6 +194,11 @@ def ingest_cpe_snapshot(
 ) -> dict:
     _bound_edge(p, body.edge_id)
     all_serials = [c.canonical_serial for c in body.cpes]
+    # Serialise concurrent snapshots per CLAIM key (tenant, serial, connector, protocol) — also for serials that do not exist yet, which
+    # row locks cannot cover. Sorted, so two overlapping batches take the locks in the same order. The unique index is the backstop.
+    keys = sorted({f"{p.tenant_id}|{c.canonical_serial}|{c.binding.connector_id}|{c.binding.protocol}" for c in body.cpes})
+    if keys:
+        conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(k, 0)) FROM unnest(CAST(:ks AS text[])) AS k"), {"ks": keys})
     owners = {  # row locks serialise concurrent snapshots touching the same CPEs
         r.canonical_serial: (r.edge_id, r.observed_at)
         for r in conn.execute(

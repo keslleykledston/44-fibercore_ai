@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/nbi"
@@ -65,7 +66,11 @@ const placeholderID = "DISCOVERYSERVICE"
 
 // A serial is a CLAIM made by the device itself (CWMP is reachable by anyone who finds the port). Only a plain identifier is accepted; the
 // rest (control characters, huge strings, markup) is dropped and counted.
-var serialRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{3,63}$`)
+var serialRe = regexp.MustCompile(`^[A-Z0-9][A-Z0-9._-]{3,63}$`)
+
+// canonicalSerial is the ONE form the Cloud stores (trimmed, upper case); grouping and validation use it so case/space variants of a
+// serial collapse into the same claim instead of looking like two devices.
+func canonicalSerial(s string) string { return strings.ToUpper(strings.TrimSpace(s)) }
 
 func isPlaceholder(d nbi.Device) bool {
 	return d.DeviceID.OUI == placeholderID || d.DeviceID.Manufacturer == placeholderID || d.DeviceID.ProductClass == placeholderID
@@ -109,10 +114,11 @@ func (g *GenieACS) Collect(ctx context.Context) ([]Item, error) {
 	claims := map[string]map[string]bool{}
 	for _, d := range devs {
 		if !isPlaceholder(d) && d.ID != "" {
-			if claims[d.DeviceID.SerialNumber] == nil {
-				claims[d.DeviceID.SerialNumber] = map[string]bool{}
+			k := canonicalSerial(d.DeviceID.SerialNumber)
+			if claims[k] == nil {
+				claims[k] = map[string]bool{}
 			}
-			claims[d.DeviceID.SerialNumber][d.ID] = true
+			claims[k][d.ID] = true
 		}
 	}
 	for _, d := range devs {
@@ -120,7 +126,7 @@ func (g *GenieACS) Collect(ctx context.Context) ([]Item, error) {
 			skipped["placeholder_identity"]++
 			continue
 		}
-		serial := d.DeviceID.SerialNumber
+		serial := canonicalSerial(d.DeviceID.SerialNumber)
 		if serial == "" || d.ID == "" {
 			skipped["no_serial"]++
 			continue // cannot be keyed canonically; skip rather than invent identity

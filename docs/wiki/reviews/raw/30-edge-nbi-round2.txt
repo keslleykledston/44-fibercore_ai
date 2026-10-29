@@ -1,0 +1,35 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18540-52ec-7980-9b2e-5a0e9ba2fb19).
+[codex] Turn started (01a18540-5435-74a3-a142-86572f226f07).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de ingestão no Edge e na API, focan...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "class Cpe|CpeSnapshot|canonical_serial|cpe_protocol_bindings|CREATE TAB...
+[codex] Command completed: /bin/bash -lc 'rg -n "class Cpe|CpeSnapshot|canonical_serial|cpe_protocol_bindings|CREATE TAB... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '50,90p' apps/api/app/api/inventory.py; sed -n '55,98p' apps/api/alembi...
+[codex] Command completed: /bin/bash -lc "sed -n '50,90p' apps/api/app/api/inventory.py; sed -n '55,98p' apps/api/alembi... (exit 0)
+[codex] Assistant message captured: O filtro de conflito da API agrupa por serial, connector e protocolo conforme descrito. Agora...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- agents/edge/cmd/fibercore-e...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- agents/edge/cmd/fibercore-e... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '188,280p'; nl -ba agents/edge/i...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '188,280p'; nl -ba agents/edge/i... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"CREATE TABLE cpes|canonical_serial|upper\\(canonical_serial\\)|serial....
+[codex] Command completed: /bin/bash -lc "rg -n \"CREATE TABLE cpes|canonical_serial|upper\\(canonical_serial\\)|serial.... (exit 0)
+[codex] Running command: /bin/bash -lc ''
+[codex] Command completed: /bin/bash -lc '' (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não deve ir ao ar ainda: os conflitos não são seriali...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não deve ir ao ar ainda: os conflitos não são serializados na API e o Edge trata serial como case-sensitive, permitindo contornar o bloqueio de reivindicações conflitantes.
+
+Findings:
+- [high] Snapshots concorrentes podem criar bindings conflitantes para o mesmo serial (apps/api/app/api/inventory.py:208-224)
+  A consulta de `stored` não usa `FOR UPDATE` e só observa bindings já confirmados. Se dois snapshots do mesmo Edge, com tempos compatíveis, reivindicarem simultaneamente o mesmo serial e connector/protocol com `external_id` diferentes, ambos podem ver ausência de binding, passar pela checagem e inserir bindings distintos para o mesmo CPE. A restrição única protege `(connector_id, protocol, external_id)`, não esse vínculo por serial. Isso permite exatamente a mesclagem que a regra pretende evitar. Serializar por uma linha de CPE não basta para serial ainda inexistente; use uma trava transacional por chave de reivindicação e uma restrição/garantia de unicidade adequada no banco.
+  Recommendation: Torne atômica a verificação e gravação da reivindicação por `(tenant, canonical_serial, connector_id, protocol)`, incluindo serialização de inserções novas e uma garantia persistente de no máximo um `external_id` nessa chave.
+- [medium] Serial com variação de caixa contorna a detecção de conflito no Edge (agents/edge/internal/collector/collector.go:108-135)
+  O mapa `claims` usa o serial bruto e a API também armazena `canonical_serial` com comparação exata. Assim, dois dispositivos podem reivindicar `ABC12345` e `abc12345` sem serem classificados como conflito, embora o ERP procure CPEs usando `upper(canonical_serial)`. O resultado pode ser dois registros tratados como identidades distintas na ingestão, mas ambíguos no fluxo de associação ERP. Normalize e valide a mesma forma canônica em ambas as camadas antes de agrupar e persistir.
+  Recommendation: Defina uma normalização canônica compartilhada para serial (incluindo caixa e espaços) e aplique-a na detecção de duplicatas e na ingestão, com compatibilidade explícita para registros existentes.
