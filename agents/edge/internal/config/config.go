@@ -53,6 +53,8 @@ type OLTConfig struct {
 	SSHMode                 string   `json:"ssh_mode"`            // "" | "exec" (default) | "shell" (interactive pty; firmwares that ignore exec)
 	SSHPagerSpace           bool     `json:"ssh_pager_space"`     // shell mode: answer the VRP "---- More ----" pager with a single Space
 	Profile                 string   `json:"profile"`             // "" | "huawei_ma56_r015" (CLI-mode profile for the MA5600 family)
+	CollectSeconds          int      `json:"collect_seconds"`     // minimum seconds between two collections of THIS olt (0 = default: 900 for cli, every cycle for snmp)
+	CooldownSeconds         int      `json:"cooldown_seconds"`    // seconds to leave this olt alone after a failure (0 = default: 900 cli, 300 snmp)
 	LegacySSH               bool     `json:"legacy_ssh"`          // explicit per-OLT opt-in to old SSH algorithms (SHA1 DH, ssh-rsa, AES-CBC)
 }
 
@@ -183,6 +185,10 @@ func (c *Config) Validate() error {
 		default:
 			errs = append(errs, fmt.Errorf("%s: transport must be cli or snmp", p))
 		}
+		if (o.CollectSeconds != 0 && (o.CollectSeconds < 60 || o.CollectSeconds > 86400)) ||
+			(o.CooldownSeconds != 0 && (o.CooldownSeconds < 60 || o.CooldownSeconds > 86400)) {
+			errs = append(errs, fmt.Errorf("%s: collect_seconds/cooldown_seconds must be 0 (default) or 60..86400", p))
+		}
 		if len(o.PonPorts) == 0 || len(o.PonPorts) > 256 {
 			errs = append(errs, fmt.Errorf("%s: pon_ports required (1..256)", p))
 		}
@@ -197,6 +203,20 @@ func (c *Config) Validate() error {
 	}
 	return errors.Join(errs...)
 }
+
+// OLTInterval is the minimum time between two collections of one OLT. A CLI session is a login on a real device (and the pager
+// makes it slow), so it defaults to 15 minutes; SNMP is already throttled per packet and follows the global cycle.
+func (o OLTConfig) OLTInterval() time.Duration {
+	if o.CollectSeconds > 0 {
+		return time.Duration(o.CollectSeconds) * time.Second
+	}
+	if o.Transport == "snmp" {
+		return 0
+	}
+	return 15 * time.Minute
+}
+
+func (o OLTConfig) OLTCooldown() time.Duration { return time.Duration(o.CooldownSeconds) * time.Second }
 
 func (c *Config) HeartbeatEvery() time.Duration {
 	return time.Duration(c.HeartbeatSeconds) * time.Second

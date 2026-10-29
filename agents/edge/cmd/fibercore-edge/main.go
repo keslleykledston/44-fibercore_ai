@@ -84,7 +84,7 @@ func main() {
 			if o.Transport == "snmp" {
 				oc.Sources = append(oc.Sources, collector.OLTSource{
 					Name: o.Name, Ports: o.PonPorts, AllowUnverified: o.AllowUnverifiedFirmware, SNMPDriver: olt.HuaweiSNMP{},
-					SNMPKey: snmpKey(o.SNMPAddress),
+					SNMPKey: snmpKey(o.SNMPAddress), Interval: o.OLTInterval(), Cooldown: o.OLTCooldown(),
 					OpenSNMP: func(ctx context.Context) (olt.SNMPReader, func(), error) {
 						community, err := config.ReadSecret(o.SNMPCommunityFile)
 						if err != nil {
@@ -105,6 +105,7 @@ func main() {
 			}
 			oc.Sources = append(oc.Sources, collector.OLTSource{
 				Name: o.Name, Driver: drv, Ports: o.PonPorts, AllowUnverified: o.AllowUnverifiedFirmware,
+				SNMPKey: snmpKey(o.Address), Interval: o.OLTInterval(), Cooldown: o.OLTCooldown(),
 				Open: func(ctx context.Context) (olt.Session, func(), error) {
 					pw, err := config.ReadSecret(o.SecretFile)
 					if err != nil {

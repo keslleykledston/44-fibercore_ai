@@ -24,6 +24,12 @@ type OLTSource struct {
 	// SNMPKey identifies the PHYSICAL agent (canonical ip:port). The per-device lock and cooldown are keyed by it, so two
 	// configured names for one agent cannot evade them. Empty falls back to Name.
 	SNMPKey string
+	// Interval is the minimum time between two attempts on this OLT (success or failure). The Edge's collection tick is shared with
+	// the NBI and with the sooner retry after an incomplete round, so without it a real OLT would be logged into on every tick.
+	// 0 = every call (tests, SNMP).
+	Interval time.Duration
+	// Cooldown is how long the OLT is left alone after ANY failed collection. 0 = the transport default (snmpCooldown / cliCooldown).
+	Cooldown time.Duration
 }
 
 const (
@@ -45,14 +51,19 @@ type OLT struct {
 	Now     func() time.Time
 
 	mu   sync.Mutex
-	cool map[string]time.Time // SNMP: OLT name -> do not touch before this instant
-	busy map[string]bool      // SNMP: OLT names with a collection in flight
+	cool map[string]time.Time // device key -> do not touch before this instant (after a failure)
+	busy map[string]bool      // device keys with a collection in flight
+	last map[string]time.Time // device key -> start of the last attempt (Interval pacing)
 }
 
 // snmpCooldown: after ANY failed SNMP collection of an OLT the Edge leaves its agent alone for this long. The measured
 // MA5608T agent goes mute for over a minute once its rate limit trips, and retrying into a mute agent only prolongs it (and
 // starves the operator's own monitoring that shares the community).
 const snmpCooldown = 5 * time.Minute
+
+// cliCooldown: after a failed CLI collection (bad login, timeout, pager, refused session) the Edge stays away longer than for
+// SNMP: repeated failed logins can lock the read-only account that the operator's own tools share.
+const cliCooldown = 15 * time.Minute
 
 func (o *OLT) Name() string { return "olt" }
 
@@ -99,9 +110,15 @@ func (o *OLT) Collect(ctx context.Context) ([]Item, error) {
 }
 
 func (o *OLT) collectOne(ctx context.Context, src OLTSource, observed string) ([]Item, error) {
-	if src.OpenSNMP != nil {
-		return o.collectSNMPCooled(ctx, src, observed)
-	}
+	return o.guarded(ctx, src, func() ([]Item, error) {
+		if src.OpenSNMP != nil {
+			return o.collectSNMP(ctx, src, observed)
+		}
+		return o.collectCLI(ctx, src, observed)
+	})
+}
+
+func (o *OLT) collectCLI(ctx context.Context, src OLTSource, observed string) ([]Item, error) {
 	raw, closeFn, err := src.Open(ctx)
 	if err != nil {
 		return nil, err
@@ -133,30 +150,49 @@ func (o *OLT) now() time.Time {
 	return time.Now()
 }
 
-// collectSNMPCooled guards every SNMP collection of an OLT: ONE at a time (reserved under the lock BEFORE any I/O, so the
-// periodic worker and a job cannot both talk to the agent) and none during the cooldown that follows a failure. While
-// reserved or cooling, nothing is sent to the device.
-func (o *OLT) collectSNMPCooled(ctx context.Context, src OLTSource, observed string) ([]Item, error) {
+// guarded wraps EVERY collection of a physical OLT (SSH or SNMP): ONE at a time (reserved under the lock BEFORE any I/O, so the
+// periodic worker and a job cannot both talk to the device), not before Interval has passed since the last attempt, and none
+// during the cooldown that follows a failure. While reserved, not due or cooling, nothing is sent to the device. A collection
+// that is simply not due yields nothing and no error (the round is not incomplete); a cooling or busy OLT is reported.
+func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, error)) ([]Item, error) {
 	key := src.SNMPKey
 	if key == "" {
 		key = src.Name
 	}
+	cooldown := src.Cooldown
+	if cooldown <= 0 {
+		cooldown = cliCooldown
+		if src.OpenSNMP != nil {
+			cooldown = snmpCooldown
+		}
+	}
 	o.mu.Lock()
+	now := o.now()
 	if o.busy[key] {
 		o.mu.Unlock()
-		return nil, errors.New("snmp collection already running for this olt")
+		return nil, errors.New("collection already running for this olt")
 	}
-	if now, until := o.now(), o.cool[key]; now.Before(until) {
+	if until := o.cool[key]; now.Before(until) {
 		o.mu.Unlock()
-		return nil, fmt.Errorf("snmp cooling down after a failure (%s left)", until.Sub(now).Round(time.Second))
+		return nil, fmt.Errorf("olt cooling down after a failure (%s left)", until.Sub(now).Round(time.Second))
+	}
+	if src.Interval > 0 {
+		if at, ok := o.last[key]; ok && now.Before(at.Add(src.Interval)) {
+			o.mu.Unlock()
+			return nil, nil
+		}
 	}
 	if o.busy == nil {
 		o.busy = map[string]bool{}
 	}
+	if o.last == nil {
+		o.last = map[string]time.Time{}
+	}
 	o.busy[key] = true
+	o.last[key] = now
 	o.mu.Unlock()
 
-	items, err := o.collectSNMP(ctx, src, observed)
+	items, err := run()
 
 	o.mu.Lock()
 	delete(o.busy, key)
@@ -164,7 +200,7 @@ func (o *OLT) collectSNMPCooled(ctx context.Context, src OLTSource, observed str
 		if o.cool == nil {
 			o.cool = map[string]time.Time{}
 		}
-		o.cool[key] = o.now().Add(snmpCooldown)
+		o.cool[key] = o.now().Add(cooldown)
 	}
 	o.mu.Unlock()
 	return items, err

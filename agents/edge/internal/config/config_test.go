@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 const goodUUID = "0b8d5a0e-1111-4222-8333-444455556666"
@@ -186,6 +187,28 @@ func TestOLTSNMPTransportValidation(t *testing.T) {
 	} {
 		if _, err := Load(write(t, 0o600, good(olt(extra))), "v"); err == nil {
 			t.Errorf("%s: must be rejected", name)
+		}
+	}
+}
+
+func TestOLTPacingDefaultsAndBounds(t *testing.T) {
+	olt := func(extra string) string {
+		return `,"allowlist":["10.0.0.9:22"],"olts":[{"name":"A","vendor":"huawei","address":"10.0.0.9:22","username":"ro","secret_file":"/s","host_key_sha256":"SHA256:abc","pon_ports":["0/1/0"]` + extra + `}]`
+	}
+	cfg, err := Load(write(t, 0o600, good(olt(``))), "v")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.OLTs[0].OLTInterval() != 15*time.Minute || cfg.OLTs[0].OLTCooldown() != 0 {
+		t.Fatalf("a CLI OLT defaults to one login per 15 minutes: %v / %v", cfg.OLTs[0].OLTInterval(), cfg.OLTs[0].OLTCooldown())
+	}
+	cfg, err = Load(write(t, 0o600, good(olt(`,"collect_seconds":1800,"cooldown_seconds":600`))), "v")
+	if err != nil || cfg.OLTs[0].OLTInterval() != 30*time.Minute || cfg.OLTs[0].OLTCooldown() != 10*time.Minute {
+		t.Fatalf("explicit pacing: %v %+v", err, cfg.OLTs[0])
+	}
+	for _, extra := range []string{`,"collect_seconds":5`, `,"collect_seconds":-1`, `,"collect_seconds":100000`, `,"cooldown_seconds":59`} {
+		if _, err := Load(write(t, 0o600, good(olt(extra))), "v"); err == nil {
+			t.Errorf("%q must be rejected (a tight loop on a real OLT)", extra)
 		}
 	}
 }

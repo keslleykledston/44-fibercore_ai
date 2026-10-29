@@ -457,3 +457,82 @@ func TestTwoAliasesOfOneAgentShareTheLockAndTheCooldown(t *testing.T) {
 		t.Fatalf("the failure of one alias must cool the whole agent: err=%v opens=%d", err, opens)
 	}
 }
+
+type countingSession struct {
+	runs *int
+	err  error
+}
+
+func (c countingSession) Run(ctx context.Context, cmd string) (string, error) {
+	*c.runs++
+	if c.err != nil {
+		return "", c.err
+	}
+	return fileSession{"huawei_ma5800/R018"}.Run(ctx, cmd)
+}
+
+func cliSrc(opens *int, runs *int, fail error) OLTSource {
+	return OLTSource{Name: "OLT-CLI", Driver: olt.Huawei{}, Ports: []string{"0/1/0"}, AllowUnverified: true,
+		Open: func(context.Context) (olt.Session, func(), error) {
+			*opens++
+			return countingSession{runs, fail}, func() {}, nil
+		}}
+}
+
+func TestAFailedCLICollectionLeavesTheDeviceAloneForTheCooldownAndRetriesAfterIt(t *testing.T) {
+	var opens, runs int
+	clock := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	o := &OLT{EdgeID: "e", Sources: []OLTSource{cliSrc(&opens, &runs, errors.New("ssh: unable to authenticate"))}, Now: func() time.Time { return clock }}
+	if _, err := o.Collect(context.Background()); err == nil || opens != 1 {
+		t.Fatalf("first attempt must fail after one login: err=%v opens=%d", err, opens)
+	}
+	clock = clock.Add(14 * time.Minute) // the sooner-retry after an incomplete round must not log in again
+	if _, err := o.Collect(context.Background()); err == nil || !strings.Contains(err.Error(), "cooling down") || opens != 1 {
+		t.Fatalf("inside the CLI cooldown nothing may reach the device: err=%v opens=%d", err, opens)
+	}
+	clock = clock.Add(2 * time.Minute)
+	if _, err := o.Collect(context.Background()); err == nil || opens != 2 {
+		t.Fatalf("after the cooldown it tries again: err=%v opens=%d", err, opens)
+	}
+}
+
+func TestIntervalPacesAHealthyCLIOLTWithoutReportingAnIncompleteRound(t *testing.T) {
+	var opens, runs int
+	clock := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	s := cliSrc(&opens, &runs, nil)
+	s.Interval = 15 * time.Minute
+	o := &OLT{EdgeID: "e", Sources: []OLTSource{s}, Now: func() time.Time { return clock }}
+	items, err := o.Collect(context.Background())
+	if err != nil || len(items) != 1 || opens != 1 {
+		t.Fatalf("first call collects: items=%d err=%v opens=%d", len(items), err, opens)
+	}
+	for _, d := range []time.Duration{30 * time.Second, 5 * time.Minute, 9 * time.Minute} { // NBI ticks and sooner retries
+		clock = clock.Add(d)
+		items, err = o.Collect(context.Background())
+		if err != nil || len(items) != 0 || opens != 1 {
+			t.Fatalf("not due at +%s: a quiet skip, not an error and not a device touch: items=%d err=%v opens=%d", d, len(items), err, opens)
+		}
+	}
+	clock = clock.Add(time.Minute) // 15m30s after the first attempt
+	if items, err = o.Collect(context.Background()); err != nil || len(items) != 1 || opens != 2 {
+		t.Fatalf("due again: items=%d err=%v opens=%d", len(items), err, opens)
+	}
+}
+
+func TestACustomCooldownOverridesTheDefaultAndPacingAppliesPerPhysicalDevice(t *testing.T) {
+	var opens, runs int
+	clock := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	mk := func(name string) OLTSource {
+		s := cliSrc(&opens, &runs, errors.New("boom"))
+		s.Name, s.SNMPKey, s.Cooldown = name, "192.0.2.10:22", time.Minute
+		return s
+	}
+	o := &OLT{EdgeID: "e", Sources: []OLTSource{mk("a1"), mk("a2")}, Now: func() time.Time { return clock }}
+	if _, err := o.Collect(context.Background()); err == nil || opens != 1 {
+		t.Fatalf("an alias of the same device must be refused while the first is cooling: err=%v opens=%d", err, opens)
+	}
+	clock = clock.Add(2 * time.Minute)
+	if _, err := o.Collect(context.Background()); err == nil || opens != 2 {
+		t.Fatalf("custom 1 min cooldown elapsed: err=%v opens=%d", err, opens)
+	}
+}
