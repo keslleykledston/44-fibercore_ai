@@ -186,18 +186,18 @@ func TestRefreshRefusesBeforeAnyTaskWhenTheDeviceOrModelIsNotClear(t *testing.T)
 }
 
 func TestRefreshAmbiguousPostOutcomesAreTreatedAsPossiblyUncleanButExplicit4xxIsNot(t *testing.T) {
-	for _, code := range []int{500, 502, 503} {
+	for _, code := range []int{500, 502, 503, 504, 408, 429, 409, 413} {
 		f := &fakeACS{devices: igd, taskCode: code, taskBody: `x`}
 		rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
 		if !errors.Is(err, ErrRefreshUncleaned) || rep.Uncleaned != 1 || len(f.tasks) != 1 {
 			t.Fatalf("%d: %+v %v tasks=%d (the ACS may have created the task)", code, rep, err, len(f.tasks))
 		}
 	}
-	for _, code := range []int{400, 403, 404, 422} {
+	for _, code := range []int{400, 401, 403, 404, 405, 422} {
 		f := &fakeACS{devices: igd, taskCode: code, taskBody: `x`}
 		_, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
 		if err == nil || errors.Is(err, ErrRefreshUncleaned) || len(f.tasks) != 1 {
-			t.Fatalf("%d: an explicit rejection created nothing, stop without a hold: %v tasks=%d", code, err, len(f.tasks))
+			t.Fatalf("%d: a refusal the NBI makes before creating anything: stop without a hold: %v tasks=%d", code, err, len(f.tasks))
 		}
 	}
 	// transport failure on the POST (connection dropped after the request was sent)

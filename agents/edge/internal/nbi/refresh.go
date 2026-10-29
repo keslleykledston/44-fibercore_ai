@@ -104,9 +104,10 @@ func (c *Client) RefreshParams(ctx context.Context, deviceID string) (RefreshRep
 		rep.Groups++
 		status, taskID, faulted, err := c.postTask(ctx, deviceID, g)
 		if err != nil {
-			// A lost response, a timeout or a 5xx does not prove the ACS did NOT create the task. Only an explicit 4xx rejection does.
+			// A lost response, a timeout, a 5xx or a proxy-style 4xx (408, 429...) does not prove the ACS did NOT create the task. Only the statuses
+			// the NBI itself uses to refuse a request before creating anything do.
 			var rej *rejectedError
-			if errors.As(err, &rej) && rej.status >= 400 && rej.status < 500 {
+			if errors.As(err, &rej) && definitelyNotCreated[rej.status] {
 				return rep, err
 			}
 			rep.Uncleaned++
@@ -190,6 +191,10 @@ func (c *Client) postTask(ctx context.Context, deviceID string, names []string) 
 	}
 	return st, t.ID, len(t.Fault) > 0 && string(t.Fault) != "null", nil
 }
+
+// definitelyNotCreated lists the statuses that mean "refused before creating a task": malformed request, no/bad credentials, forbidden,
+// unknown device, wrong method, invalid body. Everything else (timeouts, rate limits, gateway errors, 5xx) is ambiguous.
+var definitelyNotCreated = map[int]bool{400: true, 401: true, 403: true, 404: true, 405: true, 422: true}
 
 type rejectedError struct{ status int }
 
