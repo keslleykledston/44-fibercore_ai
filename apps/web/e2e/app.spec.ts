@@ -10,7 +10,19 @@ test("login inválido mostra erro e não cria sessão", async ({ page, context }
   await page.getByLabel("Senha").fill("senha-errada");
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page.getByTestId("login-error")).toBeVisible();
+  await expect(page.getByTestId("login-steps").locator('[aria-current="step"]')).toContainText("Credenciais");
   expect((await context.cookies()).find((c) => c.name === "fc_token")).toBeUndefined();
+});
+
+test("login: etapa atual indicada e sem violações sérias de acessibilidade", async ({ page }) => {
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto("/login");
+    await expect(page.getByTestId("login-steps").locator('[aria-current="step"]')).toContainText("Credenciais");
+    const res = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    const bad = res.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
+    expect(bad.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(" | ")}`)).toEqual([]);
+  }
 });
 
 test("telas protegidas redirecionam para login sem sessão", async ({ page }) => {
@@ -191,6 +203,7 @@ test("MFA: login em duas etapas com TOTP e código de recuperação; desativaç�
     await page.getByLabel("Senha").fill(PASSWORD);
     await page.getByRole("button", { name: "Entrar" }).click();
     await expect(page.getByRole("heading", { name: "Verificação em duas etapas" })).toBeVisible();
+    await expect(page.getByTestId("login-steps").locator('[aria-current="step"]')).toContainText("Verificação");
     await page.getByLabel(/Código do aplicativo/).fill("000000");
     await page.getByRole("button", { name: "Verificar" }).click();
     await expect(page.getByTestId("mfa-error")).toBeVisible();

@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { LoginSteps } from "@/components/LoginSteps";
 import { MFA_COOKIE } from "@/lib/session";
 
 export default async function LoginMfa({ searchParams }: { searchParams: Promise<{ erro?: string }> }) {
@@ -7,6 +8,7 @@ export default async function LoginMfa({ searchParams }: { searchParams: Promise
   const { erro } = await searchParams;
   return (
     <main className="mx-auto grid min-h-screen max-w-sm content-center gap-6 px-4">
+      <LoginSteps current="verificacao" />
       <h1 className="text-2xl font-semibold tracking-tight">Verificação em duas etapas</h1>
       <form action="/bff/mfa" method="post" className="panel grid gap-4 p-6" data-testid="mfa-form">
         {erro && <p role="alert" className="text-sm text-danger" data-testid="mfa-error">{erro === "429" ? "Muitas tentativas. Aguarde 15 minutos e tente de novo." : "Código inválido."}</p>}

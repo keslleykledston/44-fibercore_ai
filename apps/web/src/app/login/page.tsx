@@ -1,7 +1,10 @@
+import { LoginSteps } from "@/components/LoginSteps";
+
 export default async function Login({ searchParams }: { searchParams: Promise<{ erro?: string }> }) {
   const { erro } = await searchParams;
   return (
     <main className="mx-auto grid min-h-screen max-w-sm content-center gap-6 px-4">
+      <LoginSteps current="credenciais" />
       <h1 className="text-2xl font-semibold tracking-tight">Entrar no FiberCore</h1>
       <form action="/bff/login" method="post" className="panel grid gap-4 p-6" data-testid="login-form">
         {erro && <p role="alert" className="text-sm text-danger" data-testid="login-error">{erro === "429" ? "Muitas tentativas. Aguarde 15 minutos e tente de novo." : "E-mail ou senha inválidos."}</p>}

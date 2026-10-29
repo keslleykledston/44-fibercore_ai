@@ -1,3 +1,4 @@
+import { LoginSteps } from "@/components/LoginSteps";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
@@ -59,6 +60,7 @@ async function WorkspacePicker() {
   const ws = await api<Workspace[]>("/v1/auth/workspaces");
   return (
     <main className="mx-auto grid min-h-screen max-w-sm content-center gap-4 px-4">
+      <LoginSteps current="workspace" />
       <h1 className="text-2xl font-semibold">Escolha o workspace</h1>
       <form action="/bff/workspace" method="post" className="panel grid gap-2 p-4" data-testid="workspace-picker">
         {ws.map((w) => (
