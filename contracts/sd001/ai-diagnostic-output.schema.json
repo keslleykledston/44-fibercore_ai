@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fibercore.example/schema/sd001-ai-output.json",
+  "title": "Structured AI diagnostic analysis (advisory only)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "summary_pt_br",
+    "findings",
+    "missing_data",
+    "recommended_tests",
+    "proposed_actions",
+    "operator_message"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "status": {
+      "enum": [
+        "analysis_complete",
+        "insufficient_evidence"
+      ]
+    },
+    "summary_pt_br": {
+      "type": "string",
+      "maxLength": 3000
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "category",
+          "certainty",
+          "severity",
+          "evidence_ids",
+          "explanation"
+        ],
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "certainty": {
+            "enum": [
+              "confirmed",
+              "likely",
+              "possible",
+              "insufficient_evidence"
+            ]
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "explanation": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "missing_data": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "recommended_tests": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "proposed_actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "action_kind",
+          "rationale",
+          "evidence_ids"
+        ],
+        "properties": {
+          "action_kind": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "operator_message": {
+      "type": "string"
+    }
+  },
+  "description": "Saída estruturada e SOMENTE consultiva do copiloto (SD-001; só após ADR-0015/ADR-SD-006). Nunca autoriza nem executa: proposed_actions são sugestões para o motor de política."
+}

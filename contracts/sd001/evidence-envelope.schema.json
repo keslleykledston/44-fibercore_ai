@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fibercore.example/schema/sd001-evidence-envelope.json",
+  "title": "SD001 normalized evidence envelope",
+  "description": "Evidência normalizada de um diagnostic_job (SD-001, ADR-0025). Adaptação: o pacote chamava de run_id o que aqui é job_id, porque diagnostic_runs já existe e é a execução de regra (ADR-0024).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "evidence_id",
+    "job_id",
+    "source_type",
+    "status",
+    "captured_at",
+    "received_at",
+    "measurement"
+  ],
+  "properties": {
+    "evidence_id": {
+      "type": "string"
+    },
+    "job_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "source_type": {
+      "enum": [
+        "olt",
+        "cpe_cwmp",
+        "cpe_usp",
+        "edge",
+        "endpoint",
+        "erp",
+        "bng"
+      ]
+    },
+    "status": {
+      "enum": [
+        "available",
+        "stale",
+        "unsupported",
+        "failed",
+        "inconclusive"
+      ]
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "measurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "origin",
+        "method"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": [
+            "number",
+            "string",
+            "null"
+          ]
+        },
+        "unit": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string"
+        },
+        "side": {
+          "type": "string"
+        }
+      }
+    },
+    "device_model": {
+      "type": "string"
+    },
+    "firmware": {
+      "type": "string"
+    },
+    "source_ref": {
+      "type": "string"
+    },
+    "instrument_limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

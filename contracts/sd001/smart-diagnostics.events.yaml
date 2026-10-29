@@ -1,0 +1,21 @@
+# Eventos propostos pelo SD-001, na convenção do outbox existente (ADR-0007): `event_type` no formato `<agregado>.<fato>` e subject
+# `fibercore.events.<tenant>.<event_type>`. O pacote sugeria subjects próprios (fibercore.diagnostics.requested.v1); NÃO usamos, para não
+# criar um canal paralelo. Nenhum destes eventos é emitido hoje.
+version: 1
+status: proposal
+events:
+  diagnostic_job.requested:
+    aggregate_type: diagnostic_job
+    payload_required: [job_id, trace_id, status]
+  diagnostic_job.completed:
+    aggregate_type: diagnostic_job
+    payload_required: [job_id, trace_id, status]
+    optional: [run_id]
+  remediation.state_changed:
+    aggregate_type: action_proposal
+    payload_required: [proposal_id, state]
+    optional: [execution_id]
+common:
+  # preenchidos pelo outbox, não pelo payload
+  envelope: [id, tenant_id, aggregate_type, aggregate_id, event_type, schema_version, occurred_at]
+  forbidden_in_payload: [password, psk, secret, token, ppp_username, mac_address, document, phone, address]

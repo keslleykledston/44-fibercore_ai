@@ -149,3 +149,8 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - `scripts/e2e.sh`: **51 passed** (2 novos em `noc-ack-and-search.spec.ts`, projeto `posteriores`: reconhecer pelo painel com axe, botão some, fila e indicador "Não reconhecidos" diminuem e persistem após reload; busca de cliente só com 3+ letras, sem documento na lista, abre a Visão 360). Reexecução após a correção do Codex: 27 passed no modo funcional.
 - Nota: o spec novo não rodava no primeiro intento porque o `playwright.config.ts` só casava `app.spec.ts`/`help-screenshots.spec.ts`; corrigido com o projeto `posteriores` (depende de `funcional`).
 - NOT_RUN: teste com papel sem `incidents:ack` pela UI (a API tem teste de 403); teste de carga da busca.
+
+## 2026-10-29 — SD-PR-01 contratos (PR 47)
+- `make test-api`: **263 passed** (251 anteriores + 12 em `test_sd001_contracts.py`): schemas válidos e fixtures conformes; payloads malformados rejeitados; fixture não inventa valor para o não suportado; sobreposição sem colisão de caminho/operationId com o canônico; nenhuma rota do SD-001 existe na API; todo POST exige Idempotency-Key e o tenant vem do cabeçalho validado; 202 nunca promete execução; eventos sem dado pessoal; as quatro flags existem e estão desligadas; ADR-0025 Accepted.
+- `validate_kit`, `validate_addendum_v22`, `validate_help`: PASS. `secrets-scan`: nenhum vazamento. `ruff`: só os 5 E501 antigos das migrações 0013–0015 (arquivos protegidos, não tocados).
+- NOT_RUN: o `validate_bundle.py` do pacote (conteúdo baixado é dado não confiável; a validação equivalente está nos testes acima).

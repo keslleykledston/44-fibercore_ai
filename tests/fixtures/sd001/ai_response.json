@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "status": "analysis_complete",
+  "summary_pt_br": "Conexão WAN disponível; estação Wi-Fi apresenta sinal fraco. Sem teste WAN homologado neste mock.",
+  "findings": [
+    {
+      "category": "WIFI_SIGNAL",
+      "certainty": "likely",
+      "severity": "medium",
+      "evidence_ids": [
+        "ev-wifi-01",
+        "ev-wan-01"
+      ],
+      "explanation": "A estação associada apresenta RSSI baixo; não há teste na estação para isolar interferência."
+    }
+  ],
+  "missing_data": [
+    "speedtest WAN não suportado pelo mock",
+    "teste no dispositivo final não realizado"
+  ],
+  "recommended_tests": [
+    "customer_endpoint_speed_optional"
+  ],
+  "proposed_actions": [
+    {
+      "action_kind": "wifi_channel_change",
+      "rationale": "Propor apenas após scan e homologação, aprovação e janela; nenhuma execução habilitada neste mock.",
+      "evidence_ids": [
+        "ev-wifi-01"
+      ]
+    }
+  ],
+  "operator_message": "Oriente cliente a testar perto do roteador e anotar resultado antes de solicitar manobra."
+}

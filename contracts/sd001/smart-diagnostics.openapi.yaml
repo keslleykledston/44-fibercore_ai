@@ -1,0 +1,289 @@
+openapi: 3.1.0
+info:
+  title: FiberCore SD-001 — sobreposição incremental da API (PROPOSTA, NÃO IMPLEMENTADA)
+  version: 0.1.0-proposal
+  description: >-
+    NÃO é o contrato canônico: o canônico é contracts/fibercore-v2.openapi.yaml. Este arquivo descreve, por antecipação, o que o
+    SD-001 acrescentará (ADR-0025). Nenhum destes caminhos existe na API hoje (tests/test_sd001_contracts.py garante isso e que nenhum
+    colide com o contrato canônico). Cada caminho só é mesclado ao canônico no PR que o implementa, com as flags `smart_diagnostics_*`.
+    Diferenças deliberadas em relação ao pacote: o recurso assíncrono é `diagnostic_jobs` (o `diagnostic_runs` existente é a execução
+    síncrona e imutável de uma regra, ADR-0024); `/devices/{id}/capabilities` NÃO é criado porque `/cpes/{id}/capabilities` já existe.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Diagnostics
+  - name: Remediation
+paths:
+  /diagnostics/jobs:
+    post:
+      operationId: createDiagnosticJob
+      tags: [Diagnostics]
+      summary: Pede um diagnóstico assíncrono (passivo/guiado). Aceito ≠ resultado. diagnostics:run + flag smart_diagnostics_jobs
+      parameters:
+        - {$ref: '#/components/parameters/TenantId'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateDiagnosticJob'}
+      responses:
+        '202':
+          description: Aceito; nenhum resultado implícito
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DiagnosticJobReceipt'}
+        '400': {description: Corpo inválido}
+        '401': {description: Não autenticado}
+        '403': {description: Sem permissão ou flag desligada}
+        '409': {description: Mesma Idempotency-Key com intenção diferente}
+        '429': {description: Orçamento/quota excedido}
+  /diagnostics/jobs/{job_id}:
+    get:
+      operationId: getDiagnosticJob
+      tags: [Diagnostics]
+      summary: Estado do job e referências de evidência. incidents:read + flag smart_diagnostics_jobs
+      parameters:
+        - {$ref: '#/components/parameters/TenantId'}
+        - {$ref: '#/components/parameters/JobId'}
+      responses:
+        '200':
+          description: Retrato do job (tenant vem do servidor, nunca do corpo)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DiagnosticJob'}
+        '401': {description: Não autenticado}
+        '403': {description: Sem permissão ou flag desligada}
+        '404': {description: Job inexistente ou de outro tenant}
+  /diagnostics/jobs/{job_id}/active-tests:
+    post:
+      operationId: requestActiveDiagnostic
+      tags: [Diagnostics]
+      summary: BLOQUEADO até ADR-SD-003. Teste ativo com orçamento e consentimento explícitos. diagnostics:run_active + flag smart_diagnostics_active_tests
+      parameters:
+        - {$ref: '#/components/parameters/TenantId'}
+        - {$ref: '#/components/parameters/JobId'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ActiveTestRequest'}
+      responses:
+        '202':
+          description: Enfileirado, sujeito a capacidade validada, quota e RBAC
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DiagnosticJobReceipt'}
+        '403': {description: Sem permissão, flag desligada ou capacidade não homologada}
+        '409': {description: Conflito de idempotência ou de bloqueio do dispositivo}
+        '429': {description: Orçamento/cooldown}
+  /diagnostics/jobs/{job_id}/proposals:
+    get:
+      operationId: listDiagnosticProposals
+      tags: [Remediation]
+      summary: Propostas CONSULTIVAS (não são autorização). diagnostics:propose + flag smart_diagnostics_remediation
+      parameters:
+        - {$ref: '#/components/parameters/TenantId'}
+        - {$ref: '#/components/parameters/JobId'}
+      responses:
+        '200':
+          description: Propostas do job
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/ActionProposal'}
+        '403': {description: Sem permissão ou flag desligada}
+        '404': {description: Job inexistente ou de outro tenant}
+  /remediations/proposals/{proposal_id}/approvals:
+    post:
+      operationId: approveRemediationProposal
+      tags: [Remediation]
+      summary: Aprova UMA proposta imutável (vinculada a proposal_hash); NÃO executa. Reaproveita job_approvals
+      parameters:
+        - {$ref: '#/components/parameters/TenantId'}
+        - {$ref: '#/components/parameters/ProposalId'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ApprovalDecision'}
+      responses:
+        '200':
+          description: Política verificada, aprovação registrada, nada executado
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApprovalReceipt'}
+        '403': {description: Sem permissão, autoaprovação onde há segregação ou flag desligada}
+        '409': {description: Hash diferente, proposta expirada ou já decidida}
+  /remediations/proposals/{proposal_id}/executions:
+    post:
+      operationId: enqueueApprovedRemediation
+      tags: [Remediation]
+      summary: Reavalia a política no servidor e entra no gate de jobs existente. Sem HOMOLOGATED_WRITES o resultado é sempre `blocked`
+      parameters:
+        - {$ref: '#/components/parameters/TenantId'}
+        - {$ref: '#/components/parameters/ProposalId'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ExecutionIntent'}
+      responses:
+        '202':
+          description: Aceito para pré-checagem; nenhuma execução garantida
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ExecutionReceipt'}
+        '403': {description: Sem permissão ou flag desligada}
+        '409': {description: Aprovação expirada/consumida ou hash diferente}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    TenantId:
+      name: X-Workspace-ID
+      in: header
+      required: true
+      description: "Igual ao canônico, comparado à membership validada do token no servidor."
+      schema: {type: string, format: uuid}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 8, maxLength: 128}
+    JobId:
+      name: job_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    ProposalId:
+      name: proposal_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+  schemas:
+    CreateDiagnosticJob:
+      type: object
+      additionalProperties: false
+      required: [customer_id, mode]
+      properties:
+        customer_id: {type: string, format: uuid}
+        service_id: {type: string, format: uuid}
+        cpe_id: {type: string, format: uuid}
+        mode: {type: string, enum: [passive, guided]}
+        requested_domains:
+          type: array
+          uniqueItems: true
+          items: {type: string, enum: [pon, wan, wifi, lan, internet, erp, bng]}
+        ticket_id: {type: string, maxLength: 128}
+    DiagnosticJobReceipt:
+      type: object
+      required: [job_id, status, created_at]
+      properties:
+        job_id: {type: string, format: uuid}
+        status: {type: string, enum: [queued, running, waiting_for_device]}
+        created_at: {type: string, format: date-time}
+    Evidence:
+      type: object
+      required: [evidence_id, source_type, status, captured_at]
+      properties:
+        evidence_id: {type: string}
+        source_type: {type: string, enum: [olt, cpe_cwmp, cpe_usp, edge, endpoint, erp, bng]}
+        status: {type: string, enum: [available, stale, unsupported, failed, inconclusive]}
+        metric: {type: string}
+        value: {type: [number, string, 'null']}
+        unit: {type: string}
+        capture_side: {type: string}
+        captured_at: {type: string, format: date-time}
+        received_at: {type: string, format: date-time}
+        instrument: {type: string}
+        method: {type: string}
+        confidence: {type: string, enum: [verified, observed, unverified]}
+    Finding:
+      type: object
+      required: [category, certainty, evidence_ids, explanation]
+      properties:
+        category: {type: string}
+        certainty: {type: string, enum: [confirmed, likely, possible, insufficient_evidence]}
+        evidence_ids:
+          type: array
+          items: {type: string}
+        explanation: {type: string}
+    DiagnosticJob:
+      type: object
+      required: [job_id, status, data_quality, evidences, findings, created_at]
+      properties:
+        job_id: {type: string, format: uuid}
+        run_id:
+          type: [string, 'null']
+          format: uuid
+          description: diagnostic_runs gerado ao concluir (ADR-0024); nulo enquanto não houver execução de regra
+        status: {type: string, enum: [queued, running, partial, complete, failed, cancelled, inconclusive]}
+        data_quality: {type: string, enum: [fresh, partial, stale, unsupported]}
+        evidences:
+          type: array
+          items: {$ref: '#/components/schemas/Evidence'}
+        findings:
+          type: array
+          items: {$ref: '#/components/schemas/Finding'}
+        created_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+    ActiveTestRequest:
+      type: object
+      additionalProperties: false
+      required: [test_kind, origin, server_profile_id, max_bytes, max_duration_seconds, consent_id]
+      properties:
+        test_kind: {type: string, enum: [download, upload, ping, traceroute, ip_capacity]}
+        origin: {type: string, enum: [cpe, edge, customer_endpoint]}
+        server_profile_id: {type: string, maxLength: 128}
+        max_bytes: {type: integer, minimum: 1, maximum: 1073741824}
+        max_duration_seconds: {type: integer, minimum: 1, maximum: 120}
+        consent_id: {type: string, minLength: 1}
+    ActionProposal:
+      type: object
+      required: [proposal_id, cpe_id, action_kind, risk, proposal_hash, expires_at, status]
+      properties:
+        proposal_id: {type: string, format: uuid}
+        cpe_id: {type: string, format: uuid}
+        action_kind: {type: string, enum: [wifi_channel_change, wifi_band_steering, wan_reconnect, cpe_reboot, plan_profile_align]}
+        parameters: {type: object, additionalProperties: true, description: Somente argumentos tipados e validados criados pelo servidor}
+        risk: {type: string, enum: [R1, R2, R3]}
+        proposal_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        expires_at: {type: string, format: date-time}
+        status: {type: string, enum: [proposed, pending_approval, approved, rejected, expired, blocked, executed]}
+    ApprovalDecision:
+      type: object
+      additionalProperties: false
+      required: [proposal_hash, decision, reason]
+      properties:
+        proposal_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        decision: {type: string, enum: [approve, reject]}
+        reason: {type: string, minLength: 8, maxLength: 2048}
+    ApprovalReceipt:
+      type: object
+      required: [approval_id, status, proposal_id, approved_at, expires_at]
+      properties:
+        approval_id: {type: string, format: uuid}
+        status: {type: string, enum: [approved, rejected, blocked]}
+        proposal_id: {type: string, format: uuid}
+        approved_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+    ExecutionIntent:
+      type: object
+      additionalProperties: false
+      required: [approval_id, proposal_hash]
+      properties:
+        approval_id: {type: string, format: uuid}
+        proposal_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+    ExecutionReceipt:
+      type: object
+      required: [execution_id, state, created_at]
+      properties:
+        execution_id: {type: string, format: uuid}
+        state: {type: string, enum: [pending_preflight, blocked]}
+        created_at: {type: string, format: date-time}
