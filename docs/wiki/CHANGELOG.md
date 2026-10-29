@@ -57,3 +57,7 @@
 
 ## Unreleased — Regeneração de códigos de recuperação (PR 33)
 - `POST /v1/auth/mfa/recovery-codes` (senha + segundo fator; troca o conjunto inteiro na mesma transação, serializado com disable/reset) e botão em Conta › Segurança da conta. How-to e contrato atualizados.
+
+## Unreleased — Adendo v2.2 (PR 34, somente planejamento)
+- Pacote do adendo copiado para `docs/addenda/v2.2/` sem alterar nada existente; `GAP_ANALYSIS.md` (matriz de gaps + 18 conflitos + plano), `RECONCILED_API.md` + OpenAPI reconciliado, `SCREEN_COMPONENT_MAP.md`, `TEST_DESIGN.md`; ADR-0019…0023; backlog FC22 integrado ao `ROADMAP_BACKLOG.md`; `tests/validate_addendum_v22.py` (no `make validate`). **Nenhuma funcionalidade v2.2 foi implementada neste PR.**
+

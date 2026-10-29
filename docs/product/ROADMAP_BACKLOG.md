@@ -86,3 +86,29 @@ Inventário em 2026-10-28: backend/Edge/jobs/ERP/NOC prontos e testados; **nenhu
 - [x] W8 Telas Assinantes (importar CSV, revisar vínculos) e Operações (jobs; escrita bloqueada visível) com How-to (importar CSV, revisar associações) e Jobs (preview/aprovação; escrita bloqueada visível) com How-to.
 - [ ] W9 Hardening de publicação: MFA/refresh/rate-limit, CSP, HSTS (só após TLS real), DNS/TLS/ACME reais, Codex PASS.
 
+## v2.2 — Adendo de benchmark ACS/FTTH (integrado em 2026-10-29)
+
+Fonte: `docs/addenda/v2.2/` (pacote intacto). Análise: `docs/addenda/v2.2/GAP_ANALYSIS.md`; contrato reconciliado: `docs/addenda/v2.2/contracts/fibercore-v2.2-reconciled.openapi.yaml`; ADRs 0019–0023. **Marcar item só com código + teste + (se tela) captura real + how-to + parecer Codex.**
+
+| ID | Pri | Estado (verificado no repo) | Sprint | Depende de |
+|---|---|---|---|---|
+| FC22-001 | P0 | [x] análise de GAP/conflitos/ADRs (PR 34) | S0 | — |
+| FC22-002 | P0 | [ ] parcial: Registry do Edge + `support_level`; **fatia mínima no PR 35** | S0/S1 | 001 |
+| FC22-003 | P0 | [ ] parcial: `observed_at` + frescor na leitura; falta envelope `source/quality` | S1 | 001 |
+| FC22-004 | P0 | [ ] parcial: `/v1/onus/{id}/customer`; falta `/v1/customers/{id}/context` e vínculo ONU↔CPE | S1 | 002, 003 |
+| FC22-005 | P0 | [ ] parcial: ONU 360 publicada (`rede/onu-360`); falta entrada por cliente/abas | S1 | 004 |
+| FC22-006 | P0 | [ ] parcial: regra `pon_mass_outage` fixa; falta registro versionado/runs | S2 | 002–004 |
+| FC22-007 | P0 | [ ] falta | S2 | 006 |
+| FC22-008 | P0 | [x] existe (ADR-0018, `edge_silent`); validar contra AC-004/009 | S2 | — |
+| FC22-009 | P0 | [ ] parcial: fila em `/noc`; falta prioridade/impacto | S2 | 008, 004 |
+| FC22-010 | P1 | [ ] falta (sem CTO/POP no modelo) | S3 | 003 |
+| FC22-011 | P1 | [ ] **bloqueado por dados** (ADR-0022) | S3 | 002, 003 |
+| FC22-012 | P1 | [ ] **bloqueado** (telemetria Wi-Fi/WAN não coletada; NBI aberto) | S3 | 002, ADR-0022 |
+| FC22-013 | P1 | [ ] falta | S3 | 011/012 |
+| FC22-014 | P1 | [ ] parcial: motor de jobs; falta catálogo/dry-run com diff | S4 | 002 |
+| FC22-015 | P1 | [ ] parcial: idempotência/CAS; sem lock por dispositivo; USP ausente | S4 | USP |
+| FC22-016 | P1 | [ ] parcial: módulos/versões; falta changelog/canary | S4 | — |
+| FC22-017 | P1 | [x] prática vigente (gate por PR de tela) | contínuo | — |
+| FC22-018 | P2 | [ ] adiado (ADR-0015) | pós-S4 | 004, 006 |
+| (DoD) flags por tenant | — | [ ] falta (ADR-0023) | S1 | — |
+

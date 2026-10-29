@@ -22,6 +22,7 @@ env-dev:  ## gera .env.dev com segredos aleatórios (nunca toca .env)
 validate: venv
 	$(PY) tests/validate_kit.py
 	$(PY) tests/validate_help.py
+	$(PY) tests/validate_addendum_v22.py
 
 validate-help: venv
 	$(PY) tests/validate_help.py

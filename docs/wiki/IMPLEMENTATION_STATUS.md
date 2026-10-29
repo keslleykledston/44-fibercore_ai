@@ -49,3 +49,5 @@ Edge-fleet: registro via CLI, `POST /v1/edge/heartbeat` (bearer edge_agent, inte
 | Telas Assinantes + Operações (W8) | Feito (PR 14) | `scripts/e2e.sh` 27/27 PASS (aprovação com confirmação, ambíguo bloqueado, importação sem eco de valores, escrita bloqueada); 7 How-to published |
 | Hardening de publicação (W9): lockout de login feito; MFA, refresh, CSP, HSTS, DNS/TLS | Parcial | pytest 114 (ver TEST_EVIDENCE: verificação final) |
 | Proposta UX do Lovable | Solicitada (projeto Lovable criado); **não integrada** — UI atual segue os tokens do design system, revisão visual Lovable pendente | — |
+| Adendo v2.2 (FC22-001..018) | **Só planejamento** (PR 34): análise de GAP, conflitos, ADR-0019…0023, contrato reconciliado, backlog integrado. Nenhuma capacidade nova implementada | `python tests/validate_addendum_v22.py` PASS; mutações (adendo alterado, `implemented` sem existir, FC22/AC removidos) reprovadas |
+

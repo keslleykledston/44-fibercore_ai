@@ -1,0 +1,70 @@
+openapi: 3.1.0
+info:
+  title: FiberCore AI v2.2 — contrato reconciliado (parcial, em evolução)
+  version: 2.2.0-reconciled-draft
+  description: >-
+    Reconcilia contracts/fibercore-v2.2-additive.openapi.yaml com a API real. x-status=implemented só quando o caminho já está em
+    contracts/fibercore-v2.openapi.yaml; planned = ainda NÃO existe (não é promessa de data). Todo endpoint exige auth, membership e RBAC.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+paths:
+  /customers/{customer_id}/context:
+    get:
+      operationId: getCustomerContext
+      x-fc22-id: FC22-004
+      x-status: planned
+      summary: Visão do cliente com fonte e frescor por campo (read-only; dado pessoal exige customers:read e é auditado)
+      parameters: [{in: path, name: customer_id, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: "CustomerContext (status complete|partial|stale|unknown)"}
+        '403': {description: Sem permissão}
+        '404': {description: Cliente inexistente ou de outro provedor}
+  /devices/{device_id}/capabilities:
+    get:
+      operationId: getDeviceCapabilities
+      x-fc22-id: FC22-002
+      x-status: planned
+      summary: Capacidades do dispositivo (OLT ou CPE) pelo perfil vendor/model/firmware; operação sem registro = unknown
+      parameters: [{in: path, name: device_id, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: "{device_id, device_type, profile{vendor,model,firmware}, capabilities[{operation, protocol, support, certification, firmware, verified_at, evidence_ref}]}"}
+        '403': {description: Sem permissão}
+        '404': {description: Dispositivo inexistente ou de outro provedor}
+  /diagnostics/runs:
+    post:
+      operationId: createDiagnosticRun
+      x-fc22-id: FC22-006
+      x-status: planned
+      summary: Executa regras determinísticas versionadas (sem mutação de equipamento) e persiste a execução
+      responses:
+        '201': {description: "{run_id, rule_version, findings[{status observed|inferred|unknown, evidence_refs}]}"}
+  /network/topology:
+    get:
+      operationId: getNetworkTopology
+      x-fc22-id: FC22-010
+      x-status: planned
+      summary: Relações técnicas com evidência e confiança; não confirmadas ficam pendentes
+      responses:
+        '200': {description: Lista de NetworkLink}
+  /qoe/{subject_id}:
+    get:
+      operationId: getQoe
+      x-fc22-id: FC22-011
+      x-status: planned
+      summary: Score por algoritmo versionado ou insufficient_data com score null (nunca 0 imputado)
+      parameters: [{in: path, name: subject_id, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Lista de QoeScore}
+  /workflow-definitions:
+    get:
+      operationId: listWorkflowDefinitions
+      x-fc22-id: FC22-014
+      x-status: planned
+      summary: Catálogo versionado de intenções; não concede permissão de execução (execução = /v1/jobs)
+      responses:
+        '200': {description: Lista de WorkflowDefinition}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}

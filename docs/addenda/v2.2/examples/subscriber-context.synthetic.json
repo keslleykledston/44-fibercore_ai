@@ -1,0 +1,29 @@
+{
+  "id": "00000000-0000-4000-8000-000000000001",
+  "tenant_id": "10000000-0000-4000-8000-000000000001",
+  "customer": {
+    "display_name": "Cliente Demonstração",
+    "contract_status": "active",
+    "source": "erp_mock",
+    "observed_at": "2026-10-28T12:00:00-04:00"
+  },
+  "onu": {
+    "serial": "MOCK000001",
+    "status": "unknown",
+    "quality": "stale",
+    "observed_at": "2026-10-28T11:30:00-04:00",
+    "source": "olt_simulator"
+  },
+  "cpe": {
+    "protocol_bindings": [
+      "tr069",
+      "tr369"
+    ],
+    "last_inform": null,
+    "source": "simulator"
+  },
+  "diagnostics": {
+    "status": "insufficient_data",
+    "findings": []
+  }
+}

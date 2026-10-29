@@ -1,0 +1,9 @@
+{
+  "subject_id": "00000000-0000-4000-8000-000000000001",
+  "score_type": "home_experience",
+  "algorithm_version": "draft-v1",
+  "score": null,
+  "coverage": 0.0,
+  "status": "insufficient_data",
+  "evidence": []
+}

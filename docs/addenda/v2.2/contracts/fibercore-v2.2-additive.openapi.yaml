@@ -1,0 +1,195 @@
+openapi: 3.1.0
+info:
+  title: FiberCore AI v2.2 proposed additive endpoints
+  version: 2.2.0-draft
+  description: >-
+    CONTRATO PROPOSTO (NÃO COMPILAR automaticamente na API vigente antes de reconciliar
+    nomes/segurança/schema). Todos os endpoints precisam de auth, tenant membership e RBAC.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+paths:
+  /customers/{customerId}/context:
+    get:
+      operationId: getCustomerContext
+      summary: Visão 360 read-only com fontes e frescor
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+        - $ref: '#/components/parameters/WorkspaceId'
+      responses:
+        '200':
+          description: Contexto parcial ou completo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerContext' }
+        '403': {description: Sem permissão}
+  /devices/{deviceId}/capabilities:
+    get:
+      operationId: getDeviceCapabilitiesDraft
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+        - $ref: '#/components/parameters/WorkspaceId'
+      responses:
+        '200':
+          description: Capacidades por protocolo e firmware
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Capability' }
+  /diagnostics/runs:
+    post:
+      operationId: runDeterministicDiagnosis
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DiagnosisRequest' }
+      responses:
+        '200':
+          description: Diagnóstico sem mutação de equipamentos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DiagnosisResult' }
+  /network/topology:
+    get:
+      operationId: getNetworkTopology
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+        - in: query
+          name: root_id
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Relações técnicas com evidências
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/NetworkLink'}}
+  /qoe/{deviceId}:
+    get:
+      operationId: getDeviceQoe
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+        - $ref: '#/components/parameters/WorkspaceId'
+      responses:
+        '200':
+          description: Score null se dados insuficientes
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/QoeScore'}}
+  /workflow-definitions:
+    get:
+      operationId: listWorkflowDefinitionsDraft
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      responses:
+        '200':
+          description: Templates sem permissão implícita de executar
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/WorkflowDefinition'}}
+  /workflow-previews:
+    post:
+      operationId: previewWorkflowDraft
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkflowPreviewRequest' }
+      responses:
+        '200':
+          description: Prévia sem execução
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowPreview' }
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    WorkspaceId: {in: header, name: X-Workspace-ID, required: true, description: 'Validar com membership do token', schema: {type: string, format: uuid}}
+    CustomerId: {in: path, name: customerId, required: true, schema: {type: string, format: uuid}}
+    DeviceId: {in: path, name: deviceId, required: true, schema: {type: string, format: uuid}}
+  schemas:
+    Observation:
+      type: object
+      required: [source, observed_at, quality]
+      properties:
+        source: {type: string}
+        observed_at: {type: string, format: date-time}
+        quality: {type: string, enum: [fresh, stale, unknown, conflict]}
+        value: {type: ['string', 'number', 'boolean', 'null']}
+        unit: {type: ['string', 'null']}
+    CustomerContext:
+      type: object
+      required: [customer_id, status, observations]
+      properties:
+        customer_id: {type: string, format: uuid}
+        status: {type: string, enum: [complete, partial, stale, unknown]}
+        observations: {type: object, additionalProperties: {$ref: '#/components/schemas/Observation'}}
+        diagnostic_summary: {type: ['string', 'null']}
+    Capability:
+      type: object
+      required: [name, protocol, support, certification]
+      properties:
+        name: {type: string}
+        protocol: {type: string, enum: [tr069, tr369, olt]}
+        support: {type: string, enum: [supported, unsupported, unknown]}
+        certification: {type: string, enum: [identified, observed, certified]}
+        firmware: {type: ['string', 'null']}
+    DiagnosisRequest:
+      type: object
+      required: [subject_id, symptom]
+      properties:
+        subject_id: {type: string, format: uuid}
+        symptom: {type: string, enum: [internet_down, slow, wifi_unstable, optical_issue, unknown]}
+    DiagnosisResult:
+      type: object
+      required: [rule_version, findings]
+      properties:
+        rule_version: {type: string}
+        findings: {type: array, items: {type: object, properties: {status: {type: string, enum: [observed, inferred, unknown]}, description: {type: string}, evidence_refs: {type: array, items: {type: string}}}}}
+    NetworkLink:
+      type: object
+      required: [source_id, target_id, confidence]
+      properties:
+        source_id: {type: string, format: uuid}
+        target_id: {type: string, format: uuid}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        evidence_refs: {type: array, items: {type: string}}
+    QoeScore:
+      type: object
+      required: [score_type, status, coverage, algorithm_version]
+      properties:
+        score_type: {type: string, enum: [optical_health, home_experience]}
+        status: {type: string, enum: [computed, insufficient_data, stale]}
+        score: {type: ['number', 'null'], minimum: 0, maximum: 100}
+        coverage: {type: number, minimum: 0, maximum: 1}
+        algorithm_version: {type: string}
+    WorkflowDefinition:
+      type: object
+      required: [id, version, risk]
+      properties:
+        id: {type: string}
+        version: {type: string}
+        risk: {type: string, enum: [R0, R1, R2, R3]}
+        certified: {type: boolean}
+    WorkflowPreviewRequest:
+      type: object
+      required: [definition_id, target_id]
+      properties:
+        definition_id: {type: string}
+        target_id: {type: string, format: uuid}
+        parameters: {type: object}
+    WorkflowPreview:
+      type: object
+      required: [certified, requires_approval, redacted_diff]
+      properties:
+        certified: {type: boolean}
+        requires_approval: {type: boolean}
+        redacted_diff: {type: object}
+        warnings: {type: array, items: {type: string}}

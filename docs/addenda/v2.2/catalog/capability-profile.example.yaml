@@ -1,0 +1,21 @@
+profile_version: 1
+profile_id: sample-ont-draft
+status: identified
+vendor: EXAMPLE_VENDOR
+model: EXAMPLE_MODEL
+firmware: UNVERIFIED
+protocol_bindings: [tr069, tr369]
+capabilities:
+  - id: wifi.ssid.read
+    support: unknown
+    certification: identified
+    path_candidates: []
+    evidence_ref: null
+    verified_at: null
+  - id: wifi.ssid.write
+    support: unknown
+    certification: identified
+    allowed: false
+    requires_approval: true
+    evidence_ref: null
+operation_policy: deny_writes_until_certified
