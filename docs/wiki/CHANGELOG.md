@@ -72,7 +72,7 @@
 - Migration 0017 `onu_cpe_links` (RLS forçada; `suggested|confirmed|rejected`, confiança, evidência; `CHECK` sugestão ⇒ sem revisor; índices únicos parciais: um confirmado por ONU e por CPE; app só `INSERT` + `UPDATE(status, reviewed_by, reviewed_at)`).
 - `POST /v1/onu-cpe-links/suggest` (serial igual ⇒ sugestão 0.50, 0.20 se ambíguo; idempotente; nunca confirma), `GET /v1/onu-cpe-links`, `POST …/{id}/confirm|reject` (pessoa; auditado + outbox; 409 em ambíguo/já revisado/duplicado). `GET /v1/customers/{id}/context` (read-only, `customers:read`, auditado, flag `customer_context`): só ONUs de associação aprovada, CPE só com vínculo confirmado, proveniência por bloco, status `unknown > stale > partial > complete`, incidente só com `incidents:read`.
 - ONU 360: bloco `cpe` + card "Roteador (CPE)" com confirmar/rejeitar (BFF `/bff/onu-cpe-links`). Seed demo liga as flags no tenant demo. Flags continuam **desligadas por padrão** em produção.
-- **Suposição a aprovar:** TTL do dado de ERP = 7 dias (`ERP_FRESH_FOR`); acima disso o contexto vira `stale`.
+- TTL do dado de ERP = 7 dias (`ERP_FRESH_FOR`), **aprovado pelo responsável em 2026-10-29**; acima disso o contexto vira `stale`.
 - **Não feito (declarado):** busca por cliente/contrato na UI (FC22-005), regras de vínculo além de `serial_equal`, desfazer um vínculo confirmado.
 
 ## Unreleased — Visão 360 do assinante (PR 38, FC22-005)
