@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18810-d164-7713-bde0-0f89c5f45a17).
+[codex] Turn started (01a18810-d3c6-7431-b5f6-b5361f244457).
+[codex] Assistant message captured: I’ll inspect the branch diff against `main` and trace startup, lock-file, state persistence, ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"fibercore-edge|flock|queue_path|state\" agents/edge -g 'run.sh' -g '*....
+[codex] Command failed: /bin/bash -lc "rg -n \"fibercore-edge|flock|queue_path|state\" agents/edge -g 'run.sh' -g '*.... (exit 1)
+[codex] Running command: /bin/bash -lc "rg -n \"run\\.sh|flock\" --glob '*.sh' --glob '*.service' --glob '*.md' . | he...
+[codex] Command completed: /bin/bash -lc "rg -n \"run\\.sh|flock\" --glob '*.sh' --glob '*.service' --glob '*.md' . | he... (exit 0)
+[codex] Running command: /bin/bash -lc "cat docs/operations/EDGE_GENIEACS_LAB.md; nl -ba agents/edge/internal/queue/qu...
+[codex] Command completed: /bin/bash -lc "cat docs/operations/EDGE_GENIEACS_LAB.md; nl -ba agents/edge/internal/queue/qu... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship: the process lock is keyed by the queue f...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship: the process lock is keyed by the queue filename, so two Edge instances in the same state directory can bypass it and open concurrent sessions to the same OLT.
+
+Findings:
+- [high] Singleton lock does not cover a state directory (agents/edge/cmd/fibercore-edge/main.go:63-64)
+  `main` derives the lock path from `cfg.QueuePath` (`queue_path + ".lock"`), and the guard file is derived the same way. Two valid configs in one directory with different queue filenames therefore use different locks and different guard state; both can consider the OLT due and connect concurrently. This breaks the stated one-Edge-per-state-directory protection and can create overlapping CLI sessions or retry pressure on a real OLT. Use one canonical lock and guard path per state directory, or otherwise enforce a shared lock identity for every process that can reach the same OLT.
+  Recommendation: Derive a single lock path from a canonical state-directory setting and require all Edge instances using that state directory to acquire it before opening state or starting collectors.

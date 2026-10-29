@@ -60,8 +60,9 @@ func main() {
 	gwAllow, _ := allowlist.New([]string{gwHost})
 	gw := gateway.New(cfg.GatewayURL, cfg.ClientID, secret, gwAllow.HTTPClient(30*time.Second))
 
+	lockPath, guardPath := config.StateFiles(cfg.QueuePath) // per DIRECTORY: another queue file cannot bypass them
 	// One Edge per state directory: the OLT pacing guard is a file and cannot coordinate two processes by itself.
-	lock, err := singleton.Acquire(cfg.QueuePath + ".lock")
+	lock, err := singleton.Acquire(lockPath)
 	if err != nil {
 		log.Error("single instance", "err", err)
 		os.Exit(2)
@@ -87,7 +88,7 @@ func main() {
 	}
 
 	if len(cfg.OLTs) > 0 {
-		oc := &collector.OLT{EdgeID: cfg.EdgeID, Guard: collector.FileGuard{Path: cfg.QueuePath + ".olt-guard.json"}}
+		oc := &collector.OLT{EdgeID: cfg.EdgeID, Guard: collector.FileGuard{Path: guardPath}}
 		for _, o := range cfg.OLTs {
 			o := o
 			if o.Transport == "snmp" {

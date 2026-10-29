@@ -248,3 +248,12 @@ func TestAnOLTAddressMustBeAnIPLiteralSoAliasesCannotSplitTheGuard(t *testing.T)
 		t.Fatalf("a host-name OLT address must be refused: %v", err)
 	}
 }
+
+func TestLockAndGuardBelongToTheStateDirectoryNotToTheQueueFileName(t *testing.T) {
+	l1, g1 := StateFiles("/var/lib/edge/queue.db")
+	l2, g2 := StateFiles("/var/lib/edge/other-queue.sqlite")
+	l3, _ := StateFiles("/var/lib/edge2/queue.db")
+	if l1 != l2 || g1 != g2 || l1 == l3 {
+		t.Fatalf("same directory must share lock and guard: %s %s %s %s %s", l1, l2, g1, g2, l3)
+	}
+}

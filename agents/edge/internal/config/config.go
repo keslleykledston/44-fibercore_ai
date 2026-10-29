@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -227,6 +228,13 @@ func DeviceKey(addr string) string {
 		return ip.String()
 	}
 	return strings.ToLower(h)
+}
+
+// StateFiles returns the single-instance lock and the OLT guard file of a state directory. They hang off the DIRECTORY of the queue
+// file, never off its name, so two configs with different queue files in one directory share both.
+func StateFiles(queuePath string) (lock, guard string) {
+	d := filepath.Dir(queuePath)
+	return filepath.Join(d, "edge.lock"), filepath.Join(d, "olt-guard.json")
 }
 
 // OLTInterval is the minimum time between two collections of one OLT. A CLI session is a login on a real device (and the pager
