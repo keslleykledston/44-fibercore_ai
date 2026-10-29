@@ -36,4 +36,6 @@ Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetido
 ## 2026-10-29 — PR 37 (FC22-004) mesclado e implantado no LAB
 - Migration 0017 `onu_cpe_links`; `POST /v1/onu-cpe-links/suggest|{id}/confirm|{id}/reject`, `GET /v1/onu-cpe-links`, `GET /v1/customers/{id}/context`; card "Roteador (CPE)" na ONU 360. Codex 5 rodadas → approve (raw em `docs/wiki/reviews/raw/37-*`).
 - Testes: pytest 226 passed; E2E 42 passed; ruff/tsc/validate_* PASS. Deploy: backup verificado (20261029T045308Z), `make up-prod`, Alembic 0017, RLS forçada em `onu_cpe_links`, prodcheck sem issues. Não verificado ao vivo: comportamento com flags ligadas no LAB (desligadas por padrão).
-
+## 2026-10-29 — PR 38 (FC22-005) mesclado e implantado no LAB
+- `/assinantes/[id]` (Visão 360), lista de clientes com busca/paginação (`GET /v1/customers` + `offset`/`q`), flags `subscriber_360`+`customer_context`. Lovable: 1 lote (projeto 13aaf09e…, commit 1ad87e8; chamada MCP deu timeout ocioso mas o agente concluiu), só referência visual (ver `docs/ux/lovable/README.md`).
+- Codex 3 rodadas → approve. pytest 227 passed; E2E 45 passed; validate_* PASS. Deploy: backup 20261029T052517Z verificado, `make up-prod`, Alembic 0017, prodcheck sem issues. Flags desligadas no LAB: fluxo ligado só no E2E/pytest.

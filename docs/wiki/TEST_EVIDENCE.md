@@ -117,4 +117,4 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - NOT_RUN: E2E com a flag desligada; LAB com flags ligadas e CPE real.
 - Codex PR 38 round 1: lista de clientes truncada em 50 e sem busca → `GET /v1/customers` ganhou `offset` e `q` (substring do nome, `%`/`_`/`\` literais; auditoria grava limit/offset/filtered, não o texto); UI com busca + páginas de 20. pytest **227 passed**; E2E **45 passed**. Mutante sem escape dos curingas reprova; o desempate `id` na ordenação sobrevive (defensivo, não observável de forma determinística).
 - Aceito/documentado: cada visita à lista é uma leitura real de dados pessoais e continua auditada (`customers.list`).
-
+- Deploy no LAB (2026-10-29, PR 38): backup verificado antes; web+api reconstruídos; Alembic 0017 (sem migration nova); prodcheck sem issues; flags desligadas (rota `/assinantes/[id]` inexistente para o provedor).
