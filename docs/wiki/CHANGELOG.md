@@ -105,3 +105,7 @@
 
 ## Unreleased — PR 46 (SD-001 gate B0, só documentação)
 - `docs/feature-packs/SD-001/`: relatório de compatibilidade com a base v2.2, README do pacote; ADR-0025 (Proposed); ligação ao backlog sem renumerar. Nenhum código, contrato, migração ou versão alterado.
+
+## Unreleased — PR 47 (SD-PR-01: contratos e mocks do SD-001, flags desligadas)
+- ADR-0025 aceito pelo Tech Lead (2026-10-29). `contracts/sd001/`: schemas de evidência e de saída consultiva do copiloto, sobreposição OpenAPI **proposta** (`diagnostic_jobs`, propostas, aprovação, execução) e eventos no formato do outbox; fixtures sintéticas em `tests/fixtures/sd001/`.
+- Flags por provedor `smart_diagnostics_jobs|active_tests|remediation|copilot`, todas desligadas (`features.py`). Nenhum endpoint, migração, tabela, evento emitido ou mudança no contrato canônico; `/devices/{id}/capabilities` do pacote não foi criado (já existe `/cpes/{id}/capabilities`).

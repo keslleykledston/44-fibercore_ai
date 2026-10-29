@@ -17,6 +17,11 @@ FEATURES: dict[str, bool] = {
     "customer_context": False,     # FC22-004
     "subscriber_360": False,       # FC22-005
     "diagnostic_engine": False,    # FC22-006
+    # SD-001 (ADR-0025): nada disto tem endpoint ainda; ficam desligadas até o PR que implementa cada fatia.
+    "smart_diagnostics_jobs": False,          # SD-PR-03: diagnostic_jobs passivo/guiado (somente leitura)
+    "smart_diagnostics_active_tests": False,  # bloqueada até ADR-SD-003
+    "smart_diagnostics_remediation": False,   # propostas/aprovação; execução real só com HOMOLOGATED_WRITES
+    "smart_diagnostics_copilot": False,       # bloqueada até ADR-0015 / ADR-SD-006
 }
 
 

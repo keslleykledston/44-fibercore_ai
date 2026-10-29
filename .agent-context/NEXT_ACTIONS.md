@@ -68,3 +68,7 @@
 
 - (2026-10-29) Edge LIGADO à OLT real em somente leitura (PR 43/44: guard de ritmo persistente; 32 PONs, 775 ONUs coletadas em ~156 s; intervalo 15 min). Driver segue `identified` (nenhuma PON `complete`). PR 45: reconhecer incidente pela UI + cliente no ⌘K (no LAB).
 - (2026-10-29) Feature Pack SD-001: gate B0 entregue (`docs/feature-packs/SD-001/`). Aguardando aceite do Tech Lead das decisões D-1…D-6 do relatório; próximo código = SD-PR-01 (contratos e mocks, sem endpoint real). NÃO mexer em `diagnostic_runs`/`R-D001`.
+
+## Atualização 2026-10-29 (SD-001)
+- ADR-0025 aceito. SD-PR-01 (contratos/mocks/flags off) em PR 47. Próximo: SD-PR-02, SD-PR-03; ADR-SD-002 (caminhos permitidos do NBI + redação no Edge) antes de qualquer leitura de WAN/PPPoE/Wi-Fi.
+- Dono: fechar o NBI do GenieACS (`docs/operations/GENIEACS_NBI_HARDENING.md`) — tem root.

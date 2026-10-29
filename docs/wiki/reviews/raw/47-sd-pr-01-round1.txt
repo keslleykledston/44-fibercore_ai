@@ -1,0 +1,29 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1887e-fc63-74c2-b2ad-67405773ac59).
+[codex] Turn started (01a1887f-00a5-7ab3-b833-0b7248fb4c61).
+[codex] Assistant message captured: Vou comparar o branch com `main` e seguir os contratos SD-001 até os contratos v2.2, ADR-0024...
+[codex] Running command: /bin/bash -lc 'git status --short && git diff --stat main...HEAD && git diff --name-only main...
+[codex] Command completed: /bin/bash -lc 'git status --short && git diff --stat main...HEAD && git diff --name-only main... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --unified=50 main...HEAD -- apps/api/app/core/features.py apps/api/te...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=50 main...HEAD -- apps/api/app/core/features.py apps/api/te... (exit 0)
+[codex] Assistant message captured: O contrato não parece colidir por caminho/método com o OpenAPI canônico. Estou conferindo ago...
+[codex] Running command: /bin/bash -lc "rg -n \"tenant/features|features\" apps/api/app contracts/fibercore-v2.openapi...
+[codex] Command completed: /bin/bash -lc "rg -n \"tenant/features|features\" apps/api/app contracts/fibercore-v2.openapi... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba contracts/sd001/smart-diagnostics.openapi.yaml | sed -n '88,205p;232,27...
+[codex] Command completed: /bin/bash -lc "nl -ba contracts/sd001/smart-diagnostics.openapi.yaml | sed -n '88,205p;232,27... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: os contratos aceitam ações sem evidên...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: os contratos aceitam ações sem evidência e não impedem que envelopes ou propostas carreguem dados sensíveis ou parâmetros arbitrários. Não encontrei colisão de rota com o OpenAPI canônico nem endpoint, migração ou evento implementado neste PR.
+
+Findings:
+- [high] Ações propostas podem não citar evidência (contracts/sd001/ai-diagnostic-output.schema.json:105-110)
+  `evidence_ids` é obrigatório, mas pode ser vazio. Assim, uma resposta do copiloto pode propor uma ação sem qualquer evidência associada. O teste não detecta isso: valida apenas se os IDs fornecidos pertencem ao fixture, condição que também passa para uma lista vazia. Isso enfraquece a rastreabilidade antes de a proposta chegar à política de remediação.
+  Recommendation: Exija ao menos um ID por ação e valide que cada referência existe no conjunto de evidências da análise; acrescente um caso de teste que rejeite `evidence_ids: []`.
+- [high] Schemas permitem conteúdo sensível e parâmetros de ação arbitrários (contracts/sd001/evidence-envelope.schema.json:53-99)
+  O envelope aceita strings livres em `measurement.value`, `name`, `origin`, `source_ref` e outros campos, sem restringir caminhos ou conteúdo. O OpenAPI também aceita `ActionProposal.parameters` como objeto com `additionalProperties: true`. Portanto, PSK, credenciais PPPoE ou MAC podem passar pelo contrato, apesar da checagem textual de nomes de chaves nos testes; parâmetros arbitrários também contrariam a promessa de argumentos tipados e validados pelo servidor. O impacto provável é persistir ou expor dados que o ADR manda bloquear/redigir.
+  Recommendation: Defina campos de evidência por métricas allowlisted, limite valores e referências a identificadores não sensíveis, e modele os parâmetros de cada tipo de ação com schemas estritos; teste valores sensíveis nos campos livres e rejeição de propriedades extras.

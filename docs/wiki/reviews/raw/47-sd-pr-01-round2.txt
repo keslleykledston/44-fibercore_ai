@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18882-ebb1-7333-b192-70d7dc6f309e).
+[codex] Turn started (01a18882-f111-79e1-bde8-4f551f5bcc6d).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e os arquivos canônicos relacionados, com foco nos schem...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=40 main...HEAD -- contracts/sd001 apps/api/te...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=40 main...HEAD -- contracts/sd001 apps/api/te... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba contracts/sd001/ai-diagnostic-output.schema.json | head -170 && nl -ba ...
+[codex] Command completed: /bin/bash -lc "nl -ba contracts/sd001/ai-diagnostic-output.schema.json | head -170 && nl -ba ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: os schemas fecham os campos estrutura...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: os schemas fecham os campos estruturados de evidência e os parâmetros de ação, mas deixam texto livre nos contratos de saída, permitindo que dados sensíveis escapem por campos que os testes não exercitam.
+
+Findings:
+- [high] Texto livre da saída ainda pode transportar dados sensíveis (contracts/sd001/ai-diagnostic-output.schema.json:27-29)
+  `summary_pt_br`, `explanation`, `rationale` e `operator_message` aceitam strings arbitrárias; `missing_data` e `recommended_tests` também aceitam texto livre. Assim, uma saída de IA pode incluir PSK, credenciais PPPoE ou MAC nesses campos mesmo quando `Evidence.value` e os identificadores passam pelas allowlists e padrões. O OpenAPI repete o caminho em `Finding.explanation`. Os testes verificam payloads sensíveis nos campos estruturados, mas não tentam inserir esses dados nos campos textuais. Isso deixa aberta uma rota de exposição que a alegação de proteção dos schemas não cobre.
+  Recommendation: Substitua texto livre por códigos/valores permitidos quando possível; onde texto for necessário, aplique validação de saída e redação de segredos em runtime e inclua casos negativos para cada campo textual nos contratos AI e HTTP.
+
+Next steps:
+- Aplicar a mesma revisão aos campos textuais do schema `Finding` no OpenAPI e aos demais campos livres do contrato; adicionar testes que comprovem a rejeição ou redação de MACs e credenciais nesses caminhos.

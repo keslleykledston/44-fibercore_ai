@@ -1,0 +1,78 @@
+[
+  {
+    "evidence_id": "ev-pon-01",
+    "job_id": "33333333-3333-4333-8333-333333333333",
+    "source_type": "olt",
+    "status": "available",
+    "captured_at": "2026-10-29T05:00:00Z",
+    "received_at": "2026-10-29T05:00:05Z",
+    "measurement": {
+      "name": "rx_optical_power",
+      "value": -20.8,
+      "unit": "dBm",
+      "origin": "olt_query",
+      "method": "vendor_driver_mock",
+      "side": "onu_rx"
+    },
+    "device_model": "MOCK-CPE-01",
+    "firmware": "0.0.0-lab",
+    "source_ref": "mock-olt-01"
+  },
+  {
+    "evidence_id": "ev-wan-01",
+    "job_id": "33333333-3333-4333-8333-333333333333",
+    "source_type": "cpe_cwmp",
+    "status": "available",
+    "captured_at": "2026-10-29T05:00:10Z",
+    "received_at": "2026-10-29T05:00:11Z",
+    "measurement": {
+      "name": "wan_link_status",
+      "value": "Up",
+      "unit": "",
+      "origin": "cpe_parameter",
+      "method": "mock_genieacs"
+    },
+    "device_model": "MOCK-CPE-01",
+    "firmware": "0.0.0-lab",
+    "source_ref": "mock-cpe-01"
+  },
+  {
+    "evidence_id": "ev-wifi-01",
+    "job_id": "33333333-3333-4333-8333-333333333333",
+    "source_type": "cpe_cwmp",
+    "status": "available",
+    "captured_at": "2026-10-29T05:00:15Z",
+    "received_at": "2026-10-29T05:00:16Z",
+    "measurement": {
+      "name": "associated_client_rssi",
+      "value": -78,
+      "unit": "dBm",
+      "origin": "cpe_station_telemetry",
+      "method": "mock_genieacs"
+    },
+    "device_model": "MOCK-CPE-01",
+    "firmware": "0.0.0-lab",
+    "source_ref": "mock-cpe-01"
+  },
+  {
+    "evidence_id": "ev-speed-01",
+    "job_id": "33333333-3333-4333-8333-333333333333",
+    "source_type": "cpe_cwmp",
+    "status": "unsupported",
+    "captured_at": "2026-10-29T05:00:15Z",
+    "received_at": "2026-10-29T05:00:16Z",
+    "measurement": {
+      "name": "wan_download",
+      "value": null,
+      "unit": "Mbps",
+      "origin": "cpe_parameter",
+      "method": "unsupported"
+    },
+    "device_model": "MOCK-CPE-01",
+    "firmware": "0.0.0-lab",
+    "source_ref": "mock-cpe-01",
+    "instrument_limitations": [
+      "not_homologated_firmware"
+    ]
+  }
+]

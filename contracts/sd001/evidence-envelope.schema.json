@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fibercore.example/schema/sd001-evidence-envelope.json",
+  "title": "SD001 normalized evidence envelope",
+  "description": "Evidência normalizada de um diagnostic_job (SD-001, ADR-0025). Adaptação: o pacote chamava de run_id o que aqui é job_id, porque diagnostic_runs já existe e é a execução de regra (ADR-0024). Campos de texto livre foram trocados por listas permitidas e padrões estreitos: o contrato não deixa passar PSK, credencial PPPoE ou MAC por estes campos (a redação na origem — Edge/ADR-SD-002 — continua sendo o controle principal).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "evidence_id",
+    "job_id",
+    "source_type",
+    "status",
+    "captured_at",
+    "received_at",
+    "measurement"
+  ],
+  "properties": {
+    "evidence_id": {
+      "type": "string",
+      "pattern": "^(?![0-9A-Fa-f]{2}([-:.]?[0-9A-Fa-f]{2}){5}$)[A-Za-z0-9_-]{1,64}$"
+    },
+    "job_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "source_type": {
+      "enum": [
+        "olt",
+        "cpe_cwmp",
+        "cpe_usp",
+        "edge",
+        "endpoint",
+        "erp",
+        "bng"
+      ]
+    },
+    "status": {
+      "enum": [
+        "available",
+        "stale",
+        "unsupported",
+        "failed",
+        "inconclusive"
+      ]
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "measurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "origin",
+        "method"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "rx_optical_power",
+            "tx_optical_power",
+            "onu_status",
+            "wan_link_status",
+            "wan_connection_status",
+            "wan_download",
+            "wan_upload",
+            "associated_client_rssi",
+            "wifi_channel",
+            "wifi_band",
+            "wifi_radio_enabled",
+            "lan_port_status",
+            "latency_rtt",
+            "packet_loss",
+            "uptime_seconds"
+          ]
+        },
+        "value": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "enum": [
+                "Up",
+                "Down",
+                "Connected",
+                "Connecting",
+                "Disconnected",
+                "Unconfigured",
+                "Enabled",
+                "Disabled",
+                "Error",
+                "Unknown",
+                "online",
+                "offline",
+                "los",
+                "dying_gasp"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unit": {
+          "enum": [
+            "",
+            "dBm",
+            "dB",
+            "Mbps",
+            "ms",
+            "percent",
+            "seconds",
+            "count"
+          ]
+        },
+        "origin": {
+          "enum": [
+            "olt_query",
+            "cpe_parameter",
+            "cpe_station_telemetry",
+            "edge_probe",
+            "endpoint_report",
+            "erp_record",
+            "bng_session"
+          ]
+        },
+        "method": {
+          "enum": [
+            "snmp",
+            "cli",
+            "genieacs_nbi",
+            "usp",
+            "vendor_driver",
+            "vendor_driver_mock",
+            "mock_genieacs",
+            "unsupported"
+          ]
+        },
+        "side": {
+          "enum": [
+            "onu_rx",
+            "olt_rx",
+            "cpe",
+            "wan",
+            "lan",
+            "wifi_2g",
+            "wifi_5g"
+          ]
+        }
+      }
+    },
+    "device_model": {
+      "type": "string",
+      "pattern": "^(?![0-9A-Fa-f]{2}([-:.]?[0-9A-Fa-f]{2}){5}$)[A-Za-z0-9 ._+/()-]{1,64}$"
+    },
+    "firmware": {
+      "type": "string",
+      "pattern": "^(?![0-9A-Fa-f]{2}([-:.]?[0-9A-Fa-f]{2}){5}$)[A-Za-z0-9 ._+/()-]{1,64}$"
+    },
+    "source_ref": {
+      "type": "string",
+      "pattern": "^(?![0-9A-Fa-f]{2}([-:.]?[0-9A-Fa-f]{2}){5}$)[A-Za-z0-9_-]{1,64}$"
+    },
+    "instrument_limitations": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "not_homologated_firmware",
+          "cpe_side_only",
+          "no_endpoint_test",
+          "stale_source",
+          "vendor_unsupported",
+          "partial_listing"
+        ]
+      },
+      "uniqueItems": true
+    }
+  }
+}

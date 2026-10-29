@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18888-f344-7772-8f17-a19205f5bdf8).
+[codex] Turn started (01a18888-fc24-7692-8b87-3ea19fcaf6f2).
+[codex] Assistant message captured: Vou inspecionar o diff completo contra `main`, com foco em campos de texto livre, referências...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- contracts/sd001 apps/api/te...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- contracts/sd001 apps/api/te... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'type: string|type: \\[string|SafeText|OpaqueRef|reason:|ticket_id|serve...
+[codex] Command completed: /bin/bash -lc "rg -n 'type: string|type: \\[string|SafeText|OpaqueRef|reason:|ticket_id|serve... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba contracts/sd001/evidence-envelope.schema.json | sed -n '1,220p'; nl -ba...
+[codex] Command completed: /bin/bash -lc "nl -ba contracts/sd001/evidence-envelope.schema.json | sed -n '1,220p'; nl -ba... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberaria ainda: os contratos ainda aceitam conte...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberaria ainda: os contratos ainda aceitam conteúdo sensível em campos narrativos; `SafeText` barra apenas alguns formatos explícitos de credencial.
+
+Findings:
+- [medium] SafeText permite segredos sem marcador de chave-valor (contracts/sd001/smart-diagnostics.openapi.yaml:212-218)
+  `ApprovalDecision.reason` herda `SafeText`, mas o padrão só rejeita palavras como “senha” quando seguidas por `:` ou `=`. Valores em texto narrativo sem esse formato — por exemplo, “a senha é abc123” ou “abc123” — passam; o teste cobre apenas casos com separador. Como `reason` é persistido e exibido segundo a descrição do contrato, um segredo pode atravessar a validação. A descrição reconhece que o padrão não prova ausência de segredo, mas não há validação de redação demonstrada neste diff.
+  Recommendation: Trate `reason` como entrada sensível: aplique redação/validação antes de persistir e exibir, ou substitua texto livre por códigos de motivo. Inclua testes negativos para segredos em frases sem `:` ou `=`.

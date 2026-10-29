@@ -1,6 +1,6 @@
 # ADR-0025: Integração do Feature Pack SD-001 (Smart Diagnostics & Remediation) à base existente
 
-Status: Proposed (aguarda aceite do Tech Lead) | Data: 2026-10-29 | Owner: equipe | Origem: pacote SD-001, gate B0 (`docs/feature-packs/SD-001/BASELINE_COMPATIBILITY_REPORT.md`)
+Status: Accepted (Tech Lead, 2026-10-29) | Data: 2026-10-29 | Owner: equipe | Origem: pacote SD-001, gate B0 (`docs/feature-packs/SD-001/BASELINE_COMPATIBILITY_REPORT.md`)
 
 ## Contexto
 O pacote SD-001 propõe diagnóstico remoto assistido e remediação controlada de CPE/ONU/Wi-Fi. A base já tem Visão 360, Diagnóstico guiado, motor de regras versionado (`diagnostic_runs` append-only, ADR-0024), NOC Command Center, Capability Registry (fatia mínima, ADR-0019), gate de jobs com aprovação e envelope assinado (`jobs.py`), flags por tenant (ADR-0023) e help-by-construction. O pacote usa nomes, caminhos e tabelas que colidem com o que existe (relatório B0, seção 3).
@@ -22,4 +22,4 @@ Opção B, com estas regras:
 8. **Bloqueios explícitos:** leitura de árvore de parâmetros do CPE (WAN/PPPoE/Wi-Fi) só após ADR-SD-002 (lista de caminhos permitida + redação no Edge) **e** NBI do GenieACS fechado; copiloto só após ADR-0015/ADR-SD-006; USP após ADR-SD-005; testes ativos após ADR-SD-003; qualquer escrita real só com homologação por modelo/firmware e autorização operacional separada.
 
 ## Consequências
-Primeiro PR de código (SD-PR-01) é apenas contratos e mocks, sem endpoint real nem migração. Testes: 2 tenants (RLS) em cada recurso novo, regressão dos 29+ testes do NOC e dos de `diagnostics`, validação de contratos em CI. Rollback: cada PR é aditivo (tabelas novas, flags desligadas). Se o Tech Lead preferir outro nome que não `diagnostic_jobs`, só o ADR e o contrato mudam.
+Aceite do Tech Lead registrado em 2026-10-29 (inclui D-1…D-6 do relatório B0: nome `diagnostic_jobs`, reuso de jobs/job_approvals, flags desligadas, bloqueios do item 8). Primeiro PR de código (SD-PR-01) é apenas contratos e mocks, sem endpoint real nem migração. Testes: 2 tenants (RLS) em cada recurso novo, regressão dos 29+ testes do NOC e dos de `diagnostics`, validação de contratos em CI. Rollback: cada PR é aditivo (tabelas novas, flags desligadas). Se o Tech Lead preferir outro nome que não `diagnostic_jobs`, só o ADR e o contrato mudam.

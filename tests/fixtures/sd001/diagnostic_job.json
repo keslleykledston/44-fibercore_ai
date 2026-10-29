@@ -1,0 +1,69 @@
+{
+  "job_id": "33333333-3333-4333-8333-333333333333",
+  "status": "partial",
+  "data_quality": "partial",
+  "evidences": [
+    {
+      "evidence_id": "ev-pon-01",
+      "source_type": "olt",
+      "status": "available",
+      "metric": "rx_optical_power",
+      "value": -20.8,
+      "unit": "dBm",
+      "captured_at": "2026-10-29T05:00:00Z",
+      "received_at": "2026-10-29T05:00:05Z",
+      "method": "vendor_driver_mock",
+      "confidence": "observed"
+    },
+    {
+      "evidence_id": "ev-wan-01",
+      "source_type": "cpe_cwmp",
+      "status": "available",
+      "metric": "wan_link_status",
+      "value": "Up",
+      "unit": "",
+      "captured_at": "2026-10-29T05:00:10Z",
+      "received_at": "2026-10-29T05:00:11Z",
+      "method": "mock_genieacs",
+      "confidence": "observed"
+    },
+    {
+      "evidence_id": "ev-wifi-01",
+      "source_type": "cpe_cwmp",
+      "status": "available",
+      "metric": "associated_client_rssi",
+      "value": -78,
+      "unit": "dBm",
+      "captured_at": "2026-10-29T05:00:15Z",
+      "received_at": "2026-10-29T05:00:16Z",
+      "method": "mock_genieacs",
+      "confidence": "observed"
+    },
+    {
+      "evidence_id": "ev-speed-01",
+      "source_type": "cpe_cwmp",
+      "status": "unsupported",
+      "metric": "wan_download",
+      "value": null,
+      "unit": "Mbps",
+      "captured_at": "2026-10-29T05:00:15Z",
+      "received_at": "2026-10-29T05:00:16Z",
+      "method": "unsupported",
+      "confidence": "observed"
+    }
+  ],
+  "findings": [
+    {
+      "category": "WIFI_SIGNAL",
+      "certainty": "likely",
+      "evidence_ids": [
+        "ev-wifi-01",
+        "ev-wan-01"
+      ],
+      "explanation": "Suspeita de Wi-Fi degradado, sem teste no terminal."
+    }
+  ],
+  "created_at": "2026-10-29T05:00:00Z",
+  "completed_at": "2026-10-29T05:01:00Z",
+  "run_id": null
+}
