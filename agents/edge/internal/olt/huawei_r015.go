@@ -51,6 +51,11 @@ func (h HuaweiR015) Allowed(cmd string) bool {
 }
 
 func (h HuaweiR015) Snapshot(ctx context.Context, s Session, ports []string) (Snapshot, error) {
+	for _, p := range ports { // before ANY command, identification included: a bad port must not even touch the device
+		if !hwPort.MatchString(p) || !ValidR015Port(p) {
+			return Snapshot{}, fmt.Errorf("invalid pon port %q for huawei_ma56_r015", p)
+		}
+	}
 	id, err := h.Identify(ctx, s)
 	if err != nil {
 		return Snapshot{}, err

@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a188a6-22b3-78c3-adf8-10943e79d5da).
+[codex] Turn started (01a188a6-2dcd-7923-91e1-3a9c6d2e315e).
+[codex] Assistant message captured: Vou comparar a branch com `main` e seguir os caminhos de carga, validação do snapshot e emiss...
+[codex] Running command: /bin/bash -lc 'git status --short && git diff --stat main...HEAD && git diff --unified=70 mai...
+[codex] Command completed: /bin/bash -lc 'git status --short && git diff --stat main...HEAD && git diff --unified=70 mai... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,240p' agents/edge/internal/olt/huawei_r015.go && rg -n \"RunQuery|Va...
+[codex] Command completed: /bin/bash -lc "sed -n '1,240p' agents/edge/internal/olt/huawei_r015.go && rg -n \"RunQuery|Va... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/huawei_r015.go | sed -n '50,85p'; nl -ba agent...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/huawei_r015.go | sed -n '50,85p'; nl -ba agent... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/huawei_r015_test.go | sed -n '105,130p'"
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/huawei_r015_test.go | sed -n '105,130p'" (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"A chamada direta a `Snapshot` ainda envia `display ve...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+A chamada direta a `Snapshot` ainda envia `display version` antes de recusar portas R015 inválidas; a validação ocorre só depois da identificação.
+
+Findings:
+- [medium] Snapshot identifica a OLT antes de validar as portas (agents/edge/internal/olt/huawei_r015.go:53-61)
+  `Snapshot` chama `Identify` antes de validar `ports`; essa identificação envia `display version` pela sessão. Assim, uma chamada direta com portas fora dos limites ainda toca a OLT antes de falhar, apesar da validação no caminho de configuração. Isso também deixa sem cobertura o caso de falha sem comandos. Valide as portas antes de `Identify` e acrescente um teste que confirme zero comandos para entradas inválidas.
+  Recommendation: Mover a validação completa de portas para antes de `Identify` e testar que `Snapshot` não envia nenhum comando quando recebe uma porta inválida.

@@ -202,3 +202,16 @@ func TestRunQueryFailsClosedOnDeviceRejectionPaginationAndCapsOutput(t *testing.
 		t.Fatalf("truncated=%v len=%d err=%v", res.Truncated, len(res.Output), err)
 	}
 }
+
+func TestSnapshotRejectsInvalidPortsBeforeSendingAnyCommand(t *testing.T) {
+	h := HuaweiR015{}
+	for _, ports := range [][]string{{"1/0/14"}, {"0/18/1"}, {"0/0/16"}, {"0/0/14", "0/0/99"}, {"0/00/1"}, {"abc"}, {"0/0/1; reload"}} {
+		r := newQueryRec(h)
+		if _, err := h.Snapshot(context.Background(), r, ports); err == nil || len(r.sent) != 0 {
+			t.Fatalf("%v: err=%v sent=%v (must refuse with zero commands, identification included)", ports, err, r.sent)
+		}
+	}
+	if !ValidR015Port("0/17/15") || ValidR015Port("0/17/16") || ValidR015Port("1/0/0") {
+		t.Fatal("ValidR015Port limits drifted from the catalog")
+	}
+}
