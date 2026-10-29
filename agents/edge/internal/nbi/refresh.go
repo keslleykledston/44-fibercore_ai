@@ -26,7 +26,7 @@ import (
 const (
 	taskTimeoutMS = 5000
 	maxTaskBody   = 1 << 20
-	maxGroups     = 8
+	maxGroups     = 12
 )
 
 var (
@@ -51,19 +51,26 @@ var (
 // refreshGroups are the objects asked for, one task each, instance 1 (and the 5 GHz radio). A task that targets an object the CPE does not
 // have faults on its own without affecting the others. Every leaf must be in the allowlist (checked on every call and by the tests).
 var refreshGroups = map[string][][]string{
-	"InternetGatewayDevice": {
-		{"InternetGatewayDevice.WANDevice.1.WANCommonInterfaceConfig.PhysicalLinkStatus"},
-		groupOf("InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.", "ConnectionStatus", "Uptime"),
-		groupOf("InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.", "ConnectionStatus", "Uptime"),
-		groupOf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.", "Enable", "Channel"),
-		groupOf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.", "Enable", "Channel"),
-	},
+	"InternetGatewayDevice": tr098Groups(),
 	"Device": {
 		{"Device.PPP.Interface.1.Status"},
 		groupOf("Device.WiFi.Radio.1.", "Enable", "Channel"),
 		groupOf("Device.WiFi.Radio.2.", "Enable", "Channel"),
 		{"Device.DeviceInfo.UpTime"},
 	},
+}
+
+// tr098Groups: the link, one PPP and one IP connection per WANConnectionDevice instance (1..maxWANConnDevices) and the two Wi-Fi radios.
+func tr098Groups() [][]string {
+	g := [][]string{{"InternetGatewayDevice.WANDevice.1.WANCommonInterfaceConfig.PhysicalLinkStatus"}}
+	for cd := 1; cd <= maxWANConnDevices; cd++ {
+		for _, node := range []string{"WANPPPConnection", "WANIPConnection"} {
+			g = append(g, groupOf(fmt.Sprintf("InternetGatewayDevice.WANDevice.1.WANConnectionDevice.%d.%s.1.", cd, node), "ConnectionStatus", "Uptime"))
+		}
+	}
+	return append(g,
+		groupOf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.", "Enable", "Channel"),
+		groupOf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.", "Enable", "Channel"))
 }
 
 func groupOf(prefix string, leaves ...string) []string {

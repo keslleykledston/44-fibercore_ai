@@ -67,6 +67,10 @@ type param struct {
 
 // allowlist is built from templates with SMALL fixed instance ranges: GenieACS projections take exact paths, and we never project a
 // subtree (that would pull PSK/passphrase/username siblings through the wire).
+// maxWANConnDevices bounds the WANConnectionDevice instances read. Observed on a real EG8145V5 (LAB bench, 2026-10-29): the WAN that carries
+// the PPP connection was instance 3, so 1..2 missed it; instances are numbered by creation order and are not stable across CPEs.
+const maxWANConnDevices = 4
+
 var allowlist = buildAllowlist()
 
 func buildAllowlist() map[string]param {
@@ -74,7 +78,7 @@ func buildAllowlist() map[string]param {
 	add := func(path, scope string, s spec) { m[path] = param{path: path, scope: scope, spec: s} }
 	const tr098 = "InternetGatewayDevice."
 	add(tr098+"WANDevice.1.WANCommonInterfaceConfig.PhysicalLinkStatus", "link/1", linkStatus)
-	for cd := 1; cd <= 2; cd++ {
+	for cd := 1; cd <= maxWANConnDevices; cd++ {
 		for c := 1; c <= 2; c++ {
 			for _, t := range []string{"ppp", "ip"} {
 				node := map[string]string{"ppp": "WANPPPConnection", "ip": "WANIPConnection"}[t]

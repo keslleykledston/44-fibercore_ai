@@ -170,11 +170,14 @@ func TestRefreshGroupsAreSubsetsOfTheAllowlist(t *testing.T) {
 	}
 }
 
+// igdGroups: how many tasks one refresh creates on a TR-098 CPE (the counts below follow the table, not a literal).
+var igdGroups = len(refreshGroups["InternetGatewayDevice"])
+
 func TestRefreshOnlyPostsGetParameterValuesOfAllowlistedLeaves(t *testing.T) {
 	f := &fakeACS{devices: igd, taskCode: 200}
 	c := newACS(t, f)
 	rep, err := c.RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-	if err != nil || rep.DataModel != "InternetGatewayDevice" || rep.Groups != 5 || rep.Completed != 5 || rep.Queued+rep.Faulted+rep.Cleaned != 0 {
+	if err != nil || rep.DataModel != "InternetGatewayDevice" || rep.Groups != igdGroups || rep.Completed != igdGroups || rep.Queued+rep.Faulted+rep.Cleaned != 0 {
 		t.Fatalf("%+v %v", rep, err)
 	}
 	if len(f.deleted) != 0 || f.listCalls != 1 { // only the pre-flight check
@@ -224,7 +227,7 @@ func TestRefreshLeavesNoTaskBehindWhateverTheOutcome(t *testing.T) {
 		"unparsable body":      {devices: igd, taskCode: 202, taskBody: `not json`},
 	} {
 		rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-		if err != nil || rep.Cleaned != 5 || rep.Uncleaned != 0 || len(f.db) != 0 {
+		if err != nil || rep.Cleaned != igdGroups || rep.Uncleaned != 0 || len(f.db) != 0 {
 			t.Fatalf("%s: %+v %v left=%d", name, rep, err, len(f.db))
 		}
 		for _, id := range f.deleted {
@@ -262,7 +265,7 @@ func TestRefreshOnlyDeletesTasksThisCallCreated(t *testing.T) {
 		other("othername01", "AAAA00-ONT-SN1", "reboot", nil, time.Now().UTC().Format(time.RFC3339)),                      // other task kind
 	}}
 	rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-	if err != nil || rep.Cleaned != 5 {
+	if err != nil || rep.Cleaned != igdGroups {
 		t.Fatalf("%+v %v", rep, err)
 	}
 	if len(f.db) != 3 {
@@ -580,7 +583,7 @@ func TestRefreshWaitIsBoundedAndHonoursCancellation(t *testing.T) {
 func TestRefreshKnownIDVisibleOnlyOnALaterLook(t *testing.T) {
 	f := &fakeACS{devices: igd, taskCode: 202, lateAfter: 2}
 	rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-	if err != nil || rep.Cleaned != 5 || len(f.db) != 0 {
+	if err != nil || rep.Cleaned != igdGroups || len(f.db) != 0 {
 		t.Fatalf("%+v %v left=%d: an id that is listed a moment later is still ours", rep, err, len(f.db))
 	}
 	f = &fakeACS{devices: igd, taskCode: 202, omitFromList: true}
@@ -605,7 +608,7 @@ func TestRefreshPreflightRefusesWhileAnAllowlistedTaskIsPending(t *testing.T) {
 		mk("other0000001", []string{"Device.DeviceInfo.SerialNumber"}, "getParameterValues"),
 		mk("other0000002", names, "reboot"),
 		mk("other0000003", nil, "getParameterValues")}}
-	if _, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1"); err != nil || len(f.deleted) != 0 || len(f.posted) != 5 {
+	if _, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1"); err != nil || len(f.deleted) != 0 || len(f.posted) != igdGroups {
 		t.Fatalf("%v deleted=%v posted=%d", err, f.deleted, len(f.posted))
 	}
 	// the check itself failing is not "no pending": nothing is created
@@ -640,7 +643,35 @@ func TestRefreshCallsThroughOneClientNeverInterleave(t *testing.T) {
 		go func() { defer wg.Done(); _, _ = c.RefreshParams(context.Background(), "AAAA00-ONT-SN1") }()
 	}
 	wg.Wait()
-	if maxInflight != 1 || len(f.posted) != 20 {
+	if maxInflight != 1 || len(f.posted) != 4*igdGroups {
 		t.Fatalf("max concurrent POSTs=%d posted=%d (calls must be serialised)", maxInflight, len(f.posted))
+	}
+}
+
+// The WANConnectionDevice instance of the PPP/IP connection is firmware specific (observed: 3 on a real EG8145V5), so every instance up to
+// the bound is asked for, and nothing beyond it, and each leaf is still in the closed allowlist.
+func TestRefreshCoversWANConnectionDeviceInstancesUpToTheBoundOnly(t *testing.T) {
+	seen := map[string]bool{}
+	for _, g := range refreshGroups["InternetGatewayDevice"] {
+		for _, p := range g {
+			if _, ok := allowlist[p]; !ok {
+				t.Fatalf("%s is not allowlisted", p)
+			}
+			seen[p] = true
+		}
+	}
+	for cd := 1; cd <= maxWANConnDevices; cd++ {
+		for _, node := range []string{"WANPPPConnection", "WANIPConnection"} {
+			if !seen[fmt.Sprintf("InternetGatewayDevice.WANDevice.1.WANConnectionDevice.%d.%s.1.ConnectionStatus", cd, node)] {
+				t.Fatalf("instance %d of %s is not read", cd, node)
+			}
+		}
+	}
+	beyond := fmt.Sprintf("InternetGatewayDevice.WANDevice.1.WANConnectionDevice.%d.WANPPPConnection.1.ConnectionStatus", maxWANConnDevices+1)
+	if _, ok := allowlist[beyond]; ok || seen[beyond] {
+		t.Fatalf("%s must stay outside the allowlist", beyond)
+	}
+	if len(refreshGroups["InternetGatewayDevice"]) > maxGroups {
+		t.Fatal("refresh would exceed maxGroups")
 	}
 }
