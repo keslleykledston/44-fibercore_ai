@@ -128,3 +128,6 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - NOT_RUN: E2E com a flag desligada; execução com dado real de OLT.
 - Codex PR 40 (5 rodadas, approve): estado desconhecido/conflito não vira afirmação; ticket sem documento e com o sintoma como premissa; execução só vale se for da PON atual (`pon_id`) e recente (≤ 15 min). pytest **238 passed**, E2E **48 passed**. Não coberto por teste automatizado: estado `unknown`/proveniência `conflict` na tela (o seed não os produz; lógica em função pura `troubleshoot.ts` revisada pelo Codex).
 - Deploy no LAB (2026-10-29, PR 40): backup verificado antes (20261029T061744Z); web+api reconstruídos; Alembic 0018 (sem migration nova); prodcheck sem issues; flags (`subscriber_360`, `customer_context`, `onu_cpe_links`, `diagnostic_engine`) ligadas no tenant do LAB; sem OLT coletada no LAB, então o diagnóstico real só foi exercitado no E2E/pytest.
+
+## 2026-10-29 — FC22-008 (validação AC-004/AC-009)
+- Mapeamento caso→teste em `docs/addenda/v2.2/AC_VALIDATION_FC22-008.md`; os 13 testes citados rodam e passam; +1 teste novo (contexto do cliente com OLT velha = `stale` por bloco). `pytest -q`: **239 passed**. Nenhum comportamento alterado. Lacunas declaradas no documento (R-D003 como regra, R-D004, impacto, p95).

@@ -404,3 +404,17 @@ def test_customer_list_paging_and_search_treat_wildcards_as_literals_and_audit_t
         ev = c.execute(text("SELECT evidence_redacted FROM audit_log WHERE action = 'customers.list' AND tenant_id = :t ORDER BY created_at DESC LIMIT 1"),
                        {"t": seed["B"]}).scalar()
     assert ev == {"limit": 100, "offset": 0, "filtered": True} and "Zz" not in json.dumps(ev)
+
+
+def test_old_olt_snapshot_makes_the_context_stale_and_never_reads_as_a_fresh_or_offline_claim(client, seed, inv, migrated):
+    """AC-004 on the new blocks: silence/old data is `stale` with its age, not a current state and not an invented outage."""
+    h = _setup(client, inv, seed, migrated)
+    old = [{"serial": "CTX-OLD1", "pon_path": "0/8/0", "status": "los", "rx_dbm": None}]
+    assert client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a1"),
+                       json=snap(inv, "a1", name="OLT-CTX-OLD", observed=_now(-7200), pons=[{"pon_path": "0/8/0", "status": "up"}],
+                                 onus=old)).status_code == 202
+    cid = _customer(migrated, seed["A"], _onu(client, h, "CTX-OLD1")["id"], seed["alice"])
+    d = client.get(f"/v1/customers/{cid}/context", headers=h).json()
+    assert d["status"] == "stale"
+    assert d["onus"][0]["provenance"]["quality"] == "stale" and d["onus"][0]["provenance"]["observed_at"]
+    assert d["customer"]["provenance"]["quality"] == "fresh"   # only the old block is old: freshness is per block, not global
