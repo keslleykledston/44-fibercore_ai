@@ -164,11 +164,29 @@ func (qp QueryPolicy) allows(cmd string) bool {
 	return false
 }
 
-var placeholder = regexp.MustCompile(`%\[\d\]d`)
+var placeholder = regexp.MustCompile(`%\[(\d)\]d`)
 
+// matchesTemplate accepts cmd only if it is exactly the template with canonical decimal numbers (no leading zeros) inside the SAME
+// bounds Render enforces, so the allowlist can never admit a line that Render would have refused.
 func matchesTemplate(q Query, cmd string) bool {
 	quoted := strings.ReplaceAll(strings.ReplaceAll(regexp.QuoteMeta(q.Template), `\[`, "["), `\]`, "]") // keep %[n]d placeholders intact
-	return regexp.MustCompile("^" + placeholder.ReplaceAllString(quoted, `\d{1,3}`) + "$").MatchString(cmd)
+	var slots []int                                                                                      // which parameter each capture group is
+	pat := placeholder.ReplaceAllStringFunc(quoted, func(m string) string {
+		slots = append(slots, int(m[2]-'1'))
+		return `(0|[1-9][0-9]{0,2})`
+	})
+	m := regexp.MustCompile("^" + pat + "$").FindStringSubmatch(cmd)
+	if m == nil {
+		return false
+	}
+	bounds := [3]int{maxSlot, maxPort, maxONT}
+	for i, idx := range slots {
+		n, err := strconv.Atoi(m[i+1])
+		if err != nil || n > bounds[idx] {
+			return false
+		}
+	}
+	return true
 }
 
 // QueryResult is what a query returns. Output is device text, UNPARSED: it may contain customer-chosen strings (ONT descriptions) and must

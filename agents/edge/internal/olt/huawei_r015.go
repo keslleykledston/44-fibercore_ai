@@ -12,7 +12,8 @@ import (
 // ONT commands only exist inside the GPON interface context (config -> interface gpon F/S), so this profile walks the CLI
 // modes. Everything stays read-only: the allowlist below is the exact set of commands this profile may send.
 var (
-	hwR015Allowed = regexp.MustCompile(`^(enable|config|quit|interface gpon \d+/\d+|display board 0|display ont info \d+ all|display ont optical-info \d+ all)$`)
+	// the data commands (display board 0, display ont info/optical-info <port> all) are catalog queries with bounded parameters (query.go)
+	hwR015Allowed = regexp.MustCompile(`^(enable|config|quit|interface gpon \d+/\d+)$`)
 
 	// "  0/ 0/14   7  4857544310001A2B  active      online   normal   match    no"
 	r015OntRow = regexp.MustCompile(`^\s*(\d+)/\s*(\d+)/\s*(\d+)\s+(\d+)\s+([0-9A-Fa-f]{16})\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*$`)

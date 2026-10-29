@@ -106,6 +106,9 @@ func TestOnlyValidatedQueriesAreAllowedUntilTheOperatorEnablesOne(t *testing.T) 
 		// never allowed whatever the policy
 		"display ont info 3 all; reload": false, "reboot": false, "undo ont add 0 5": false, "save": false, "display\nreload": false,
 		"display ont register-info 0 5 | include x": false, "display version 1": false,
+		// bounds are enforced by the allowlist itself, also for the validated queries
+		"display ont info 15 all": true, "display ont info 16 all": false, "display ont info 999 all": false, "display ont info 007 all": false,
+		"display ont optical-info 99 all": false, "display ont optical-info -1 all": false, "display board 1": false,
 	} {
 		if got := h.Allowed(cmd); got != want {
 			t.Fatalf("Allowed(%q)=%v want %v", cmd, got, want)
@@ -113,7 +116,8 @@ func TestOnlyValidatedQueriesAreAllowedUntilTheOperatorEnablesOne(t *testing.T) 
 	}
 	h2 := HuaweiR015{Queries: QueryPolicy{Enabled: map[string]bool{"onu.register": true, "olt.alarm.active": true}}}
 	for cmd, want := range map[string]bool{
-		"display ont register-info 0 5": true, "display alarm active all": true,
+		"display ont register-info 0 5": true, "display ont register-info 15 127": true, "display ont register-info 16 5": false,
+		"display ont register-info 0 128": false, "display ont register-info 0 05": false, "display alarm active all": true,
 		"display cpu 0/3": false, "display alarm history all list": false, "display ont register-info 0 5; reload": false,
 		"display ont register-info 0 5 6": false,
 	} {
