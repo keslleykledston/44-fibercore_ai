@@ -10,7 +10,13 @@ DIR="${FIBERCORE_BACKUP_DIR:-$HOME/fibercore-backups}"; KEEP="${FIBERCORE_BACKUP
 mkdir -p -m 700 "$DIR"
 exec 9>"$DIR/.lock"; flock -n 9 || { echo "$(date -Is) backup já em execução; saindo" >> "$DIR/backup.log"; exit 0; }
 log() { echo "$(date -Is) $*" >> "$DIR/backup.log"; }
-trap 'rc=$?; [[ $rc -eq 0 ]] || log "FALHA rc=$rc"' EXIT
+# Dump publicado mas NÃO verificado: guardado (pode ser um backup bom com verificador quebrado), marcado .failed e limitado aos 2 mais novos,
+# para falhas repetidas nunca encherem o disco.
+prune_failed() {
+  mapfile -t F < <(ls -1 "$DIR"/fibercore-prod-????????T??????Z.dump.failed 2>/dev/null | sort | head -n -2)
+  for m in "${F[@]}"; do base="${m%.failed}"; rm -f -- "$m" "$base" "$base.gpg" "$base.sha256"; done
+}
+trap 'rc=$?; if [[ $rc -ne 0 ]]; then log "FALHA rc=$rc"; [[ -e "${OUT:-/nonexistent}" || -e "${OUT:-/nonexistent}.gpg" ]] && : > "$OUT.failed"; fi; prune_failed' EXIT
 export ENV_FILE=.env.prod COMPOSE_PROJECT=fibercore-prod
 OUT="$DIR/fibercore-prod-$(date -u +%Y%m%dT%H%M%SZ).dump"
 [[ -n "${BACKUP_GPG_RECIPIENT:-}" ]] || log "AVISO: backup SEM cifra (BACKUP_GPG_RECIPIENT não definido); manter só neste host, 0600, e NÃO copiar para fora sem cifrar"

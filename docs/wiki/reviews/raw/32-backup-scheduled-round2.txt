@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a185a3-8318-79d3-9378-eb5c3bfd531f).
+[codex] Turn started (01a185a3-8353-76a3-a665-5b30ed642584).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os caminhos de criação, verificação e retenção dos...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- scripts/backup-scheduled.sh...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- scripts/backup-scheduled.sh... (exit 0)
+[codex] Running command: /bin/bash -lc 'nl -ba scripts/backup-scheduled.sh; git status --short; rg -n "backup-schedule...
+[codex] Command completed: /bin/bash -lc 'nl -ba scripts/backup-scheduled.sh; git status --short; rg -n "backup-schedule... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: falhas na verificação deixam dumps...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: falhas na verificação deixam dumps publicados fora da retenção; falhas repetidas podem encher o disco e impedir backups futuros.
+
+Findings:
+- [high] Backups não verificados acumulam sem limite (scripts/backup-scheduled.sh:19)
+  `backup.sh` publica o dump e o checksum antes da verificação. Se `restore-verify.sh` falhar, esta rotina sai sem remover esses arquivos nem criar `.done`; a retenção da linha 23 considera apenas conjuntos concluídos, então nunca os apaga. Uma falha persistente no restore pode acumular um dump completo por execução até esgotar o disco e bloquear novos backups. Remova os artefatos desta execução ao falhar a verificação, ou inclua arquivos incompletos numa política segura de limpeza com idade mínima.
+  Recommendation: Adicione limpeza dos artefatos da execução no caminho de falha da verificação e registre a falha antes de sair.
