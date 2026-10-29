@@ -213,6 +213,8 @@ def mfa_enroll(
     if not settings.mfa_encryption_key:
         raise HTTPException(503, "MFA enrolment is not configured")  # fail closed: never store a secret unencrypted
     with scoped_connection(get_engine(), user_id=uid) as conn:
+        # per-account lock shared by EVERY MFA change (enrol/activate/disable/regenerate, admin reset, refresh): state is read after it
+        conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{uid}"})
         email = _reauth(conn, request, settings, uid, body.password)
         if email is None:
             outcome = "bad"
@@ -242,6 +244,8 @@ def mfa_activate(
     key, ip = f"mfa:{uid}", _client_ip(request, settings)
     codes: list[str] = []
     with scoped_connection(get_engine(), user_id=uid) as conn:
+        # per-account lock shared by EVERY MFA change (enrol/activate/disable/regenerate, admin reset, refresh): state is read after it
+        conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{uid}"})
         if _gate(conn, key, ip):
             outcome = "locked"
         else:
@@ -285,6 +289,8 @@ def mfa_disable(
     uid = _user_id(authorization, settings)
     key, ip = f"mfa:{uid}", _client_ip(request, settings)
     with scoped_connection(get_engine(), user_id=uid) as conn:
+        # per-account lock shared by EVERY MFA change (enrol/activate/disable/regenerate, admin reset, refresh): state is read after it
+        conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{uid}"})
         if _mfa_required(conn, settings, uid):  # required by policy: switching it off would lock the account out of every route
             raise HTTPException(409, "MFA is required for your role and cannot be disabled")
         if _gate(conn, key, ip):
@@ -315,7 +321,7 @@ def mfa_regenerate_recovery_codes(
     key, ip = f"mfa:{uid}", _client_ip(request, settings)
     codes: list[str] = []
     with scoped_connection(get_engine(), user_id=uid) as conn:
-        # same per-account lock as the administrator reset and the refresh: the MFA state below is read only AFTER any of them has committed
+        # per-account lock shared by EVERY MFA change (enrol/activate/disable/regenerate, admin reset, refresh): state is read after it
         conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{uid}"})
         if _gate(conn, key, ip):
             outcome = "locked"

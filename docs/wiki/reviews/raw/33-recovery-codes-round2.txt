@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a185b2-8655-7d01-9e2a-c765d9471988).
+[codex] Turn started (01a185b2-90c2-7e51-a8ad-bd2ff6e50d87).
+[codex] Assistant message captured: Vou conferir o diff real contra `main` e seguir os fluxos alterados de regeneração, CLI e int...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/session.py...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/session.py... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/session.py...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/session.py... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/session.py | sed -n '100,150p;285,345p'; nl -ba apps/a...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/session.py | sed -n '100,150p;285,345p'; nl -ba apps/a... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar: regeneração ainda pode confirmar sucesso...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar: regeneração ainda pode confirmar sucesso enquanto uma desativação concorrente apaga o MFA e os códigos recém-criados.
+
+Findings:
+- [high] Desativação concorrente pode invalidar os códigos recém-entregues (apps/api/app/api/session.py:325-335)
+  A regeneração bloqueia a linha `user_mfa` antes de consumir o segundo fator e substituir os códigos. Porém, `/disable` não usa o advisory lock nem bloqueia essa linha antes de `_check_second_factor`. Com um código de recuperação, a desativação pode consumi-lo e então ficar bloqueada ao apagar `user_mfa`; após a regeneração confirmar e devolver os novos códigos, a desativação prossegue e apaga tanto o MFA quanto esses códigos. O cliente da regeneração recebe sucesso e um conjunto que não pode ser usado. Faça a desativação participar do mesmo lock/ordem de bloqueio e valide o estado após adquirir o lock.
+  Recommendation: Serialize `/disable` com a regeneração usando o advisory lock por conta antes da leitura/consumo do fator; mantenha a operação de desativação e a remoção dos códigos na mesma transação.

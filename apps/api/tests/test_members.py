@@ -291,3 +291,26 @@ def test_regenerating_codes_waits_for_the_account_lock_and_then_sees_a_reset(cli
     assert out["r"].status_code == 409, out["r"].text
     with migrated.begin() as c:
         assert c.execute(text("SELECT count(*) FROM mfa_recovery_codes WHERE user_id = :u"), {"u": who["id"]}).scalar() == 0
+
+
+def test_disable_waits_for_the_account_lock_like_every_other_mfa_change(client, make, migrated):
+    import threading
+    import time
+
+    who = make("engineer")
+    _secret, codes = _enrol(client, who)
+    s = client.post("/v1/auth/mfa/verify", json={"mfa_token": _login(client, who)["mfa_token"], "code": codes.pop()})
+    h = _bearer(s.json()["access_token"])
+    out: dict = {}
+
+    def disable():
+        out["r"] = client.post("/v1/auth/mfa/disable", json={"password": PW, "code": codes.pop()}, headers=h)
+
+    with migrated.begin() as holder:  # a regeneration (or reset) in flight holds the account lock
+        holder.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{who['id']}"})
+        t = threading.Thread(target=disable)
+        t.start()
+        time.sleep(1.5)
+        assert t.is_alive() and "r" not in out, "disable did not wait for the account lock"
+    t.join(15)
+    assert out["r"].status_code == 204, out["r"].text
