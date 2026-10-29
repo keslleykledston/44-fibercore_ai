@@ -1,8 +1,112 @@
 [
-  {"_id": "AAAA00-HG8245H-SYN0000001", "_lastInform": "2026-10-28T10:00:00.000Z", "_deviceId": {"_Manufacturer": "Huawei", "_OUI": "AAAA00", "_ProductClass": "HG8245H", "_SerialNumber": "SYN0000001"}},
-  {"_id": "DISCOVERYSERVICE-DISCOVERYSERVICE-SYNDISCOA", "_lastInform": "2026-10-28T10:00:01.000Z", "_deviceId": {"_Manufacturer": "DISCOVERYSERVICE", "_OUI": "DISCOVERYSERVICE", "_ProductClass": "DISCOVERYSERVICE", "_SerialNumber": "SYNDISCOA"}},
-  {"_id": "DISCOVERYSERVICE-DISCOVERYSERVICE-SYNDISCOB", "_lastInform": "2026-10-28T10:00:02.000Z", "_deviceId": {"_Manufacturer": "DISCOVERYSERVICE", "_OUI": "DISCOVERYSERVICE", "_ProductClass": "DISCOVERYSERVICE", "_SerialNumber": "SYNDISCOB"}},
-  {"_id": "BBBB11-G3000E-SYN-00000002", "_lastInform": "2026-10-28T10:00:03.000Z", "_deviceId": {"_Manufacturer": "ACME Networks", "_OUI": "BBBB11", "_ProductClass": "G3000E", "_SerialNumber": "SYN-00000002"}},
-  {"_id": "CCCC22-hAP%20lite-SYN0000003", "_lastInform": "2026-10-28T10:00:04.000Z", "_deviceId": {"_Manufacturer": "MikroTik", "_OUI": "CCCC22", "_ProductClass": "hAP lite", "_SerialNumber": "SYN0000003"}},
-  {"_id": "DDDD33-ONT-", "_lastInform": "2026-10-28T10:00:05.000Z", "_deviceId": {"_Manufacturer": "Huawei", "_OUI": "DDDD33", "_ProductClass": "ONT", "_SerialNumber": ""}}
+ {
+  "_id": "AAAA00-HG8245H-SYN0000001",
+  "_lastInform": "2026-10-28T10:00:00.000Z",
+  "_deviceId": {
+   "_Manufacturer": "Huawei",
+   "_OUI": "AAAA00",
+   "_ProductClass": "HG8245H",
+   "_SerialNumber": "SYN0000001"
+  }
+ },
+ {
+  "_id": "DISCOVERYSERVICE-DISCOVERYSERVICE-SYNDISCOA",
+  "_lastInform": "2026-10-28T10:00:01.000Z",
+  "_deviceId": {
+   "_Manufacturer": "DISCOVERYSERVICE",
+   "_OUI": "DISCOVERYSERVICE",
+   "_ProductClass": "DISCOVERYSERVICE",
+   "_SerialNumber": "SYNDISCOA"
+  }
+ },
+ {
+  "_id": "DISCOVERYSERVICE-DISCOVERYSERVICE-SYNDISCOB",
+  "_lastInform": "2026-10-28T10:00:02.000Z",
+  "_deviceId": {
+   "_Manufacturer": "DISCOVERYSERVICE",
+   "_OUI": "DISCOVERYSERVICE",
+   "_ProductClass": "DISCOVERYSERVICE",
+   "_SerialNumber": "SYNDISCOB"
+  }
+ },
+ {
+  "_id": "BBBB11-G3000E-SYN-00000002",
+  "_lastInform": "2026-10-28T10:00:03.000Z",
+  "_deviceId": {
+   "_Manufacturer": "ACME Networks",
+   "_OUI": "BBBB11",
+   "_ProductClass": "G3000E",
+   "_SerialNumber": "SYN-00000002"
+  }
+ },
+ {
+  "_id": "CCCC22-hAP%20lite-SYN0000003",
+  "_lastInform": "2026-10-28T10:00:04.000Z",
+  "_deviceId": {
+   "_Manufacturer": "MikroTik",
+   "_OUI": "CCCC22",
+   "_ProductClass": "hAP lite",
+   "_SerialNumber": "SYN0000003"
+  }
+ },
+ {
+  "_id": "DDDD33-ONT-",
+  "_lastInform": "2026-10-28T10:00:05.000Z",
+  "_deviceId": {
+   "_Manufacturer": "Huawei",
+   "_OUI": "DDDD33",
+   "_ProductClass": "ONT",
+   "_SerialNumber": ""
+  }
+ },
+ {
+  "_id": "EEEE44-ONT-SYNDUP0001",
+  "_lastInform": "2026-10-28T10:00:06.000Z",
+  "_deviceId": {
+   "_Manufacturer": "Huawei",
+   "_OUI": "EEEE44",
+   "_ProductClass": "ONT",
+   "_SerialNumber": "SYNDUP0001"
+  }
+ },
+ {
+  "_id": "FFFF55-ONT-SYNDUP0001",
+  "_lastInform": "2026-10-28T10:00:07.000Z",
+  "_deviceId": {
+   "_Manufacturer": "Other",
+   "_OUI": "FFFF55",
+   "_ProductClass": "ONT",
+   "_SerialNumber": "SYNDUP0001"
+  }
+ },
+ {
+  "_id": "1111AA-ONT-hostile",
+  "_lastInform": "2026-10-28T10:00:08.000Z",
+  "_deviceId": {
+   "_Manufacturer": "X",
+   "_OUI": "1111AA",
+   "_ProductClass": "ONT",
+   "_SerialNumber": "<script>x</script>"
+  }
+ },
+ {
+  "_id": "2222BB-ONT-long",
+  "_lastInform": "2026-10-28T10:00:09.000Z",
+  "_deviceId": {
+   "_Manufacturer": "X",
+   "_OUI": "2222BB",
+   "_ProductClass": "ONT",
+   "_SerialNumber": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+  }
+ },
+ {
+  "_id": "3333CC-ONT-ctl",
+  "_lastInform": "2026-10-28T10:00:10.000Z",
+  "_deviceId": {
+   "_Manufacturer": "X",
+   "_OUI": "3333CC",
+   "_ProductClass": "ONT",
+   "_SerialNumber": "SYN\nINJECT01"
+  }
+ }
 ]

@@ -210,3 +210,25 @@ def test_go_edge_olt_payload_is_accepted_by_the_api(client, seed, inv):
     assert onus["48575443A1B2C3D5"]["status"] == "offline" and onus["48575443A1B2C3D5"]["rx_dbm"] is None
     olt = next(o for o in client.get("/v1/olts", headers=h).json() if o["name"] == "OLT-GO-GOLDEN")
     assert olt["support_level"] == "identified" and olt["firmware"] == "R018"
+
+
+def test_a_serial_claim_with_another_external_id_is_ignored_not_merged(client, seed, inv):
+    """A CPE is identified by what it CLAIMS. A second device claiming an existing serial under a different external id must not
+    gain a binding on that CPE nor rewrite its vendor/model; the rest of the batch still goes through."""
+    a = agent(client, inv, "a1")
+
+    def cpe(serial, ext, vendor="Huawei"):
+        return {"canonical_serial": serial, "vendor": vendor, "model": "M",
+                "binding": {"protocol": "tr069", "external_id": ext, "connector_id": "genieacs-claims"}}
+
+    base = {"edge_id": str(inv["a1"]["edge"]), "observed_at": _now(-5), "cpes": [cpe("CLAIM-VICTIM-1", "legit-ext-1")]}
+    assert client.post("/v1/edge/cpe-snapshots", headers=a, json=base).status_code == 202
+    hostile = {**base, "observed_at": _now(), "cpes": [cpe("CLAIM-VICTIM-1", "hostile-ext", "HACKED"), cpe("CLAIM-OTHER-1", "legit-ext-2"),
+                                                       cpe("CLAIM-DUP-1", "dup-a"), cpe("CLAIM-DUP-1", "dup-b")]}
+    r = client.post("/v1/edge/cpe-snapshots", headers=a, json=hostile)
+    assert r.status_code == 202 and r.json()["conflicts"] == 3 and r.json()["cpes"] == 1, r.text  # victim claim + both dup claims
+    rows = {c["canonical_serial"]: c for c in client.get("/v1/cpes", headers=hdr(client, "alice", seed, "A")).json()}
+    assert rows["CLAIM-VICTIM-1"]["vendor"] == "Huawei" and [b["external_id"] for b in rows["CLAIM-VICTIM-1"]["bindings"]] == ["legit-ext-1"]
+    assert "CLAIM-OTHER-1" in rows and "CLAIM-DUP-1" not in rows
+    again = {**base, "observed_at": _now(2)}  # the legitimate device re-informing keeps updating normally
+    assert client.post("/v1/edge/cpe-snapshots", headers=a, json=again).json()["conflicts"] == 0

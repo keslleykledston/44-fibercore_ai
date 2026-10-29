@@ -202,6 +202,30 @@ def ingest_cpe_snapshot(
     skipped = len(body.cpes) - len(fresh)
     if not fresh:
         return {"status": "ignored_stale", "cpes": 0, "skipped": skipped}
+    # A serial is only a CLAIM made by the device. One CPE has ONE external id per (connector, protocol): a claim that names a
+    # different one (than stored, or than another claim in this very batch) is IGNORED and counted, never merged into the existing
+    # CPE (no second binding, no vendor/model overwrite). Ignoring instead of failing keeps one hostile device from blocking the rest.
+    stored: dict[tuple, str] = {
+        (r.canonical_serial, r.connector_id, r.protocol): r.external_id
+        for r in conn.execute(
+            text("SELECT c.canonical_serial, b.connector_id, b.protocol, b.external_id FROM cpes c JOIN cpe_protocol_bindings b "
+                 "ON b.cpe_id = c.id AND b.tenant_id = c.tenant_id WHERE c.tenant_id = :t AND c.canonical_serial = ANY(:s)"),
+            {"t": p.tenant_id, "s": [c.canonical_serial for c in fresh]},
+        )
+    }
+    claimed: dict[tuple, set[str]] = {}
+    for c in fresh:
+        claimed.setdefault((c.canonical_serial, c.binding.connector_id, c.binding.protocol), set()).add(c.binding.external_id)
+    kept = []
+    for c in fresh:
+        k = (c.canonical_serial, c.binding.connector_id, c.binding.protocol)
+        if len(claimed[k]) > 1 or stored.get(k, c.binding.external_id) != c.binding.external_id:
+            continue
+        kept.append(c)
+    conflicts = len(fresh) - len(kept)
+    fresh = kept
+    if not fresh:
+        return {"status": "accepted", "cpes": 0, "skipped": skipped, "conflicts": conflicts}
     serials = [c.canonical_serial for c in fresh]
     conn.execute(
         text(
@@ -246,7 +270,7 @@ def ingest_cpe_snapshot(
         [{"t": p.tenant_id, "ci": ids[c.canonical_serial], "p": c.binding.protocol, "x": c.binding.external_id,
           "c": c.binding.connector_id, "o": body.observed_at} for c in fresh],
     )
-    return {"status": "accepted", "cpes": len(fresh), "skipped": skipped}
+    return {"status": "accepted", "cpes": len(fresh), "skipped": skipped, "conflicts": conflicts}
 
 
 # ---- reads ------------------------------------------------------------------------------------

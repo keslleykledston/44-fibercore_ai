@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1853d-b07e-7401-8731-b0da71a0b8db).
+[codex] Turn started (01a1853d-dba4-7252-8e2a-73d944c9ff89).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e rastrear como a identidade chega ao payload enviado ao...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/collector/collector.go | sed -n '35,125p'; rg -n \...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/collector/collector.go | sed -n '35,125p'; rg -n \... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '48,78p' apps/api/app/api/inventory.py; sed -n '1,90p' agents/edge/inte...
+[codex] Command completed: /bin/bash -lc "sed -n '48,78p' apps/api/app/api/inventory.py; sed -n '1,90p' agents/edge/inte... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'Short\\s*=' apps/api/app/api/inventory.py"
+[codex] Command completed: /bin/bash -lc "rg -n 'Short\\s*=' apps/api/app/api/inventory.py" (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviaria ainda: qualquer CPE via CWMP pode reivin...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviaria ainda: qualquer CPE via CWMP pode reivindicar o serial de outro fabricante; o coletor o promove diretamente a identidade canônica e pode sobrescrever a entrada existente no Cloud.
+
+Findings:
+- [high] Serial reivindicado pelo CPE vira identidade canônica sem validação ou deduplicação (agents/edge/internal/collector/collector.go:108-115)
+  O coletor aceita qualquer serial não vazio vindo do NBI e o envia como `canonical_serial`; OUI, fabricante e classe não participam da identidade, e não há validação nem deduplicação no lote. Como o endpoint Cloud usa `(tenant_id, canonical_serial)` para atualizar o registro existente, um CPE hostil que anuncie o serial de outro equipamento pode fazer o Edge associar sua própria identidade/binding à entrada existente e atualizar fabricante/modelo. A unicidade do serial no banco não autentica a alegação feita pelo dispositivo. Recomenda-se rejeitar duplicatas conflitantes no lote e não tratar serial CWMP como identidade verificada; exigir uma fonte confiável de associação ou uma política explícita de identidade antes de enviar atualizações ao Cloud.
+  Recommendation: Adicionar validação e detecção de conflitos para identidades reivindicadas, e impedir que um serial não verificado por CWMP crie ou atualize uma identidade canônica/binding no Cloud.

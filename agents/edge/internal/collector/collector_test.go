@@ -23,7 +23,7 @@ func dev(i int, serial string) nbi.Device {
 }
 
 func TestSnapshotShapeMatchesCloudContract(t *testing.T) {
-	g := &GenieACS{EdgeID: "e1", ConnectorID: "genieacs-lab", Client: fakeLister{[]nbi.Device{dev(1, "S1"), dev(2, "")}},
+	g := &GenieACS{EdgeID: "e1", ConnectorID: "genieacs-lab", Client: fakeLister{[]nbi.Device{dev(1, "SER00001"), dev(2, "")}},
 		Now: func() time.Time { return time.Date(2026, 10, 28, 1, 2, 3, 0, time.UTC) }}
 	items, err := g.Collect(context.Background())
 	if err != nil || len(items) != 1 || items[0].Kind != "cpe_snapshot" {
@@ -47,7 +47,7 @@ func TestSnapshotShapeMatchesCloudContract(t *testing.T) {
 func TestBatchesAtCloudLimit(t *testing.T) {
 	var devs []nbi.Device
 	for i := 0; i < maxPerSnapshot+1; i++ {
-		devs = append(devs, dev(i, fmt.Sprintf("S%d", i)))
+		devs = append(devs, dev(i, fmt.Sprintf("SER%06d", i)))
 	}
 	items, _ := (&GenieACS{EdgeID: "e", ConnectorID: "c", Client: fakeLister{devs}}).Collect(context.Background())
 	if len(items) != 2 {
@@ -103,10 +103,15 @@ func TestRealNBIShapeSkipsPlaceholdersAndReportsOnlyCounts(t *testing.T) {
 			t.Fatalf("serial %s: external_id %q want %q", k, got[k], v)
 		}
 	}
+	for _, bad := range []string{"SYNDUP0001", "<script>", "INJECT01"} {
+		if strings.Contains(string(items[0].Payload), bad) {
+			t.Fatalf("hostile or conflicting claim %q reached the snapshot", bad)
+		}
+	}
 	if strings.Contains(string(items[0].Payload), "DISCOVERYSERVICE") {
 		t.Fatal("placeholder identity leaked into the snapshot")
 	}
-	if skips["placeholder_identity"] != 2 || skips["no_serial"] != 1 {
+	if skips["placeholder_identity"] != 2 || skips["no_serial"] != 1 || skips["invalid_serial"] != 3 || skips["conflicting_serial"] != 2 {
 		t.Fatalf("skips=%v", skips)
 	}
 }

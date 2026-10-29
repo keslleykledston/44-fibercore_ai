@@ -471,9 +471,10 @@ paths:
     post:
       tags: [Edge]
       operationId: ingestCpeSnapshot
+      summary: O serial é uma reivindicação do dispositivo; reivindicação com external_id diferente do já vinculado (ou conflitante no lote) é IGNORADA e contada em `conflicts`, nunca mesclada
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CpeSnapshot'}}}}
       responses:
-        '202': {description: Aceito}
+        '202': {description: "Aceito: {status, cpes, skipped, conflicts}"}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}

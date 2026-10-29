@@ -4,6 +4,7 @@ package collector
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"time"
 
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/nbi"
@@ -62,6 +63,10 @@ const maxPerSnapshot = 5000 // keep in sync with the Cloud limit
 // per Inform. Counts of what was dropped are reported through OnSkip, never the identifiers.
 const placeholderID = "DISCOVERYSERVICE"
 
+// A serial is a CLAIM made by the device itself (CWMP is reachable by anyone who finds the port). Only a plain identifier is accepted; the
+// rest (control characters, huge strings, markup) is dropped and counted.
+var serialRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{3,63}$`)
+
 func isPlaceholder(d nbi.Device) bool {
 	return d.DeviceID.OUI == placeholderID || d.DeviceID.Manufacturer == placeholderID || d.DeviceID.ProductClass == placeholderID
 }
@@ -93,13 +98,23 @@ func (g *GenieACS) Collect(ctx context.Context) ([]Item, error) {
 	skipped := map[string]int{}
 	defer func() {
 		if g.OnSkip != nil {
-			for _, r := range []string{"no_serial", "placeholder_identity"} {
+			for _, r := range []string{"no_serial", "invalid_serial", "placeholder_identity", "conflicting_serial"} {
 				if skipped[r] > 0 {
 					g.OnSkip(r, skipped[r])
 				}
 			}
 		}
 	}()
+	// Two DIFFERENT devices claiming the same serial cannot both be true and nothing here can tell which one is: drop every claim.
+	claims := map[string]map[string]bool{}
+	for _, d := range devs {
+		if !isPlaceholder(d) && d.ID != "" {
+			if claims[d.DeviceID.SerialNumber] == nil {
+				claims[d.DeviceID.SerialNumber] = map[string]bool{}
+			}
+			claims[d.DeviceID.SerialNumber][d.ID] = true
+		}
+	}
 	for _, d := range devs {
 		if isPlaceholder(d) {
 			skipped["placeholder_identity"]++
@@ -109,6 +124,14 @@ func (g *GenieACS) Collect(ctx context.Context) ([]Item, error) {
 		if serial == "" || d.ID == "" {
 			skipped["no_serial"]++
 			continue // cannot be keyed canonically; skip rather than invent identity
+		}
+		if !serialRe.MatchString(serial) {
+			skipped["invalid_serial"]++
+			continue
+		}
+		if len(claims[serial]) > 1 {
+			skipped["conflicting_serial"]++
+			continue
 		}
 		batch = append(batch, cpeIn{
 			CanonicalSerial: serial, Vendor: d.DeviceID.Manufacturer, Model: d.DeviceID.ProductClass,
