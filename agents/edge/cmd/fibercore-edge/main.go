@@ -93,13 +93,9 @@ func main() {
 					return "", err
 				}
 				rep, err := nbiClient.RefreshParams(ctx, ref)
-				if errors.Is(err, nbi.ErrRefreshUncleaned) {
-					// local log only (device id stays on the site): the operator must look for pending tasks on this device in the ACS
-					hold := 24 * time.Hour // a task we know is there and could not remove
-					if errors.Is(err, nbi.ErrRefreshUnproven) {
-						hold = time.Hour // absence could not be proven after an ambiguous request
-					}
-					log.Error("refresh may have left a task on the ACS; device held", "device", ref, "hold", hold.String(), "groups", rep.Groups, "uncleaned", rep.Uncleaned, "unproven", errors.Is(err, nbi.ErrRefreshUnproven))
+				if hold := nbi.RefreshHold(rep, err); hold > 0 {
+					// local log only (device id stays on the site): the operator must look at this device in the ACS
+					log.Error("refresh left the device on hold", "device", ref, "hold", hold.String(), "groups", rep.Groups, "faulted", rep.Faulted, "uncleaned", rep.Uncleaned, "unproven", errors.Is(err, nbi.ErrRefreshUnproven))
 					if herr := guard.Hold(ref, hold); herr != nil {
 						log.Error("could not persist the hold (kept in memory for this process; refreshes also fail closed while the state cannot be written)", "err", herr)
 					}

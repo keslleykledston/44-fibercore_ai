@@ -685,3 +685,22 @@ func TestRefreshGroupsAreExactlyTheDocumentedOnes(t *testing.T) {
 		t.Fatalf("%s must stay outside the allowlist", beyond)
 	}
 }
+
+func TestRefreshHoldPolicy(t *testing.T) {
+	for name, tc := range map[string]struct {
+		rep  RefreshReport
+		err  error
+		want time.Duration
+	}{
+		"clean":                  {RefreshReport{Groups: igdGroups, Completed: igdGroups}, nil, 0},
+		"queued and cleaned":     {RefreshReport{Groups: igdGroups, Queued: igdGroups, Cleaned: igdGroups}, nil, 0},
+		"any fault holds a day":  {RefreshReport{Groups: igdGroups, Completed: igdGroups - 1, Faulted: 1}, nil, 24 * time.Hour},
+		"uncleaned holds a day":  {RefreshReport{Uncleaned: 1}, ErrRefreshUncleaned, 24 * time.Hour},
+		"unproven holds an hour": {RefreshReport{}, fmt.Errorf("%w: %w", ErrRefreshUncleaned, ErrRefreshUnproven), time.Hour},
+		"unrelated error":        {RefreshReport{}, ErrRefreshPending, 0},
+	} {
+		if got := RefreshHold(tc.rep, tc.err); got != tc.want {
+			t.Fatalf("%s: got %s want %s", name, got, tc.want)
+		}
+	}
+}

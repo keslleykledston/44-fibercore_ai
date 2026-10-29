@@ -81,6 +81,21 @@ func groupOf(prefix string, leaves ...string) []string {
 	return out
 }
 
+// RefreshHold is how long a device stays out of refresh after an attempt. Unclean outcomes keep their holds; a refresh that made the CPE fault
+// on ANY requested object also holds the device for a day: the instance range is only validated on the firmware measured so far (ADR-SD-002),
+// so an unknown firmware that faults on absent instances costs at most one round of faults per day instead of one per refresh.
+func RefreshHold(rep RefreshReport, err error) time.Duration {
+	switch {
+	case errors.Is(err, ErrRefreshUnproven):
+		return time.Hour // absence could not be proven after an ambiguous request
+	case errors.Is(err, ErrRefreshUncleaned):
+		return 24 * time.Hour // a task we know is there and could not remove
+	case rep.Faulted > 0:
+		return 24 * time.Hour
+	}
+	return 0
+}
+
 // RefreshReport says what happened, in counts only (no device data).
 type RefreshReport struct {
 	DataModel string
