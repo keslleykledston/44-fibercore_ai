@@ -115,3 +115,34 @@ func TestRealNBIShapeSkipsPlaceholdersAndReportsOnlyCounts(t *testing.T) {
 		t.Fatalf("skips=%v", skips)
 	}
 }
+
+// Conflicting claims are classified over the WHOLE NBI answer, before it is split into Cloud-sized snapshots: a serial claimed by two
+// different devices on opposite sides of the chunk boundary must be dropped, not accepted in whichever chunk happens to come first.
+func TestConflictAcrossTheChunkBoundaryIsStillDropped(t *testing.T) {
+	var devs []nbi.Device
+	for i := 0; i < maxPerSnapshot+3; i++ {
+		devs = append(devs, dev(i, fmt.Sprintf("SER%06d", i)))
+	}
+	devs[0].DeviceID.SerialNumber = "SPLIT-CLAIM-1"
+	devs[maxPerSnapshot+1].DeviceID.SerialNumber = "split-claim-1" // same canonical serial, different _id, other side of the boundary
+	items, err := (&GenieACS{EdgeID: "e", ConnectorID: "c", Client: fakeLister{devs}}).Collect(context.Background())
+	if err != nil || len(items) != 2 {
+		t.Fatalf("items=%d err=%v", len(items), err)
+	}
+	total := 0
+	for _, it := range items {
+		if strings.Contains(strings.ToUpper(string(it.Payload)), "SPLIT-CLAIM-1") {
+			t.Fatalf("a conflicting claim survived chunking")
+		}
+		var snap struct {
+			CPEs []json.RawMessage `json:"cpes"`
+		}
+		if err := json.Unmarshal(it.Payload, &snap); err != nil {
+			t.Fatal(err)
+		}
+		total += len(snap.CPEs)
+	}
+	if total != maxPerSnapshot+3-2 {
+		t.Fatalf("total cpes %d", total)
+	}
+}
