@@ -56,10 +56,13 @@ def get_principal(
         return Principal(claims.sub, "service", claims.tenant_id, row.role, row.edge_id)
 
     with scoped_connection(engine, user_id=claims.sub) as conn:
-        active = conn.execute(
-            text("SELECT is_active FROM users_global WHERE id = :u"), {"u": claims.sub}
-        ).scalar()
-        if not active:
+        u = conn.execute(
+            text("SELECT is_active, extract(epoch FROM tokens_valid_after) AS valid_after FROM users_global WHERE id = :u"),
+            {"u": claims.sub},
+        ).first()
+        if not u or not u.is_active:
+            raise _unauth()
+        if u.valid_after is not None and claims.iat < float(u.valid_after):  # revoked: issued before the account was signed out everywhere
             raise _unauth()
         memberships = {
             r.tenant_id: r.role

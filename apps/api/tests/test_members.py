@@ -178,3 +178,18 @@ def test_membership_created_while_the_reset_waits_is_seen_and_refused(client, se
     assert out["r"].status_code == 409 and "other workspaces" in out["r"].text, out["r"].text
     with migrated.begin() as c:
         assert c.execute(text("SELECT enabled FROM user_mfa WHERE user_id=:u"), {"u": target["id"]}).scalar() is True
+
+
+def test_reset_kills_access_tokens_already_issued_not_only_refresh_tokens(client, seed, make):
+
+    adm, codes, h = _admin_with_mfa(client, make, seed)
+    target = make("engineer")
+    _secret, tcodes = _enrol(client, target)
+    ch = _login(client, target)
+    s = client.post("/v1/auth/mfa/verify", json={"mfa_token": ch["mfa_token"], "code": tcodes.pop()})
+    ht = {**_bearer(s.json()["access_token"]), "X-Workspace-ID": str(seed["A"])}
+    assert client.get("/v1/incidents", headers=ht).status_code == 200  # the target's live session works...
+    assert client.post(f"/v1/members/{target['id']}/mfa/reset", json={"password": PW, "code": _code(codes)}, headers=h).status_code == 200
+    assert client.get("/v1/incidents", headers=ht).status_code == 401  # ...and dies at once, without waiting for expiry
+    fresh = _login(client, target)  # a login right after the reset (same second) is a NEW session and works
+    assert client.get("/v1/incidents", headers={**_bearer(fresh["access_token"]), "X-Workspace-ID": str(seed["A"])}).status_code == 200

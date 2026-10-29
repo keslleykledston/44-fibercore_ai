@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1855e-1d48-7973-8a14-950a33375487).
+[codex] Turn started (01a1855e-29d8-7c80-8674-f3ad63d1beb7).
+[codex] Assistant message captured: Vou inspecionar o diff completo contra `main`, seguindo especialmente reautenticação, enumera...
+[codex] Running command: /bin/bash -lc "git diff --find-renames --unified=70 main...HEAD -- apps/api/app/api/members.p...
+[codex] Command completed: /bin/bash -lc "git diff --find-renames --unified=70 main...HEAD -- apps/api/app/api/members.p... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --unified=35 main...HEAD -- apps/web/src/app/bff/members/'[id]'/mfa-r...
+[codex] Command completed: /bin/bash -lc "git diff --unified=35 main...HEAD -- apps/web/src/app/bff/members/'[id]'/mfa-r... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "def get_principal|refresh_tokens|revoked_at|members:read|def _reauth|de...
+[codex] Command completed: /bin/bash -lc 'rg -n "def get_principal|refresh_tokens|revoked_at|members:read|def _reauth|de... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,125p' apps/api/app/api/deps.py; sed -n '70,120p' apps/api/app/api/ro...
+[codex] Command completed: /bin/bash -lc "sed -n '1,125p' apps/api/app/api/deps.py; sed -n '70,120p' apps/api/app/api/ro... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: o reset revoga refresh tokens, mas de...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: o reset revoga refresh tokens, mas deixa válidos os access tokens já emitidos; a interface e o how-to prometem encerrar as sessões abertas.
+
+Findings:
+- [high] Access tokens roubados continuam válidos após o reset (apps/api/app/api/members.py:100-102)
+  O reset revoga apenas registros em `refresh_tokens`. `get_principal` valida o JWT e a conta ativa, mas não consulta se a sessão ou token foi revogado. Portanto, um access token já emitido para o alvo continua autorizando requisições até expirar, mesmo após o reset; isso pode manter o acesso de uma sessão comprometida durante a validade restante do token. A interface e o how-to dizem que as sessões abertas são encerradas, criando uma expectativa falsa de revogação imediata. Implemente revogação verificável de access tokens/sessões ou deixe explícito que só os refresh tokens são encerrados e ajuste o aviso e a documentação.
+  Recommendation: Faça a autenticação verificar uma versão/identificador de sessão revogável para invalidar access tokens existentes no reset; alternativamente, limite e comunique com precisão a janela até a expiração, atualizando a UI e o how-to.

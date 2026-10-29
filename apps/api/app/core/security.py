@@ -51,19 +51,20 @@ class TokenClaims:
     sub: UUID
     kind: str  # "user" | "service"
     tenant_id: UUID | None  # set only for service accounts
+    iat: float = 0.0  # issue time (epoch s, fractional): compared with users_global.tokens_valid_after to honour revocations
 
 
 def issue_token(settings: Settings, *, sub: UUID, kind: str, tenant_id: UUID | None = None) -> str:
     if not settings.jwt_secret:
         raise RuntimeError("JWT_SECRET not configured")
-    now = int(time.time())
+    now = time.time()  # fractional: revocation (users_global.tokens_valid_after) is compared at sub-second precision
     claims = {
         "iss": settings.jwt_issuer,
         "aud": settings.jwt_audience,
         "sub": str(sub),
         "kind": kind,
         "iat": now,
-        "exp": now + settings.jwt_ttl_seconds,
+        "exp": int(now) + settings.jwt_ttl_seconds,
     }
     if tenant_id:
         claims["tid"] = str(tenant_id)
@@ -129,4 +130,4 @@ def decode_token(settings: Settings, token: str) -> TokenClaims:
     tid = UUID(data["tid"]) if data.get("tid") else None
     if kind == "service" and tid is None:
         raise ValueError("service token without tenant")
-    return TokenClaims(sub=UUID(data["sub"]), kind=kind, tenant_id=tid)
+    return TokenClaims(sub=UUID(data["sub"]), kind=kind, tenant_id=tid, iat=float(data["iat"]))

@@ -50,4 +50,4 @@
 
 ## Unreleased — Redefinição de MFA por administrador (PR 31)
 - `GET /v1/members` e `POST /v1/members/{id}/mfa/reset` (senha + segundo fator do administrador, guarda de conta multi-workspace, auditoria, sessões revogadas, fail closed). Tela Administração › Membros com abas, how-to com captura, E2E do fluxo completo. ADR-0017 (adendo).
-
+- Migration 0014 `users_global.tokens_valid_after`: revogação verificável de access tokens já emitidos (reset de MFA encerra sessões na hora); `iat` do JWT passa a ser fracionário.

@@ -97,6 +97,8 @@ def reset_member_mfa(
     conn.execute(text("SELECT 1 FROM user_mfa WHERE user_id = :u FOR UPDATE"), {"u": user_id})  # serialise with their own enrol/activate
     had = conn.execute(text("DELETE FROM user_mfa WHERE user_id = :u RETURNING enabled"), {"u": user_id}).first()
     conn.execute(text("DELETE FROM mfa_recovery_codes WHERE user_id = :u"), {"u": user_id})
+    # access tokens issued so far stop working NOW (the authenticator compares their iat with this instant)
+    conn.execute(text("UPDATE users_global SET tokens_valid_after = now() WHERE id = :u"), {"u": user_id})
     revoked = conn.execute(
         text("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = :u AND revoked_at IS NULL RETURNING 1"), {"u": user_id}
     ).rowcount
