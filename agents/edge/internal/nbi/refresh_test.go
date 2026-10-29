@@ -17,25 +17,27 @@ import (
 )
 
 type fakeACS struct {
-	mu         sync.Mutex
-	devices    string // JSON array returned by GET /devices
-	taskCode   int    // status of POST .../tasks
-	taskBody   string // when set, replaces the body of the POST response (e.g. to hide the id)
-	faultBody  bool   // answer 200 with a fault object
-	dropCreate bool   // the POST fails WITHOUT creating a task
-	hangup     bool   // the POST creates the task and then closes the connection (what the real ACS did)
-	listCode   int    // status of GET /tasks (0 = 200)
-	deleteCode int    // status of DELETE (0 = 200); a non-2xx deletes nothing
-	deleteNoop bool   // DELETE answers 200 but deletes nothing
-	methods    []string
-	taskPaths  []string
-	posted     []map[string]any
-	db         []map[string]any // tasks currently on the ACS
-	deleted    []string
-	query      string
-	seq        int
-	listCalls  int
-	now        func() time.Time
+	mu           sync.Mutex
+	devices      string // JSON array returned by GET /devices
+	taskCode     int    // status of POST .../tasks
+	taskBody     string // when set, replaces the body of the POST response (e.g. to hide the id)
+	faultBody    bool   // answer 200 with a fault object
+	dropCreate   bool   // the POST fails WITHOUT creating a task
+	hangup       bool   // the POST creates the task and then closes the connection (what the real ACS did)
+	listCode     int    // status of GET /tasks (0 = 200)
+	deleteCode   int    // status of DELETE (0 = 200); a non-2xx deletes nothing
+	deleteNoop   bool   // DELETE answers 200 but deletes nothing
+	omitFromList bool   // GET /tasks hides the tasks created by POST
+	wrongDevice  bool   // GET /tasks reports them under another device
+	methods      []string
+	taskPaths    []string
+	posted       []map[string]any
+	db           []map[string]any // tasks currently on the ACS
+	deleted      []string
+	query        string
+	seq          int
+	listCalls    int
+	now          func() time.Time
 }
 
 func (f *fakeACS) clock() time.Time {
@@ -59,7 +61,23 @@ func (f *fakeACS) handler() http.Handler {
 				w.WriteHeader(f.listCode)
 				return
 			}
-			b, _ := json.Marshal(f.db)
+			view := make([]map[string]any, 0, len(f.db))
+			for _, d := range f.db {
+				switch {
+				case f.omitFromList && strings.HasPrefix(d["_id"].(string), "task0000"):
+					continue
+				case f.wrongDevice && strings.HasPrefix(d["_id"].(string), "task0000"):
+					c := map[string]any{}
+					for k, v := range d {
+						c[k] = v
+					}
+					c["device"] = "ZZZZ00-OTHER-X"
+					view = append(view, c)
+				default:
+					view = append(view, d)
+				}
+			}
+			b, _ := json.Marshal(view)
 			_, _ = w.Write(b)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/tasks"):
 			var m map[string]any
@@ -448,19 +466,29 @@ func TestRefreshOwnershipTheACSIdIsTheProofAndLookAlikesAreNeverTouched(t *testi
 		return map[string]any{"_id": id, "name": "getParameterValues", "device": "AAAA00-ONT-SN1", "parameterNames": toAny(names),
 			"timestamp": time.Now().UTC().Format(time.RFC3339)}
 	}
-	// the ACS returned our id: only that one goes, an identical task made by someone else at the same moment stays
+	// the ACS returned our id but an identical task by someone else sits in the same window: nothing can be attributed, nothing is
+	// deleted from the look-alike, and the call fails closed
 	f := &fakeACS{devices: igd, taskCode: 202, db: []map[string]any{lookalike("operator0001")}}
 	rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-	if err != nil || rep.Cleaned != 5 {
+	if !errors.Is(err, ErrRefreshUncleaned) || rep.Uncleaned != 1 {
 		t.Fatalf("%+v %v", rep, err)
 	}
 	for _, id := range f.deleted {
 		if id == "operator0001" {
-			t.Fatal("deleted a look-alike task that was not ours although the ACS gave us our id")
+			t.Fatal("deleted a look-alike task that was not ours")
 		}
 	}
-	if len(f.db) != 1 || f.db[0]["_id"] != "operator0001" {
-		t.Fatalf("left: %v", f.db)
+	// the id the ACS returned must be visible in the device's list; absent or filed under another device => fail closed, no DELETE
+	for name, hide := range map[string]func(*fakeACS){
+		"omitted from the list": func(f *fakeACS) { f.omitFromList = true },
+		"other device field":    func(f *fakeACS) { f.wrongDevice = true },
+	} {
+		f = &fakeACS{devices: igd, taskCode: 202}
+		hide(f)
+		rep, err = newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
+		if !errors.Is(err, ErrRefreshUncleaned) || len(f.deleted) != 0 {
+			t.Fatalf("%s: %+v %v deleted=%v", name, rep, err, f.deleted)
+		}
 	}
 	// no id and TWO candidates: ownership cannot be shown => nothing deleted, fail closed
 	f = &fakeACS{devices: igd, taskCode: 202, taskBody: `{}`, db: []map[string]any{lookalike("operator0001")}}

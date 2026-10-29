@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a188df-7a68-75e0-a76a-f3427c3f288b).
+[codex] Turn started (01a188df-7dfd-7322-aecf-4e462c2e1719).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de reconciliação, exclusão e limite...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/nbi/re...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/nbi/re... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/nbi/refresh.go | sed -n '95,280p'; git status --sh...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/nbi/refresh.go | sed -n '95,280p'; git status --sh... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: cleanup can report success while an ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: cleanup can report success while an unfinished task still exists, and can miss duplicates after deleting the known ID.
+
+Findings:
+- [high] Cleanup does not prove absence when the task list omits or misattributes a task (agents/edge/internal/nbi/refresh.go:216-253)
+  With a usable ACS ID, the code deletes that ID without verifying the listed task belongs to `deviceID`; `deviceTasks` filters results by the returned `device` field, and the post-delete check searches only that filtered result. If the ACS omits the task from a device-scoped list, returns stale/incomplete results, or reports a mismatched device field, cleanup returns nil and `RefreshParams` treats the request as reconciled even though the task may remain queued and fire later. The stated invariant is that cleanup must prove the unfinished task is gone; this view cannot establish that when the target is absent before deletion or the list is inconsistent.
+  Recommendation: Require the initial complete task listing to contain the known ID with matching device ownership before deleting, and make absence or conflicting ownership fail closed. Ensure the post-delete verification uses an ACS response contract that proves the queried device's task set is complete.
+- [medium] Known-ID cleanup ignores other matching candidates and can leave duplicate tasks behind (agents/edge/internal/nbi/refresh.go:221-254)
+  When the POST returns a valid ID, `cleanupTasks` deletes only that ID and verifies only that ID disappeared. If a lost/duplicated POST or concurrent ACS retry created another task with the same posted names in the same call window, the second task remains, but the function returns success. This matters for the ambiguous POST case the reconciliation path handles: the ID identifies the returned task, but does not prove it is the only task this call caused. The job then fails without `ErrRefreshUncleaned`/hold while another queued task may still trigger a CPE connection.
+  Recommendation: For ambiguous outcomes, reconcile the full candidate set even when a known ID exists: delete only the proven ID, but fail closed if another same-window candidate remains or ownership cannot be established; preserve the rule never to delete a look-alike solely by similarity.

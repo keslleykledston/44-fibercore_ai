@@ -207,7 +207,8 @@ func (e *rejectedError) Error() string {
 }
 
 // cleanupTasks removes the task(s) THIS call created on deviceID and proves nothing of ours is left. Ownership rules, strictest first:
-//   - the ACS returned a well-formed task id: only that id is deleted (the id is the proof; other look-alike tasks are never touched);
+//   - the ACS returned a well-formed task id: only that id is deleted, and only if the device's task list shows it; a look-alike next to it
+//     (same shape, same window) cannot be attributed, so the call fails closed without touching either;
 //   - no usable id: a task is ours only if it is the ONLY one on the device with getParameterValues + exactly the posted names + a stamp not
 //     older than the call (small skew). Two or more candidates cannot be attributed, so the call fails closed (the caller holds the device).
 //
@@ -218,17 +219,30 @@ func (c *Client) cleanupTasks(ctx context.Context, deviceID string, names []stri
 	if err != nil {
 		return err
 	}
+	var cand []string
+	for _, d := range docs {
+		if looksLikeOurs(d, names, since) {
+			cand = append(cand, d.ID)
+		}
+	}
 	var target string
-	switch {
-	case knownID != "":
-		target = knownID
-	default:
-		var cand []string
+	if knownID != "" {
+		// The id is the proof of WHICH task is ours, but the listing must show it (with this device) before anything is deleted, and no other
+		// same-shape task from the same window may exist: a duplicate cannot be attributed, so we fail closed instead of guessing.
+		found := false
 		for _, d := range docs {
-			if looksLikeOurs(d, names, since) {
-				cand = append(cand, d.ID)
+			found = found || d.ID == knownID
+		}
+		if !found {
+			return errors.New("nbi: the task the ACS returned is not in the device's task list")
+		}
+		for _, id := range cand {
+			if id != knownID {
+				return errors.New("nbi: another look-alike task exists next to ours, cannot attribute")
 			}
 		}
+		target = knownID
+	} else {
 		if len(cand) > 1 {
 			return errors.New("nbi: several look-alike tasks, cannot attribute ours")
 		}
@@ -247,7 +261,7 @@ func (c *Client) cleanupTasks(ctx context.Context, deviceID string, names []stri
 		return err
 	}
 	for _, d := range after {
-		if d.ID == target {
+		if d.ID == target || looksLikeOurs(d, names, since) {
 			return errors.New("nbi: task still present after delete")
 		}
 	}
