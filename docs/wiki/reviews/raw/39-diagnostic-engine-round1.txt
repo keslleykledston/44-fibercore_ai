@@ -1,0 +1,22 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18638-167d-7101-9f7e-6d2f2a6e0ad0).
+[codex] Turn started (01a18638-24cb-70b0-9f08-8dad8e9648b2).
+[codex] Assistant message captured: Vou comparar o branch com `main` e seguir os fluxos de regra, persistência, autorização e mig...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/diagnosti...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/diagnosti... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/tests/test_invento...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/tests/test_invento... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=3 main...HEAD -- apps/api/app/core/diagnostic...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=3 main...HEAD -- apps/api/app/core/diagnostic... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"observed_at|future|snapshot\" apps/api/app/api/inventory.py apps/api/a...
+[codex] Command completed: /bin/bash -lc "rg -n \"observed_at|future|snapshot\" apps/api/app/api/inventory.py apps/api/a... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"Não encontrei risco material sustentado pelo diff: R-D001 pre...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+Não encontrei risco material sustentado pelo diff: R-D001 preserva a decisão e o arredondamento do correlator, e os fluxos de execução usam escopo por tenant, flag e permissões explícitas.
+
+No material findings.

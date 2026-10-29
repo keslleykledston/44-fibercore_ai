@@ -21,5 +21,6 @@
 | final/15-handoff | em curso | — | honestidade da documentação (este arquivo e TEST_EVIDENCE) |
 | feat/37-onu-cpe-links-customer-context (PR 37, FC22-004) | 5 | approve | (saídas brutas em `raw/37-*-round1..5.txt`) CHECK de evidência no banco (+ bug de NULL no CHECK), RLS provada por relação, ambiguidade com a mesma normalização do match, contexto limitado a 50 ONUs, N+1 em lote, contagem real de sugestões; contestado/documentado: flags independentes por desenho |
 | feat/38-subscriber-360 (PR 38, FC22-005) | 3 | approve | (brutos em `raw/38-*`) lista de clientes sem busca/paginação (API ganhou `offset`/`q` com curingas literais; auditoria sem o texto); dependência de flags (UI exige `subscriber_360` e `customer_context`) |
+| feat/39-diagnostic-rule-engine (PR 39, FC22-006) | 1 | approve | (bruto em `raw/39-*`) sem achados; a extração é coberta por teste de propriedade (2000 casos) e pelos 29 testes do NOC sem alteração |
 
 Riscos aceitos e documentados (não corrigidos): DoS direcionado por lockout de conta (KNOWN_ISSUES); postcss embutido no Next (build-time).
