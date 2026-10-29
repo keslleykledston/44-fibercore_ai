@@ -441,3 +441,56 @@ func TestRefreshGuardFailsClosed(t *testing.T) {
 }
 
 func itoa(n int64) string { b, _ := json.Marshal(n); return string(b) }
+
+func TestRefreshOwnershipTheACSIdIsTheProofAndLookAlikesAreNeverTouched(t *testing.T) {
+	names := refreshGroups["InternetGatewayDevice"][0]
+	lookalike := func(id string) map[string]any {
+		return map[string]any{"_id": id, "name": "getParameterValues", "device": "AAAA00-ONT-SN1", "parameterNames": toAny(names),
+			"timestamp": time.Now().UTC().Format(time.RFC3339)}
+	}
+	// the ACS returned our id: only that one goes, an identical task made by someone else at the same moment stays
+	f := &fakeACS{devices: igd, taskCode: 202, db: []map[string]any{lookalike("operator0001")}}
+	rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
+	if err != nil || rep.Cleaned != 5 {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	for _, id := range f.deleted {
+		if id == "operator0001" {
+			t.Fatal("deleted a look-alike task that was not ours although the ACS gave us our id")
+		}
+	}
+	if len(f.db) != 1 || f.db[0]["_id"] != "operator0001" {
+		t.Fatalf("left: %v", f.db)
+	}
+	// no id and TWO candidates: ownership cannot be shown => nothing deleted, fail closed
+	f = &fakeACS{devices: igd, taskCode: 202, taskBody: `{}`, db: []map[string]any{lookalike("operator0001")}}
+	rep, err = newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
+	if !errors.Is(err, ErrRefreshUncleaned) || len(f.deleted) != 0 || rep.Uncleaned != 1 {
+		t.Fatalf("%+v %v deleted=%v", rep, err, f.deleted)
+	}
+}
+
+func TestRefreshCleanupRefusesAPartialView(t *testing.T) {
+	huge := make([]map[string]any, 0, 60000)
+	for i := 0; i < 60000; i++ {
+		huge = append(huge, map[string]any{"_id": fmt.Sprintf("other%08d", i), "name": "getParameterValues", "device": "AAAA00-ONT-SN1",
+			"parameterNames": []string{"Device.DeviceInfo.UpTime"}, "timestamp": "2026-01-01T00:00:00Z"})
+	}
+	f := &fakeACS{devices: igd, taskCode: 202, db: huge}
+	rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
+	if !errors.Is(err, ErrRefreshUncleaned) || rep.Uncleaned != 1 || len(f.deleted) != 0 {
+		t.Fatalf("a list too large to read in full must not be treated as clean: %+v %v", rep, err)
+	}
+	// an ACS that ignores the device query and returns everything: other devices' tasks are filtered out, never deleted
+	other := map[string]any{"_id": "otherdev0001", "name": "getParameterValues", "device": "BBBB00-ONT-SN2",
+		"parameterNames": toAny(refreshGroups["InternetGatewayDevice"][0]), "timestamp": time.Now().UTC().Format(time.RFC3339)}
+	f = &fakeACS{devices: igd, taskCode: 202, taskBody: `{}`, db: []map[string]any{other}}
+	if _, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1"); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range f.deleted {
+		if id == "otherdev0001" {
+			t.Fatal("deleted another device's task")
+		}
+	}
+}

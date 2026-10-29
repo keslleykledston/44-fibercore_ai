@@ -206,74 +206,97 @@ func (e *rejectedError) Error() string {
 	return fmt.Sprintf("nbi: task rejected with status %d", e.status)
 }
 
-// cleanupTasks removes every task on deviceID that THIS call can have created: getParameterValues with exactly the posted names, stamped no
-// earlier than the call (minus a clock-skew margin), plus the id the ACS returned if it is well formed. It then lists again: the call is clean
-// only if nothing matching remains. Any failure to list or delete is an error (the caller holds the device).
+// cleanupTasks removes the task(s) THIS call created on deviceID and proves nothing of ours is left. Ownership rules, strictest first:
+//   - the ACS returned a well-formed task id: only that id is deleted (the id is the proof; other look-alike tasks are never touched);
+//   - no usable id: a task is ours only if it is the ONLY one on the device with getParameterValues + exactly the posted names + a stamp not
+//     older than the call (small skew). Two or more candidates cannot be attributed, so the call fails closed (the caller holds the device).
+//
+// Residual risk (accepted, ADR-SD-002): with no id and exactly one look-alike created within the skew window by someone else, that one
+// read-only task of the same allowlisted leaves would be removed.
 func (c *Client) cleanupTasks(ctx context.Context, deviceID string, names []string, since time.Time, knownID string) error {
-	ids, err := c.matchingTasks(ctx, deviceID, names, since)
+	docs, err := c.deviceTasks(ctx, deviceID)
 	if err != nil {
 		return err
 	}
-	if knownID != "" {
-		seen := false
-		for _, id := range ids {
-			seen = seen || id == knownID
+	var target string
+	switch {
+	case knownID != "":
+		target = knownID
+	default:
+		var cand []string
+		for _, d := range docs {
+			if looksLikeOurs(d, names, since) {
+				cand = append(cand, d.ID)
+			}
 		}
-		if !seen {
-			ids = append(ids, knownID)
+		if len(cand) > 1 {
+			return errors.New("nbi: several look-alike tasks, cannot attribute ours")
+		}
+		if len(cand) == 1 {
+			target = cand[0]
 		}
 	}
-	for _, id := range ids {
-		if err := c.deleteTask(ctx, id); err != nil {
-			return err
-		}
+	if target == "" {
+		return nil // nothing of ours exists on the ACS (the request never created a task)
 	}
-	left, err := c.matchingTasks(ctx, deviceID, names, since)
+	if err := c.deleteTask(ctx, target); err != nil {
+		return err
+	}
+	after, err := c.deviceTasks(ctx, deviceID)
 	if err != nil {
 		return err
 	}
-	if len(left) > 0 {
-		return errors.New("nbi: task still present after delete")
+	for _, d := range after {
+		if d.ID == target {
+			return errors.New("nbi: task still present after delete")
+		}
 	}
 	return nil
 }
 
-const taskClockSkew = time.Minute
+const (
+	taskClockSkew   = 5 * time.Second
+	maxTaskListBody = 4 << 20
+)
 
-func (c *Client) matchingTasks(ctx context.Context, deviceID string, names []string, since time.Time) ([]string, error) {
+type taskDoc struct {
+	ID        string   `json:"_id"`
+	Name      string   `json:"name"`
+	Device    string   `json:"device"`
+	Names     []string `json:"parameterNames"`
+	Timestamp string   `json:"timestamp"`
+}
+
+func looksLikeOurs(d taskDoc, names []string, since time.Time) bool {
+	ts, err := time.Parse(time.RFC3339, d.Timestamp)
+	return err == nil && d.Name == "getParameterValues" && sameNames(d.Names, names) && !ts.Before(since.Add(-taskClockSkew))
+}
+
+// deviceTasks lists the tasks of ONE device (query sent to the ACS and re-checked here). A list too large to read in full is an error:
+// cleanup is never declared on a partial view.
+func (c *Client) deviceTasks(ctx context.Context, deviceID string) ([]taskDoc, error) {
 	q, _ := json.Marshal(map[string]string{"device": deviceID})
 	u := *c.base
 	u.Path = strings.TrimRight(u.Path, "/") + "/tasks"
 	u.RawQuery = url.Values{"query": {string(q)}}.Encode()
-	body, st, err := c.do(ctx, http.MethodGet, u.String(), nil)
+	body, st, err := c.doLimit(ctx, http.MethodGet, u.String(), nil, maxTaskListBody)
 	if err != nil {
 		return nil, err
 	}
 	if st != http.StatusOK {
 		return nil, fmt.Errorf("nbi: list tasks status %d", st)
 	}
-	var docs []struct {
-		ID        string   `json:"_id"`
-		Name      string   `json:"name"`
-		Device    string   `json:"device"`
-		Names     []string `json:"parameterNames"`
-		Timestamp string   `json:"timestamp"`
-	}
+	var docs []taskDoc
 	if err := json.Unmarshal(body, &docs); err != nil {
 		return nil, fmt.Errorf("nbi: decode tasks: %w", err)
 	}
-	var ids []string
+	out := docs[:0]
 	for _, d := range docs {
-		ts, terr := time.Parse(time.RFC3339, d.Timestamp)
-		if d.Device != deviceID || d.Name != "getParameterValues" || !taskIDRe.MatchString(d.ID) || !sameNames(d.Names, names) {
-			continue
+		if d.Device == deviceID && taskIDRe.MatchString(d.ID) {
+			out = append(out, d)
 		}
-		if terr != nil || ts.Before(since.Add(-taskClockSkew)) {
-			continue // not made by this call (older, or undated)
-		}
-		ids = append(ids, d.ID)
 	}
-	return ids, nil
+	return out, nil
 }
 
 func sameNames(a, b []string) bool {
@@ -309,6 +332,10 @@ func (c *Client) deleteTask(ctx context.Context, taskID string) error {
 
 // do is the single request path of the refresh feature: the method is one of three literals chosen by the callers above.
 func (c *Client) do(ctx context.Context, method, rawURL string, body []byte) ([]byte, int, error) {
+	return c.doLimit(ctx, method, rawURL, body, maxTaskBody)
+}
+
+func (c *Client) doLimit(ctx context.Context, method, rawURL string, body []byte, limit int64) ([]byte, int, error) {
 	var rd io.Reader
 	if body != nil {
 		rd = bytes.NewReader(body)
@@ -328,12 +355,12 @@ func (c *Client) do(ctx context.Context, method, rawURL string, body []byte) ([]
 		return nil, 0, err
 	}
 	defer resp.Body.Close()
-	b, err := io.ReadAll(io.LimitReader(resp.Body, maxTaskBody+1))
+	b, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return nil, resp.StatusCode, err
 	}
-	if len(b) > maxTaskBody {
-		return nil, resp.StatusCode, fmt.Errorf("nbi: response exceeds %d bytes", maxTaskBody)
+	if int64(len(b)) > limit {
+		return nil, resp.StatusCode, fmt.Errorf("nbi: response exceeds %d bytes", limit)
 	}
 	return b, resp.StatusCode, nil
 }
