@@ -27,6 +27,14 @@ articles:
   - assets/rede/onu-360/mobile.png
   e2e_test: help-screenshots.spec.ts › rede/onu-360; app.spec.ts › ONU 360
   last_verified: '2026-10-29'
+- slug: assinantes/visao-360
+  ui_route: /assinantes/[id]
+  status: published
+  images:
+  - assets/assinantes/visao-360/desktop.png
+  - assets/assinantes/visao-360/mobile.png
+  e2e_test: help-screenshots.spec.ts › assinantes/visao-360; app.spec.ts › Visão 360 do assinante
+  last_verified: '2026-10-29'
 - slug: noc/acompanhar-incidente
   ui_route: /noc
   status: published

@@ -22,3 +22,10 @@ Adotado da proposta, adaptado aos tokens já validados por axe (os valores de `m
 - `Kpi` sem caixa-alta, números tabulares.
 - `AppShell`: ícones, item ativo em `accent-soft`, barra superior fixa, menu mobile em gaveta (`MobileMenu`), alternância manual de tema claro/escuro persistida em `localStorage` (convenience; sem ela vale `prefers-color-scheme`).
 - Não adotado ainda: ONU 360, Login multi-passo, `EntityDetailDrawer`, grade virtualizada (dependem de API/telas novas — W8).
+
+## Visão 360 do assinante (2026-10-29, FC22-005)
+- **Um** pedido em lote (`UX_HANDOFF_SUBSCRIBER_360.md`, dados sintéticos, sem segredos) ao projeto acima; commit `1ad87e8a8d69…`. A chamada MCP estourou o timeout ocioso (300 s) mas o agente concluiu; o resultado foi lido por `read_file`. Nada do código foi importado.
+- **Adotado:** "Cobertura das informações" com estado em texto + ícone e a frase do porquê; rótulo "Último estado conhecido" + "a idade do dado não indica ONU offline"; aba Conexão agrupando conexão + roteador + incidente; abas Óptica/Roteador só com dado; "Não é diagnóstico" no incidente; mensagens de erro/403 que não afirmam nada.
+- **Não adotado:** skeleton de carregamento via `loading.tsx` (faz o Next responder 200 para `notFound`); seletor de estado de demonstração; abas por JS (as nossas são links de servidor, funcionam sem hidratação); botões Confirmar/Rejeitar na tela do cliente (a revisão fica na ONU 360).
+- **Não verificado por nós no Lovable:** tema escuro e demais estados da página de demonstração.
+

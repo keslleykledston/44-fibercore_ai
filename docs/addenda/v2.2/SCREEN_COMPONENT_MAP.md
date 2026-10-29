@@ -13,7 +13,7 @@ Navegação (≤6 grupos): **já são 6** (Visão Geral, Rede, Assinantes, NOC, 
 | SourceChip | falta | FC22-003/005 (fonte + `observed_at` + `quality`) |
 | CapabilityGate | falta | **PR 35**: bloco de capacidades no card Ações da ONU 360 |
 | ConnectionSummary / OpticalSummary / ClientSummary | parcial | cards Estado/Localização/Assinante da ONU 360 |
-| EvidenceTimeline | falta | FC22-005/007 |
+| EvidenceTimeline | falta | FC22-007 (Histórico do assinante sem fonte homologada) |
 | DiagnosticStepper | falta | FC22-007 |
 | IncidentQueue | parcial | lista em `/noc` (sem componente próprio) |
 | TopologyTree | falta | FC22-010 |

@@ -27,3 +27,15 @@ export type OnuCustomer = { association: "approved" | "suggested" | "none"; pend
 export type Member = { user_id: string; email: string; display_name: string; role: string; mfa_enabled: boolean; is_self: boolean };
 export type MemberList = { can_reset_mfa: boolean; members: Member[] };
 export type Capability = { name: string; protocol: string; status: "supported" | "unsupported" | "unknown"; certification: "identified" | "observed" | "certified"; vendor: string | null; model: string | null; firmware: string | null; writes: boolean; blocked_reason: string | null; verified_at: string | null; evidence_ref: string | null };
+export type CustomerOnu = {
+  id: string; serial: string; status: string; rx_dbm: number | null; olt: string; pon_path: string | null; provenance: Provenance;
+  incident: { suspected_cause: string } | null; incident_hidden: boolean; cpe: CpeBlock;
+};
+export type CustomerContext = {
+  customer_id: string; status: "complete" | "partial" | "stale" | "unknown"; onus_truncated: boolean;
+  customer: { display_name: string; document_last4: string | null; contract_status: string; provenance: Provenance };
+  onus: CustomerOnu[];
+};
+export type CustomerRow = { id: string; display_name: string; document_last4: string | null; contract_status: string };
+export type TenantFeature = { feature: string; enabled: boolean; source: string };
+

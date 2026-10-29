@@ -74,3 +74,9 @@
 - ONU 360: bloco `cpe` + card "Roteador (CPE)" com confirmar/rejeitar (BFF `/bff/onu-cpe-links`). Seed demo liga as flags no tenant demo. Flags continuam **desligadas por padrão** em produção.
 - **Suposição a aprovar:** TTL do dado de ERP = 7 dias (`ERP_FRESH_FOR`); acima disso o contexto vira `stale`.
 - **Não feito (declarado):** busca por cliente/contrato na UI (FC22-005), regras de vínculo além de `serial_equal`, desfazer um vínculo confirmado.
+
+## Unreleased — Visão 360 do assinante (PR 38, FC22-005)
+- `/assinantes/[id]` (Next, servidor): estado geral explicado (Completo/Parcial/Defasado/Desconhecido), seletor de ONU, abas por query (`?aba=`) só com dado — Conexão (conexão + roteador + incidente), Óptica, Roteador (CPE), Cliente, Ações (sempre bloqueadas). Lista "Clientes · visão 360" em Assinantes. Tudo atrás da flag `subscriber_360` (desligada por padrão; fora dela a rota é 404). Consome `GET /v1/customers/{id}/context` (sem API nova).
+- Referência visual do Lovable (um lote); how-to `assinantes/visao-360` + capturas reais 1440×900/390×844; seed demo liga a flag.
+- **Não feito (declarado):** busca por cliente/contrato no ⌘K, Wi-Fi e Histórico (sem fonte homologada), caminho "flag desligada" não coberto por E2E (só 404 por construção + flags testadas no backend).
+

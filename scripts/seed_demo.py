@@ -35,6 +35,7 @@ def main() -> None:
     cli("add-member", tenant, AGENT_EMAIL, "engineer")
     cli("feature-set", tenant, "onu_cpe_links", "on")  # FC22-004 (ADR-0021/0023): off by default in production, on for the demo tenant
     cli("feature-set", tenant, "customer_context", "on")
+    cli("feature-set", tenant, "subscriber_360", "on")  # FC22-005
     edge = cli("register-edge", tenant, "edge-demo", "--site", "POP Central (demo)")
     sa = subprocess.run([*COMPOSE, "run", "--rm", "-T", "--no-deps", "migrate", "python", "-m", "app.cli",
                          "create-service-account", tenant, "edge-demo-agent", "edge_agent", "--edge-id", edge],

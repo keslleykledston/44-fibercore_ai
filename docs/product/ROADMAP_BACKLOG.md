@@ -96,7 +96,7 @@ Fonte: `docs/addenda/v2.2/` (pacote intacto). Análise: `docs/addenda/v2.2/GAP_A
 | FC22-002 | P0 | [~] **fatia mínima implementada (PR 35)**: tabela `device_capabilities` (RLS, leitura-only p/ a app), `GET /cpes/{cpeId}/capabilities` e `/olts/{oltId}/capabilities`, CLI `capability-set` com evidência, bloco na ONU 360. **Faltam**: cobertura TR-369/Wi-Fi, gate por perfil nos jobs, Edge alimentando o registro | S0/S1 | 001 |
 | FC22-003 | P0 | [~] envelope `provenance{source,observed_at,quality}` na ONU 360 (PR 36); falta nas demais respostas/telas | S1 | 001 |
 | FC22-004 | P0 | [x] PR 37: `/v1/customers/{id}/context` + vínculo ONU↔CPE por evidência com confirmação humana (flags `onu_cpe_links`/`customer_context`, desligadas por padrão); falta: regras de vínculo além de serial igual | S1 | 002, 003 |
-| FC22-005 | P0 | [ ] parcial: ONU 360 publicada (`rede/onu-360`); falta entrada por cliente/abas | S1 | 004 |
+| FC22-005 | P0 | [x] PR 38: `/assinantes/[id]` (entrada por cliente, abas Conexão/Óptica/Roteador/Cliente/Ações só com dado, flag `subscriber_360`); falta: busca por cliente/contrato no ⌘K, Wi-Fi e Histórico (sem fonte homologada) | S1 | 004 |
 | FC22-006 | P0 | [ ] parcial: regra `pon_mass_outage` fixa; falta registro versionado/runs | S2 | 002–004 |
 | FC22-007 | P0 | [ ] falta | S2 | 006 |
 | FC22-008 | P0 | [x] existe (ADR-0018, `edge_silent`); validar contra AC-004/009 | S2 | — |

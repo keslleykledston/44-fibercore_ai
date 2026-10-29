@@ -1,7 +1,9 @@
 import { AppShell } from "@/components/AppShell";
 import { EmptyState, ErrorState, PageHeader } from "@/components/ui";
+import Link from "next/link";
 import { apiSafe } from "@/lib/api";
-import type { Association } from "@/lib/types";
+import { featureOn } from "@/lib/features";
+import type { Association, CustomerRow } from "@/lib/types";
 
 const n = (v: string | undefined) => (v && /^\d{1,5}$/.test(v) ? v : "0");
 
@@ -12,6 +14,8 @@ export default async function Assinantes({ searchParams }: { searchParams: Promi
   // pede 1 item a mais para saber se há próxima página (nenhum vínculo fica inacessível)
   const r = await apiSafe<Association[]>(`/v1/associations?status=suggested&limit=${PAGE + 1}&offset=${(page - 1) * PAGE}`);
   if (r.status === 403) return <AppShell active="/assinantes" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver assinantes." /></AppShell>;
+  const sub360 = await featureOn("subscriber_360");
+  const customers = sub360 ? await apiSafe<CustomerRow[]>("/v1/customers?limit=50") : null;
   const hasMore = (r.data ?? []).length > PAGE;
   const list = (r.data ?? []).slice(0, PAGE);
   return (
@@ -21,6 +25,7 @@ export default async function Assinantes({ searchParams }: { searchParams: Promi
       {(q.ok === "approve" || q.ok === "reject") && <p role="status" className="panel mb-4 p-4 text-sm">Vínculo {q.ok === "approve" ? "aprovado" : "rejeitado"}.</p>}
       {q.erro && <p role="alert" className="panel mb-4 border-danger p-4 text-sm text-danger">Não foi possível concluir a operação ({q.erro === "409" ? "o vínculo já foi revisado, é ambíguo ou a ONU já tem vínculo aprovado" : q.erro === "403" ? "sem permissão" : "erro " + q.erro.slice(0, 8)}).</p>}
       <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+        <div className="grid content-start gap-6">
         <section aria-label="Importar CSV">
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Importar CSV</h2>
           <form action="/bff/erp/import" method="post" encType="multipart/form-data" className="panel grid gap-3 p-4" data-testid="import-form">
@@ -34,6 +39,17 @@ export default async function Assinantes({ searchParams }: { searchParams: Promi
             <button type="submit" className="min-h-touch rounded-btn bg-accent px-4 font-medium text-[color:var(--on-accent)]">Importar</button>
           </form>
         </section>
+        {customers && (
+          <section aria-label="Clientes" data-testid="customer-list">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Clientes · visão 360</h2>
+            {customers.data === null ? <ErrorState title="Falha ao carregar clientes" /> : customers.data.length === 0 ? <EmptyState title="Nenhum cliente importado" /> : (
+              <ul className="panel divide-y divide-line">
+                {customers.data.map((c) => <li key={c.id}><Link href={`/assinantes/${c.id}`} className="flex min-h-touch items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-accent-soft"><span>{c.display_name}</span><span className="text-xs text-accent">Ver 360 →</span></Link></li>)}
+              </ul>
+            )}
+          </section>
+        )}
+        </div>
         <section aria-label="Vínculos sugeridos" className="min-w-0">
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Vínculos sugeridos</h2>
           {r.data === null ? <ErrorState title="Falha ao carregar vínculos" /> : list.length === 0 ? <EmptyState title="Nenhum vínculo para revisar" hint="Importe um CSV com a coluna onu_serial." /> : (

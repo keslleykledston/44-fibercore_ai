@@ -126,6 +126,38 @@ test("ONU↔CPE: serial igual só gera SUGESTÃO; vale depois da confirmação h
   expect(res.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
 });
 
+test("Visão 360 do assinante: estado explicado, fonte por bloco, abas só com dado e escrita bloqueada", async ({ page, request }) => {
+  const tok = (await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json()).access_token as string;
+  const h = { Authorization: `Bearer ${tok}` };
+  const assoc = (await (await request.get(`${API_URL}/v1/associations?status=suggested&limit=200`, { headers: h })).json()) as { id: string; customer_name: string }[];
+  const a = assoc.find((x) => x.customer_name === "Cliente Demo Três");
+  if (a) expect((await request.post(`${API_URL}/v1/associations/${a.id}/approve`, { headers: h })).status()).toBe(200);
+  await login(page);
+  await page.goto("/assinantes");
+  await page.getByTestId("customer-list").getByRole("link", { name: /Cliente Demo Três/ }).click();
+  await expect(page).toHaveURL(/\/assinantes\/[0-9a-f-]{36}$/);
+  await expect(page.getByRole("heading", { name: "Cliente Demo Três" })).toBeVisible();
+  const overall = page.getByTestId("sub-overall");
+  await expect(overall).toContainText(/Completo|Parcial|Defasado|Desconhecido/);
+  await expect(overall).toContainText("Contrato suspenso");
+  await expect(overall.getByTestId("source-chip")).toContainText("ERP (csv-demo)");
+  await expect(page.getByTestId("sub-conexao")).toContainText("OLT-DEMO-02");
+  await expect(page.getByTestId("sub-conexao").getByTestId("source-chip")).toContainText("Leitura da OLT pelo Edge");
+  await page.getByTestId("tab-optica").click();
+  await expect(page.getByTestId("sub-optica")).toContainText("-19.25 dBm");
+  await page.getByTestId("tab-cpe").click();
+  await expect(page.getByTestId("sub-cpe")).toContainText("Nenhum roteador vinculado");
+  await page.getByTestId("tab-acoes").click();
+  await expect(page.getByTestId("sub-acoes")).toContainText("Nenhuma ação de escrita está liberada");
+  await expect(page.getByTestId("tab-wifi")).toHaveCount(0);  // sem fonte homologada: a aba não existe
+  await expect(page.getByText("Wi-Fi e Histórico ainda não têm fonte homologada")).toBeVisible();
+  const res = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+  expect(res.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
+  expect((await page.goto("/assinantes/00000000-0000-0000-0000-000000000000"))?.status()).toBe(404);
+  expect((await page.goto("/assinantes/nao-e-uuid"))?.status()).toBe(404);
+});
+
+
 for (const scheme of ["light", "dark"] as const) {
   test(`acessibilidade (axe) sem violações sérias - tema ${scheme}`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });

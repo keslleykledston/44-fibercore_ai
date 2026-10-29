@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
+import { Card, Row } from "@/components/Panel";
 import { SourceChip } from "@/components/SourceChip";
 import { DataFreshness, ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
@@ -11,13 +12,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const cause: Record<string, string> = { fiber_or_los: "Suspeita: perda de sinal / fibra", power: "Suspeita: falta de energia", unknown: "Causa não determinada" };
 const contract: Record<string, string> = { active: "Contrato ativo", suspended: "Contrato suspenso", cancelled: "Contrato cancelado", unknown: "Contrato não informado" };
 const when = (iso: string | null) => (iso ? <span data-testid="volatile">{new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span> : "—");
-
-function Card({ title, children, testid }: { title: string; children: React.ReactNode; testid: string }) {
-  return <section aria-label={title} data-testid={testid} className="panel p-4"><h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">{title}</h2>{children}</section>;
-}
-function Row({ k, children }: { k: string; children: React.ReactNode }) {
-  return <div className="flex flex-wrap items-baseline justify-between gap-2 py-1 text-sm"><dt className="text-muted">{k}</dt><dd className="text-right">{children}</dd></div>;
-}
 
 const cpeErr: Record<string, string> = { "403": "Seu papel não permite revisar vínculos.", "409": "Este vínculo mudou ou é ambíguo; recarregue e confira o inventário." };
 
