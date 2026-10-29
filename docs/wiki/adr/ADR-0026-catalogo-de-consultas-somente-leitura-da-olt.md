@@ -1,0 +1,17 @@
+# ADR-0026: Catálogo de consultas somente leitura da OLT (Edge)
+
+Status: Proposed (aguarda Codex gate) | Data: 2026-10-29 | Owner: equipe | Origem: pedido do responsável ("o runbook é apenas uma referência para desenvolver as tools de consulta da OLT"), FC22-014
+
+## Contexto
+O runbook operacional da MA5608T (R015C00) lista dezenas de comandos `display` para triagem. O Edge só envia o que a allowlist do driver permite e hoje essa lista tem 4 comandos de dados (`display version`, `display board 0`, `display ont info <p> all`, `display ont optical-info <p> all`) mais as palavras de modo. O runbook (seção 19) avisa que a sintaxe dos demais comandos varia por patch e **não foi executada** nesta release.
+
+## Decisão
+1. **Catálogo tipado, nunca comando livre.** `agents/edge/internal/olt/query.go`: cada consulta tem ID estável, escopo (global, slot, PON, ONU) e um modelo `display …`. O chamador entrega apenas **inteiros limitados** (slot 0–17, porta 0–15, ONT-ID 0–127; parâmetro não usado pelo escopo tem de ser zero). O Edge renderiza a linha; ela ainda precisa casar com um padrão estrito (`display` + palavras + números, sem separadores, aspas, pipes ou segunda linha) e não pode conter verbo de escrita/saída.
+2. **Validado × não validado.** Só `Validated=true` (comando já executado na OLT real, com fixture sanitizada) é aceito por padrão. As demais ficam **recusadas** até o operador habilitar aquele ID exato localmente (`QueryPolicy.Enabled`) para uma captura supervisionada. Promoção a `Validated`: captura real → sanitização → fixture + parser + teste → mudar o flag no mesmo PR, com Codex.
+3. **Execução** (`HuaweiR015.RunQuery`): só em MA56xx R015; `enable`, `config`, `interface gpon 0/<slot>` quando o escopo pede, o comando, `quit` (sempre tentado ao sair de uma interface, mesmo com erro). Rejeição do equipamento, paginação (`More`) e saída acima de 256 KiB falham fechado (a saída grande é cortada e marcada).
+4. **A saída não sai do Edge crua.** Texto de equipamento pode conter strings escolhidas pelo cliente (descrição de ONT). Uma consulta só deve alimentar a nuvem depois de existir parser para ela; o resultado cru é para captura local supervisionada.
+5. **Ritmo.** Esta decisão **não** cria canal de execução: ligar a consulta a um job exige respeitar o guard por equipamento (uma por vez, intervalo mínimo, cooldown, reserva persistida — PR 43) e um orçamento próprio para consultas sob demanda; isso é o próximo PR e precisa de ADR (params no envelope assinado, canal de resultado, `ReadOnlyOps`).
+6. **Escrita/"comandos".** Fora do catálogo. `HOMOLOGATED_WRITES` continua vazio; qualquer mudança (profiles, VLANs, reinício, ativação) exige homologação por modelo/firmware e autorização operacional separada.
+
+## Consequências
+O PR é inerte: nada chama `RunQuery`, não há endpoint, job, migração ou configuração. O comportamento do coletor periódico não muda (a allowlist só ganha formas já validadas). Risco residual: um comando `display` pode ser pesado na OLT; por isso o ritmo (item 5) é pré-requisito para qualquer uso real, e o runbook de captura supervisionada fica em `docs/operations/OLT_QUERY_CATALOG.md`.

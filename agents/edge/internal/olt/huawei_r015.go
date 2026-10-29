@@ -33,10 +33,13 @@ func isR015(id Identity) bool { return isMA56(id) && strings.HasPrefix(id.Firmwa
 
 // HuaweiR015 is selected by the OLT config (profile "huawei_ma56_r015"). Its allowlist includes the CLI mode commands
 // (enable, config, interface gpon F/S, quit) that the generic Huawei driver must never be able to send.
-type HuaweiR015 struct{ Huawei }
+type HuaweiR015 struct {
+	Huawei
+	Queries QueryPolicy // catalog queries beyond the validated ones; zero value enables nothing
+}
 
-func (HuaweiR015) Allowed(cmd string) bool {
-	return HuaweiAllowed(cmd) || hwR015Allowed.MatchString(cmd)
+func (h HuaweiR015) Allowed(cmd string) bool {
+	return HuaweiAllowed(cmd) || hwR015Allowed.MatchString(cmd) || h.Queries.allows(cmd)
 }
 
 func (h HuaweiR015) Snapshot(ctx context.Context, s Session, ports []string) (Snapshot, error) {

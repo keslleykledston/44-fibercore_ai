@@ -72,3 +72,5 @@
 ## Atualização 2026-10-29 (SD-001)
 - ADR-0025 aceito. SD-PR-01 (contratos/mocks/flags off) em PR 47. Próximo: SD-PR-02, SD-PR-03; ADR-SD-002 (caminhos permitidos do NBI + redação no Edge) antes de qualquer leitura de WAN/PPPoE/Wi-Fi.
 - Dono: fechar o NBI do GenieACS (`docs/operations/GENIEACS_NBI_HARDENING.md`) — tem root.
+
+- Catálogo de consultas da OLT pronto e inerte (PR 49). Próximo: ADR do canal (params no envelope assinado, resultado só parseado, orçamento de consultas sob demanda respeitando o guard) e capturas supervisionadas para promover as consultas N.

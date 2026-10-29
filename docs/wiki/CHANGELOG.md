@@ -113,3 +113,7 @@
 ## Unreleased — PR 48 (SD-PR-02: leitor passivo de parâmetros do CPE, ADR-SD-002)
 - Edge: `nbi.CachedParams` lê, por GET, folhas exatas de uma lista fechada (WAN/enlace, uptime, rádio Wi-Fi habilitado/canal) do que o GenieACS já tem em cache, com validação de tipo e descarte do que não é esperado. Não é usado pelo coletor: nada novo vai à nuvem, sem endpoint nem migração.
 - ADR-SD-002 (Proposed): evidência da LAB mostra que o cache só tem dados do Inform (sem WAN/Wi-Fi); a leitura ativa (`getParameterValues`) ficou separada e depende de autorização explícita. Estados novos no contrato de evidência.
+
+## Unreleased — PR 49 (catálogo de consultas somente leitura da OLT, ADR-0026)
+- Edge: `olt.Queries`/`HuaweiR015.RunQuery` — 25 consultas `display` tipadas (global, slot, PON, ONU), parâmetros inteiros limitados, renderização no Edge, padrão estrito e proibição de verbos de escrita. Só as 4 já executadas na OLT real são aceitas por padrão; as demais exigem habilitação local para captura supervisionada.
+- `docs/operations/OLT_QUERY_CATALOG.md` (mapa runbook→ID e processo de promoção) e ADR-0026 (Proposed). Inerte: nenhum fluxo chama `RunQuery`, sem endpoint/job/migração.
