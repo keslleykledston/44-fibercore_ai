@@ -27,6 +27,7 @@ type fakeACS struct {
 	listCode     int    // status of GET /tasks (0 = 200)
 	deleteCode   int    // status of DELETE (0 = 200); a non-2xx deletes nothing
 	deleteNoop   bool   // DELETE answers 200 but deletes nothing
+	lateAfter    int    // tasks created by POST only show up in GET /tasks from the Nth list call on
 	omitFromList bool   // GET /tasks hides the tasks created by POST
 	wrongDevice  bool   // GET /tasks reports them under another device
 	methods      []string
@@ -57,6 +58,7 @@ func (f *fakeACS) handler() http.Handler {
 			_, _ = w.Write([]byte(f.devices))
 		case r.Method == http.MethodGet && r.URL.Path == "/tasks":
 			f.listCalls++
+			late := f.lateAfter > 0 && f.listCalls < f.lateAfter
 			if f.listCode != 0 {
 				w.WriteHeader(f.listCode)
 				return
@@ -64,7 +66,7 @@ func (f *fakeACS) handler() http.Handler {
 			view := make([]map[string]any, 0, len(f.db))
 			for _, d := range f.db {
 				switch {
-				case f.omitFromList && strings.HasPrefix(d["_id"].(string), "task0000"):
+				case (f.omitFromList || late) && strings.HasPrefix(d["_id"].(string), "task0000"):
 					continue
 				case f.wrongDevice && strings.HasPrefix(d["_id"].(string), "task0000"):
 					c := map[string]any{}
@@ -131,6 +133,8 @@ func (f *fakeACS) handler() http.Handler {
 		}
 	})
 }
+
+func init() { settleDelay = 0 } // the tests never wait; TestRefreshWaitsForALateTask restores it explicitly
 
 func newACS(t *testing.T, f *fakeACS) *Client {
 	srv := httptest.NewServer(f.handler())
@@ -520,5 +524,40 @@ func TestRefreshCleanupRefusesAPartialView(t *testing.T) {
 		if id == "otherdev0001" {
 			t.Fatal("deleted another device's task")
 		}
+	}
+}
+
+func TestRefreshLooksAgainBeforeAcceptingThatNoTaskOfOursExists(t *testing.T) {
+	// the POST lost its answer (no id) and the task shows up in the list only on the second look: it must be found and removed
+	f := &fakeACS{devices: igd, hangup: true, lateAfter: 2}
+	rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
+	if err == nil || errors.Is(err, ErrRefreshUncleaned) || len(f.db) != 0 || rep.Cleaned != 1 {
+		t.Fatalf("%+v %v left=%d lists=%d", rep, err, len(f.db), f.listCalls)
+	}
+	// it only shows up after the whole window: not provable => the caller holds the device only if the task is seen later; here it stays unseen,
+	// which is the documented assumption (the ACS store is read-after-write consistent within the window)
+	f = &fakeACS{devices: igd, hangup: true, lateAfter: 99}
+	_, err = newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
+	if err == nil || f.listCalls < settleChecks {
+		t.Fatalf("err=%v lists=%d (must have looked %d times)", err, f.listCalls, settleChecks)
+	}
+}
+
+func TestRefreshWaitIsBoundedAndHonoursCancellation(t *testing.T) {
+	old := settleDelay
+	settleDelay = 50 * time.Millisecond
+	defer func() { settleDelay = old }()
+	f := &fakeACS{devices: igd, hangup: true, dropCreate: true}
+	start := time.Now()
+	_, _ = newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
+	if d := time.Since(start); d < 90*time.Millisecond || d > 2*time.Second {
+		t.Fatalf("waited %v", d)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	f = &fakeACS{devices: igd, hangup: true, dropCreate: true}
+	rep, err := newACS(t, f).RefreshParams(ctx, "AAAA00-ONT-SN1")
+	if err == nil {
+		t.Fatalf("a cancelled context must stop: %+v", rep)
 	}
 }

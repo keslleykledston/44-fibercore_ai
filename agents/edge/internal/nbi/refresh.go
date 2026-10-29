@@ -243,6 +243,23 @@ func (c *Client) cleanupTasks(ctx context.Context, deviceID string, names []stri
 		}
 		target = knownID
 	} else {
+		// No id and nothing listed yet is NOT proof that nothing was created (the task may become visible a moment later): look again
+		// over a short, bounded window before accepting "nothing of ours exists".
+		for i := 1; i < settleChecks && len(cand) == 0; i++ {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(settleDelay):
+			}
+			if docs, err = c.deviceTasks(ctx, deviceID); err != nil {
+				return err
+			}
+			for _, d := range docs {
+				if looksLikeOurs(d, names, since) {
+					cand = append(cand, d.ID)
+				}
+			}
+		}
 		if len(cand) > 1 {
 			return errors.New("nbi: several look-alike tasks, cannot attribute ours")
 		}
@@ -267,6 +284,13 @@ func (c *Client) cleanupTasks(ctx context.Context, deviceID string, names []stri
 	}
 	return nil
 }
+
+// settleChecks lists in total (the first plus settleChecks-1 more, settleDelay apart) before "no task of ours" is accepted. Variables so tests
+// can shrink the wait; production keeps ~4 s.
+var (
+	settleChecks = 3
+	settleDelay  = 2 * time.Second
+)
 
 const (
 	taskClockSkew   = 5 * time.Second
