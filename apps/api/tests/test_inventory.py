@@ -318,3 +318,20 @@ def test_claim_locks_are_taken_in_sorted_order(client, seed, inv):
     ks = [p["k"] for params in seen for p in (params if isinstance(params, list) else [params])]
     ks = [k for k in ks if "|c-order|" in k]  # the login throttle takes advisory locks too (ip:/svc: keys); only the claim keys matter here
     assert len(ks) == 10 and ks == sorted(ks), ks
+
+
+def test_duplicate_entries_in_one_batch_never_abort_the_snapshot(client, seed, inv):
+    """Same serial twice (different vendor) and one device with both protocols: the valid entries must still be ingested."""
+    a = agent(client, inv, "a1")
+    c = "c-dups"
+    body = {"edge_id": str(inv["a1"]["edge"]), "observed_at": _now(), "cpes": [
+        {"canonical_serial": "DUP-SAME-1", "vendor": "First", "binding": {"protocol": "tr069", "external_id": "dup-same", "connector_id": c}},
+        {"canonical_serial": "DUP-SAME-1", "vendor": "Second", "binding": {"protocol": "tr069", "external_id": "dup-same", "connector_id": c}},
+        {"canonical_serial": "DUP-BOTH-1", "vendor": "V", "binding": {"protocol": "tr069", "external_id": "both-cwmp", "connector_id": c}},
+        {"canonical_serial": "DUP-BOTH-1", "vendor": "V", "binding": {"protocol": "tr369", "external_id": "both-usp", "connector_id": c}},
+        {"canonical_serial": "DUP-OK-1", "vendor": "V", "binding": {"protocol": "tr069", "external_id": "ok-1", "connector_id": c}}]}
+    r = client.post("/v1/edge/cpe-snapshots", headers=a, json=body)
+    assert r.status_code == 202, r.text
+    rows = {x["canonical_serial"]: x for x in client.get("/v1/cpes", headers=hdr(client, "alice", seed, "A")).json()}
+    assert {"DUP-SAME-1", "DUP-BOTH-1", "DUP-OK-1"} <= set(rows)
+    assert len(rows["DUP-SAME-1"]["bindings"]) == 1 and len(rows["DUP-BOTH-1"]["bindings"]) == 2

@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18548-4115-74b3-a7cf-77914b86ddb4).
+[codex] Turn started (01a18548-416b-72e1-baed-8c72bbf29b31).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos da migração, do endpoint e do colet...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --find-copies main...HE...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --find-copies main...HE... (exit 0)
+[codex] Assistant message captured: A migração agora bloqueia as escritas concorrentes durante o diagnóstico, então esse risco pa...
+[codex] Running command: /bin/bash -lc "git diff main...HEAD -- apps/api/tests/test_inventory.py apps/api/tests/test_z...
+[codex] Command completed: /bin/bash -lc "git diff main...HEAD -- apps/api/tests/test_inventory.py apps/api/tests/test_z... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '55,100p' apps/api/alembic/versions/0005_inventory.py && sed -n '180,29...
+[codex] Command completed: /bin/bash -lc "sed -n '55,100p' apps/api/alembic/versions/0005_inventory.py && sed -n '180,29... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não encontrei sequência de escrita que sustente o ach...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não encontrei sequência de escrita que sustente o achado 2 da rodada 4: o índice existente impede external_ids diferentes na mesma chave, e a migração bloqueia escritores durante o diagnóstico. Ainda há risco material no endpoint: lotes com serial repetido e dados incompatíveis podem abortar a transação inteira.
+
+Findings:
+- [high] Serial duplicado no lote pode abortar o snapshot inteiro (apps/api/app/api/inventory.py:230-284)
+  `CpeSnapshot.cpes` não rejeita serials duplicados. Quando duas entradas do lote usam o mesmo `canonical_serial` e a mesma chave de binding, mas trazem vendor/model diferentes, ambas passam por `kept`. O `INSERT ... ON CONFLICT DO UPDATE` em `cpes` então tenta atualizar a mesma linha mais de uma vez na mesma instrução, o que PostgreSQL rejeita (`ON CONFLICT DO UPDATE command cannot affect row a second time`). Com a transação da requisição, isso descarta também as entradas válidas do lote. Lotes duplicados com chaves de binding distintas também podem falhar na instrução em lote de `cpe_protocol_bindings`, pois ambas as entradas tentam inserir a mesma chave única. A lógica já detecta serials repetidos com external_ids diferentes, mas não consolida nem rejeita as duplicatas restantes.
+  Recommendation: Validar unicidade de `canonical_serial` no corpo antes de qualquer escrita ou reduzir o lote a uma única entrada determinística por serial e binding; responder com erro de validação sem executar as instruções em lote quando houver duplicatas incompatíveis.
