@@ -131,6 +131,11 @@ class LoginOut(BaseModel):
 def login(body: LoginIn, request: Request, settings: Settings = Depends(get_settings)) -> LoginOut:
     key, ip = body.email.lower(), _client_ip(request, settings)
     with scoped_connection(get_engine()) as conn:
+        # Per-account lock FIRST (before the throttle locks; same order everywhere, so no deadlock), then the credentials are read: a
+        # concurrent `set-password` has committed or not, and no session is minted from a password it already replaced.
+        known = conn.execute(text("SELECT id FROM users_global WHERE lower(email) = lower(:e)"), {"e": body.email}).scalar()
+        if known is not None:
+            conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{known}"})
         if _gate(conn, key, ip):
             outcome, row = "locked", None
         else:

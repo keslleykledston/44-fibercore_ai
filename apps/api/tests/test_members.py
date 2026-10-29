@@ -314,3 +314,28 @@ def test_disable_waits_for_the_account_lock_like_every_other_mfa_change(client, 
         assert t.is_alive() and "r" not in out, "disable did not wait for the account lock"
     t.join(15)
     assert out["r"].status_code == 204, out["r"].text
+
+
+def test_login_that_races_set_password_cannot_mint_a_session_from_the_old_password(client, make, migrated):
+    """Deterministic: a connection plays `set-password` (account lock held); a login with the OLD password starts meanwhile. It must wait
+    for the lock and then be judged against the NEW hash, not slip a fresh session in after the revocation."""
+    import threading
+    import time
+
+    from app.core.security import hash_secret
+
+    who = make("engineer")
+    out: dict = {}
+
+    def login():
+        out["r"] = client.post("/v1/auth/token", json={"email": who["email"], "password": PW})
+
+    with migrated.begin() as holder:
+        holder.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{who['id']}"})
+        t = threading.Thread(target=login)
+        t.start()
+        time.sleep(1.5)
+        assert t.is_alive() and "r" not in out, "login did not wait for the account lock"
+        holder.execute(text("UPDATE users_global SET password_hash = :h WHERE id = :u"), {"h": hash_secret("another-password-123!"), "u": who["id"]})
+    t.join(15)
+    assert out["r"].status_code == 401, out["r"].text

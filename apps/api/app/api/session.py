@@ -140,6 +140,8 @@ def mfa_verify(body: MfaVerifyIn, request: Request, settings: Settings = Depends
     key, ip = f"mfa:{user_id}", _client_ip(request, settings)
     sess, outcome = None, "bad"
     with scoped_connection(get_engine()) as conn:
+        # before the throttle locks (same order as login and the MFA routes)
+        conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{user_id}"})
         if _gate(conn, key, ip):
             outcome = "locked"
         else:

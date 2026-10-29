@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a185b4-491e-7fd1-8b03-db9c42bfdb3c).
+[codex] Turn started (01a185b4-53ef-76d2-bbd5-5491bb87fd85).
+[codex] Assistant message captured: Vou inspecionar o diff completo contra `main` e rastrear os fluxos de MFA e CLI em busca de r...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/session.py...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/session.py... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=40 main...HEAD -- apps/web/src/app/bff/securi...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=40 main...HEAD -- apps/web/src/app/bff/securi... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,145p' apps/api/app/api/session.py; sed -n '1,240p' apps/web/src/lib/...
+[codex] Command completed: /bin/bash -lc "sed -n '1,145p' apps/api/app/api/session.py; sed -n '1,240p' apps/web/src/lib/... (exit 0)
+[codex] Assistant message captured: Encontrei um risco concreto no novo `set-password`: a operação revoga sessões existentes, mas...
+[codex] Running command: /bin/bash -lc "rg -n \"def token|issue_session|verify_secret\" apps/api/app/api/routes.py app...
+[codex] Command completed: /bin/bash -lc "rg -n \"def token|issue_session|verify_secret\" apps/api/app/api/routes.py app... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/routes.py | sed -n '126,158p'; nl -ba apps/api/app/cor...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/routes.py | sed -n '126,158p'; nl -ba apps/api/app/cor... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar: um login concorrente pode emitir uma ses...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar: um login concorrente pode emitir uma sessão com a senha antiga depois de `set-password` revogar as sessões existentes.
+
+Findings:
+- [high] `set-password` não impede emissão concorrente de sessão com a senha antiga (apps/api/app/cli.py:76-84)
+  O CLI adquire o lock da conta e atualiza a senha, `tokens_valid_after` e os refresh tokens em uma transação. Porém, `/v1/auth/token` não adquire esse lock: pode verificar a senha antiga antes da atualização e inserir o refresh token depois que o CLI já revogou os existentes. Nesse interleaving, o login termina com sucesso e a sessão recém-emitida continua válida após a troca de senha, contrariando a promessa de encerrar todas as sessões. Faça o login participar do mesmo lock por conta antes de verificar a senha e mantenha-o até a emissão da sessão; confirme também que MFA e outros caminhos de emissão respeitam a política pretendida.
+  Recommendation: Serializar a verificação de credenciais e a emissão de sessão com `set-password` usando o mesmo advisory lock por conta; adicionar um teste concorrente determinístico que pause o login após validar a senha antiga e confirme que ele não deixa uma sessão ativa após a troca.
