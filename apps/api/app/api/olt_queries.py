@@ -31,7 +31,7 @@ def list_queries(olt_id: UUID, p: Principal = Depends(require("inventory:read"))
     on = olt_query.EDGE_SUPPORT and features.enabled(conn, p.tenant_id, "olt_query")
     items = []
     for q in olt_query.CATALOG:
-        if not (p.can("olt_query:run") and p.can("jobs:request")):
+        if not (p.can("olt_query:run") and p.can("jobs:request") and p.can("jobs:read")):   # jobs:read: the person must be able to follow what they asked for
             reason = "not_permitted"
         elif q.id not in olt_query.ROLLOUT:
             reason = "query_not_enabled"
@@ -55,7 +55,7 @@ def request_query(
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=8, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$"),
     p: Principal = Depends(require("olt_query:run")), conn: Connection = TENANT_CONN,
 ) -> dict:
-    if not p.can("jobs:request"):
+    if not (p.can("jobs:request") and p.can("jobs:read")):
         raise HTTPException(403, "forbidden")
     _olt_or_404(conn, olt_id)
     if "query_id" in body.params:
