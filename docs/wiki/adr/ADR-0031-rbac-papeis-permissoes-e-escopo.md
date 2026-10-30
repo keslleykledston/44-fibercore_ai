@@ -1,6 +1,6 @@
 # ADR-0031: RBAC — catálogo de permissões, papéis por provedor, escopo e governança de mudança
 
-Status: Proposed (aguarda aprovação do responsável antes de qualquer construção; depois Codex gate) | Data: 2026-10-30 | Owner: equipe | Origem: pedido do responsável em 2026-10-30 ("desenho e construção do RBAC").
+Status: Proposed (revisado após a rodada 1 do Codex; aguarda aprovação do responsável antes da construção do que depende das perguntas) | Data: 2026-10-30 | Owner: equipe | Origem: pedido do responsável em 2026-10-30 ("desenho e construção do RBAC").
 
 ## Contexto
 
@@ -27,26 +27,33 @@ Fonte única no código (`app/core/permissions.py`): cada permissão tem `nome` 
 ### 2. Papéis
 - **Papéis de sistema** (os 8 atuais): imutáveis, versionados, com exatamente as permissões de hoje. Servem de modelo e de fallback.
 - **Papéis customizados por provedor** (`tenant_roles`, `tenant_role_permissions`, RLS): copiam um papel de sistema e só podem **remover** ou **adicionar** permissões dentro do **teto** do provedor (abaixo). `edge_agent` e `platform_support` não são customizáveis.
-- **Teto (invariantes que nenhum papel customizado quebra):** nenhuma permissão R3 sem `isp_admin` aprovando; um papel nunca combina `jobs:request` e `jobs:approve` a menos que seja `isp_admin` (separação de funções); PII (`customers:read`, `customers:export`) nunca vem sem auditoria de acesso; `roles:manage`/`members:manage` só `isp_admin`.
+- **Teto (invariantes que nenhum papel customizado quebra):** nenhuma permissão R3 sem `isp_admin` aprovando; **papel customizado nunca contém `jobs:request` e `jobs:approve` ao mesmo tempo** (só o papel de sistema `isp_admin` mantém a combinação, como hoje); PII (`customers:read`, `customers:export`) nunca vem sem auditoria de acesso; `roles:manage`/`members:manage` só `isp_admin`.
+- **Separação de funções é regra do motor de jobs, por operação e por ator, e não depende da composição do papel:** quem solicitou um job não o aprova, para qualquer papel e qualquer operação; **a única exceção é a das operações de bancada do ADR-0030** (autorização prévia de uso único do responsável, 1 aprovação que pode vir do solicitante) e nenhum papel customizado, delegação ou escopo a amplia. Teste: papel customizado clonado de `isp_admin` não consegue autoaprovar fora da bancada nem criar a combinação.
 - Um membro tem **um papel por provedor**; acumular papéis fica de fora (somar papéis esconde a combinação perigosa).
 
 ### 3. Escopo
-Escopo opcional por atribuição: `provedor` (padrão) → `site` → `OLT` → `PON`. Leituras e ações filtram por linha (`olt_id`/`pon`) e **negam por padrão fora do escopo** (um 404, nunca um 403 que revele existência). Permissões sem sentido por escopo (ex.: `members:*`) são só de provedor. Fase posterior ao núcleo (entrega 4 abaixo).
+Escopo opcional por atribuição: `provedor` (padrão) → `site` → `OLT` → `PON`. **O escopo é um predicado obrigatório no acesso aos dados, não um filtro de tela:** aplicado no banco (políticas de RLS em `olts`, `pon_ports`, `onus`, incidentes e derivados, lendo `app.scope` definido junto de `app.tenant_id` na mesma conexão), de modo que listas, **totais e contagens** (`onu_count`, `excluded.stale`, `excluded.unknown_start`, KPIs do NOC), **relatórios e CSV** e subconsultas herdam o recorte sem código por endpoint. Filtros de entrada (`olt_id`, `pon_path`) fora do escopo se comportam como se o identificador não existisse (**404/lista vazia, nunca 403**, e nenhum cabeçalho ou contagem diferente do que um provedor sem essa OLT mostraria).
+- **Recursos sem vínculo com OLT (clientes, CPEs sem ONU vinculada, membros, auditoria) não são escopáveis:** um papel com escopo restrito simplesmente não recebe as permissões desses recursos (`customers:*`, `members:*`, `audit:*`, CPEs); isso evita vazar existência por agregação.
+- **Inventário obrigatório de endpoints:** a entrega de escopo só fecha com um teste que percorre TODA rota autenticada com permissão de leitura de inventário e prova, com um principal restrito, que corpo, contagens, cabeçalhos e CSV não revelam nada fora do escopo.
+- Permissões sem sentido por escopo (`members:*`, `roles:*`, `audit:*`) são só de provedor. Fase posterior ao núcleo (entrega 4).
 
 ### 4. Governança de mudança de papel
 - Só quem tem `members:manage` atribui; **ninguém atribui papel com mais permissões do que o próprio** nem altera o próprio papel; **não se remove nem rebaixa o último `isp_admin`**; conceder papel com R3 exige **MFA recente** do concedente e MFA ativo do beneficiário.
 - Toda concessão/remoção/edição de papel grava `audit_log` (quem, quem recebeu, antes/depois, motivo) e emite evento; sessões do beneficiário são revogadas na mudança.
-- Concorrência: a regra do último admin e do teto é verificada na mesma transação com trava de linha (dois admins removendo um ao outro ao mesmo tempo não zeram o provedor).
+- **Concorrência:** toda mudança de papel/membro passa por UMA função que, na transação, primeiro trava a linha do provedor (`SELECT … FROM tenants WHERE id = :t FOR UPDATE`, trava comum por provedor), depois as linhas de membership alvo em ordem de id, e só então conta os `isp_admin` ativos e aplica as travas e o teto. Duas mudanças simultâneas se serializam na trava do provedor: dois admins removendo um ao outro nunca zeram o provedor. Teste com duas transações concorrentes.
 
 ### 5. Delegação da plataforma e contas de serviço
-- `platform_support`: só por **delegação com prazo e motivo** (`membership_delegations`), expira sozinha, visível ao `isp_admin` e auditada; sem acesso a PII por padrão.
+- `platform_support`: só por **delegação com prazo e motivo** (`membership_delegations`), visível ao `isp_admin` e auditada; sem acesso a PII por padrão. **A resolução do principal (`get_principal`) exige uma delegação ativa e não expirada em CADA requisição** (consulta no banco, nunca só o que o token diz); sem delegação válida o membership `platform_support` não resolve (401/403). Memberships `platform_support` que já existam sem delegação são **invalidadas pela migração** (desativadas) e só voltam por uma delegação nova; a expiração vale no instante (`now() < expires_at`), sem depender de fim de sessão.
 - Edge/contas de serviço: permissões mínimas por função (`edge_agent` não muda); token ligado a um Edge; revogação imediata.
 
 ### 6. MFA por risco
 `MFA_REQUIRED_ROLES` continua; soma-se **MFA recente** (janela curta) para permissões marcadas no catálogo (R3, conceder papel, exportar PII).
 
-### 7. Migração (sem mudar comportamento)
-1) Catálogo + teste de inventário (todo `require()` no catálogo; cada papel de sistema com exatamente o conjunto de hoje: matriz positiva e negativa) — sem alterar nada em produção. 2) Tabelas de papéis customizados, vazias; papéis de sistema como linhas semente. 3) API e tela. 4) Escopo. Cada etapa reversível; nenhuma exige mudar o papel de quem já existe.
+### 7. Leitura de papéis, compatibilidade e migração (sem mudar comportamento)
+- **Modelo de leitura:** `Principal.can()` passa a usar `resolve_permissions(membership)`: papel de sistema → `ROLE_PERMISSIONS` do código (inalterado); papel customizado → conjunto da tabela, calculado dentro do teto. `tenant_memberships.role` continua guardando a chave do papel de sistema; o customizado entra por `role_id` (nulo para os atuais).
+- **Compatibilidade de schema:** o CHECK de `tenant_memberships.role` (migração 0001, hoje sem `edge_agent`) é substituído por restrição que cobre os 8 papéis de sistema; contas de serviço continuam em `service_accounts`. `required_mfa_roles()` passa a avaliar o **papel de sistema base** de cada customizado (ou a marca de MFA do catálogo, a que for mais estrita) e continua falhando fechado em nome desconhecido.
+- **Rollback fail-closed:** com a flag do provedor desligada (ou tabelas ilegíveis), membros de papel customizado resolvem para **nenhuma permissão além de `tenant:read`** até serem reatribuídos a um papel de sistema; nunca para o papel base, que pode ter mais poder que o customizado.
+- **Ordem:** 1) catálogo + teste de inventário (sem alterar nada em produção); 2) tabelas e CHECK, papéis de sistema como sementes; 3) API e tela; 4) escopo; 5) delegação e MFA recente. Cada etapa reversível; nenhuma exige mudar o papel de quem já existe.
 
 ## Perguntas ao responsável (precisam de resposta antes da construção)
 1. Papéis customizados por provedor entram já no MVP, ou ficamos só com os 8 papéis + catálogo + tela de leitura e atribuição (opção A+)?
@@ -58,7 +65,10 @@ Escopo opcional por atribuição: `provedor` (padrão) → `site` → `OLT` → 
 ## Consequências
 
 - **Como testar:** teste de inventário de rotas e de matriz (positivo/negativo) por papel; tentativas de escalada (auto-atribuição, papel acima do próprio, último admin, concorrência de dois admins); isolamento entre provedores; escopo (fora do escopo = 404); revogação de sessão; auditoria completa; geração da matriz em `docs/` sem diferença (teste falha se divergir).
-- **Rollback:** cada etapa é aditiva (tabelas novas, rotas novas); desligar por flag de provedor devolve o comportamento atual (papéis de sistema).
+- **Rollback:** cada etapa é aditiva; desligar a flag do provedor devolve o comportamento dos papéis de sistema e, para quem tinha papel customizado, o fail-closed descrito na seção 7.
 - **Monitorar:** mudanças de papel por dia, tentativas negadas de escalada, delegações ativas, membros sem MFA em papel que exige.
 - **Revisão:** Codex adversarial em cada entrega (CRITICAL/HIGH bloqueiam); nenhuma exposição fora de LAB/INTERNAL_PILOT sem o gate formal.
 - **Entregas:** (1) catálogo + teste de inventário + matriz gerada; (2) papéis no banco + API de atribuição com travas + auditoria; (3) tela Administração → Papéis e permissões; (4) escopo por OLT/site; (5) delegação da plataforma e MFA recente por risco. A entrega 4 da fase Dispositivos (ações na tela do CPE) usa as permissões `devices:act:*` da entrega 1.
+
+## Registro da revisão adversarial (Codex)
+- Rodada 1 (2026-10-30, `docs/wiki/reviews/raw/114-*`): 2 HIGH e 3 MEDIUM, todos incorporados acima — SoD por operação/ator com a exceção da bancada preservada (seção 2), escopo como predicado de dados cobrindo agregados, contagens e CSV com inventário obrigatório (seção 3), leitura de papéis/CHECK/MFA/rollback fail-closed (seção 7), trava comum por provedor para o último admin (seção 4), delegação exigida em cada resolução de principal e invalidação das memberships legadas (seção 5).

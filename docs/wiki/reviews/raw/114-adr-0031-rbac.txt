@@ -1,0 +1,35 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18d3e-0b56-7110-afe5-3b9e32fe5c7b).
+[codex] Turn started (01a18d3e-0b8f-7711-be54-43218e179947).
+[codex] Assistant message captured: Vou conferir as premissas do ADR diretamente contra as implementações atuais de segurança, de...
+[codex] Running command: /bin/bash -lc "pwd && git diff --stat main...HEAD && git diff --unified=3 main...HEAD -- docs...
+[codex] Command completed: /bin/bash -lc "pwd && git diff --stat main...HEAD && git diff --unified=3 main...HEAD -- docs... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/security.py | sed -n '1,100p'; nl -ba apps/api/app/ap...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/security.py | sed -n '1,100p'; nl -ba apps/api/app/ap... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '383,455p'; nl -ba apps/api/app/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '383,455p'; nl -ba apps/api/app/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar como desenho fechado: o teto de papéis pe...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar como desenho fechado: o teto de papéis permite exceções que contradizem a separação de funções, e o escopo não define como proteger consultas agregadas já existentes.
+
+Findings:
+- [high] O teto de SoD abre exceção ampla para isp_admin (docs/wiki/adr/ADR-0031-rbac-papeis-permissoes-e-escopo.md:30)
+  O ADR proíbe `jobs:request` + `jobs:approve` salvo para `isp_admin`, mas não delimita a exceção aos casos da bancada. No código atual, `isp_admin` tem ambas as permissões, e a rota impede autoaprovação apenas para operações que não sejam da bancada (jobs.py:199-201). Um papel customizado baseado nesse modelo pode, portanto, preservar a combinação e permitir autoaprovação de operações de bancada. Defina a exceção por operação e preserve a regra de autoaprovação no servidor, independentemente da composição do papel.
+  Recommendation: Especificar SoD por operação e ator, incluindo a exceção do ADR-0030; proibir que RBAC customizado amplie a exceção existente.
+- [high] Escopo por OLT/PON não cobre as consultas agregadas existentes (docs/wiki/adr/ADR-0031-rbac-papeis-permissoes-e-escopo.md:34)
+  A proposta promete filtrar leituras e ações por linha, mas não define como aplicar o escopo a todas as consultas e agregações. Hoje `/v1/olts` retorna `onu_count`, `/v1/onus/offline` retorna linhas, contagens `excluded.unknown_start`/`excluded.stale` e CSV, e `/v1/onus` aceita `olt_id` opcional. Todos usam `inventory:read` e só contam com isolamento RLS por tenant. Se o escopo for aplicado apenas aos registros da lista, filtros, contagens ou exportação podem revelar dados e existência de OLTs/PONs fora do escopo. 404 isoladamente não resolve esses canais.
+  Recommendation: Definir escopo como predicado obrigatório no acesso aos dados, inclusive filtros de entrada, subconsultas, totais, contagens, relatórios e CSV; incluir inventário explícito de endpoints e comportamento para identificadores fora do escopo.
+- [medium] A migração descrita não é reversível por flag sem especificar a leitura de papéis (docs/wiki/adr/ADR-0031-rbac-papeis-permissoes-e-escopo.md:48-49)
+  Hoje `tenant_memberships.role` tem CHECK limitado aos sete papéis listados na migração 0001 (edge_agent nem consta nesse CHECK), e `Principal.can()` consulta diretamente `ROLE_PERMISSIONS`. Além disso, `required_mfa_roles()` rejeita nomes que não estejam nesse mapa. Papéis customizados não podem funcionar só com tabelas novas: será necessário alterar schema, autenticação/autorização e política MFA. Uma flag que apenas volta ao papel de sistema não explica o que acontece com memberships já convertidas para papéis customizados, nem garante que o fallback reconheça essas sessões.
+  Recommendation: Especificar o modelo de leitura e fallback, compatibilidade do CHECK e do MFA, e rollback de memberships customizadas antes de afirmar reversibilidade; incluir migração de `edge_agent`.
+- [medium] A regra de último administrador não define um bloqueio serializável (docs/wiki/adr/ADR-0031-rbac-papeis-permissoes-e-escopo.md:39)
+  O ADR diz que a checagem ocorrerá na mesma transação com trava de linha, mas não identifica qual linha será travada. Se os dois admins removerem/rebaixarem um ao outro simultaneamente, travar apenas as linhas de membership alvo não serializa a contagem de admins; ambos podem observar dois admins e confirmar a remoção concorrente. A garantia declarada não decorre da estratégia especificada.
+  Recommendation: Definir uma trava comum por tenant ou outra estratégia serializável e explicitar a ordem de lock e a checagem sob concorrência.
+- [medium] A delegação de platform_support não especifica como bloqueia o acesso direto atual (docs/wiki/adr/ADR-0031-rbac-papeis-permissoes-e-escopo.md:42)
+  Atualmente `get_principal()` aceita qualquer membership `platform_support`, e esse papel concede `tenant:read`; não há consulta a delegações ou prazo na autenticação/autorização. O ADR exige delegação, mas não define como ela substitui ou restringe a membership atual. Se a implementação apenas adicionar `membership_delegations` sem mudar a resolução do principal, memberships existentes continuam autorizadas sem delegação ou após expiração.
+  Recommendation: Definir que toda resolução de membership `platform_support` exige delegação ativa, como expiração é aplicada em cada requisição e como memberships legadas são migradas ou invalidadas.
