@@ -338,3 +338,31 @@ func TestLastDownWaitsForTheAgentToSettleAfterTheCLISessionAndSpawnsOneRunPerSna
 		t.Fatalf("exactly one read after the wait: %d", ldCalls(h))
 	}
 }
+
+func TestLastDownSettleWaitEndsWithTheServiceNotWithTheRound(t *testing.T) {
+	h := newLD(t, nil)
+	h.o.Sources[0].LastDown.Settle = time.Hour
+	life, stop := context.WithCancel(context.Background())
+	h.o.Lifecycle = life
+	round, endRound := context.WithCancel(context.Background())
+	if _, err := h.o.Collect(round); err != nil {
+		t.Fatal(err)
+	}
+	endRound() // the round ends: the wait must go on
+	done := make(chan struct{})
+	go func() { h.o.ldWG.Wait(); close(done) }()
+	select {
+	case <-done:
+		t.Fatal("ending the round must not cut the wait")
+	case <-time.After(100 * time.Millisecond):
+	}
+	stop() // the service stops: the wait ends and nothing is sent to the agent
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the wait must end when the service stops")
+	}
+	if ldCalls(h) != 0 {
+		t.Fatal("no read after shutdown")
+	}
+}

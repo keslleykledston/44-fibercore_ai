@@ -96,10 +96,16 @@ func (o *OLT) refreshLastDown(ctx context.Context, src OLTSource) {
 	}
 	st.attemptGen = st.gen // this snapshot has its (one) run, whatever its outcome; the wait below must not spawn another
 	o.ldMu.Unlock()
+	// The read outlives the collection round (its cancellation must not cut it) but not the service: Lifecycle is cancelled at shutdown.
 	bg := context.WithoutCancel(ctx)
+	cancelBG := func() {}
+	if o.Lifecycle != nil {
+		bg, cancelBG = context.WithCancel(o.Lifecycle)
+	}
 	o.ldWG.Add(1)
 	go func() {
 		defer o.ldWG.Done()
+		defer cancelBG()
 		if ld.Settle > 0 {
 			select {
 			case <-time.After(ld.Settle):

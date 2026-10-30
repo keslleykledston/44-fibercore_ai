@@ -79,6 +79,9 @@ type OLT struct {
 
 	// Guard persists the pacing state (last attempt, cooldown) so a restart cannot reopen the window. nil = in memory only (tests).
 	Guard GuardStore
+	// Lifecycle, when set, is cancelled when the service stops: background reads (the last-down side channel) end with it, while an ordinary
+	// collection round ending does not cut them. nil = they only end by their own budget.
+	Lifecycle context.Context
 	// OnCollected, when set, is told how every attempt that reached the device ended (never called for skips): the only way an
 	// operator can see how long a real OLT takes and whether it answered. err is the collection error, never device output.
 	OnCollected func(name string, took time.Duration, items int, err error)
