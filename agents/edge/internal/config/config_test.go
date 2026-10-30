@@ -421,3 +421,29 @@ func TestOLTLastDownConfig(t *testing.T) {
 		t.Error("last_down without the validated profile must be refused")
 	}
 }
+
+func TestOLTDownTimesConfig(t *testing.T) {
+	cli := func(extra string) string {
+		return `,"allowlist":["10.0.0.9:22","10.0.0.9:161"],"olts":[{"name":"A","vendor":"huawei","profile":"huawei_ma56_r015","address":"10.0.0.9:22","username":"ro","secret_file":"/s","host_key_sha256":"SHA256:abc","pon_ports":["0/1/0"]` + extra + `}]`
+	}
+	cfg, err := Load(write(t, 0o600, good(cli(`,"down_times":{}`))), "v")
+	if err != nil || cfg.OLTs[0].DownTimes == nil || cfg.OLTs[0].DownTimes.Max() != 15 {
+		t.Fatalf("default must be 15 reads per collection: %v", err)
+	}
+	if cfg, err = Load(write(t, 0o600, good(cli(`,"down_times":{"max_per_round":40}`))), "v"); err != nil || cfg.OLTs[0].DownTimes.Max() != 40 {
+		t.Fatalf("explicit value: %v", err)
+	}
+	for name, extra := range map[string]string{
+		"negative":       `,"down_times":{"max_per_round":-1}`,
+		"too many":       `,"down_times":{"max_per_round":61}`,
+		"with last_down": `,"down_times":{},"last_down":{"snmp_address":"10.0.0.9:161","snmp_community_file":"/c"}`,
+	} {
+		if _, err := Load(write(t, 0o600, good(cli(extra))), "v"); err == nil {
+			t.Errorf("%s: expected error", name)
+		}
+	}
+	notR015 := `,"allowlist":["10.0.0.9:22"],"olts":[{"name":"A","vendor":"huawei","address":"10.0.0.9:22","username":"ro","secret_file":"/s","host_key_sha256":"SHA256:abc","pon_ports":["0/1/0"],"down_times":{}}]`
+	if _, err := Load(write(t, 0o600, good(notR015)), "v"); err == nil {
+		t.Error("down_times without the validated profile must be refused")
+	}
+}

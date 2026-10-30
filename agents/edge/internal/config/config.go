@@ -98,6 +98,22 @@ type OLTConfig struct {
 	// LastDown (CLI huawei entries only): also read the OLT's own "last down time" of the offline ONUs over SNMP (read-only), at most every
 	// EverySeconds, and add it to the snapshots this entry sends. It never changes which OLT the snapshot belongs to.
 	LastDown *LastDownConfig `json:"last_down"`
+	// DownTimes (CLI huawei entries with profile huawei_ma56_r015 only): read the OLT's own "last down time" of the offline ONUs over the CLI
+	// session of the collection itself (`display ont register-info`, read-only), a few ONUs per collection. Exclusive with last_down.
+	DownTimes *DownTimesConfig `json:"down_times"`
+}
+
+// DownTimesConfig is the CLI read of the OLT's last down times (see OLTConfig.DownTimes).
+type DownTimesConfig struct {
+	MaxPerRound int `json:"max_per_round"` // ONUs read per collection (0 = 15; 1..60)
+}
+
+// Max is the number of register-info reads per collection.
+func (d DownTimesConfig) Max() int {
+	if d.MaxPerRound <= 0 {
+		return 15
+	}
+	return d.MaxPerRound
 }
 
 // LastDownConfig is the read-only SNMP side channel of a CLI OLT entry (see OLTConfig.LastDown).
@@ -351,6 +367,17 @@ func (c *Config) Validate() error {
 				(l.EverySeconds != 0 && (l.EverySeconds < 900 || l.EverySeconds > 86400)) ||
 				(l.SettleSeconds != 0 && (l.SettleSeconds < 60 || l.SettleSeconds > 600)) {
 				errs = append(errs, fmt.Errorf("%s: last_down needs snmp_community_file; snmp_pace_ms 0 or 1000..10000; snmp_max_requests 0..1000; every_seconds 0 or 900..86400; settle_seconds 0 or 60..600", p))
+			}
+		}
+		if d := o.DownTimes; d != nil {
+			if o.Transport == "snmp" || o.Vendor != "huawei" || o.Profile != "huawei_ma56_r015" {
+				errs = append(errs, fmt.Errorf("%s: down_times requires a CLI huawei entry with profile huawei_ma56_r015", p))
+			}
+			if o.LastDown != nil {
+				errs = append(errs, fmt.Errorf("%s: down_times and last_down are exclusive", p))
+			}
+			if d.MaxPerRound < 0 || d.MaxPerRound > 60 {
+				errs = append(errs, fmt.Errorf("%s: down_times.max_per_round must be 0 (=15) or 1..60", p))
 			}
 		}
 		if (o.CollectSeconds != 0 && (o.CollectSeconds < 60 || o.CollectSeconds > 86400)) ||

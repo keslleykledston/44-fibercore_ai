@@ -43,11 +43,14 @@ func isR015(id Identity) bool { return isMA56(id) && strings.HasPrefix(id.Firmwa
 type HuaweiR015 struct {
 	Huawei
 	Queries QueryPolicy // catalog queries beyond the validated ones; zero value enables nothing
+	// DownTimes: also allow `display ont register-info <port> <ont-id>` (read-only) so SnapshotWithDownTimes can read the OLT's last down time
+	// of offline ONUs. Off = that command is not even allowed.
+	DownTimes bool
 }
 
 func (h HuaweiR015) Allowed(cmd string) bool {
 	// Deliberately NOT delegating to the generic Huawei allowlist: its F/S/P forms take unbounded numbers and this profile never sends them.
-	return hwR015Allowed.MatchString(cmd) || h.Queries.allows(cmd)
+	return hwR015Allowed.MatchString(cmd) || h.Queries.allows(cmd) || (h.DownTimes && allowsRegister(cmd))
 }
 
 func (h HuaweiR015) Snapshot(ctx context.Context, s Session, ports []string) (Snapshot, error) {
