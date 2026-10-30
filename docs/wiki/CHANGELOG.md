@@ -141,3 +141,6 @@
 - Migração 0020 `diagnostic_jobs` (imutável, RLS forçada, idempotência). `POST /v1/diagnostics/jobs` e `GET /v1/diagnostics/jobs/{id}` (flags `smart_diagnostics_jobs` + `diagnostic_engine`, desligadas por padrão): evidências do que já está retido (ONU e `cpe_state`), regras R-D001/R-D002 com entradas gravadas e replay, achados que citam evidência; dado antigo/ausente = `insufficient_evidence`. Operações movidas do overlay SD-001 para o contrato canônico.
 - Correção de teste: a verificação "nenhuma rota do SD-001 existe" lia `app.routes` (neste FastAPI só mostra `/openapi.json`) e era vazia; agora usa o esquema OpenAPI gerado pela aplicação.
 
+## Unreleased — ADR-0029 (Proposed): canal de execução das consultas da OLT
+- Só documento (Codex approve em 5 rodadas): operação `olt_query` R0 sobre o catálogo do ADR-0026, intenção assinada estrita por consulta, sessão única do guard, estados duráveis com no máximo uma execução, instância única como pré-condição bloqueante, fencing e arrendamento em memória. Nenhum código, nenhuma execução na OLT; aguarda o aceite do responsável.
+

@@ -1,0 +1,8 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), ADR-0029, round 1
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: needs-attention
+- [high] Idempotência não cobre o ponto de falha após executar na OLT (sem máquina de estados persistida, claim exclusivo nem reconciliação).
+- [high] O limite de instância única não é garantido entre diretórios de estado.
+- [medium] A janela de sessão e os limites de consultas não têm regra de arbitragem executável.
+- [medium] A operação não define vínculo entre escopo, parâmetros e alvo assinado (nem versão do catálogo).

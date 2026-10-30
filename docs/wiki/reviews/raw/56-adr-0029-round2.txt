@@ -1,0 +1,5 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), ADR-0029, round 2
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: needs-attention
+- [high] Jobs não são vinculados a uma geração do proprietário da OLT (fencing de propriedade).

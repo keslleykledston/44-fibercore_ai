@@ -1,0 +1,5 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), ADR-0029, round 5
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: approve
+Não encontrei risco material novo no diff. A invalidação do arrendamento em memória fecha a extensão após reinício: a fila durável só retoma com uma concessão online, e a transferência impede novas concessões ao dono antigo. No material findings.
