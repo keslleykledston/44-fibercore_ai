@@ -187,3 +187,4 @@
 ## Unreleased — "Last down time" da OLT
 - Edge: lê por SNMP (somente leitura, lotes de 20) o "Last down time" das ONUs offline e envia `last_down_at` no snapshot.
 - API: migração 0023 `onus.olt_down_at`; `GET /v1/onus/offline` ganha a base `olt_reported` (abaixo de `transition_observed`, acima de `since_last_online`). `down_since` não muda de significado.
+- Edge: `last_down` (opcional, entrada CLI Huawei R015): lê o "Last down time" por SNMP depois da coleta CLI, no máximo 1×/h, só nas PONs com ONU offline; o horário vai como `last_down_at` no snapshot seguinte. Sem segunda entrada de OLT.

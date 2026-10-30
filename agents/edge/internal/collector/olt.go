@@ -14,6 +14,7 @@ import (
 // OLTSource is one configured OLT. Open returns a raw CLI session (SSH) plus its closer.
 type OLTSource struct {
 	failCooldown    func(error) time.Duration // internal: see Exclusive
+	busyKey         string                    // internal: the physical device whose in-flight lock this run shares when it paces under another key
 	Name            string
 	Driver          olt.Driver
 	Ports           []string
@@ -33,6 +34,8 @@ type OLTSource struct {
 	Cooldown time.Duration
 	// Timeout overrides the wall-clock budget of one attempt (opening the session included). 0 = oltTimeout(len(Ports)).
 	Timeout time.Duration
+	// LastDown (CLI sources only): optional read-only SNMP side channel for the OLT's own "last down time" of the offline ONUs.
+	LastDown *LastDownSource
 }
 
 func (s OLTSource) budget() time.Duration {
@@ -85,6 +88,10 @@ type OLT struct {
 	busy    map[string]bool       // device keys with a collection in flight
 	loaded  bool
 	corrupt bool // the state file could not be trusted: a device with no entry is treated as touched just now
+
+	ldMu sync.Mutex
+	ld   map[string]*lastDownState // OLT name -> what the last-down side channel remembers
+	ldWG sync.WaitGroup            // background last-down reads in flight (tests wait on it)
 }
 
 // ErrOLTNotDue: the shared OLT guard says the last session on this device is too recent for another one now.
@@ -173,6 +180,7 @@ func (o *OLT) Collect(ctx context.Context) ([]Item, error) {
 	var errs []error
 	for _, src := range o.Sources {
 		its, err := o.collectOne(ctx, src, now().UTC().Format(time.RFC3339))
+		o.refreshLastDown(ctx, src) // background, after the CLI read; what it reads travels with the next snapshot
 		if err != nil {
 			errs = append(errs, fmt.Errorf("olt %s: %w", src.Name, err))
 			continue
@@ -213,6 +221,7 @@ func (o *OLT) collectCLI(ctx context.Context, src OLTSource, observed string) ([
 	if err != nil {
 		return nil, err
 	}
+	o.applyLastDown(src, &snap)
 	return o.buildItems(src.Name, observed, id, level, snap, func(p olt.PON) bool { return ponComplete(level, raw, p) })
 }
 
@@ -239,6 +248,10 @@ func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, er
 	if key == "" {
 		key = src.Name
 	}
+	lock := key // who is "in flight": the physical device, even when pacing and cooldown are kept under another key
+	if src.busyKey != "" {
+		lock = src.busyKey
+	}
 	cooldown := src.Cooldown
 	if cooldown <= 0 {
 		cooldown = cliCooldown
@@ -260,7 +273,7 @@ func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, er
 		}
 		o.loaded = true
 	}
-	if o.busy[key] {
+	if o.busy[lock] {
 		o.mu.Unlock()
 		return nil, errors.New("collection already running for this olt")
 	}
@@ -300,7 +313,7 @@ func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, er
 	if o.busy == nil {
 		o.busy = map[string]bool{}
 	}
-	o.busy[key] = true
+	o.busy[lock] = true
 	o.mu.Unlock()
 
 	started := o.now()
@@ -310,7 +323,7 @@ func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, er
 	}
 
 	o.mu.Lock()
-	delete(o.busy, key)
+	delete(o.busy, lock)
 	if err == nil {
 		o.st[key] = GuardState{Last: o.st[key].Last} // success lifts the pessimistic cooldown; if the save fails the file stays cooled (safe side)
 	} else {

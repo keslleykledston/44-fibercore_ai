@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18bb5-6c8c-7ef1-8c5f-0cdfb796353c).
+[codex] Turn started (01a18bb5-6cc7-7180-9ea3-33564581900a).
+[codex] Assistant message captured: I’ll inspect the full branch diff against `main`, then trace the focused SNMP read through th...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=80 main...HEA...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=80 main...HEA... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,260p' agents/edge/internal/collector/olt_lastdown.go; rg -n \"LastDo...
+[codex] Command completed: /bin/bash -lc "sed -n '1,260p' agents/edge/internal/collector/olt_lastdown.go; rg -n \"LastDo... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '245,390p' agents/edge/internal/collector/olt.go; sed -n '45,220p' agen...
+[codex] Command completed: /bin/bash -lc "sed -n '245,390p' agents/edge/internal/collector/olt.go; sed -n '45,220p' agen... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: the focused reader sends substantial...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: the focused reader sends substantially more SNMP requests than its pacing and batching claim implies, risking the same agent rate limit this path is meant to avoid.
+
+Findings:
+- [high] Focused reads exceed the assumed SNMP request rate (agents/edge/internal/olt/huawei_snmp.go:249-277)
+  `LastDowns` batches 10 targets into 20 data OIDs (plus the first-batch port check), but `snmpClient.Get` splits every GET into at most 10 OIDs. That means each batch takes two requests, or roughly one request per five targets, with an extra request for the first batch—not the documented roughly one request per ten ONUs. Across many offline targets and PONs, this can consume the request budget and trigger the OLT's rate limit, leaving timestamps unavailable and potentially muting the agent for other monitoring.
+  Recommendation: Align `downPairs` and the request-budget documentation with the transport's 10-OID GET limit, or reduce the data OIDs per batch so the actual paced request rate matches the intended limit; include the initial port-check request in the budget.

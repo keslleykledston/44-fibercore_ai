@@ -52,6 +52,9 @@ type ONU struct {
 	// LastDownAt: when the OLT itself says the ONU last went down (SNMP only, offline ONUs only); nil = not reported. The OLT's clock may be off by
 	// minutes: it is good for "hours offline", not for correlating with other systems to the second.
 	LastDownAt *time.Time
+	// OntID is the ONT-ID on the port when the driver read it (HasOntID); the read-only last-down side channel addresses the ONU with it.
+	OntID    int
+	HasOntID bool
 }
 
 type Snapshot struct {

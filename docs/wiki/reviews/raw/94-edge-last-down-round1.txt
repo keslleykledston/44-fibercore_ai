@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18baf-ce0c-7a60-b989-71fcf92f78fe).
+[codex] Turn started (01a18baf-ce46-7051-baab-da4af1c029a5).
+[codex] Assistant message captured: I’ll inspect the branch diff and the surrounding collector/config code, then trace the SNMP p...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"func DialSNMP|MaxReqs|Pace|LastDownAt|last_down_at|HuaweiSNMP\" agents...
+[codex] Command completed: /bin/bash -lc "rg -n \"func DialSNMP|MaxReqs|Pace|LastDownAt|last_down_at|HuaweiSNMP\" agents... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/huawei_snmp.go | sed -n '65,230p'; nl -ba agen...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/huawei_snmp.go | sed -n '65,230p'; nl -ba agen... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: the synchronous SNMP side channel ca...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: the synchronous SNMP side channel can consume the remainder of the 10-minute round, and overlapping CLI/SNMP reads can reintroduce stale last-down times after a newer CLI snapshot clears them.
+
+Findings:
+- [high] SNMP side channel can starve the collection round (agents/edge/internal/collector/olt.go:180-181)
+  `Collect` calls `refreshLastDown` synchronously after each CLI attempt. Its 8-minute budget is capped by the 10-minute round context, but it can still spend nearly all remaining round time waiting on paced SNMP requests. That delays later OLT sources and collectors, and can leave the round canceled before they run; the ignored SNMP error does not prevent this delay. Run the side channel asynchronously or give it a small independent budget that cannot consume the round's remaining time.
+  Recommendation: Make last-down refresh non-blocking for `Collect`, or enforce a strict short budget and scheduling policy that preserves time for the rest of the round.
+- [medium] An older SNMP response can restore a cleared timestamp (agents/edge/internal/collector/olt_lastdown.go:111-116)
+  `ldMu` prevents concurrent map access, but it does not order updates by snapshot age. Because the side channel has a distinct guard key from CLI, overlapping `Collect` calls can run its SNMP request while another call obtains and applies a newer CLI snapshot. If the CLI snapshot observes an ONU online and clears its cached time, the older SNMP response can later write that ONU's offline timestamp back into `st.at`; a subsequent offline CLI snapshot can then inherit the stale time. This can report the prior outage after a bounce. Associate updates with a CLI generation and discard results from older generations, or serialize side-channel updates against CLI state replacement.
+  Recommendation: Track a generation/version for each CLI snapshot and apply SNMP results only if the generation has not advanced since the request began.

@@ -2,6 +2,7 @@ package olt
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -510,4 +511,70 @@ func (f *failingDown) Get(ctx context.Context, oids []string) (map[string]SNMPVa
 		}
 	}
 	return f.fakeMIB.Get(ctx, oids)
+}
+
+func fakeSerial(id int) string {
+	return strings.ToUpper(hex.EncodeToString([]byte{0x48, 0x57, 0x54, 0x43, 0x30, 0, 0, byte(id)}))
+}
+
+func TestLastDownsReadsOnlyTheTargetsAndOnlyAcceptsATimeWhoseSerialMatches(t *testing.T) {
+	const ifx = 4194307584
+	m := newPon14()
+	m.vals[fmt.Sprintf("%s.46.1.23.%d.0", hwXpon, ifx)] = dateAndTime(2026, 10, 30, 2, 30, 34, '-', 4, 0)
+	m.vals[fmt.Sprintf("%s.46.1.23.%d.1", hwXpon, ifx)] = dateAndTime(2026, 10, 29, 1, 0, 0, '+', 0, 0)
+	m.vals[fmt.Sprintf("%s.46.1.23.%d.2", hwXpon, ifx)] = SNMPValue{IsBytes: true, Bytes: []byte{0, 0, 1, 1, 0, 0, 0, 0, '+', 0, 0}} // "never"
+	m.vals[fmt.Sprintf("%s.46.1.23.%d.7", hwXpon, ifx)] = dateAndTime(2026, 10, 1, 1, 1, 1, '+', 0, 0)                               // an online ONU: never asked
+	targets := []DownTarget{
+		{PonPath: "0/0/14", OntID: 0, Serial: fakeSerial(0)},
+		{PonPath: "0/0/14", OntID: 1, Serial: "4857544399999999"}, // the table moved: that ONT-ID is now another ONU
+		{PonPath: "0/0/14", OntID: 2, Serial: fakeSerial(2)},
+	}
+	got, err := HuaweiSNMP{}.LastDowns(context.Background(), m, targets)
+	if err != nil || len(got) != 1 || !got[fakeSerial(0)].Equal(time.Date(2026, 10, 30, 6, 30, 34, 0, time.UTC)) {
+		t.Fatalf("only the ONU whose serial still matches and whose time is real: %v err=%v", got, err)
+	}
+	for _, o := range m.gets {
+		if strings.Contains(o, ".46.1.15.") || strings.Contains(o, ".46.1.24.") || strings.Contains(o, ".51.1.4.") || strings.HasSuffix(o, ".46.1.23."+fmt.Sprint(ifx)+".7") {
+			t.Errorf("a focused read must not ask for %s", o)
+		}
+	}
+}
+
+func TestLastDownsCostsOneRequestPerFiveOnusAndRefusesWhatIsNotAGponPort(t *testing.T) {
+	const ifx = 4194307584
+	m := newPon14()
+	var targets []DownTarget
+	for id := 0; id < 12; id++ {
+		targets = append(targets, DownTarget{PonPath: "0/0/14", OntID: id, Serial: fakeSerial(id)})
+	}
+	cm := &countingMIB{fakeMIB: m}
+	if _, err := (HuaweiSNMP{}).LastDowns(context.Background(), cm, targets); err != nil || cm.requests != 3 || cm.maxOIDs > snmpGetOIDs {
+		t.Fatalf("12 ONUs = 3 requests (4 + 5 + 3; the port check rides the first), none above %d OIDs: requests=%d max=%d err=%v",
+			snmpGetOIDs, cm.requests, cm.maxOIDs, err)
+	}
+	m.vals[fmt.Sprintf("%s.%d", oidIfDesc, ifx)] = SNMPValue{Bytes: []byte("Ethernet0/0/1"), IsBytes: true}
+	if got, err := (HuaweiSNMP{}).LastDowns(context.Background(), m, targets); err == nil || len(got) != 0 {
+		t.Fatalf("an ifIndex that is not a GPON port must read nothing: %v %v", got, err)
+	}
+	for name, bad := range map[string][]DownTarget{
+		"two ports":   {{PonPath: "0/0/14", OntID: 1, Serial: "A"}, {PonPath: "0/0/13", OntID: 1, Serial: "B"}},
+		"id past end": {{PonPath: "0/0/14", OntID: 128, Serial: "A"}},
+		"negative id": {{PonPath: "0/0/14", OntID: -1, Serial: "A"}},
+		"bad port":    {{PonPath: "0/0/14;x", OntID: 1, Serial: "A"}},
+	} {
+		if _, err := (HuaweiSNMP{}).LastDowns(context.Background(), newPon14(), bad); err == nil {
+			t.Errorf("%s must be refused", name)
+		}
+	}
+}
+
+type countingMIB struct {
+	*fakeMIB
+	requests, maxOIDs int
+}
+
+func (c *countingMIB) Get(ctx context.Context, oids []string) (map[string]SNMPValue, error) {
+	c.requests++
+	c.maxOIDs = max(c.maxOIDs, len(oids))
+	return c.fakeMIB.Get(ctx, oids)
 }

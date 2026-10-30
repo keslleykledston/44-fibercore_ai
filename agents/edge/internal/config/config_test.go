@@ -381,3 +381,35 @@ func TestBenchOLTConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestOLTLastDownConfig(t *testing.T) {
+	cli := func(extra string) string {
+		return `,"allowlist":["10.0.0.9:22","10.0.0.9:161","10.0.0.8:161"],"olts":[{"name":"A","vendor":"huawei","profile":"huawei_ma56_r015","address":"10.0.0.9:22","username":"ro","secret_file":"/s","host_key_sha256":"SHA256:abc","pon_ports":["0/1/0"]` + extra + `}]`
+	}
+	ld := func(f string) string { return `,"last_down":{` + f + `}` }
+	const ok = `"snmp_address":"10.0.0.9:161","snmp_community_file":"/c"`
+	cfg, err := Load(write(t, 0o600, good(cli(ld(ok+`,"every_seconds":1800`)))), "v")
+	if err != nil || cfg.OLTs[0].LastDown == nil || cfg.OLTs[0].LastDown.Every() != 30*time.Minute {
+		t.Fatalf("valid last_down rejected: %v", err)
+	}
+	if cfg, _ = Load(write(t, 0o600, good(cli(ld(ok)))), "v"); cfg.OLTs[0].LastDown.Every() != time.Hour {
+		t.Fatal("default must be one hour")
+	}
+	for name, extra := range map[string]string{
+		"other device":     ld(`"snmp_address":"10.0.0.8:161","snmp_community_file":"/c"`),
+		"not in allowlist": ld(`"snmp_address":"10.0.0.9:162","snmp_community_file":"/c"`),
+		"no community":     ld(`"snmp_address":"10.0.0.9:161"`),
+		"too frequent":     ld(ok + `,"every_seconds":300`),
+		"too fast pace":    ld(ok + `,"snmp_pace_ms":200`),
+		"too many reqs":    ld(ok + `,"snmp_max_requests":5000`),
+		"host name":        ld(`"snmp_address":"olt.example:161","snmp_community_file":"/c"`),
+	} {
+		if _, err := Load(write(t, 0o600, good(cli(extra))), "v"); err == nil {
+			t.Errorf("%s: expected error", name)
+		}
+	}
+	notR015 := `,"allowlist":["10.0.0.9:22","10.0.0.9:161"],"olts":[{"name":"A","vendor":"huawei","address":"10.0.0.9:22","username":"ro","secret_file":"/s","host_key_sha256":"SHA256:abc","pon_ports":["0/1/0"]` + ld(ok) + `}]`
+	if _, err := Load(write(t, 0o600, good(notR015)), "v"); err == nil {
+		t.Error("last_down without the validated profile must be refused")
+	}
+}

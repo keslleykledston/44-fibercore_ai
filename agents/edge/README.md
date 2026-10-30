@@ -28,3 +28,11 @@ Pendências: mTLS (ADR-0011), assinatura/anti-replay de jobs (Sprint 3), SNMP/SS
  "snmp_community_file":"/etc/fibercore-edge/olt-exemplo.snmp","snmp_pace_ms":1000,"snmp_max_requests":300,"pon_ports":["0/0/14"]}
 ```
 `192.0.2.10:161` precisa constar em `allowlist` e ser IP literal. `snmp_pace_ms` nunca fica abaixo de 1000. A OLT medida limita a taxa do agente SNMP (ver `docs/engineering/DRIVER_SDK_INTERFACE.md`).
+
+## Exemplo: "Last down time" da OLT (canal SNMP somente leitura dentro de uma entrada CLI; valores fictícios)
+```json
+{"name":"olt-exemplo","vendor":"huawei","profile":"huawei_ma56_r015","address":"192.0.2.10:22", "...":"(campos CLI como acima)",
+ "last_down":{"snmp_address":"192.0.2.10:161","snmp_community_file":"/etc/fibercore-edge/olt-exemplo.snmp",
+              "snmp_pace_ms":1000,"snmp_max_requests":400,"every_seconds":3600}}
+```
+Só para entrada CLI Huawei com o perfil validado. A OLT é a MESMA (mesmo nome, mesmo IP; `snmp_address` em `allowlist` e IP literal). Depois de cada coleta CLI, no máximo a cada `every_seconds` (padrão 3600, mínimo 900), o Edge lê por SNMP (GET, 1 requisição/s) o "Last down time" das ONUs que a última coleta CLI mostrou fora do ar (leitura focada: 2 OIDs por ONU, 1 requisição a cada 5 ONUs, ou seja ~60 requisições para 289 ONUs offline; o ONT-ID vem da listagem CLI e o serial é conferido na própria resposta, então um ONT-ID que mudou de dono não rende horário), porta por porta, e o horário viaja como `last_down_at` no próximo snapshot. A leitura roda em segundo plano, com orçamento próprio de 3 min (nunca bloqueia nem encurta a rodada de coleta) e segura o travamento do dispositivo enquanto roda (uma coleta CLI ou uma manobra da bancada que chegue nesse intervalo vê a OLT ocupada; o ritmo e o cooldown continuam separados), uma vez por snapshot CLI, e descarta a resposta se um snapshot CLI mais novo chegou durante a leitura. Falha ou timeout nunca derrubam a coleta CLI; o agente SNMP fica 5 min em paz depois de uma falha e o retry só vem no próximo intervalo. O horário é esquecido quando a ONU volta e nunca é herdado por uma nova queda.
