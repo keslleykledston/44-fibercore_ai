@@ -163,3 +163,16 @@ func (h *LeaseHolder) Epoch(targetRef string) (int, bool) {
 	e, ok := h.targets[targetRef]
 	return e, ok
 }
+
+// Remaining is how long the lease, valid right now, still covers this target (local monotonic clock); 0 when it does not.
+func (h *LeaseHolder) Remaining(targetRef string) time.Duration {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if _, ok := h.targets[targetRef]; !ok || h.targets == nil {
+		return 0
+	}
+	if d := h.deadline.Sub(h.now()); d > 0 {
+		return d
+	}
+	return 0
+}

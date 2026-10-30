@@ -22,6 +22,12 @@ const qCloud = "8f14e45f-ceea-467a-9a36-4a1b5c3d2e10"
 type fakeLease map[string]int
 
 func (l fakeLease) Epoch(ref string) (int, bool) { e, ok := l[ref]; return e, ok }
+func (l fakeLease) Remaining(ref string) time.Duration {
+	if _, ok := l[ref]; ok {
+		return 2 * time.Minute
+	}
+	return 0
+}
 func (l fakeLease) Check(ref string, epoch int) error {
 	if e, ok := l[ref]; !ok {
 		return jobs.ErrNoLease
@@ -312,8 +318,9 @@ func TestAQueryOfAnotherOwnerGenerationEndsAloneAndTheCurrentOneRuns(t *testing.
 // a lease that is valid when the loop asks, and gone when the claim is checked
 type flakyLease struct{ asked int }
 
-func (l *flakyLease) Epoch(string) (int, bool) { return 1, true }
-func (l *flakyLease) Check(string, int) error  { return jobs.ErrNoLease }
+func (l *flakyLease) Epoch(string) (int, bool)       { return 1, true }
+func (l *flakyLease) Check(string, int) error        { return jobs.ErrNoLease }
+func (l *flakyLease) Remaining(string) time.Duration { return 2 * time.Minute }
 
 func TestALeaseLostBetweenTheAskAndTheClaimSendsNothing(t *testing.T) {
 	sess := &qSession{inner: r015Session{}}
@@ -332,5 +339,41 @@ func TestALeaseLostBetweenTheAskAndTheClaimSendsNothing(t *testing.T) {
 	}
 	if sess.sent[len(sess.sent)-1] != "quit" {
 		t.Fatalf("%v", sess.sent)
+	}
+}
+
+// a lease with 40 s left at the start: the query gets AT MOST that long, never the batch's 3 minutes
+type shortLease struct {
+	fakeLease
+	left time.Duration
+}
+
+func (l shortLease) Remaining(string) time.Duration { return l.left }
+
+func TestAQueryNeverOutlivesTheLeaseItStartedUnder(t *testing.T) {
+	var deadline time.Time
+	sess := &qSession{inner: r015Session{}}
+	o, store := queryRig(t, sess)
+	o.Queries.Lease = shortLease{fakeLease{qCloud: 1}, 40 * time.Second}
+	o.Queries.Run = func(c context.Context, s olt.Session, id string, p olt.Params) (olt.QueryResult, error) {
+		deadline, _ = c.Deadline()
+		return olt.HuaweiR015{}.RunQueryInConfig(c, s, id, p)
+	}
+	enqueue(t, store, "job-v", "olt.version")
+	start := time.Now()
+	if _, err := o.Collect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if deadline.IsZero() || deadline.Sub(start) > 41*time.Second {
+		t.Fatalf("the query's own deadline must be the lease's end, got %v after start", deadline.Sub(start))
+	}
+	// with less than the minimum window of lease left, nothing is claimed at all
+	o.Queries.Lease = shortLease{fakeLease{qCloud: 1}, 10 * time.Second}
+	enqueue(t, store, "job-b", "olt.board")
+	if _, err := o.Collect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if e, _, _ := store.Get("job-b"); e.State != oltquery.Queued {
+		t.Fatalf("%+v", e)
 	}
 }

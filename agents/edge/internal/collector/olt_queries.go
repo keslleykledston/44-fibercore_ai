@@ -30,6 +30,7 @@ type Queries struct {
 type LeaseChecker interface {
 	Epoch(ref string) (int, bool)
 	Check(ref string, epoch int) error
+	Remaining(ref string) time.Duration
 }
 
 const (
@@ -115,6 +116,9 @@ func (q *Queries) Drain(ctx context.Context, src OLTSource, raw olt.Session, clo
 		if q.Lease == nil {
 			return ran
 		}
+		if q.Lease.Remaining(cloudID) < minQueryWindow { // too little lease left for a query to finish inside it
+			return ran
+		}
 		if _, ok := q.Lease.Epoch(cloudID); !ok { // no valid lease for this OLT (lost, withdrawn, mid-transfer, or the Edge just restarted): nothing is claimed
 			return ran
 		}
@@ -129,6 +133,11 @@ func (q *Queries) Drain(ctx context.Context, src OLTSource, raw olt.Session, clo
 				continue
 			}
 			_ = q.Store.Fail(e.JobID, "lease_lost") // the lease ran out between the check and the claim: nothing was sent, stop
+			return ran
+		}
+		leaseLeft := q.Lease.Remaining(cloudID)
+		if leaseLeft < minQueryWindow { // the claim took the lease's last seconds: nothing is sent
+			_ = q.Store.Fail(e.JobID, "lease_lost")
 			return ran
 		}
 		if !windowLeft(ctx) { // writing the claim took the time that was left: nothing was sent, and the query ends honestly instead of starting half-way
@@ -152,7 +161,10 @@ func (q *Queries) Drain(ctx context.Context, src OLTSource, raw olt.Session, clo
 			fail(olt.ErrNoParser)
 			continue // nothing was sent to the device
 		}
-		res, err := q.Run(ctx, sess, e.Intent.QueryID, olt.Params{Slot: e.Intent.Slot, Port: e.Intent.Port, ONT: e.Intent.ONT})
+		// the query can never outlive the lease it started under: the transfer of the OLT waits for the lease (and a margin), not for a command still running
+		runCtx, stop := context.WithTimeout(ctx, leaseLeft)
+		res, err := q.Run(runCtx, sess, e.Intent.QueryID, olt.Params{Slot: e.Intent.Slot, Port: e.Intent.Port, ONT: e.Intent.ONT})
+		stop()
 		if err != nil {
 			fail(err)
 			return ran
