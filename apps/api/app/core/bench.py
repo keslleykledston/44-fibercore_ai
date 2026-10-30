@@ -30,6 +30,9 @@ class BenchOp:
 
 # ADR-0030 item 4: nothing outside this table can be a bench write. Adding a row is an amendment to the ADR and a new owner authorization.
 BENCH_OPS: dict[str, BenchOp] = {"reboot_cpe": BenchOp("tr069", frozenset())}
+from datetime import timedelta  # noqa: E402
+
+ENVELOPE_TTL = timedelta(minutes=2)  # a bench envelope lives at most this long after it is issued
 MIN_APPROVALS = 1  # a bench write always needs one approval from someone other than the requester
 
 

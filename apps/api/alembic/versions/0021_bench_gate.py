@@ -51,6 +51,12 @@ def upgrade() -> None:
           CHECK (window_end > window_start AND window_end - window_start <= interval '4 hours'),
           CHECK ((state = 'consumed') = (job_id IS NOT NULL))
         );
+        CREATE TABLE bench_target_epochs (
+          tenant_id uuid NOT NULL REFERENCES tenants(id),
+          cpe_id uuid NOT NULL,
+          last_epoch integer NOT NULL CHECK (last_epoch >= 1),
+          PRIMARY KEY (tenant_id, cpe_id)
+        );
         ALTER TABLE jobs ADD COLUMN authorization_id uuid, ADD COLUMN owner_epoch integer;
         CREATE UNIQUE INDEX jobs_one_per_authorization ON jobs (authorization_id) WHERE authorization_id IS NOT NULL;
         ALTER TABLE bench_targets ENABLE ROW LEVEL SECURITY;
@@ -59,7 +65,10 @@ def upgrade() -> None:
         ALTER TABLE bench_authorizations ENABLE ROW LEVEL SECURITY;
         ALTER TABLE bench_authorizations FORCE ROW LEVEL SECURITY;
         CREATE POLICY tenant_isolation ON bench_authorizations USING (tenant_id = {cur_t}) WITH CHECK (tenant_id = {cur_t});
-        GRANT SELECT ON bench_targets, bench_authorizations TO fibercore_app;
+        ALTER TABLE bench_target_epochs ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE bench_target_epochs FORCE ROW LEVEL SECURITY;
+        CREATE POLICY tenant_isolation ON bench_target_epochs USING (tenant_id = {cur_t}) WITH CHECK (tenant_id = {cur_t});
+        GRANT SELECT ON bench_targets, bench_authorizations, bench_target_epochs TO fibercore_app;
         GRANT UPDATE (write_locked, lock_reason) ON bench_targets TO fibercore_app;
         GRANT UPDATE (state, job_id) ON bench_authorizations TO fibercore_app;
         GRANT UPDATE (authorization_id, owner_epoch) ON jobs TO fibercore_app;
@@ -69,4 +78,4 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS jobs_one_per_authorization; ALTER TABLE jobs DROP COLUMN IF EXISTS authorization_id, DROP COLUMN IF EXISTS owner_epoch;"
-               " DROP TABLE IF EXISTS bench_authorizations; DROP TABLE IF EXISTS bench_targets;")
+               " DROP TABLE IF EXISTS bench_authorizations; DROP TABLE IF EXISTS bench_target_epochs; DROP TABLE IF EXISTS bench_targets;")

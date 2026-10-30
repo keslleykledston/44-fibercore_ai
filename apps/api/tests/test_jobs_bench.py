@@ -31,6 +31,7 @@ def _cleanup(migrated):
         c.execute(text("DELETE FROM job_approvals WHERE job_id IN (SELECT id FROM jobs WHERE operation = 'reboot_cpe')"))
         c.execute(text("DELETE FROM jobs WHERE operation = 'reboot_cpe'"))
         c.execute(text("DELETE FROM bench_targets"))
+        c.execute(text("DELETE FROM bench_target_epochs"))
         c.execute(text("DELETE FROM device_capabilities"))
         c.execute(text("DELETE FROM cpe_protocol_bindings WHERE cpe_id IN (SELECT id FROM cpes WHERE canonical_serial LIKE 'BNCH-%')"))
         c.execute(text("DELETE FROM cpes WHERE canonical_serial LIKE 'BNCH-%'"))
@@ -167,8 +168,22 @@ def test_bench_reboot_full_path_authorization_is_consumed_with_the_approval_and_
     assert env["operation"] == "reboot_cpe" and env["target_ref"] == EXT and env["owner_epoch"] == 3
     assert env["authorization_id"] == str(a.id) and env["authorization_ends_at"] == a.window_end.isoformat()
     assert datetime.fromisoformat(env["expires_at"]) <= a.window_end  # never valid beyond the authorization window
+    issued = datetime.fromisoformat(env["issued_at"])
+    assert datetime.fromisoformat(env["expires_at"]) - issued <= bench.ENVELOPE_TTL  # and short-lived on its own
     for field in ("authorization_id", "owner_epoch", "target_ref"):    # all covered by the signature
         assert not jobsign.verify(_pub_b64(), {**env, field: "tampered" if field != "owner_epoch" else 9})
+
+
+def test_no_envelope_leaves_without_the_confirmed_transition_to_dispatched(client, seed, inv, migrated, monkeypatch):
+    cpe, h = _full(client, seed, inv, migrated)
+    jid = _preview(client, h, cpe).json()["id"]
+    client.post(f"/v1/jobs/{jid}/submit", headers=h)
+    client.post(f"/v1/jobs/{jid}/approve", headers=_approver(client, seed, migrated))
+    real = jobs_mod.cas
+    monkeypatch.setattr(jobs_mod, "cas", lambda conn, job, to, **kw: False if to == "DISPATCHED" else real(conn, job, to, **kw))
+    assert client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1")).status_code == 204  # signed, but never returned
+    monkeypatch.setattr(jobs_mod, "cas", real)
+    assert client.get(f"/v1/jobs/{jid}", headers=h).json()["status"] == "APPROVED"
 
 
 def test_an_authorization_is_single_use_and_a_refused_approval_commits_nothing(client, seed, inv, migrated):
@@ -311,6 +326,9 @@ def test_owner_cli_manages_targets_authorizations_locks_and_checks_the_evidence(
     cli.main(["bench-target-remove", t, cpe])
     with migrated.begin() as c:
         assert c.execute(text("SELECT count(*) FROM bench_targets")).scalar() == 0
+    cli.main(["bench-target-add", t, cpe, edge])  # added again: the generation moved forward, it did not restart
+    with migrated.begin() as c:
+        assert c.execute(text("SELECT owner_epoch FROM bench_targets")).scalar() == 2
     # capability evidence: a bench operation needs the checked file; `certified` is never granted by ADR-0030
     base = [t, *PROFILE, "tr069", "reboot_cpe", "supported"]
     claim = ["--evidence", "docs/wiki/bench/H2-reboot_cpe-test.md", "--verified-at", now.isoformat()]

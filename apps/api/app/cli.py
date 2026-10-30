@@ -135,9 +135,12 @@ def main(argv: list[str] | None = None) -> None:
             cpe = c.execute(text("SELECT edge_id FROM cpes WHERE id = :c"), {"c": a.cpe_id}).first()
             if cpe is None or str(cpe.edge_id) != a.edge_id:  # the target's Edge is the CPE's owner Edge; no other pairing
                 sys.exit("cpe not found for this tenant, or it is owned by another edge")
-            c.execute(text("INSERT INTO bench_targets (tenant_id, cpe_id, edge_id, note) VALUES (:t,:c,:e,:n)"),
-                      {"t": a.tenant_id, "c": a.cpe_id, "e": a.edge_id, "n": a.note})
-            print(f"bench target added: cpe {a.cpe_id} (edge {a.edge_id})")
+            # the generation never goes back: a target that was removed and is added again gets a HIGHER owner_epoch, so an envelope issued
+            # for an older generation can never match again (ADR-0029 fencing)
+            last = c.execute(text("SELECT last_epoch FROM bench_target_epochs WHERE cpe_id = :c"), {"c": a.cpe_id}).scalar() or 0
+            c.execute(text("INSERT INTO bench_targets (tenant_id, cpe_id, edge_id, note, owner_epoch) VALUES (:t,:c,:e,:n,:ep)"),
+                      {"t": a.tenant_id, "c": a.cpe_id, "e": a.edge_id, "n": a.note, "ep": last + 1})
+            print(f"bench target added: cpe {a.cpe_id} (edge {a.edge_id}), owner_epoch {last + 1}")
         elif a.cmd == "bench-target-remove":
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
             busy = c.execute(
@@ -148,6 +151,11 @@ def main(argv: list[str] | None = None) -> None:
             if busy[0] or busy[1]:
                 sys.exit("refused: the target has open authorizations or jobs in flight")
             c.execute(text("DELETE FROM bench_authorizations WHERE cpe_id = :c AND state = 'open'"), {"c": a.cpe_id})
+            c.execute(text("INSERT INTO bench_target_epochs (tenant_id, cpe_id, last_epoch) "
+                           "SELECT tenant_id, cpe_id, owner_epoch FROM bench_targets WHERE cpe_id = :c "
+                           "ON CONFLICT (tenant_id, cpe_id) DO UPDATE SET "
+                           "last_epoch = GREATEST(bench_target_epochs.last_epoch, EXCLUDED.last_epoch)"),
+                      {"c": a.cpe_id})
             c.execute(text("DELETE FROM bench_targets WHERE cpe_id = :c"), {"c": a.cpe_id})
             print("bench target removed")
         elif a.cmd == "bench-authorize":

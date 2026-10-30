@@ -274,10 +274,11 @@ def next_job(
         response.status_code = 204
         return None
     approvals = [str(r.id) for r in conn.execute(text("SELECT id FROM job_approvals WHERE job_id = :j"), {"j": row.id})]
+    issued = datetime.now(UTC)
     envelope = {
         "schema_version": "1.0", "job_id": str(row.id), "tenant_id": str(p.tenant_id), "edge_id": str(p.edge_id),
         "target_id": str(row.target_id), "operation": row.operation, "idempotency_key": row.idempotency_key,
-        "issued_at": datetime.now(UTC).isoformat(), "expires_at": row.expires_at.isoformat(), "nonce": row.nonce,
+        "issued_at": issued.isoformat(), "expires_at": row.expires_at.isoformat(), "nonce": row.nonce,
         "intent_sha256": row.intent_hash.strip(), "policy_version": POLICY_VERSION, "approval_ids": approvals,
     }
     bench_job = row.operation in bench.BENCH_OPS and _blocked_reason(row.operation) is not None
@@ -291,7 +292,8 @@ def next_job(
             return None
         envelope["authorization_id"], envelope["authorization_ends_at"] = str(auth.id), auth.window_end.isoformat()
         envelope["owner_epoch"] = row.owner_epoch
-        envelope["expires_at"] = min(row.expires_at, auth.window_end).isoformat()
+        # the envelope is also short-lived on its own (bench.ENVELOPE_TTL), so a copy that waits in transit or in a queue dies in minutes
+        envelope["expires_at"] = min(row.expires_at, auth.window_end, issued + bench.ENVELOPE_TTL).isoformat()
     if (row.operation == "refresh" or bench_job) and row.target_type == "cpe":
         # The ACS device id the Edge may ask about (ADR-SD-002 item 4), covered by the signature. A CPE without a TR-069 binding keeps the
         # old behaviour (a plain collection round); the Edge validates the value again and only acts when active reads are enabled.
@@ -307,7 +309,9 @@ def next_job(
             response.status_code = 204
             return None
     envelope["signature"] = jobsign.sign(jobsign.load_private(settings.job_signing_key), envelope)
-    cas(conn, row.id, "DISPATCHED")
+    if not cas(conn, row.id, "DISPATCHED"):  # the emission is the transition: no confirmed transition, no envelope leaves
+        response.status_code = 204
+        return None
     outbox.enqueue(conn, tenant_id=p.tenant_id, aggregate_type="job", aggregate_id=row.id, event_type="job.dispatched",
                    payload={"operation": row.operation, "edge_id": str(p.edge_id)})
     return envelope
