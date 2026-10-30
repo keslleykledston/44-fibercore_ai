@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18b4e-9450-7143-9506-c2f3739a06dc).
+[codex] Turn started (01a18b4e-96ca-76f3-bd43-76e6e01556e1).
+[codex] Assistant message captured: I’ll inspect the full branch diff against `main`, focusing on the command ordering and clock-...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/bench/...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/bench/... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- agents/edge/cmd/fibercore-e...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- agents/edge/cmd/fibercore-e... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/bench.go | sed -n '178,215p'; git status --sho...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/bench.go | sed -n '178,215p'; git status --sho... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/bench.go | sed -n '215,250p'; git diff --no-ex...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/bench.go | sed -n '215,250p'; git diff --no-ex... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship: the post-claim deadline check occurs bef...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship: the post-claim deadline check occurs before another OLT read, so the first changing command can still be sent after authorization expires.
+
+Findings:
+- [high] Deadline can expire during the OLT read after the final check (agents/edge/internal/olt/bench.go:190-220)
+  After `beforeSend` records the claim, the code checks `notAfter` and then performs another network `display ont info` call before `ont reset` or `ont deactivate`. If that read blocks or the clock advances past the deadline, execution sends the changing command without another check. The current test only advances time inside `beforeSend`, so it does not cover this gap. This violates the stated guarantee that nothing is sent once the window has closed and may trigger an unauthorized ONU change. Recheck the deadline after this read and immediately before the changing command; add a test that advances the injected clock during the read.
+  Recommendation: Move the final deadline check to after the last OLT read and immediately before each first changing command, with a regression test that advances the clock during that read.

@@ -60,19 +60,26 @@ type benchSession struct {
 	inner   Session
 	allowed map[string]bool
 	sent    []string
+	// the two commands that start a maneuver are refused once the window is over, checked at the very moment of sending
+	starters map[string]bool
+	notAfter time.Time
+	now      func() time.Time
 }
 
-func newBenchSession(inner Session, c BenchCommands) *benchSession {
+func newBenchSession(inner Session, c BenchCommands, notAfter time.Time, now func() time.Time) *benchSession {
 	a := map[string]bool{}
 	for _, s := range []string{c.Enable, c.Config, c.Iface, c.BySN, c.Info, c.Reset, c.Deactivate, c.Activate, c.Quit} {
 		a[s] = true
 	}
-	return &benchSession{inner: inner, allowed: a}
+	return &benchSession{inner: inner, allowed: a, starters: map[string]bool{c.Reset: true, c.Deactivate: true}, notAfter: notAfter, now: now}
 }
 
 func (s *benchSession) Run(ctx context.Context, cmd string) (string, error) {
 	if !s.allowed[cmd] {
 		return "", fmt.Errorf("%w: %q", ErrBenchOLTCommand, cmd)
+	}
+	if s.starters[cmd] && !s.now().Before(s.notAfter) {
+		return "", fmt.Errorf("%w: window over, command not sent", ErrBenchOLTBefore)
 	}
 	s.sent = append(s.sent, cmd)
 	return s.inner.Run(ctx, cmd)
@@ -141,7 +148,7 @@ func RunBenchManeuver(ctx context.Context, raw Session, onu BenchONU, op string,
 		return ManeuverOutcome{}, ErrBenchOLTBefore
 	}
 	c := onu.Commands()
-	s := newBenchSession(raw, c)
+	s := newBenchSession(raw, c, notAfter, now)
 	step := func(cmd string) (string, error) {
 		out, err := s.Run(ctx, cmd)
 		if err == nil && refusedRe.MatchString(out) {
@@ -218,7 +225,7 @@ func RunBenchManeuver(ctx context.Context, raw Session, onu BenchONU, op string,
 	switch op {
 	case "onu_reset":
 		if _, err := step(c.Reset); err != nil {
-			if errors.Is(err, ErrBenchOLTRefused) {
+			if errors.Is(err, ErrBenchOLTRefused) || errors.Is(err, ErrBenchOLTBefore) {
 				res.Sent = false // the OLT said no: the command did not run
 			}
 			return res, err
@@ -230,7 +237,7 @@ func RunBenchManeuver(ctx context.Context, raw Session, onu BenchONU, op string,
 		res.Done, res.Detail = true, "reset sent and the ONU came back online"
 	case "onu_deactivate":
 		if _, err := step(c.Deactivate); err != nil {
-			if errors.Is(err, ErrBenchOLTRefused) {
+			if errors.Is(err, ErrBenchOLTRefused) || errors.Is(err, ErrBenchOLTBefore) {
 				res.Sent = false
 			}
 			return res, err

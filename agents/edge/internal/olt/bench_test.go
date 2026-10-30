@@ -255,7 +255,7 @@ func TestRefusalIsNotASend(t *testing.T) {
 
 func TestOnlyTheClosedListOfCommandsCanBeSent(t *testing.T) {
 	f := newFake()
-	s := newBenchSession(f, onu14.Commands())
+	s := newBenchSession(f, onu14.Commands(), time.Now().Add(time.Hour), time.Now)
 	for _, bad := range []string{"ont reset 14 all", "ont reset 14 graceful", "ont reset 14 11", "ont reset 13 10", "ont deactivate 14 all", "ont activate 14 all",
 		"display ont info 14 all", "undo ont add 14 10", "interface gpon 0/1", "reboot", "ont reset 14 10 ", "ont reset 14 10; ont reset 14 11", "save", "display version"} {
 		if _, err := s.Run(context.Background(), bad); !errors.Is(err, ErrBenchOLTCommand) {
@@ -288,5 +288,26 @@ func TestParseONTInfoNeedsExactlyOneRecord(t *testing.T) {
 	}
 	if _, err := ParseONTInfo("garbage"); err == nil {
 		t.Fatal("no record must be refused")
+	}
+}
+
+func TestTheStartingCommandChecksTheWindowAtTheMomentOfSending(t *testing.T) {
+	f := newFake()
+	clock := time.Now()
+	s := newBenchSession(f, onu14.Commands(), clock.Add(time.Minute), func() time.Time { return clock })
+	if _, err := s.Run(context.Background(), "display ont info 14 10"); err != nil {
+		t.Fatal(err)
+	}
+	clock = clock.Add(2 * time.Minute) // the window closes during that read
+	for _, cmd := range []string{"ont reset 14 10", "ont deactivate 14 10"} {
+		if _, err := s.Run(context.Background(), cmd); !errors.Is(err, ErrBenchOLTBefore) {
+			t.Fatalf("%s must be refused after the window: %v", cmd, err)
+		}
+	}
+	if got := f.changing(); len(got) != 0 {
+		t.Fatalf("nothing sent: %v", got)
+	}
+	if _, err := s.Run(context.Background(), "ont activate 14 10"); err != nil { // the way back is never blocked by the window
+		t.Fatalf("activate is the recovery and stays allowed: %v", err)
 	}
 }
