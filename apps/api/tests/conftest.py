@@ -64,7 +64,7 @@ def migrated(admin_url: str, app_url: str, rbac_url: str):
     env = {**os.environ, "ADMIN_DATABASE_URL": admin_url, "APP_DB_PASSWORD": APP_PW, "WORKER_DB_PASSWORD": WORKER_PW, "RBAC_DB_PASSWORD": RBAC_PW}
     subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], cwd=API_DIR, env=env, check=True)
     os.environ.update(
-        DATABASE_URL=app_url, RBAC_DATABASE_URL=rbac_url, JWT_SECRET=JWT_SECRET, MFA_ENCRYPTION_KEY=MFA_KEY, PII_HMAC_KEY=PII_KEY, JOB_SIGNING_KEY=JOB_SEED_B64, MODULE_MANIFEST=str(MANIFEST), NATS_MONITOR_URL=""
+        DATABASE_URL=app_url, RBAC_DATABASE_URL=rbac_url, JWT_SECRET=JWT_SECRET, MFA_ENCRYPTION_KEY=MFA_KEY, PII_HMAC_KEY=PII_KEY, JOB_SIGNING_KEY=JOB_SEED_B64, MODULE_MANIFEST=str(MANIFEST), NATS_MONITOR_URL="", MFA_RECENT_ENFORCE="false"  # the default is ON; the older suites predate it, test_rbac_delegation_mfa turns it on
     )
     from app.core import db, settings
     settings.get_settings.cache_clear(); db.get_engine.cache_clear(); db.get_rbac_engine.cache_clear()

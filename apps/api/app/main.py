@@ -29,6 +29,8 @@ logging.basicConfig(level=logging.INFO, format='{"ts":"%(asctime)s","level":"%(l
 async def lifespan(_app: FastAPI):
     # fail closed: a typo in MFA_REQUIRED_ROLES stops the API from booting instead of silently weakening the policy
     required_mfa_roles(get_settings())
+    if not get_settings().mfa_recent_enforce:  # an explicit, visible exception (ADR-0031): the default is ON
+        logging.getLogger("fibercore.security").warning("MFA_RECENT_ENFORCE is off: critical actions do not ask for a recent second factor")
     yield
 
 

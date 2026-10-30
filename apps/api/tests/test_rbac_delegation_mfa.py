@@ -32,12 +32,12 @@ def _forget_failed_attempts(migrated):
 @pytest.fixture
 def enforce(monkeypatch):
     def on(seconds: int | None = None):
-        monkeypatch.setenv("MFA_RECENT_ENFORCE", "true")
+        monkeypatch.setenv("MFA_RECENT_ENFORCE", "true")  # (the suite default is off, see conftest)
         if seconds:
             monkeypatch.setenv("MFA_RECENT_SECONDS", str(seconds))
         settings.get_settings.cache_clear()
     yield on
-    monkeypatch.delenv("MFA_RECENT_ENFORCE", raising=False)
+    monkeypatch.setenv("MFA_RECENT_ENFORCE", "false")
     monkeypatch.delenv("MFA_RECENT_SECONDS", raising=False)
     settings.get_settings.cache_clear()
 
@@ -384,3 +384,10 @@ def test_delegation_grant_asks_for_a_recent_second_factor_when_enforced(client, 
     s = _session(client, admin, codes[0])
     assert _grant(client, s["access_token"], tenant, op["email"]).status_code == 201
     assert client.delete(f"/v1/platform-delegations/{uuid4()}", headers=_h(tok, tenant)).json()["detail"] == "mfa_recent_required"
+
+
+def test_the_default_is_on_and_turning_it_off_is_explicit(monkeypatch):
+    monkeypatch.delenv("MFA_RECENT_ENFORCE", raising=False)
+    assert settings.Settings().mfa_recent_enforce is True
+    monkeypatch.setenv("MFA_RECENT_ENFORCE", "false")
+    assert settings.Settings().mfa_recent_enforce is False

@@ -63,7 +63,7 @@ services:
       TRUSTED_PROXY: ${FIBERCORE_TRUSTED_PROXY:-true}  # api-core is reachable only via web/Caddy (internal network); client IP comes from X-Forwarded-For
       JOB_SIGNING_KEY: ${FIBERCORE_JOB_SIGNING_KEY:-}  # empty => job dispatch disabled (fail closed)
       MFA_ENCRYPTION_KEY: ${FIBERCORE_MFA_ENCRYPTION_KEY:-}  # Fernet key; empty => MFA enrolment disabled (fail closed)
-      MFA_RECENT_ENFORCE: ${FIBERCORE_MFA_RECENT_ENFORCE:-false}  # ADR-0031: true = permissions marked `mfa_recent` need a second factor from the last MFA_RECENT_SECONDS (10 min)
+      MFA_RECENT_ENFORCE: ${FIBERCORE_MFA_RECENT_ENFORCE:-true}  # ADR-0031: default true = permissions marked `mfa_recent` need a second factor from the last MFA_RECENT_SECONDS (10 min)
       MFA_RECENT_SECONDS: ${FIBERCORE_MFA_RECENT_SECONDS:-600}
       MFA_REQUIRED_ROLES: ${FIBERCORE_MFA_REQUIRED_ROLES:-}  # e.g. isp_admin: those roles must enrol MFA (ADR-0017); empty = policy off; typos stop the API at boot
       JWT_KID: ${FIBERCORE_JWT_KID:-k1}  # rotation: set new JWT_SECRET+KID, move the old pair to *_PREVIOUS until tokens expire
