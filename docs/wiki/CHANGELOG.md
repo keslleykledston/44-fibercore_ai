@@ -154,3 +154,8 @@
 - `bench.EDGE_SUPPORT = False`: o servidor, o owner CLI e os testes recusam habilitar, autorizar e despachar até o PR do Edge; envelope de bancada vive no máximo 2 min; `owner_epoch` nunca volta (tabela `bench_target_epochs`); nenhum envelope sai sem a transição DISPATCHED confirmada (Codex approve em 3 rodadas).
 - Ainda NÃO feito (PR 57): lado Edge (configuração `bench`, conferência do CPE no ACS, claim durável, arrendamento) e a execução real da H2. Nenhuma escrita em equipamento.
 
+
+## Unreleased — PR 57 (ADR-0030, lado Edge do gate de bancada + código do H2)
+- Edge: `internal/bench` (runner), `jobs/claims.go` (claim durável), `jobs/lease.go` (lease assinada, só em memória), `nbi/bench.go` (identidade + única tarefa `reboot`), `BenchWriteOps` separado do `ReadOnlyOps`, seção `bench` na configuração, guard de ritmo próprio, execução fora do laço de poll.
+- Nuvem: `X-Bench-Lease` em toda resposta de `jobs/next`; `bench.EDGE_SUPPORT = True` (precondição, não abertura: flag, alvo, registro e autorização prévia continuam exigidos).
+- Runbook do responsável: `docs/wiki/bench/RUNBOOK-H2-REBOOT.md`. Emenda proposta no ADR-0030 (primeira execução).
