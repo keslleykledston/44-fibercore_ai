@@ -62,14 +62,15 @@ def _bench(migrated, seed, inv, cpe, **kw):
                       {"t": t, "c": cpe, "e": str(inv["a1"]["edge"])})
         if kw.get("capability", True):
             c.execute(text("INSERT INTO device_capabilities (tenant_id, vendor, model, firmware, protocol, operation, status, certification, "
-                           "verified_at, evidence_ref) VALUES (:t,:v,:m,:f,'tr069','reboot_cpe',:s,:cert,now(),'docs/wiki/bench/H2-reboot_cpe-test.md')"),
+                           "verified_at, evidence_ref) VALUES (:t,:v,:m,:f,'tr069','reboot_cpe',:s,:cert,CAST(:va AS timestamptz),:ev)"),
                       {"t": t, "v": PROFILE[0], "m": PROFILE[1], "f": PROFILE[2], "s": kw.get("status", "supported"),
-                       "cert": kw.get("cert", "observed")})
+                       "cert": kw.get("cert", "observed"), "va": None if kw.get("no_evidence") else datetime.now(UTC).isoformat(),
+                       "ev": None if kw.get("no_evidence") else "docs/wiki/bench/H2-reboot_cpe-test.md"})
         if kw.get("authorization", True) and kw.get("target", True):
             now = datetime.now(UTC)
-            c.execute(text("INSERT INTO bench_authorizations (tenant_id, operation, cpe_id, params_hash, window_start, window_end, authorized_by) "
-                           "VALUES (:t,'reboot_cpe',:c,:h,:s,:e,'responsavel')"),
-                      {"t": t, "c": cpe, "h": kw.get("hash", bench.params_hash({})), "s": now + timedelta(seconds=kw.get("start", -60)),
+            c.execute(text("INSERT INTO bench_authorizations (tenant_id, operation, cpe_id, params_hash, window_start, window_end, authorized_by, first_run) "
+                           "VALUES (:t,'reboot_cpe',:c,:h,:s,:e,'responsavel',:fr)"),
+                      {"t": t, "c": cpe, "fr": kw.get("first_run", False), "h": kw.get("hash", bench.params_hash({})), "s": now + timedelta(seconds=kw.get("start", -60)),
                        "e": now + timedelta(seconds=kw.get("end", 1800))})
 
 
@@ -445,3 +446,75 @@ def test_golden_lease_matches_what_the_edge_verifies():
 def features_default(name):
     from app.core import features
     return features.FEATURES[name]
+
+
+# ---- first run (ADR-0030 amendment): the owner's prior authorization stands in for the `observed` entry that only the evidence can create ----
+def _run_to_dispatch(client, seed, inv, migrated, h, cpe):
+    jid = _preview(client, h, cpe).json()["id"]
+    r = client.post(f"/v1/jobs/{jid}/submit", headers=h)
+    if r.status_code != 200 and r.status_code != 202:
+        return jid, r
+    return jid, client.post(f"/v1/jobs/{jid}/approve", headers=_approver(client, seed, migrated))
+
+
+def test_first_run_authorization_opens_the_gate_with_an_identified_entry_and_stays_single_use(client, seed, inv, migrated):
+    cpe, h = _full(client, seed, inv, migrated, cert="identified", first_run=True)
+    jid, r = _run_to_dispatch(client, seed, inv, migrated, h, cpe)
+    assert r.status_code == 200 and r.json()["status"] == "APPROVED", r.text
+    env = client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1"))
+    assert env.status_code == 200 and env.json()["operation"] == "reboot_cpe"
+    with migrated.begin() as c:
+        assert c.execute(text("SELECT state FROM bench_authorizations")).scalar() == "consumed"
+    # the same authorization cannot open a second job, and no new one exists
+    jid2 = _preview(client, h, cpe).json()["id"]
+    r2 = client.post(f"/v1/jobs/{jid2}/submit", headers=h)
+    assert r2.status_code == 409 and r2.json()["detail"] == "capability_not_observed"
+
+
+@pytest.mark.parametrize("kw", [
+    {"cert": "identified", "first_run": False},                      # identified alone never opens a write
+    {"capability": False, "first_run": True},                         # first_run does not replace the registry entry altogether
+    {"cert": "identified", "first_run": True, "status": "unknown"},   # an `unknown` row is not a claim
+])
+def test_first_run_needs_a_complete_identified_supported_entry(client, seed, inv, migrated, kw):
+    cpe, h = _full(client, seed, inv, migrated, **kw)
+    jid = _preview(client, h, cpe).json()["id"]
+    r = client.post(f"/v1/jobs/{jid}/submit", headers=h)
+    assert r.status_code == 409 and r.json()["detail"] == "capability_not_observed", r.text
+
+
+def test_the_registry_itself_refuses_a_supported_entry_without_evidence(client, seed, inv, migrated):
+    cpe = _cpe(client, inv, seed)
+    with pytest.raises(DBAPIError):   # the `identified` entry that a first run relies on is always complete: the database enforces it
+        _bench(migrated, seed, inv, cpe, cert="identified", first_run=True, no_evidence=True)
+
+
+def test_first_run_is_rechecked_at_dispatch_when_the_registry_changes(client, seed, inv, migrated):
+    cpe, h = _full(client, seed, inv, migrated, cert="identified", first_run=True)
+    jid, r = _run_to_dispatch(client, seed, inv, migrated, h, cpe)
+    assert r.json()["status"] == "APPROVED"
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("DELETE FROM device_capabilities"))
+    assert client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1")).status_code == 204
+    assert client.get(f"/v1/jobs/{jid}", headers=h).json()["status"] == "CANCELLED"
+
+
+def test_a_normal_authorization_works_once_observed_exists_and_first_run_is_then_moot(client, seed, inv, migrated):
+    cpe, h = _full(client, seed, inv, migrated, first_run=True)  # `observed` entry present
+    jid, r = _run_to_dispatch(client, seed, inv, migrated, h, cpe)
+    assert r.status_code == 200 and r.json()["status"] == "APPROVED", r.text
+
+
+def test_owner_cli_records_the_first_run_flag(client, seed, inv, migrated, admin_url, monkeypatch):
+    from app import cli
+
+    _flag(migrated, seed["A"])
+    cpe = _cpe(client, inv, seed)
+    _bench(migrated, seed, inv, cpe, authorization=False, cert="identified")
+    monkeypatch.setenv("ADMIN_DATABASE_URL", admin_url)
+    now = datetime.now(UTC)
+    cli.main(["bench-authorize", str(seed["A"]), "reboot_cpe", cpe, "--from", now.isoformat(), "--to", (now + timedelta(minutes=5)).isoformat(),
+              "--by", "responsavel", "--first-run"])
+    with migrated.begin() as c:
+        assert c.execute(text("SELECT first_run FROM bench_authorizations")).scalar() is True

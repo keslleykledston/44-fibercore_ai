@@ -6,7 +6,7 @@ Escopo: SOMENTE a ONT de bancada. Nada aqui toca CPE/ONU de cliente. Sem credenc
 1. Edge novo (com `agents/edge/internal/bench`) instalado no host do Edge; configuração com a seção `bench` (lista local com `oui`, `product_class`, `serial` da bancada), `bench_writes_enabled: true`, `jobs_enabled: true`, `nbi_url` e `"reboot_cpe"` em `allowed_operations`. Sem a seção, o Edge recusa o envelope.
 2. Backup da nuvem (`scripts/backup.sh`) e migração 0021 aplicada.
 3. Firmware do CPE gravado na nuvem (o registro de capacidades casa por firmware exato).
-4. Owner CLI (na nuvem): `bench-target-add` (CPE da bancada), `feature-set <tenant> bench_writes on`, entrada de capacidade conforme a emenda de primeira execução, e, **imediatamente antes da manobra**, `bench-authorize reboot_cpe <cpe> --from <agora> --to <agora+15min> --by <responsável>`.
+4. Owner CLI (na nuvem): `bench-target-add` (CPE da bancada), `feature-set <tenant> bench_writes on`, entrada de capacidade `supported` + `identified` com evidência (perfil exato, firmware incluído) e, **imediatamente antes da manobra**, `bench-authorize reboot_cpe <cpe> --from <agora> --to <agora+15min> --by <responsável> --first-run` (a primeira execução; depois dela a evidência promove a entrada a `observed` e as próximas autorizações dispensam `--first-run`).
 5. Responsável presente, com a ONT de bancada em condição de ser reiniciada (sem cliente dependendo dela).
 
 ## Execução

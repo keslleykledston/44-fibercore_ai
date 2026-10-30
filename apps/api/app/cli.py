@@ -61,6 +61,7 @@ def main(argv: list[str] | None = None) -> None:
     ba.add_argument("--from", dest="start", required=True, help="ISO-8601 start of the window")
     ba.add_argument("--to", dest="end", required=True, help="ISO-8601 end of the window (at most 4 h after the start)")
     ba.add_argument("--by", required=True, help="who authorizes (the responsible person)")
+    ba.add_argument("--first-run", action="store_true", help="ADR-0030 amendment: stands in for the missing `observed` registry entry (single use)")
     bu = sub.add_parser("bench-unlock", help="ADR-0030: clear the write lock of a bench target after a documented reconciliation")
     bu.add_argument("tenant_id"); bu.add_argument("cpe_id"); bu.add_argument("--reason", required=True)
     fs = sub.add_parser("feature-set", help="turn a per-tenant feature flag on/off (owner-only; overrides the code default)")
@@ -172,10 +173,12 @@ def main(argv: list[str] | None = None) -> None:
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
             aid = c.execute(
                 text("INSERT INTO bench_authorizations "
-                     "(tenant_id, operation, cpe_id, params_hash, window_start, window_end, authorized_by) "
-                     "VALUES (:t,:o,:c,:h,:s,:e,:by) RETURNING id"),
-                {"t": a.tenant_id, "o": a.operation, "c": a.cpe_id, "h": bench.params_hash({}), "s": start, "e": end, "by": a.by}).scalar()
-            print(f"authorization {aid}: {a.operation} on {a.cpe_id}, {start.isoformat()} .. {end.isoformat()}, single use")
+                     "(tenant_id, operation, cpe_id, params_hash, window_start, window_end, authorized_by, first_run) "
+                     "VALUES (:t,:o,:c,:h,:s,:e,:by,:fr) RETURNING id"),
+                {"t": a.tenant_id, "o": a.operation, "c": a.cpe_id, "h": bench.params_hash({}), "s": start, "e": end, "by": a.by,
+                 "fr": a.first_run}).scalar()
+            print(f"authorization {aid}: {a.operation} on {a.cpe_id}, {start.isoformat()} .. {end.isoformat()}, single use"
+                  + (", FIRST RUN (valid only while no `observed` entry exists)" if a.first_run else ""))
         elif a.cmd == "bench-unlock":
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
             n = c.execute(
