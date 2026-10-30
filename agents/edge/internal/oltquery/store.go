@@ -40,6 +40,7 @@ const (
 
 var (
 	ErrCorrupt     = errors.New("oltquery: state file is unreadable; the budget is treated as spent")
+	ErrConflict    = errors.New("oltquery: this job id is already queued with a different intent")
 	ErrQueueFull   = errors.New("oltquery: too many queries waiting for this OLT")
 	ErrBadState    = errors.New("oltquery: illegal state transition")
 	ErrResultSize  = errors.New("oltquery: result too large")
@@ -173,7 +174,10 @@ func (s *Store) update(fn func(f *file) error) error {
 // Enqueue records an approved query. The same job twice changes nothing (the Cloud may redeliver an envelope the Edge already has).
 func (s *Store) Enqueue(jobID string, in Intent, expires time.Time) error {
 	return s.update(func(f *file) error {
-		if _, ok := f.Entries[jobID]; ok {
+		if old, ok := f.Entries[jobID]; ok {
+			if old.Intent != in || !old.ExpiresAt.Equal(expires) { // only an identical redelivery is a no-op; the same id with another intent is a conflict
+				return ErrConflict
+			}
 			return nil
 		}
 		n := 0

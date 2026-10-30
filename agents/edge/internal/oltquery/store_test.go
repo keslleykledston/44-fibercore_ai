@@ -64,8 +64,15 @@ func TestLifecycleAndPersistenceAcrossRestarts(t *testing.T) {
 
 func TestEnqueueIsIdempotentAndBounded(t *testing.T) {
 	s, c := newStore(t)
-	enq(t, s, c, "j1", olt1)
-	enq(t, s, c, "j1", olt1)
+	exp := c.t.Add(15 * time.Minute)
+	for i := 0; i < 2; i++ { // the same envelope delivered twice
+		if err := s.Enqueue("j1", in(olt1), exp); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Enqueue("j1", Intent{QueryID: "olt.board", OLTRef: olt1}, c.t.Add(time.Hour)); !errors.Is(err, ErrConflict) {
+		t.Fatalf("the same job id with another intent must be refused: %v", err)
+	}
 	e1, _ := s.Claim(olt1, "s")
 	if _, err := s.Claim(olt1, "s"); !errors.Is(err, ErrNothingToDo) {
 		t.Fatalf("one entry, one claim: %v %v", e1, err)

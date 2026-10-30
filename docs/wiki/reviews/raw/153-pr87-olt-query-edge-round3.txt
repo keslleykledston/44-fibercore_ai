@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18e99-178f-7ff3-b248-5298ba3f1947).
+[codex] Turn started (01a18e99-17cb-7c53-8575-899bee705253).
+[codex] Assistant message captured: Vou comparar a branch com `main` e seguir os caminhos de carga e persistência da fila para pr...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/oltque...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/oltque... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'oltquery|Enqueue\\(|\\.Claim\\(|Complete\\(' agents/edge/internal"
+[codex] Command completed: /bin/bash -lc "rg -n 'oltquery|Enqueue\\(|\\.Claim\\(|Complete\\(' agents/edge/internal" (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/oltquery/store.go | sed -n '168,195p'; git status ...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/oltquery/store.go | sed -n '168,195p'; git status ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: reentrega de um job_id já usado com o...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: reentrega de um job_id já usado com outra intenção é aceita como sucesso e descarta silenciosamente a nova consulta.
+
+Findings:
+- [high] Enqueue aceita reutilização de job_id com intenção diferente (agents/edge/internal/oltquery/store.go:175-178)
+  Se um envelope válido chega com um `jobID` já presente, `Enqueue` retorna sucesso sem comparar a intenção nem a expiração existentes com os valores recebidos. Uma redelivery idêntica é segura, mas uma nova consulta com o mesmo ID pode ser descartada enquanto a chamada aparenta ter sido enfileirada; a fila pode então executar ou reportar a intenção antiga. Isso cria divergência entre a intenção assinada e o trabalho persistido. Compare os campos da entrada existente com os recebidos, tratando apenas uma duplicata idêntica como sucesso e recusando conflito.
+  Recommendation: Ao encontrar o `jobID`, comparar intenção e expiração; retornar erro de conflito se diferirem, mantendo idempotência somente para redelivery equivalente.
