@@ -338,3 +338,30 @@ func TestAnAbandonedClaimBecomesUnknownWithoutARestart(t *testing.T) {
 		t.Fatal("never claimed again")
 	}
 }
+
+func TestRefusedAndAcknowledgedEntriesAreBothPrunedAfterADay(t *testing.T) {
+	s, c := newStore(t)
+	for _, id := range []string{"ok", "refused"} {
+		enq(t, s, c, id, olt1)
+		e, _ := s.Claim(olt1, "s")
+		_ = s.Complete(e.JobID, json.RawMessage(`{}`))
+	}
+	if err := s.MarkReported("ok"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkRejected("refused"); err != nil {
+		t.Fatal(err)
+	}
+	if e, _, _ := s.Get("refused"); e.Reason != "cloud_rejected" || len(e.Result) == 0 {
+		t.Fatalf("%+v", e)
+	}
+	c.t = c.t.Add(25 * time.Hour)
+	if _, err := s.ExpireDue(); err != nil { // the periodic sweep, whatever the Cloud answered
+		t.Fatal(err)
+	}
+	for _, id := range []string{"ok", "refused"} {
+		if _, ok, _ := s.Get(id); ok {
+			t.Fatalf("%s must be pruned", id)
+		}
+	}
+}

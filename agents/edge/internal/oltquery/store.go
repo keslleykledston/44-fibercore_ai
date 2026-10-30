@@ -344,6 +344,7 @@ func (s *Store) ExpireDue() (int, error) {
 				n++
 			}
 		}
+		s.pruneReported(f)
 		return nil
 	})
 	return n, err
@@ -374,6 +375,15 @@ func (s *Store) PendingReports() ([]Entry, error) {
 	return out, nil
 }
 
+// pruneReported drops REPORTED entries (acknowledged or refused) older than KeepReported: the file stays small whatever the Cloud answered.
+func (s *Store) pruneReported(f *file) {
+	for id, x := range f.Entries {
+		if x.State == Reported && s.now().Sub(x.FinishedAt) > KeepReported {
+			delete(f.Entries, id)
+		}
+	}
+}
+
 // MarkHanded records, durably, that the outcome of a finished query was handed to the delivery queue now.
 func (s *Store) MarkHanded(jobID string) error {
 	return s.update(func(f *file) error {
@@ -399,6 +409,7 @@ func (s *Store) MarkRejected(jobID string) error {
 			return err
 		}
 		e.Reason, e.FinishedAt = "cloud_rejected", s.now()
+		s.pruneReported(f)
 		return nil
 	})
 }
@@ -417,11 +428,7 @@ func (s *Store) MarkReported(jobID string) error {
 			return err
 		}
 		e.FinishedAt = s.now()
-		for id, x := range f.Entries {
-			if x.State == Reported && s.now().Sub(x.FinishedAt) > KeepReported {
-				delete(f.Entries, id)
-			}
-		}
+		s.pruneReported(f)
 		return nil
 	})
 }
