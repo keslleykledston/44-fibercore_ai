@@ -134,3 +134,6 @@
 - Migração 0019 `cpe_state` (RLS forçada, CHECKs de métrica/escopo/tipo). `POST /v1/edge/cpe-state` (Edge → nuvem) e `GET /v1/cpes/{id}/state`; contrato OpenAPI atualizado.
 - Edge: o coletor do GenieACS envia `cpe_state` depois do inventário (só dispositivos do inventário; falha de leitura não derruba o inventário); gateway ganhou o endpoint.
 
+## Unreleased — PR 54 (R-D002 v1: WAN do CPE, ADR-0027)
+- Regra pura `R-D002` v1 sobre o `cpe_state` (sem leitura/leitura velha = `unknown`; todas as conexões não estabelecidas = hipótese `inferred` com confirmação humana; a ONU só dá contexto). `POST /diagnostics/runs` aceita `cpe_id`/`onu_id` para regras de CPE, somente leitura, mesma flag.
+

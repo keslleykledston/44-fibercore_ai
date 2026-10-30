@@ -20,6 +20,8 @@ def _cleanup(migrated):
     yield
     with migrated.begin() as c:
         c.execute(text("DELETE FROM tenant_features"))
+        c.execute(text("DELETE FROM onu_cpe_links WHERE cpe_id IN (SELECT id FROM cpes WHERE canonical_serial LIKE 'DGC%')"))
+        c.execute(text("DELETE FROM cpes WHERE canonical_serial LIKE 'DGC%'"))  # cpe_state and bindings follow (ON DELETE CASCADE)
         c.execute(text("DELETE FROM diagnostic_runs"))
         c.execute(text("DELETE FROM incident_onus WHERE onu_id IN (SELECT id FROM onus WHERE olt_id IN (SELECT id FROM olts WHERE name LIKE 'OLT-DG-%'))"))
         c.execute(text("DELETE FROM incidents WHERE olt_id IN (SELECT id FROM olts WHERE name LIKE 'OLT-DG-%')"))
@@ -172,7 +174,7 @@ def test_rules_listing_rbac_and_isolation(client, seed, inv, migrated):
     _on(migrated, seed["A"])
     ha, hd, hb = hdr(client, "alice", seed, "A"), hdr(client, "dave", seed, "A"), hdr(client, "bob", seed, "B")
     rules = client.get("/v1/diagnostics/rules", headers=ha).json()
-    assert [(x["id"], x["version"], x["read_only"]) for x in rules] == [("R-D001", 1, True)]
+    assert [(x["id"], x["version"], x["read_only"]) for x in rules] == [("R-D001", 1, True), ("R-D002", 1, True)]
     assert client.get("/v1/diagnostics/rules", headers=hd).status_code == 200                       # noc_n1 reads
     assert client.post("/v1/diagnostics/runs", headers=hd, json={"rule_id": "R-D001"}).status_code == 403   # but does not run
     assert client.post("/v1/diagnostics/runs", headers=agent(client, inv, "a1"), json={"rule_id": "R-D001"}).status_code == 403
@@ -233,3 +235,153 @@ def test_run_scoped_by_onu_resolves_its_pon_server_side(client, seed, inv, migra
     _on(migrated, seed["B"])
     assert client.post("/v1/diagnostics/runs", headers=hdr(client, "bob", seed, "B"),
                        json={"rule_id": "R-D001", "onu_id": onu["id"]}).status_code == 404         # RLS: B cannot probe A's ONU
+
+
+# ---- R-D002 v1: the WAN as the CPE reports it (pure) ----------------------------------------------------------------------------------
+def _cpe_row(**kw):
+    base = {"subject_id": "c1", "wan_link": "Up", "connections": ["Disconnected"], "state_fresh": True, "state_age_seconds": 60,
+            "onu_link": "none", "onu_status": None, "onu_fresh": False}
+    base.update(kw)
+    return base
+
+
+def _verdict(**kw):
+    rule = diagnostics.RULES[("R-D002", 1)]
+    return diagnostics.run(rule, [_cpe_row(**kw)])[0]
+
+
+def test_r_d002_never_claims_without_a_fresh_observation():
+    none = _verdict(wan_link=None, connections=[], state_age_seconds=None, state_fresh=False)
+    assert none["status"] == "unknown" and "no WAN observation" in none["reason"] and none["requires_human_confirmation"] is False
+    old = _verdict(state_fresh=False, state_age_seconds=99999)
+    assert old["status"] == "unknown" and "too old" in old["reason"] and old["hypothesis"] is None
+    assert old["evidence"]["state_age_seconds"] == 99999  # the evidence shows how old, not a made-up value
+
+
+def test_r_d002_down_needs_every_reported_connection_down_and_is_only_a_hypothesis():
+    sess = _verdict(connections=["Disconnected"])
+    assert sess["status"] == "inferred" and sess["suspected_cause"] == "wan_session_down" and sess["requires_human_confirmation"] is True
+    assert _verdict(connections=["Disconnected", "Error"], wan_link="Down")["suspected_cause"] == "wan_link_down"
+    assert _verdict(connections=["Down"], wan_link=None)["suspected_cause"] == "wan_session_down"  # link not reported: no claim about the link
+    # anything established wins; transitional/unknown states never become a claim
+    assert _verdict(connections=["Disconnected", "Connected"])["status"] == "observed"
+    assert _verdict(connections=["Up"])["status"] == "observed"
+    for state in ("Connecting", "PendingDisconnect", "Disconnecting", "Dormant", "Unknown"):
+        v = _verdict(connections=[state])
+        assert v["status"] == "observed" and v["hypothesis"] is None and "not conclusive" in v["reason"], state
+    assert _verdict(connections=["Disconnected", "Connecting"])["status"] == "observed"  # one transitional state keeps it inconclusive
+    assert _verdict(connections=[], wan_link="Down")["status"] == "observed"  # only a link reading: not enough for a connection claim
+
+
+def test_r_d002_onu_only_adds_context_and_never_changes_the_verdict():
+    base = _verdict(connections=["Disconnected"])
+    up = _verdict(connections=["Disconnected"], onu_link="confirmed", onu_status="online", onu_fresh=True)
+    down = _verdict(connections=["Disconnected"], onu_link="confirmed", onu_status="los", onu_fresh=True)
+    stale = _verdict(connections=["Disconnected"], onu_link="confirmed", onu_status="online", onu_fresh=False)
+    assert {base["status"], up["status"], down["status"], stale["status"]} == {"inferred"}
+    assert {base["suspected_cause"], up["suspected_cause"], down["suspected_cause"], stale["suspected_cause"]} == {"wan_session_down"}
+    assert "access layer is up" in up["context"] and "can be a consequence" in down["context"]
+    assert "not considered" in base["context"] and "not considered" in stale["context"]
+
+
+def test_r_d002_is_registered_deterministic_and_replays():
+    assert diagnostics.latest("R-D002").version == 1 and diagnostics.RULES[("R-D002", 1)].subject == "cpe"
+    rows = [_cpe_row(subject_id="a"), _cpe_row(subject_id="b", connections=["Connected"])]
+    rule = diagnostics.RULES[("R-D002", 1)]
+    a, b = diagnostics.run(rule, rows), diagnostics.run(rule, rows)
+    assert a == b and json.loads(json.dumps(a)) == a and a[0]["evidence_refs"] == [{"type": "cpe", "id": "a"}]
+    assert [f["finding_id"] for f in a] == ["R-D002/v1/a", "R-D002/v1/b"]
+    rnd = random.Random(7)  # noqa: S311  property: the verdict depends only on the inputs and never claims on a stale/absent reading
+    states = ["Connected", "Up", "Disconnected", "Down", "Connecting", "Unknown", "Error", "Dormant", "NotPresent"]
+    for _ in range(500):
+        row = _cpe_row(connections=sorted(rnd.sample(states, rnd.randint(0, 3))), wan_link=rnd.choice([None, "Up", "Down"]),
+                       state_fresh=rnd.random() < 0.7, onu_link=rnd.choice(["none", "confirmed"]), onu_status=rnd.choice([None, "online", "los"]),
+                       onu_fresh=rnd.random() < 0.5)
+        f = diagnostics.run(rule, [row])[0]
+        assert f == diagnostics.run(rule, [dict(row)])[0]
+        if not row["state_fresh"] or (not row["connections"] and row["wan_link"] is None):
+            assert f["status"] == "unknown"
+        if f["status"] == "inferred":
+            assert row["state_fresh"] and row["connections"] and not set(row["connections"]) & {"Connected", "Up"}
+
+
+# ---- R-D002 through the API ------------------------------------------------------------------------------------------------------------
+def _cpe_with_state(client, inv, migrated, seed, serial, ext, metrics, onu_status=None):
+    body = {"edge_id": str(inv["a1"]["edge"]), "observed_at": _now(), "cpes": [
+        {"canonical_serial": serial, "vendor": "ACME", "model": "G3000", "binding": {"protocol": "tr069", "external_id": ext, "connector_id": "c-dg"}}]}
+    assert client.post("/v1/edge/cpe-snapshots", headers=agent(client, inv, "a1"), json=body).status_code == 202
+    if metrics:
+        st = {"edge_id": str(inv["a1"]["edge"]), "observed_at": _now(), "states": [
+            {"binding": {"protocol": "tr069", "external_id": ext, "connector_id": "c-dg"}, "metrics": metrics}]}
+        assert client.post("/v1/edge/cpe-state", headers=agent(client, inv, "a1"), json=st).status_code == 202
+    h = hdr(client, "alice", seed, "A")
+    cpe = next(c["id"] for c in client.get("/v1/cpes", headers=h).json() if c["canonical_serial"] == serial)
+    onu = None
+    if onu_status:
+        _push(client, inv, "a1", NAME + serial, [{"serial": serial, "pon_path": "0/1/0", "status": onu_status, "rx_dbm": -20.0}], _now(-30))
+        onu = client.get(f"/v1/onus?serial={serial}", headers=h).json()[0]["id"]
+        with migrated.begin() as c:
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+            c.execute(text("INSERT INTO onu_cpe_links (tenant_id, onu_id, cpe_id, status, confidence, evidence, reviewed_by, reviewed_at) "
+                           "VALUES (:t,:o,:c,'confirmed',1,CAST('{\"rule\":\"manual\"}' AS jsonb),:u,now())"),
+                      {"t": str(seed["A"]), "o": onu, "c": cpe, "u": str(seed["alice"])})
+    return cpe, onu
+
+
+def _m(name, scope, value, at=None):
+    return {"name": name, "scope": scope, "value": value, "captured_at": at or _now(-60)}
+
+
+def test_r_d002_run_reads_the_stored_state_is_read_only_and_reproducible(client, seed, inv, migrated):
+    _on(migrated, seed["A"])
+    h = hdr(client, "alice", seed, "A")
+    cpe, onu = _cpe_with_state(client, inv, migrated, seed, "DGC-0001", "dgc-1",
+                               [_m("wan_link_status", "link/1", "Up"), _m("wan_connection_status", "ppp/3/1", "Disconnected")], onu_status="online")
+    with migrated.begin() as c:
+        before = c.execute(text("SELECT (SELECT count(*) FROM incidents), (SELECT count(*) FROM cpe_state), (SELECT count(*) FROM events_outbox)")).one()
+    r = client.post("/v1/diagnostics/runs", headers=h, json={"rule_id": "R-D002", "cpe_id": cpe})
+    assert r.status_code == 201, r.text
+    d = r.json()
+    assert d["scope"]["cpe_id"] == cpe and d["rule_version"] == 1 and d["truncated"] is False and len(d["findings"]) == 1
+    f = d["findings"][0]
+    assert f["status"] == "inferred" and f["suspected_cause"] == "wan_session_down" and f["requires_human_confirmation"] is True
+    assert f["evidence"]["connections"] == ["Disconnected"] and f["evidence"]["wan_link"] == "Up" and "access layer is up" in f["context"]
+    assert f["evidence"]["state_age_seconds"] < 300
+    with migrated.begin() as c:
+        after = c.execute(text("SELECT (SELECT count(*) FROM incidents), (SELECT count(*) FROM cpe_state), (SELECT count(*) FROM events_outbox)")).one()
+        stored = c.execute(text("SELECT inputs FROM diagnostic_runs WHERE id = :i"), {"i": d["run_id"]}).scalar_one()
+    assert after == before  # a run opens no incident, writes no state and publishes no event
+    assert "DGC-0001" not in json.dumps(stored) and set(stored[0]) == {
+        "subject_id", "wan_link", "connections", "state_age_seconds", "state_fresh", "onu_link", "onu_status", "onu_fresh"}  # no serial, no free text
+    assert client.get(f"/v1/diagnostics/runs/{d['run_id']}", headers=h).json()["reproducible"] is True
+    # the same CPE reached through its confirmed ONU
+    r2 = client.post("/v1/diagnostics/runs", headers=h, json={"rule_id": "R-D002", "onu_id": onu})
+    assert r2.status_code == 201 and r2.json()["scope"]["cpe_id"] == cpe and r2.json()["findings"][0]["status"] == "inferred"
+
+
+def test_r_d002_old_or_missing_state_is_unknown_and_scopes_are_validated(client, seed, inv, migrated):
+    _on(migrated, seed["A"])
+    h = hdr(client, "alice", seed, "A")
+    old, _ = _cpe_with_state(client, inv, migrated, seed, "DGC-0002", "dgc-2", [_m("wan_connection_status", "ppp/1/1", "Disconnected", _now(-7200))])
+    none, _ = _cpe_with_state(client, inv, migrated, seed, "DGC-0003", "dgc-3", [])
+    for cpe, why in ((old, "too old"), (none, "no WAN observation")):
+        f = client.post("/v1/diagnostics/runs", headers=h, json={"rule_id": "R-D002", "cpe_id": cpe}).json()["findings"][0]
+        assert f["status"] == "unknown" and why in f["reason"] and f["hypothesis"] is None
+    post = lambda body: client.post("/v1/diagnostics/runs", headers=h, json=body)  # noqa: E731
+    assert post({"rule_id": "R-D002"}).status_code == 422                                               # a CPE rule needs a CPE
+    assert post({"rule_id": "R-D002", "cpe_id": old, "olt_id": old}).status_code == 422                 # exclusive scopes
+    assert post({"rule_id": "R-D002", "olt_id": old}).status_code == 422
+    assert post({"rule_id": "R-D001", "cpe_id": old}).status_code == 422                                # a PON rule does not take a CPE
+    assert post({"rule_id": "R-D002", "cpe_id": "00000000-0000-0000-0000-000000000000"}).status_code == 404
+    onu_only = _cpe_with_state(client, inv, migrated, seed, "DGC-0004", "dgc-4", [])
+    assert onu_only[1] is None
+    _push(client, inv, "a1", NAME + "L", [{"serial": "DGC-LONELY", "pon_path": "0/1/0", "status": "online", "rx_dbm": -20.0}], _now(-30))
+    lonely = client.get("/v1/onus?serial=DGC-LONELY", headers=h).json()[0]["id"]
+    assert post({"rule_id": "R-D002", "onu_id": lonely}).status_code == 409                             # no confirmed link: nothing to read
+
+
+def test_r_d002_is_tenant_isolated(client, seed, inv, migrated):
+    _on(migrated, seed["A"])
+    _on(migrated, seed["B"])
+    cpe, _ = _cpe_with_state(client, inv, migrated, seed, "DGC-0005", "dgc-5", [_m("wan_connection_status", "ppp/1/1", "Disconnected")])
+    assert client.post("/v1/diagnostics/runs", headers=hdr(client, "bob", seed, "B"), json={"rule_id": "R-D002", "cpe_id": cpe}).status_code == 404

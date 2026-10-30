@@ -58,6 +58,52 @@ def r_d001_v1(i: dict) -> RuleResult:
     return RuleResult(False, "unknown", f)
 
 
+CONNECTED = frozenset({"Connected", "Up"})   # TR-098 WANxxxConnection / TR-181 PPP interface
+DOWN = frozenset({"Disconnected", "Unconfigured", "Down", "NotPresent", "LowerLayerDown", "Error"})  # not established, and not on its way
+
+
+def r_d002_v1(i: dict) -> RuleResult:
+    """R-D002 v1: what the CPE ITSELF reports about its WAN (link and connection state read from the ACS cache; ADR-0027).
+
+    Inputs: wan_link (str|None), connections (sorted list of connection states), state_fresh (bool), state_age_seconds (int|None),
+    onu_link ("confirmed"|"none"), onu_status (str|None), onu_fresh (bool).
+    Nothing is concluded without a FRESH observation. A connection counts as down only when EVERY reported connection is in DOWN: a
+    transitional or unknown state (Connecting, Dormant, Unknown...) never becomes a claim. The ONU state only adds context and never changes
+    the verdict."""
+    conns = [str(c) for c in i["connections"]]
+    onu = {"link": i["onu_link"], "status": i["onu_status"], "fresh": bool(i["onu_fresh"])}
+    evidence = {"wan_link": i["wan_link"], "connections": conns, "state_age_seconds": i["state_age_seconds"], "onu": onu}
+    if i["wan_link"] is None and not conns:
+        f = {"status": "unknown", "hypothesis": None, "reason": "no WAN observation of this CPE", "evidence": evidence,
+             "requires_human_confirmation": False,
+             "next_read_action": "request a read-only refresh of this CPE (job refresh, R0) when a fresh read is wanted"}
+        return RuleResult(False, "unknown", f)
+    if not i["state_fresh"]:
+        f = {"status": "unknown", "hypothesis": None, "reason": "the newest WAN observation of this CPE is too old", "evidence": evidence,
+             "requires_human_confirmation": False, "next_read_action": "request a read-only refresh of this CPE (job refresh, R0)"}
+        return RuleResult(False, "unknown", f)
+    if any(c in CONNECTED for c in conns):
+        f = {"status": "observed", "hypothesis": None, "reason": "the CPE reports an established WAN connection", "evidence": evidence,
+             "requires_human_confirmation": False, "next_read_action": "re-read after the next collection"}
+        return RuleResult(False, "unknown", f)
+    if conns and all(c in DOWN for c in conns):
+        cause = "wan_link_down" if i["wan_link"] == "Down" else "wan_session_down"
+        what = ("the CPE reports no WAN link" if cause == "wan_link_down"
+                else "the CPE reports its WAN link without an established connection (session or provisioning)")
+        if i["onu_link"] == "confirmed" and onu["fresh"]:
+            context = ("the linked ONU is online on the OLT: the access layer is up" if i["onu_status"] == "online"
+                       else "the linked ONU is not online on the OLT: the CPE state can be a consequence")
+        else:
+            context = "no fresh confirmed ONU link: the access layer was not considered"
+        f = {"status": "inferred", "hypothesis": what, "suspected_cause": cause, "context": context, "evidence": evidence,
+             "requires_human_confirmation": True,
+             "next_read_action": "confirm on the CPE and in the authentication logs; do not change anything from here"}
+        return RuleResult(True, cause, f)
+    f = {"status": "observed", "hypothesis": None, "reason": "the reported WAN state is transitional or not conclusive",
+         "evidence": evidence, "requires_human_confirmation": False, "next_read_action": "re-read after the next collection"}
+    return RuleResult(False, "unknown", f)
+
+
 @dataclass(frozen=True)
 class Rule:
     id: str
@@ -73,6 +119,10 @@ RULES: dict[tuple[str, int], Rule] = {
         "R-D001", 1, "Queda coletiva de acesso na PON",
         "Várias ONUs da mesma PON caíram juntas (online -> fora) em dado recente; ONUs cronicamente offline não contam.",
         "pon", r_d001_v1),
+    ("R-D002", 1): Rule(
+        "R-D002", 1, "Estado da WAN informado pelo CPE",
+        "O que o CPE informa da sua WAN (enlace e conexão) em leitura recente do cache do ACS; sem leitura recente, nada é afirmado.",
+        "cpe", r_d002_v1),
 }
 
 

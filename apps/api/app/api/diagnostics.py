@@ -6,7 +6,7 @@ Customer data never enters a run."""
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,6 +20,8 @@ from app.core import diagnostics, features
 
 router = APIRouter()
 
+# a WAN observation older than this supports no claim; the verdict is STORED as `state_fresh`, so a replay needs no clock
+STATE_FRESH_FOR = timedelta(hours=1)
 MAX_PONS = 200   # one run looks at most at this many PONs; a bigger scope is reported as truncated, never silently cut
 
 
@@ -30,11 +32,14 @@ class RunRequest(BaseModel):
     olt_id: UUID | None = None
     pon_id: UUID | None = None
     onu_id: UUID | None = None   # the PON of this ONU (resolved server-side); exclusive with olt_id/pon_id
+    cpe_id: UUID | None = None   # for CPE rules (R-D002): the CPE; exclusive with olt_id/pon_id/onu_id
 
     @model_validator(mode="after")
     def _one_scope(self) -> RunRequest:
         if self.onu_id and (self.olt_id or self.pon_id):
             raise ValueError("onu_id cannot be combined with olt_id or pon_id")
+        if self.cpe_id and (self.olt_id or self.pon_id or self.onu_id):
+            raise ValueError("cpe_id cannot be combined with olt_id, pon_id or onu_id")
         return self
 
 
@@ -84,25 +89,63 @@ def _pon_inputs(conn: Connection, olt_id: UUID | None, pon_id: UUID | None) -> t
     return out, truncated
 
 
+def _cpe_inputs(conn: Connection, cpe_id: UUID) -> list[dict]:
+    """One row for the CPE from the stored state (RLS scopes the tenant). `state_fresh`, `state_age_seconds` and the ONU freshness are
+    STORED: the rule has no clock. Only enum words and numbers go in (no serial, no customer data)."""
+    if conn.execute(text("SELECT 1 FROM cpes WHERE id = :c"), {"c": cpe_id}).first() is None:
+        raise HTTPException(404, "cpe not found")
+    now = datetime.now(UTC)
+    st = conn.execute(text("SELECT metric, scope, value, captured_at FROM cpe_state WHERE cpe_id = :c AND metric IN "
+                           "('wan_link_status','wan_connection_status') ORDER BY metric, scope"), {"c": cpe_id}).all()
+    link = next((r.value for r in st if r.metric == "wan_link_status"), None)
+    conns = sorted(r.value for r in st if r.metric == "wan_connection_status")
+    newest = max((r.captured_at for r in st), default=None)
+    age = None if newest is None else max(0, int((now - newest).total_seconds()))
+    onu = conn.execute(
+        text("SELECT o.status, o.observed_at FROM onu_cpe_links l JOIN onus o ON o.id = l.onu_id AND o.tenant_id = l.tenant_id "
+             "WHERE l.cpe_id = :c AND l.status = 'confirmed'"), {"c": cpe_id}).first()
+    return [{"subject_id": str(cpe_id), "wan_link": link, "connections": conns, "state_age_seconds": age,
+             "state_fresh": age is not None and age <= STATE_FRESH_FOR.total_seconds(),
+             "onu_link": "confirmed" if onu else "none", "onu_status": onu.status if onu else None,
+             "onu_fresh": bool(onu and onu.observed_at and now - onu.observed_at <= EVAL_FRESH_FOR)}]
+
+
 @router.post("/v1/diagnostics/runs", status_code=201)
 def create_run(body: RunRequest, p: Principal = Depends(require("diagnostics:run")), conn: Connection = TENANT_CONN) -> dict:
     features.ensure(conn, p.tenant_id, "diagnostic_engine")
     rule = diagnostics.RULES.get((body.rule_id, body.rule_version)) if body.rule_version else diagnostics.latest(body.rule_id)
     if rule is None:
         raise HTTPException(404, "rule not found")
-    pon_id = body.pon_id
-    if body.onu_id:
-        # RLS: another tenant's ONU is simply not found
-        row = conn.execute(text("SELECT pon_id FROM onus WHERE id = :o"), {"o": body.onu_id}).first()
-        if row is None:
-            raise HTTPException(404, "onu not found")
-        if row.pon_id is None:
-            raise HTTPException(409, "onu has no known PON")
-        pon_id = row.pon_id
-    inputs, truncated = _pon_inputs(conn, body.olt_id, pon_id)
+    pon_id, cpe_id = body.pon_id, body.cpe_id
+    if rule.subject == "cpe":
+        if body.olt_id or body.pon_id:
+            raise HTTPException(422, "this rule takes cpe_id or onu_id")
+        if body.onu_id:  # RLS: another tenant's ONU is simply not found
+            if conn.execute(text("SELECT 1 FROM onus WHERE id = :o"), {"o": body.onu_id}).first() is None:
+                raise HTTPException(404, "onu not found")
+            link = conn.execute(
+                text("SELECT cpe_id FROM onu_cpe_links WHERE onu_id = :o AND status = 'confirmed'"), {"o": body.onu_id}).first()
+            if link is None:
+                raise HTTPException(409, "onu has no confirmed cpe link")
+            cpe_id = link.cpe_id
+        if cpe_id is None:
+            raise HTTPException(422, "this rule needs cpe_id or onu_id")
+        inputs, truncated = _cpe_inputs(conn, cpe_id), False
+    else:
+        if body.cpe_id:
+            raise HTTPException(422, "this rule does not take cpe_id")
+        if body.onu_id:
+            # RLS: another tenant's ONU is simply not found
+            row = conn.execute(text("SELECT pon_id FROM onus WHERE id = :o"), {"o": body.onu_id}).first()
+            if row is None:
+                raise HTTPException(404, "onu not found")
+            if row.pon_id is None:
+                raise HTTPException(409, "onu has no known PON")
+            pon_id = row.pon_id
+        inputs, truncated = _pon_inputs(conn, body.olt_id, pon_id)
     findings = diagnostics.run(rule, inputs)
     scope = {"olt_id": str(body.olt_id) if body.olt_id else None, "pon_id": str(pon_id) if pon_id else None,
-             "onu_id": str(body.onu_id) if body.onu_id else None}
+             "onu_id": str(body.onu_id) if body.onu_id else None, **({"cpe_id": str(cpe_id)} if cpe_id else {})}
     run_id = conn.execute(
         text("INSERT INTO diagnostic_runs (tenant_id, rule_id, rule_version, scope, inputs, findings, truncated, requested_by) "
              "VALUES (:t,:r,:v,CAST(:s AS jsonb),CAST(:i AS jsonb),CAST(:f AS jsonb),:x,:u) RETURNING id"),
