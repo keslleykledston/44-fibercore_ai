@@ -243,8 +243,11 @@ def _c(state, fresh=True):
 
 
 def _cpe_row(**kw):
-    base = {"subject_id": "c1", "wan_link": "Up", "wan_link_fresh": True, "connections": [_c("Disconnected")], "newest_age_seconds": 60,
+    base = {"subject_id": "c1", "links": [_c("Up")], "connections": [_c("Disconnected")], "newest_age_seconds": 60,
             "oldest_age_seconds": 60, "onu_link": "none", "onu_status": None, "onu_fresh": False}
+    link = kw.pop("wan_link", "keep")
+    if link != "keep":  # test shorthand: a single link reading (state, fresh) or None
+        base["links"] = [] if link is None else [_c(*link) if isinstance(link, tuple) else _c(link)]
     base.update(kw)
     return base
 
@@ -255,12 +258,12 @@ def _verdict(**kw):
 
 
 def test_r_d002_never_claims_without_a_fresh_observation():
-    none = _verdict(wan_link=None, wan_link_fresh=False, connections=[], newest_age_seconds=None, oldest_age_seconds=None)
+    none = _verdict(wan_link=None, connections=[], newest_age_seconds=None, oldest_age_seconds=None)
     assert none["status"] == "unknown" and "no WAN observation" in none["reason"] and none["requires_human_confirmation"] is False
     old = _verdict(connections=[_c("Disconnected", False)], newest_age_seconds=99999, oldest_age_seconds=99999)
     assert old["status"] == "unknown" and "too long ago" in old["reason"] and old["hypothesis"] is None
     assert old["evidence"]["oldest_age_seconds"] == 99999  # the evidence shows how old, not a made-up value
-    only_old_link = _verdict(wan_link="Down", wan_link_fresh=False, connections=[])
+    only_old_link = _verdict(wan_link=("Down", False), connections=[])
     assert only_old_link["status"] == "unknown" and "too old" in only_old_link["reason"]
 
 
@@ -279,9 +282,9 @@ def test_r_d002_down_needs_every_reported_connection_down_and_is_only_a_hypothes
     assert sess["status"] == "inferred" and sess["suspected_cause"] == "wan_session_down" and sess["requires_human_confirmation"] is True
     assert _verdict(connections=[_c("Disconnected"), _c("Error")], wan_link="Down")["suspected_cause"] == "wan_link_down"
     # a link that was not read, or read too long ago, is not a claim about the link
-    assert _verdict(connections=[_c("Down")], wan_link=None, wan_link_fresh=False)["suspected_cause"] == "wan_connection_down"
-    assert _verdict(connections=[_c("Down")], wan_link="Up", wan_link_fresh=False)["suspected_cause"] == "wan_connection_down"
-    assert _verdict(connections=[_c("Down")], wan_link="Down", wan_link_fresh=False)["suspected_cause"] == "wan_connection_down"
+    assert _verdict(connections=[_c("Down")], wan_link=None)["suspected_cause"] == "wan_connection_down"
+    assert _verdict(connections=[_c("Down")], wan_link=("Up", False))["suspected_cause"] == "wan_connection_down"
+    assert _verdict(connections=[_c("Down")], wan_link=("Down", False))["suspected_cause"] == "wan_connection_down"
     for link in ("Initializing", "Unavailable"):  # a recent link reading that is neither Up nor Down says nothing about the session
         v = _verdict(connections=[_c("Disconnected")], wan_link=link)
         assert v["status"] == "inferred" and v["suspected_cause"] == "wan_connection_down" and "session" not in v["hypothesis"], link
@@ -294,6 +297,17 @@ def test_r_d002_down_needs_every_reported_connection_down_and_is_only_a_hypothes
     assert _verdict(connections=[_c("Disconnected"), _c("Connecting")])["status"] == "observed"  # one transitional state keeps it inconclusive
     only_link = _verdict(connections=[], wan_link="Down")  # only a recent link reading: not enough for a connection claim
     assert only_link["status"] == "observed" and "only the WAN link" in only_link["reason"]
+
+
+def test_r_d002_several_links_never_pick_one_and_disagreement_is_indeterminate():
+    two = lambda a, b, **kw: _verdict(connections=[_c("Disconnected")], links=[a, b], **kw)  # noqa: E731
+    assert two(_c("Up"), _c("Up"))["suspected_cause"] == "wan_session_down"        # every recent link says Up
+    assert two(_c("Down"), _c("Down"))["suspected_cause"] == "wan_link_down"       # every recent link says Down
+    assert two(_c("Up"), _c("Down"))["suspected_cause"] == "wan_connection_down"   # they disagree: no link is picked
+    assert two(_c("Down"), _c("Up", False))["suspected_cause"] == "wan_link_down"  # an old reading does not take part
+    assert two(_c("Up", False), _c("Down", False))["suspected_cause"] == "wan_connection_down"
+    # the order of the readings (text order of the scope, link/10 before link/2) cannot change the verdict
+    assert two(_c("Down"), _c("Up"))["suspected_cause"] == two(_c("Up"), _c("Down"))["suspected_cause"] == "wan_connection_down"
 
 
 def test_r_d002_onu_only_adds_context_and_never_changes_the_verdict():
@@ -318,14 +332,16 @@ def test_r_d002_is_registered_deterministic_and_replays():
     states = ["Connected", "Up", "Disconnected", "Down", "Connecting", "Unknown", "Error", "Dormant", "NotPresent"]
     for _ in range(800):
         conns = sorted((_c(st, rnd.random() < 0.7) for st in rnd.sample(states, rnd.randint(0, 3))), key=lambda c: (c["state"], c["fresh"]))
-        row = _cpe_row(connections=conns, wan_link=rnd.choice([None, "Up", "Down"]), wan_link_fresh=rnd.random() < 0.7,
+        links = sorted((_c(st, rnd.random() < 0.7) for st in rnd.sample(["Up", "Down", "Initializing"], rnd.randint(0, 2))),
+                       key=lambda c: (c["state"], c["fresh"]))
+        row = _cpe_row(connections=conns, links=links,
                        onu_link=rnd.choice(["none", "confirmed"]), onu_status=rnd.choice([None, "online", "los"]), onu_fresh=rnd.random() < 0.5)
         f = diagnostics.run(rule, [row])[0]
         assert f == diagnostics.run(rule, [dict(row)])[0]
         if f["status"] == "inferred":  # a claim needs readings that are ALL recent and NONE established
             assert row["connections"] and all(c["fresh"] for c in row["connections"])
             assert not {c["state"] for c in row["connections"]} & {"Connected", "Up"}
-        if not row["connections"] and row["wan_link"] is None:
+        if not row["connections"] and not row["links"]:
             assert f["status"] == "unknown"
 
 
@@ -369,14 +385,14 @@ def test_r_d002_run_reads_the_stored_state_is_read_only_and_reproducible(client,
     assert d["scope"]["cpe_id"] == cpe and d["rule_version"] == 1 and d["truncated"] is False and len(d["findings"]) == 1
     f = d["findings"][0]
     assert f["status"] == "inferred" and f["suspected_cause"] == "wan_session_down" and f["requires_human_confirmation"] is True
-    assert f["evidence"]["connections"] == [{"state": "Disconnected", "fresh": True}] and f["evidence"]["wan_link"] == "Up"
-    assert f["evidence"]["wan_link_fresh"] is True and "access layer is up" in f["context"] and f["evidence"]["newest_age_seconds"] < 300
+    assert f["evidence"]["connections"] == [{"state": "Disconnected", "fresh": True}] and f["evidence"]["links"] == [{"state": "Up", "fresh": True}]
+    assert "access layer is up" in f["context"] and f["evidence"]["newest_age_seconds"] < 300
     with migrated.begin() as c:
         after = c.execute(text("SELECT (SELECT count(*) FROM incidents), (SELECT count(*) FROM cpe_state), (SELECT count(*) FROM events_outbox)")).one()
         stored = c.execute(text("SELECT inputs FROM diagnostic_runs WHERE id = :i"), {"i": d["run_id"]}).scalar_one()
     assert after == before  # a run opens no incident, writes no state and publishes no event
     assert "DGC-0001" not in json.dumps(stored) and set(stored[0]) == {
-        "subject_id", "wan_link", "wan_link_fresh", "connections", "newest_age_seconds", "oldest_age_seconds", "onu_link", "onu_status",
+        "subject_id", "links", "connections", "newest_age_seconds", "oldest_age_seconds", "onu_link", "onu_status",
         "onu_fresh"}  # no serial, no free text
     assert client.get(f"/v1/diagnostics/runs/{d['run_id']}", headers=h).json()["reproducible"] is True
     # the same CPE reached through its confirmed ONU

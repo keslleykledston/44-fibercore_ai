@@ -65,17 +65,20 @@ DOWN = frozenset({"Disconnected", "Unconfigured", "Down", "NotPresent", "LowerLa
 def r_d002_v1(i: dict) -> RuleResult:
     """R-D002 v1: what the CPE ITSELF reports about its WAN (link and connection state read from the ACS cache; ADR-0027).
 
-    Inputs: wan_link (str|None) and wan_link_fresh (bool); connections (list of {"state", "fresh"}, sorted); newest_age_seconds and
-    oldest_age_seconds of the WAN readings (int|None); onu_link ("confirmed"|"none"), onu_status (str|None), onu_fresh (bool).
+    Inputs: links and connections (lists of {"state", "fresh"}, one per reading, sorted); newest_age_seconds and oldest_age_seconds of the
+    WAN readings (int|None); onu_link ("confirmed"|"none"), onu_status (str|None), onu_fresh (bool). The link is "Up" or "Down" only when
+    EVERY recent link reading says so (several links that disagree, old readings and other states are indeterminate: no link is picked).
     Freshness is per reading, not per CPE: the cache keeps the last row of every connection, so a recent reading of one connection must
     never vouch for an old reading of another. An established connection that is fresh wins; any connection last read too long ago could
     still be established, so the rule says nothing then. A connection counts as down only when EVERY reported connection is fresh and in
     DOWN: a transitional or unknown state (Connecting, Dormant, Unknown...) never becomes a claim. The ONU only adds context and never
     changes the verdict."""
     conns = [{"state": str(c["state"]), "fresh": bool(c["fresh"])} for c in i["connections"]]
-    link_fresh = bool(i["wan_link_fresh"])
+    links = [{"state": str(c["state"]), "fresh": bool(c["fresh"])} for c in i["links"]]
+    recent_links = {c["state"] for c in links if c["fresh"]}
+    link = next(iter(recent_links)) if len(recent_links) == 1 else None  # one recent state, or indeterminate
     onu = {"link": i["onu_link"], "status": i["onu_status"], "fresh": bool(i["onu_fresh"])}
-    evidence = {"wan_link": i["wan_link"], "wan_link_fresh": link_fresh, "connections": conns,
+    evidence = {"links": links, "connections": conns,
                 "newest_age_seconds": i["newest_age_seconds"], "oldest_age_seconds": i["oldest_age_seconds"], "onu": onu}
     refresh = "request a read-only refresh of this CPE (job refresh, R0) when a fresh read is wanted"
 
@@ -89,18 +92,17 @@ def r_d002_v1(i: dict) -> RuleResult:
              "next_read_action": "re-read after the next collection"}
         return RuleResult(False, "unknown", f)
 
-    if i["wan_link"] is None and not conns:
+    if not links and not conns:
         return unknown("no WAN observation of this CPE")
     if any(c["fresh"] and c["state"] in CONNECTED for c in conns):
         return observed("the CPE reports an established WAN connection")
     if any(not c["fresh"] for c in conns):
         return unknown("a WAN connection of this CPE was last read too long ago to rule out that it is established")
     if not conns:  # only a link reading
-        return unknown("the newest WAN observation of this CPE is too old") if not link_fresh else observed(
+        return unknown("the newest WAN observation of this CPE is too old") if not recent_links else observed(
             "only the WAN link was read: not enough for a claim about the connection")
     if all(c["state"] in DOWN for c in conns):
-        # only a RECENT Up or Down says something about the link; Initializing/Unavailable, not read or old claim nothing about it
-        link = i["wan_link"] if link_fresh else None
+        # only RECENT readings that all say Up (or all Down) say something about the link; anything else claims nothing about it
         cause = {"Down": "wan_link_down", "Up": "wan_session_down"}.get(link, "wan_connection_down")
         what = {"wan_link_down": "the CPE reports no WAN link",
                 "wan_session_down": "the CPE reports its WAN link without an established connection (session or provisioning)",

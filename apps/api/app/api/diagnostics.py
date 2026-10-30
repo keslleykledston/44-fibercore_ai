@@ -104,15 +104,16 @@ def _cpe_inputs(conn: Connection, cpe_id: UUID) -> list[dict]:
     def fresh(r) -> bool:  # per reading: the cache keeps the last row of EVERY connection, one recent row must not vouch for an old one
         return age(r) <= STATE_FRESH_FOR.total_seconds()
 
-    link = next((r for r in st if r.metric == "wan_link_status"), None)
+    links = sorted(({"state": r.value, "fresh": fresh(r)} for r in st if r.metric == "wan_link_status"),
+                   key=lambda c: (c["state"], c["fresh"]))
     conns = sorted(({"state": r.value, "fresh": fresh(r)} for r in st if r.metric == "wan_connection_status"),
                    key=lambda c: (c["state"], c["fresh"]))
     ages = [age(r) for r in st]
     onu = conn.execute(
         text("SELECT o.status, o.observed_at FROM onu_cpe_links l JOIN onus o ON o.id = l.onu_id AND o.tenant_id = l.tenant_id "
              "WHERE l.cpe_id = :c AND l.status = 'confirmed'"), {"c": cpe_id}).first()
-    return [{"subject_id": str(cpe_id), "wan_link": link.value if link else None, "wan_link_fresh": bool(link and fresh(link)),
-             "connections": conns, "newest_age_seconds": min(ages, default=None), "oldest_age_seconds": max(ages, default=None),
+    return [{"subject_id": str(cpe_id), "links": links, "connections": conns,
+             "newest_age_seconds": min(ages, default=None), "oldest_age_seconds": max(ages, default=None),
              "onu_link": "confirmed" if onu else "none", "onu_status": onu.status if onu else None,
              "onu_fresh": bool(onu and onu.observed_at and now - onu.observed_at <= EVAL_FRESH_FOR)}]
 
