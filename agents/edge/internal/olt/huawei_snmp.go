@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // HuaweiSNMP reads a Huawei MA5600-family OLT (validated on a MA5608T, MA5600V800R015C00) over SNMP v2c, read-only.
@@ -168,6 +169,7 @@ func (HuaweiSNMP) readPon(ctx context.Context, r SNMPReader, path string) ([]ONU
 	if err != nil {
 		return nil, PON{}, err
 	}
+	down := HuaweiSNMP{}.lastDown(ctx, r, ifx, ids, run)
 	var onus []ONU
 	for _, id := range ids {
 		u := ONU{Serial: sn[id], PonPath: path, Status: "unknown"}
@@ -180,6 +182,10 @@ func (HuaweiSNMP) readPon(ctx context.Context, r SNMPReader, path string) ([]ONU
 			}
 		case 2:
 			u.Status = "offline"
+			if t, ok := down[id]; ok {
+				tt := t
+				u.LastDownAt = &tt
+			}
 			switch c := cause[fmt.Sprintf("%s.46.1.24.%d.%d", hwXpon, ifx, id)]; {
 			case c.IsInt && c.Int == 13:
 				u.Status = "dying_gasp"
@@ -190,6 +196,61 @@ func (HuaweiSNMP) readPon(ctx context.Context, r SNMPReader, path string) ([]ONU
 		onus = append(onus, u)
 	}
 	return onus, PON{Path: path, Status: ponStatus(len(onus)), Verified: verified}, nil
+}
+
+// downBatch is how many OIDs one GET carries. The agent is rate-limited (one request per second), so the offline ONUs of a PON cost a handful of
+// requests, not one each.
+const downBatch = 20
+
+// lastDown reads hwGponDeviceOntControlLastDownTime (column 23, DateAndTime) of the OFFLINE ONUs. It is best effort: any failure (budget, timeout,
+// a value that does not parse) only means "not reported" for the affected ONUs and never fails the snapshot.
+func (HuaweiSNMP) lastDown(ctx context.Context, r SNMPReader, ifx int, ids []int, run map[int]int64) map[int]time.Time {
+	var oids []string
+	idOf := map[string]int{}
+	for _, id := range ids {
+		if run[id] == 2 {
+			o := fmt.Sprintf("%s.46.1.23.%d.%d", hwXpon, ifx, id)
+			oids, idOf[o] = append(oids, o), id
+		}
+	}
+	out := map[int]time.Time{}
+	for len(oids) > 0 {
+		n := min(downBatch, len(oids))
+		got, err := r.Get(ctx, oids[:n])
+		if err != nil {
+			return out // keep what was read so far
+		}
+		for _, o := range oids[:n] {
+			if v := got[o]; v.IsBytes && !v.Missing {
+				if t, ok := parseDateAndTime(v.Bytes); ok {
+					out[idOf[o]] = t
+				}
+			}
+		}
+		oids = oids[n:]
+	}
+	return out
+}
+
+// parseDateAndTime decodes an SNMPv2 DateAndTime (RFC 2579) WITH a time zone (11 bytes). An 8-byte value has no zone and is refused rather than
+// guessed; the all-zero / pre-2010 "never" value is not a time.
+func parseDateAndTime(b []byte) (time.Time, bool) {
+	if len(b) != 11 {
+		return time.Time{}, false
+	}
+	year := int(b[0])<<8 | int(b[1])
+	if year < 2010 || year > 2100 || b[2] < 1 || b[2] > 12 || b[3] < 1 || b[3] > 31 || b[4] > 23 || b[5] > 59 || b[6] > 60 || (b[8] != '+' && b[8] != '-') || b[9] > 14 || b[10] > 59 {
+		return time.Time{}, false
+	}
+	off := int(b[9])*3600 + int(b[10])*60
+	if b[8] == '-' {
+		off = -off
+	}
+	t := time.Date(year, time.Month(b[2]), int(b[3]), int(b[4]), int(b[5]), int(b[6]), int(b[7])*100e6, time.FixedZone("", off))
+	if t.Day() != int(b[3]) { // 31 February and friends roll over: not a real date
+		return time.Time{}, false
+	}
+	return t.UTC(), true
 }
 
 func ontID(suffix string) (int, bool) {

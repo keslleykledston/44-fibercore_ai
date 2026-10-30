@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var (
@@ -48,6 +49,9 @@ type ONU struct {
 	PonPath string
 	Status  string // online|offline|los|dying_gasp|unknown
 	RxDBm   *float64
+	// LastDownAt: when the OLT itself says the ONU last went down (SNMP only, offline ONUs only); nil = not reported. The OLT's clock may be off by
+	// minutes: it is good for "hours offline", not for correlating with other systems to the second.
+	LastDownAt *time.Time
 }
 
 type Snapshot struct {

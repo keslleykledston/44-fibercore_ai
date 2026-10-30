@@ -287,3 +287,9 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 ## 2026-10-30 — relatório de ONUs offline há mais de X horas (PR 68)
 - `make test-api` 398 passed; validate PASS. Provas por teste: ordenação (mais antigas primeiro), base explícita (`transition_observed` / `since_last_online`), ONU nunca vista online só contada, filtros por OLT e PON (padrão estrito), dado velho (ONU ou OLT, inclusive horário ausente) fora e contado antes do limit, isolamento entre tenants, CSV com fórmulas neutralizadas e cabeçalhos de exclusão, sem dado pessoal.
 
+
+## 2026-10-30 — "Last down time" da OLT para ONUs offline (SNMP → `olt_down_at`)
+- `make test-api` 400 passed; `go vet` + `go test -race ./...` (Edge) PASS; validate PASS; secrets-scan sem vazamentos.
+- Edge: leitura SNMP em lotes (≤20 OIDs por Get) só das ONUs offline; falha da leitura nunca derruba o snapshot; `parseDateAndTime` estrito (11 bytes, ano 2010–2100, data válida, fuso ≤14 h → UTC).
+- Cloud: coluna própria `onus.olt_down_at` (migração 0023), separada de `down_since` (a correlação de incidentes continua lendo só transições observadas). Provas por teste: valor guardado, nunca no futuro, ONU online não tem, leitura ausente mantém o último, leitura nova substitui, voltar online apaga, hora sem fuso → 422, transição observada vence (`basis` = `transition_observed`), ONU sem nada continua só em `excluded.unknown_start`.
+- Base nova do relatório: `olt_reported`. Limite declarado: o relógio da OLT do LAB está ~7 min atrás do real. Ainda NÃO há leitura real na OLT do LAB (próximo passo, supervisionado e só leitura).

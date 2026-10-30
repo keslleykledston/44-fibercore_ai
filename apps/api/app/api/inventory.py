@@ -47,6 +47,15 @@ class OnuIn(BaseModel):
     pon_path: Short | None = None
     status: Literal["online", "offline", "los", "dying_gasp", "unknown"] = "unknown"
     rx_dbm: float | None = Field(default=None, ge=-50, le=10)
+    # the OLT's own "last down time" for this ONU (read-only SNMP), sent only for ONUs that are not online
+    last_down_at: datetime | None = None
+
+    @field_validator("last_down_at")
+    @classmethod
+    def _aware(cls, v: datetime | None) -> datetime | None:
+        if v is not None and v.tzinfo is None:
+            raise ValueError("last_down_at must be timezone-aware")
+        return v
 
 
 class OltSnapshot(BaseModel):
@@ -160,8 +169,10 @@ def ingest_olt_snapshot(
     if body.onus:
         conn.execute(
             text(
-                "INSERT INTO onus (tenant_id, olt_id, pon_id, serial, status, rx_dbm, observed_at, last_online_at) "
-                "VALUES (:t,:o,:pi,:s,:st,:rx,:ts, CASE WHEN CAST(:st AS text) = 'online' THEN LEAST(CAST(:ts AS timestamptz), now()) END) "
+                "INSERT INTO onus (tenant_id, olt_id, pon_id, serial, status, rx_dbm, observed_at, last_online_at, olt_down_at) "
+                "VALUES (:t,:o,:pi,:s,:st,:rx,:ts, CASE WHEN CAST(:st AS text) = 'online' THEN LEAST(CAST(:ts AS timestamptz), now()) END, "
+                "CASE WHEN CAST(:ld AS timestamptz) IS NOT NULL AND CAST(:st AS text) IN ('offline','los','dying_gasp') "
+                "THEN LEAST(CAST(:ld AS timestamptz), CAST(:ts AS timestamptz), now()) END) "
                 "ON CONFLICT (tenant_id, olt_id, serial) DO UPDATE SET pon_id=EXCLUDED.pon_id, status=EXCLUDED.status, "
                 "rx_dbm=EXCLUDED.rx_dbm, observed_at=EXCLUDED.observed_at, "
                 "last_online_at = CASE WHEN EXCLUDED.status = 'online' "
@@ -172,13 +183,19 @@ def ingest_olt_snapshot(
                 # correlation can tell.
                 "down_since = CASE WHEN EXCLUDED.status = 'online' THEN NULL "
                 "WHEN onus.status = 'online' AND EXCLUDED.status IN ('offline','los','dying_gasp') THEN LEAST(EXCLUDED.observed_at, now()) "
-                "ELSE onus.down_since END "
+                "ELSE onus.down_since END, "
+                # What the OLT says about itself, kept apart from down_since: replaced by each report while the ONU stays down, kept if
+                # this read had none (it is best effort), erased when the ONU is back. Never later than the observation or the server clock.
+                "olt_down_at = CASE WHEN EXCLUDED.status = 'online' THEN NULL "
+                "WHEN EXCLUDED.status IN ('offline','los','dying_gasp') AND CAST(:ld AS timestamptz) IS NOT NULL "
+                "THEN LEAST(CAST(:ld AS timestamptz), EXCLUDED.observed_at, now()) "
+                "ELSE onus.olt_down_at END "
                 # STRICTLY newer: a snapshot with the same observed_at is a retry/replay of the one already applied and must not
                 # re-apply states, or a reordered tie could fabricate or erase a drop (down_since is derived from the old row).
                 "WHERE onus.observed_at IS NULL OR onus.observed_at < EXCLUDED.observed_at"
             ),
             [{"t": p.tenant_id, "o": olt_id, "pi": pon_ids.get(x.pon_path) if x.pon_path else None, "s": x.serial,
-              "st": x.status, "rx": x.rx_dbm, "ts": body.observed_at} for x in body.onus],
+              "st": x.status, "rx": x.rx_dbm, "ts": body.observed_at, "ld": x.last_down_at} for x in body.onus],
         )
     evaluate_pons(conn, p.tenant_id, olt_id, [x.pon_path for x in body.pons if x.complete], [o.serial for o in body.onus],
                   body.observed_at)
@@ -380,10 +397,11 @@ def list_offline_onus(
     """ONUs that have been offline for at least `min_hours`, longest first (to schedule a pickup or to contact the customer).
 
     The start of the outage is stated with its BASIS, never invented: `transition_observed` (the Edge saw it online and then down: exact),
+    `olt_reported` (the OLT's own "last down time" for the ONU, read by the Edge; the OLT clock can be a few minutes off),
     `since_last_online` (no transition was seen, so it is when the ONU was last seen online: the outage is AT MOST that long), and an ONU that
     was never seen online has no known start and is only counted in `excluded.unknown_start`. Rows whose OLT snapshot is stale are left out
     (counted in `excluded.stale`) unless `include_stale=true`, so an OLT the Edge stopped collecting cannot pass for a long outage."""
-    ref = "COALESCE(u.down_since, u.last_online_at)"
+    ref = "COALESCE(u.down_since, u.olt_down_at, u.last_online_at)"
     # fresh = the ONU AND its OLT's snapshot were both observed recently; decided in SQL so that the limit and the counts see the same candidates
     # two-valued: a missing observation time (both columns are nullable) is stale, never "unknown", so the page and the count agree
     fresh = "COALESCE(u.observed_at >= now() - make_interval(secs => :fs) AND o.observed_at >= now() - make_interval(secs => :fs), false)"
@@ -396,7 +414,7 @@ def list_offline_onus(
     unknown = conn.execute(text(f"SELECT count(*) {base} AND {ref} IS NULL"), args).scalar_one()  # noqa: S608
     stale = 0 if include_stale else conn.execute(text(f"SELECT count(*) {base} AND {due} AND NOT {fresh}"), {**args, "s": int(min_hours * 3600)}).scalar_one()  # noqa: S608
     rows = conn.execute(
-        text(f"SELECT u.id, u.serial, o.name AS olt, pp.pon_path, u.status, u.down_since, u.last_online_at, u.observed_at, "  # noqa: S608
+        text(f"SELECT u.id, u.serial, o.name AS olt, pp.pon_path, u.status, u.down_since, u.olt_down_at, u.last_online_at, u.observed_at, "  # noqa: S608
              f"o.observed_at AS olt_observed_at, {ref} AS since {base} AND {due} {'' if include_stale else 'AND ' + fresh} "
              f"ORDER BY {ref} ASC LIMIT :l"),
         {**args, "s": int(min_hours * 3600), "l": limit + 1}).all()
@@ -408,7 +426,8 @@ def list_offline_onus(
         items.append({
             "onu_id": str(r.id), "serial": r.serial, "olt": r.olt, "pon_path": r.pon_path, "status": r.status,
             "offline_since": r.since.isoformat(), "offline_hours": round((now - r.since).total_seconds() / 3600, 1),
-            "basis": "transition_observed" if r.down_since is not None else "since_last_online",
+            "basis": ("transition_observed" if r.down_since is not None
+                      else "olt_reported" if r.olt_down_at is not None else "since_last_online"),
             "last_online_at": r.last_online_at.isoformat() if r.last_online_at else None,
             "observed_at": r.observed_at.isoformat() if r.observed_at else None,
             "olt_observed_at": r.olt_observed_at.isoformat() if r.olt_observed_at else None, "freshness": _fresh(oldest),

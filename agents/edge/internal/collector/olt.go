@@ -143,6 +143,8 @@ type onuJSON struct {
 	Pon    string   `json:"pon_path,omitempty"`
 	Status string   `json:"status"`
 	Rx     *float64 `json:"rx_dbm"`
+	// LastDownAt (UTC, RFC 3339): when the OLT says this OFFLINE ONU last went down (SNMP). Absent = the OLT did not say.
+	LastDownAt string `json:"last_down_at,omitempty"`
 }
 type ponJSON struct {
 	Path     string `json:"pon_path"`
@@ -377,7 +379,11 @@ func (o *OLT) buildItems(name, observed string, id olt.Identity, level olt.Level
 		return nil
 	}
 	for _, u := range snap.ONUs {
-		cur.ONUs = append(cur.ONUs, onuJSON{Serial: u.Serial, Pon: u.PonPath, Status: u.Status, Rx: u.RxDBm})
+		j := onuJSON{Serial: u.Serial, Pon: u.PonPath, Status: u.Status, Rx: u.RxDBm}
+		if u.LastDownAt != nil && u.Status != "online" && u.Status != "unknown" {
+			j.LastDownAt = u.LastDownAt.UTC().Format(time.RFC3339)
+		}
+		cur.ONUs = append(cur.ONUs, j)
 		if len(cur.ONUs) == maxPerSnapshot {
 			if err := flush(); err != nil {
 				return nil, err
