@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { DataFreshness, EmptyState, ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { OnuTable } from "@/components/OnuTable";
@@ -11,7 +12,9 @@ export default async function Rede({ searchParams }: { searchParams: Promise<{ s
   if (olts.status === 403 || onus.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver o inventário." /></AppShell>;
   return (
     <AppShell active="/rede" user="1">
-      <PageHeader title="Rede" subtitle="OLTs e ONUs com frescor e fonte do dado" helpSlug="rede/consultar-onu" />
+      <PageHeader title="Rede" subtitle="OLTs e ONUs com frescor e fonte do dado" helpSlug="rede/consultar-onu">
+        <Link href="/rede/offline" data-testid="offline-link" className="inline-flex min-h-touch items-center rounded-btn border border-line px-4 text-sm hover:bg-surface-2">ONUs offline</Link>
+      </PageHeader>
       <div data-testid="onu-inventory-ready" className="grid gap-6 lg:grid-cols-[320px_1fr]">
         <section aria-label="OLTs">
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">OLTs</h2>

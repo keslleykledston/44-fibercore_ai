@@ -572,3 +572,12 @@ def test_an_observed_transition_wins_over_the_olt_reported_time_and_a_naive_time
     bad = snap(inv, observed=_now(-1))
     bad["onus"] = [{"serial": "OLTDOWN-NAIVE", "status": "offline", "last_down_at": "2026-10-30T10:00:00"}]
     assert client.post("/v1/edge/olt-snapshots", headers=a, json=bad).status_code == 422
+
+
+def test_csv_cell_neutralises_formulas_even_behind_blanks_and_control_characters():
+    from app.api.inventory import _csv_cell
+
+    for bad in ["=1+1", "+1", "-1", "@SUM(A1)", " =1", "  \t=1", "\t1", "\r1", "\n=1", "\x0b@x", "\u00a0=1", "\ufeff+1"]:
+        assert _csv_cell(bad) == "'" + bad, repr(bad)
+    for ok in ["HWTC00000001", "OLT-1", "0/0/14", "a=b", "", None, 3.5, "x -1"]:
+        assert _csv_cell(ok) == ok, repr(ok)

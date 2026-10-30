@@ -19,6 +19,9 @@ articles:
   e2e_test: help-screenshots.spec.ts › rede/consultar-onu; app.spec.ts › busca por
     serial
   last_verified: '2026-10-28'
+- slug: rede/onus-offline
+  ui_route: /rede/offline
+  status: draft
 - slug: rede/onu-360
   ui_route: /rede/onu/[id]
   status: published

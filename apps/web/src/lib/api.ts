@@ -78,3 +78,13 @@ export async function apiMfaStatus(): Promise<MfaStatus | null> {
   if (res.status === 401) redirect("/login");
   return res.ok ? ((await res.json()) as MfaStatus) : null;
 }
+
+/** GET server-side que devolve o corpo bruto (ex.: CSV) com o token da sessão; o token nunca chega ao navegador. */
+export async function apiRaw(path: string): Promise<{ status: number; body: string; contentType: string | null; headers: Headers }> {
+  const { token, workspace } = await getSession();
+  if (!token) return { status: 401, body: "", contentType: null, headers: new Headers() };
+  const res = await fetch(`${API}${path}`, {
+    cache: "no-store", headers: { Authorization: `Bearer ${token}`, ...(workspace ? { "X-Workspace-ID": workspace } : {}) },
+  });
+  return { status: res.status, body: await res.text(), contentType: res.headers.get("content-type"), headers: res.headers };
+}

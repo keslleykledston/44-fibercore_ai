@@ -1,8 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { API_URL, EMAIL, PASSWORD, login, totp } from "./helpers";
+import { humanHours, offlineQuery, parseOfflineFilters } from "../src/lib/offline";
 
-const routes = ["/", "/rede", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/administracao/membros", "/conta/seguranca", "/ajuda", "/ajuda/rede/consultar-onu"];
+const routes = ["/", "/rede", "/rede/offline", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/administracao/membros", "/conta/seguranca", "/ajuda", "/ajuda/rede/consultar-onu"];
 
 test("login inválido mostra erro e não cria sessão", async ({ page, context }) => {
   await page.goto("/login");
@@ -482,4 +483,38 @@ test("Membros: administrador redefine o MFA de outra pessoa com senha + segundo 
   } finally {
     await request.post(`${API_URL}/v1/auth/mfa/disable`, { headers: admin.h, data: { password: PASSWORD, code: admin.recovery[2] } });
   }
+});
+
+test("ONUs offline: tela mostra as contagens e o CSV sai pelo BFF (só leitura)", async ({ page }) => {
+  await login(page);
+  await page.getByRole("link", { name: "Rede" }).first().click();
+  await page.getByTestId("offline-link").click();
+  await expect(page.getByTestId("offline-report-ready")).toBeVisible();
+  await expect(page.getByTestId("kpi-Sem horário de início")).toHaveText("2"); // as 2 ONUs do seed nunca foram vistas online: contadas, não listadas
+  await expect(page.getByTestId("empty-state")).toBeVisible();
+  const r = await page.request.get("/bff/onus/offline?min_hours=24&olt_id=nao-e-uuid&pon_path=%27%3Bdrop");
+  expect(r.status()).toBe(200);
+  expect(r.headers()["content-type"]).toContain("text/csv");
+  expect((await r.text()).split("\n")[0]).toContain("serial,olt,pon_path,status,offline_since");
+  expect((await page.request.get("/bff/onus/offline")).status()).toBe(200);
+});
+
+test("CSV de ONUs offline exige sessão", async ({ playwright, baseURL }) => {
+  const anon = await playwright.request.newContext({ baseURL });
+  expect([401, 403]).toContain((await anon.get("/bff/onus/offline")).status());
+  await anon.dispose();
+});
+
+test("filtros do relatório offline: o que não passa na validação nunca chega à API", () => {
+  const bad = parseOfflineFilters({ min_hours: "abc", olt_id: "x", pon_path: "';drop", include_stale: "yes" });
+  expect(bad).toEqual({ minHours: 24, oltId: null, ponPath: null, includeStale: false });
+  expect(offlineQuery(bad)).toBe("min_hours=24");
+  expect(parseOfflineFilters({ min_hours: "-1" }).minHours).toBe(24);
+  expect(parseOfflineFilters({ min_hours: "8761" }).minHours).toBe(24);
+  expect(parseOfflineFilters({ min_hours: "0" }).minHours).toBe(0);
+  const id = "0f6c1b0e-5d7a-4a43-9a53-1d0e3a8f4b21";
+  const ok = parseOfflineFilters({ min_hours: "48.5", olt_id: id, pon_path: "0/0/14", include_stale: "1" });
+  expect(ok).toEqual({ minHours: 48.5, oltId: id, ponPath: "0/0/14", includeStale: true });
+  expect(offlineQuery(ok, { format: "csv" })).toBe(`min_hours=48.5&format=csv&olt_id=${id}&pon_path=0%2F0%2F14&include_stale=true`);
+  expect([humanHours(0.2), humanHours(5), humanHours(50), humanHours(48)]).toEqual(["12 min", "5 h", "2 d 2 h", "2 d"]);
 });

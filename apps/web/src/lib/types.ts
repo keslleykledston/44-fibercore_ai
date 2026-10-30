@@ -48,3 +48,12 @@ export type DiagnosticFinding = {
 };
 export type DiagnosticRun = { run_id: string; rule_id: string; rule_version: number; scope: { onu_id: string | null; pon_id: string | null }; created_at: string; findings: DiagnosticFinding[]; reproducible: boolean | null };
 
+export type OfflineBasis = "transition_observed" | "olt_reported" | "since_last_online";
+export type OfflineOnu = {
+  onu_id: string; serial: string; olt: string; pon_path: string | null; status: "offline" | "los" | "dying_gasp"; offline_since: string; offline_hours: number;
+  basis: OfflineBasis; last_online_at: string | null; observed_at: string | null; olt_observed_at: string | null; freshness: string;
+};
+export type OfflineOnuReport = {
+  generated_at: string; criteria: { min_hours: number; olt_id: string | null; pon_path: string | null; include_stale: boolean };
+  excluded: { stale: number; unknown_start: number }; truncated: boolean; count: number; items: OfflineOnu[];
+};
