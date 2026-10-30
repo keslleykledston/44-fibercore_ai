@@ -97,3 +97,10 @@
 - H2 `reboot_cpe` REAL executado na ONT de bancada com sucesso e aceito pelo responsável; registro `observed` (evidência `docs/wiki/bench/H2-reboot_cpe-2026-10-30.md`). Próximas autorizações de reboot são NORMAIS (sem `--first-run`); ritmo do Edge: 1 reboot por 30 min por dispositivo.
 - Pedido do responsável: repetir o teste para validar (após 04:02 UTC, nova autorização normal). Depois: H3 (SSID `BANCADA-…`) e H4 (ONU na OLT) só por emenda do ADR-0030 + autorização.
 
+## Backlog acrescentado em 2026-10-30 (a pedido do responsável; encaixar na ordem ideal, sem atropelar as fases)
+- **Relatório "ONUs offline há mais de X horas"** por OLT e PON (ex.: agendar retirada, contatar o cliente), com exportação CSV. Hoje há `onus.down_since`/`last_online_at` do snapshot da OLT, mas nenhuma consulta/relatório por duração nem histórico de transições. Passos: (1) consulta `GET /v1/onus` com filtro `status=offline` + `down_for_min` e filtros por OLT/PON (leitura, sem migração); (2) exportação CSV e tela; (3) tabela de histórico `onu_state_events` (migração) para "tempo acumulado offline no mês"; (4) política: ONU crônica fora das regras de queda em massa continua separada. Ordem sugerida: depois do H4 (`onu_reset`/`onu_deactivate`) e antes de um 2º modelo de ONU, ou em paralelo se o H4 estiver esperando autorização.
+- **2º modelo de ONU para homologar:** pode começar o H2/H3 (TR-069, por perfil) em paralelo à parte da OLT; o `bench.olt` do Edge hoje é UMA ONU (precisa virar lista para o H4 do 2º modelo) e o ADR-0030 precisa de emenda (lista fechada). Precisa da ONT nova na bancada, do fabricante/modelo e da posição na OLT.
+
+## Estado do H4 (2026-10-30 ~05:50 UTC)
+- `ont reset 14 10` PEDE CONFIRMAÇÃO no CLI da OLT: o Edge parou (fail-closed), a ONU NÃO foi reiniciada (ACS: `_lastBoot` inalterado). Job `6c5d99e1-…` FAILED, alvo travado, autorização `fe3a6406-…` consumida. Próximo: capturar o texto exato da pergunta (sonda supervisionada, responde "n"), tratar UMA confirmação conhecida por comando, Codex, nova autorização do responsável.
+
