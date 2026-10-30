@@ -1,0 +1,35 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18d45-4ea0-70a2-a6f8-b2b2df4e11ab).
+[codex] Turn started (01a18d45-4edb-7790-acd1-12f67af838db).
+[codex] Assistant message captured: Vou inspecionar o diff real contra `main` e seguir a construção da app/rotas, especialmente d...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/permissio...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/permissio... (exit 0)
+[codex] Running command: /bin/bash -lc "rg \"include_router|mount\\(|FastAPI\\(|APIRouter\\(|Depends\\(|require\\(\" a...
+[codex] Command completed: /bin/bash -lc "rg \"include_router|mount\\(|FastAPI\\(|APIRouter\\(|Depends\\(|require\\(\" a... (exit 0)
+[codex] Assistant message captured: A introspecção parece limitada ao `app.routes` de primeiro nível e a um `original_router` por...
+[codex] Running command: /bin/bash -lc "sed -n '1,100p' apps/api/app/main.py; cat apps/api/pyproject.toml; git status ...
+[codex] Command completed: /bin/bash -lc "sed -n '1,100p' apps/api/app/main.py; cat apps/api/pyproject.toml; git status ... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- docs/security/SECURITY_AND_...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- docs/security/SECURITY_AND_... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: o inventário pode omitir rotas reais e, por...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: o inventário pode omitir rotas reais e, por isso, seu teste não demonstra cobertura completa; também não congela os tipos de rotas sem permissão.
+
+Findings:
+- [high] Inventário ignora rotas aninhadas e pode deixar rotas reais fora da matriz (apps/api/app/core/rbac_matrix.py:13-22)
+  `_routes()` só lê `app.routes` e, quando encontra uma rota com `original_router`, inspeciona apenas um nível de `original_router.routes`. Rotas adicionadas por outros mecanismos, routers aninhados e aplicações montadas não são percorridos. O teste valida apenas as linhas retornadas por esse inventário, então uma rota omitida pode não aparecer na matriz nem ser obrigada a ter permissão ou justificativa. A app atual usa `include_router`, mas a alegação de inventariar rotas reais não é garantida por esse percurso e pode deixar de ser verdadeira quando a composição mudar.
+  Recommendation: Percorra recursivamente a estrutura efetiva de rotas, incluindo mounts e routers aninhados, ou use `app.routes` já expandido pela versão suportada do FastAPI. Faça o teste comparar o inventário com todos os caminhos e métodos efetivamente roteáveis.
+- [medium] Listas sem permissão não congelam o tipo de autenticação da rota (apps/api/tests/test_rbac_inventory.py:64-79)
+  O teste só exige que rotas sem permissão estejam em alguma lista; ele não verifica que uma rota de `PUBLIC` continua pública, que uma rota `SELF_AUTH` continua autenticando o próprio usuário, ou que uma rota `SESSION_ONLY` mantém uma sessão válida. Se uma dessas rotas mudar de mecanismo de autenticação, o teste ainda pode passar e a matriz classifica todas como “pública ou autentica pelo próprio fluxo”. A lista nomeada, portanto, não comprova a justificativa de segurança que o foco exige.
+  Recommendation: Inclua no inventário uma classificação verificável das dependências de autenticação e compare cada rota, método e classificação com as listas esperadas; falhe se uma rota PUBLIC adquirir autenticação, ou se SELF_AUTH/SESSION_ONLY perder a proteção correspondente.
+- [medium] Teste de rotas sensíveis sem permissão não verifica mudanças de estado ou acesso a dados pessoais (apps/api/tests/test_rbac_inventory.py:82-88)
+  Apesar do nome, o teste só impõe uma condição às rotas em `SESSION_ONLY`: método GET e path fora de três prefixos. Não inspeciona handlers nem valida que endpoints em `PUBLIC` ou `SELF_AUTH` não executem mudanças sensíveis, nem protege rotas futuras que leiam PII sob caminhos não previstos. A lista atual inclui operações de MFA/autenticação que são sensíveis, mas a classificação não demonstra que elas só atuam sobre a conta própria ou que continuam exigindo a prova indicada no comentário.
+  Recommendation: Substitua a checagem de prefixos por expectativas explícitas por rota e testes de comportamento negativo sem credencial, com identidade alheia e com sessão insuficiente para cada fluxo sensível; verifique também que os handlers SELF_AUTH vinculam a operação ao principal autenticado.
+
+Next steps:
+- Corrigir o percurso de inventário e as expectativas de autenticação por rota antes de tratar a matriz como prova de cobertura RBAC.

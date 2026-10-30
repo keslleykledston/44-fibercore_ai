@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from app.core.permissions import CATALOG
-from app.core.rbac_matrix import inventory, render
+from app.core.rbac_matrix import inventory, render, served_operations
 from app.core.security import ROLE_PERMISSIONS
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -61,31 +61,42 @@ def test_require_rejects_a_permission_outside_the_catalog():
         require("inventory:reed")  # a typo must stop the app from importing, not silently deny (or allow) everything
 
 
-def test_every_route_has_a_decided_permission_or_is_on_a_named_list():
-    rows = inventory()
-    assert len(rows) > 50
-    undecided = []
-    for r in rows:
-        key = (r["method"], r["path"])
-        if r["kind"] == "require":
-            assert key not in PUBLIC | SELF_AUTH | SESSION_ONLY, f"{key} is listed as unprotected but requires a permission: update the list"
-        elif r["kind"] == "principal":
-            if key not in SESSION_ONLY:
-                undecided.append(key)
-        elif key not in PUBLIC | SELF_AUTH:
-            undecided.append(key)
-    assert not undecided, f"routes with no permission and not on a list (decide, then add with a reason): {undecided}"
-    listed = PUBLIC | SELF_AUTH | SESSION_ONLY
-    assert listed <= {(r["method"], r["path"]) for r in rows}, "a listed route no longer exists: remove it"
+def test_the_inventory_is_exactly_what_the_app_serves():
+    """Independent check: the inventory (route tree walk) must equal the operations of the app's own OpenAPI schema, both ways."""
+    inv = {(r["method"], r["path"]) for r in inventory()}
+    served = served_operations()
+    assert inv == served, f"only in inventory: {sorted(inv - served)}; only served: {sorted(served - inv)}"
 
 
-def test_state_changing_and_personal_data_routes_are_never_session_only_or_public():
-    for r in inventory():
-        key = (r["method"], r["path"])
-        if r["kind"] != "require" and key not in PUBLIC | SELF_AUTH | SESSION_ONLY:
-            continue
-        if key in SESSION_ONLY:
-            assert r["method"] == "GET" and not r["path"].startswith(("/v1/customers", "/v1/members", "/v1/jobs"))
+def test_every_route_has_a_decided_permission_or_is_on_a_named_list_whose_mechanism_is_checked():
+    kinds = {(r["method"], r["path"]): r["kind"] for r in inventory()}
+    assert len(kinds) > 50
+    for key, kind in kinds.items():
+        if kind == "require":
+            assert key not in PUBLIC | SELF_AUTH | SESSION_ONLY, f"{key} requires a permission but is on an unprotected list: update the list"
+    # each list is tied to the authentication mechanism it claims: a route that gains or loses protection changes kind and fails here
+    assert {k for k, v in kinds.items() if v == "none"} == PUBLIC, "routes with no credential check must be exactly the PUBLIC list"
+    assert {k for k, v in kinds.items() if v == "header_auth"} == SELF_AUTH, "own-token routes must be exactly the SELF_AUTH list"
+    assert {k for k, v in kinds.items() if v == "principal"} == SESSION_ONLY, "session-only routes must be exactly the SESSION_ONLY list"
+
+
+def test_own_account_routes_cannot_name_another_account():
+    for method, path in SELF_AUTH:
+        assert "{" not in path, f"{method} {path}: a path parameter could point at another account"
+
+
+def test_session_only_routes_are_read_only_platform_and_identity_metadata():
+    assert SESSION_ONLY == {("GET", "/v1/auth/me"), ("GET", "/v1/platform/modules"), ("GET", "/v1/platform/versions")}
+
+
+BODY = {"password": "x", "code": "000000"}   # satisfies every request model of the own-account routes, so only the missing credential can fail
+
+
+@pytest.mark.parametrize("method,path", sorted(SELF_AUTH | SESSION_ONLY))
+def test_routes_without_a_permission_still_refuse_a_missing_or_invalid_credential(client, method, path):
+    for headers in ({}, {"Authorization": "Bearer not-a-token"}):
+        r = client.request(method, path, headers=headers, json=BODY if method == "POST" else None)
+        assert r.status_code == 401, f"{method} {path} with headers {list(headers)}: {r.status_code}"
 
 
 def test_the_generated_matrix_in_docs_matches_the_code():

@@ -52,24 +52,24 @@
 
 | Método | Rota | Exige |
 |---|---|---|
-| GET | `/livez` | (pública ou autentica pelo próprio fluxo) |
-| GET | `/readyz` | (pública ou autentica pelo próprio fluxo) |
+| GET | `/livez` | (pública ou usa credencial no corpo) |
+| GET | `/readyz` | (pública ou usa credencial no corpo) |
 | GET | `/v1/associations` | `customers:read` |
 | POST | `/v1/associations/{assoc_id}/approve` | `associations:review` |
 | POST | `/v1/associations/{assoc_id}/reject` | `associations:review` |
 | GET | `/v1/audit` | `audit:read` |
-| POST | `/v1/auth/logout` | (pública ou autentica pelo próprio fluxo) |
+| POST | `/v1/auth/logout` | (pública ou usa credencial no corpo) |
 | GET | `/v1/auth/me` | (sessão válida, sem permissão) |
-| POST | `/v1/auth/mfa/activate` | (pública ou autentica pelo próprio fluxo) |
-| POST | `/v1/auth/mfa/disable` | (pública ou autentica pelo próprio fluxo) |
-| POST | `/v1/auth/mfa/enroll` | (pública ou autentica pelo próprio fluxo) |
-| POST | `/v1/auth/mfa/recovery-codes` | (pública ou autentica pelo próprio fluxo) |
-| GET | `/v1/auth/mfa/status` | (pública ou autentica pelo próprio fluxo) |
-| POST | `/v1/auth/mfa/verify` | (pública ou autentica pelo próprio fluxo) |
-| POST | `/v1/auth/refresh` | (pública ou autentica pelo próprio fluxo) |
-| POST | `/v1/auth/service-token` | (pública ou autentica pelo próprio fluxo) |
-| POST | `/v1/auth/token` | (pública ou autentica pelo próprio fluxo) |
-| GET | `/v1/auth/workspaces` | (pública ou autentica pelo próprio fluxo) |
+| POST | `/v1/auth/mfa/activate` | (autentica o token da própria conta) |
+| POST | `/v1/auth/mfa/disable` | (autentica o token da própria conta) |
+| POST | `/v1/auth/mfa/enroll` | (autentica o token da própria conta) |
+| POST | `/v1/auth/mfa/recovery-codes` | (autentica o token da própria conta) |
+| GET | `/v1/auth/mfa/status` | (autentica o token da própria conta) |
+| POST | `/v1/auth/mfa/verify` | (pública ou usa credencial no corpo) |
+| POST | `/v1/auth/refresh` | (pública ou usa credencial no corpo) |
+| POST | `/v1/auth/service-token` | (pública ou usa credencial no corpo) |
+| POST | `/v1/auth/token` | (pública ou usa credencial no corpo) |
+| GET | `/v1/auth/workspaces` | (autentica o token da própria conta) |
 | GET | `/v1/cpes` | `inventory:read` |
 | GET | `/v1/cpes/{cpe_id}` | `inventory:read` |
 | GET | `/v1/cpes/{cpe_id}/capabilities` | `inventory:read` |
@@ -114,4 +114,4 @@
 | GET | `/v1/platform/versions` | (sessão válida, sem permissão) |
 | GET | `/v1/tenant` | `tenant:read` |
 | GET | `/v1/tenant/features` | `tenant:read` |
-| GET | `/version` | (pública ou autentica pelo próprio fluxo) |
+| GET | `/version` | (pública ou usa credencial no corpo) |

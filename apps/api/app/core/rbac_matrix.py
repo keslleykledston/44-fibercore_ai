@@ -10,15 +10,24 @@ from app.core.security import ROLE_PERMISSIONS
 ROLE_ORDER = ["isp_admin", "engineer", "noc_n2", "noc_n1", "support", "auditor", "platform_support", "edge_agent"]
 
 
+def _collect(routes, out: list) -> None:
+    """Walks the effective route tree: included routers (any depth), nested routers; a Mount is refused (an unknown sub-application cannot be inventoried)."""
+    for r in routes:
+        if isinstance(r, APIRoute):
+            out.append(r)
+        elif hasattr(r, "original_router"):
+            _collect(r.original_router.routes, out)
+        elif hasattr(r, "routes") and type(r).__name__ in ("APIRouter", "_IncludedRouter"):
+            _collect(r.routes, out)
+        elif type(r).__name__ == "Mount":
+            raise RuntimeError(f"mounted application at {getattr(r, 'path', '?')!r}: its routes cannot be inventoried; include a router instead")
+
+
 def _routes() -> list[APIRoute]:
     from app.main import app
 
     out: list[APIRoute] = []
-    for r in app.routes:
-        if hasattr(r, "original_router"):
-            out += [x for x in r.original_router.routes if isinstance(x, APIRoute)]
-        elif isinstance(r, APIRoute):
-            out.append(r)
+    _collect(app.routes, out)
     return out
 
 
@@ -28,17 +37,39 @@ def _deps(dependant, acc: list) -> None:
         _deps(d, acc)
 
 
+def _header_names(dependant) -> set[str]:
+    names = {p.name.lower() for p in dependant.header_params}
+    for d in dependant.dependencies:
+        names |= _header_names(d)
+    return names
+
+
 def inventory() -> list[dict]:
-    """One row per route: method, path, kind ('require' | 'principal' | 'none') and the permissions it requires."""
+    """One row per route and method. kind: 'require' (a catalog permission), 'principal' (a valid session, no permission), 'header_auth' (the handler
+    authenticates the caller's OWN bearer token from the Authorization header), 'none' (no credentials checked by the route itself)."""
     rows = []
     for r in _routes():
         acc: list = []
         _deps(r.dependant, acc)
         perms = sorted({c.rbac_permission for c in acc if hasattr(c, "rbac_permission")})
-        kind = "require" if perms else ("principal" if deps.get_principal in acc else "none")
+        if perms:
+            kind = "require"
+        elif deps.get_principal in acc:
+            kind = "principal"
+        elif "authorization" in _header_names(r.dependant):
+            kind = "header_auth"
+        else:
+            kind = "none"
         for m in sorted(r.methods - {"HEAD", "OPTIONS"}):
             rows.append({"method": m, "path": r.path, "kind": kind, "permissions": perms})
     return sorted(rows, key=lambda x: (x["path"], x["method"]))
+
+
+def served_operations() -> set[tuple[str, str]]:
+    """(method, path) of every operation the app serves according to its OWN OpenAPI schema: an independent source to compare the inventory with."""
+    from app.main import app
+
+    return {(m.upper(), path) for path, ops in app.openapi()["paths"].items() for m in ops if m.upper() in {"GET", "POST", "PUT", "PATCH", "DELETE"}}
 
 
 def render() -> str:
@@ -55,6 +86,7 @@ def render() -> str:
     inv = inventory()
     out += ["", "## Rotas × permissão", "", "| Método | Rota | Exige |", "|---|---|---|"]
     for r in inv:
-        need = ", ".join(f"`{p}`" for p in r["permissions"]) if r["permissions"] else ("(sessão válida, sem permissão)" if r["kind"] == "principal" else "(pública ou autentica pelo próprio fluxo)")
+        need = ", ".join(f"`{p}`" for p in r["permissions"]) if r["permissions"] else {
+            "principal": "(sessão válida, sem permissão)", "header_auth": "(autentica o token da própria conta)", "none": "(pública ou usa credencial no corpo)"}[r["kind"]]
         out.append(f"| {r['method']} | `{r['path']}` | {need} |")
     return "\n".join(out) + "\n"
