@@ -24,7 +24,7 @@ from sqlalchemy import Connection, text
 
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import audit
-from app.core import jobsign
+from app.core import bench, jobsign
 from app.core.settings import Settings, get_settings
 from app.events import outbox
 
@@ -73,6 +73,16 @@ def _blocked_reason(op_name: str) -> str | None:
     return None
 
 
+def _write_gate(conn: Connection, tenant_id: UUID, row, mode: str) -> str | None:
+    """The global gate first (HOMOLOGATED_WRITES, empty); a write it blocks can still pass ONLY through the bench gate (ADR-0030)."""
+    reason = _blocked_reason(row.operation)
+    if reason is None or row.operation not in bench.BENCH_OPS:
+        return reason
+    refusal = bench.gate(conn, tenant_id, row, mode=mode)
+    # flag off, or no Edge support yet: the bench path is not visible, the global reason stays
+    return "operation_not_homologated" if refusal in ("bench_writes_disabled", "edge_support_missing") else refusal
+
+
 def cas(conn: Connection, job_id: UUID, to: str, *, extra: str = "", params: dict | None = None) -> bool:
     """Atomic transition guarded by the legal-source set; returns False if the job is not in a legal source state."""
     sources = [s for s, tos in TRANSITIONS.items() if to in tos]
@@ -104,7 +114,7 @@ def _view(r) -> dict:
 
 
 COLS = ("id, operation, target_type, target_id, risk, status, required_approvals, expires_at, result, created_at, "
-        "requested_by, edge_id, idempotency_key, intent_hash")
+        "requested_by, edge_id, idempotency_key, intent_hash, params, authorization_id, owner_epoch")
 
 
 @router.post("/v1/jobs/preview", status_code=201)
@@ -135,7 +145,8 @@ def preview(
             f"risk, required_approvals, requested_by) VALUES (:t,:e,:tt,:ti,:op,CAST(:pa AS jsonb),:ih,:ik,:rk,:ra,:rb) RETURNING {COLS}"
         ),
         {"t": p.tenant_id, "e": tgt.edge_id, "tt": op.target, "ti": body.target_id, "op": body.operation, "pa": json.dumps(body.params),
-         "ih": ih, "ik": idempotency_key, "rk": op.risk, "ra": op.approvals, "rb": p.id},
+         "ih": ih, "ik": idempotency_key, "rk": op.risk,
+         "ra": max(op.approvals, bench.MIN_APPROVALS) if body.operation in bench.BENCH_OPS else op.approvals, "rb": p.id},
     ).one()
     audit(conn, p, "job.preview", "job", str(row.id), {"operation": body.operation, "risk": op.risk})
     return _view(row)
@@ -161,7 +172,7 @@ def submit(job_id: UUID, p: Principal = Depends(require("jobs:request")), conn: 
         raise HTTPException(403, "only the requester can submit")
     if row.status != "PREVIEWED":
         raise HTTPException(409, f"job is {row.status}")
-    reason = _blocked_reason(row.operation)
+    reason = _write_gate(conn, p.tenant_id, row, "submit")
     if reason:
         raise HTTPException(409, reason)  # write gate: never leaves PREVIEWED
     to = "PENDING_APPROVAL" if row.required_approvals > 0 else "APPROVED"
@@ -180,8 +191,9 @@ def approve(job_id: UUID, p: Principal = Depends(require("jobs:approve")), conn:
         raise HTTPException(409, f"job is {row.status}")
     if row.requested_by == p.id:
         raise HTTPException(403, "requester cannot approve their own job")
-    if _blocked_reason(row.operation):
-        raise HTTPException(409, _blocked_reason(row.operation))
+    reason = _write_gate(conn, p.tenant_id, row, "approve")
+    if reason:
+        raise HTTPException(409, reason)
     dup = conn.execute(
         text("INSERT INTO job_approvals (tenant_id, job_id, approver_id) VALUES (:t,:j,:a) ON CONFLICT DO NOTHING RETURNING id"),
         {"t": p.tenant_id, "j": job_id, "a": p.id},
@@ -191,6 +203,10 @@ def approve(job_id: UUID, p: Principal = Depends(require("jobs:approve")), conn:
     n = conn.execute(text("SELECT count(*) FROM job_approvals WHERE job_id = :j"), {"j": job_id}).scalar_one()
     audit(conn, p, "job.approve", "job", str(job_id), {"approvals": n, "required": row.required_approvals})
     if n >= row.required_approvals:
+        if _blocked_reason(row.operation):  # a bench write: the prior authorization is consumed atomically with the approval
+            reason = bench.gate(conn, p.tenant_id, row, mode="consume")
+            if reason:
+                raise HTTPException(409, reason)  # nothing is committed: no approval row, no consumed authorization
         cas(conn, job_id, "APPROVED")
     return _view(_load(conn, job_id, lock=False))
 
@@ -232,11 +248,14 @@ def next_job(
     if not settings.job_signing_key:
         raise HTTPException(503, "job signing key not configured")  # fail closed: nothing is dispatched unsigned
     # Opportunistic sweep: a job dispatched but never reported (Edge died / envelope rejected) must not stay DISPATCHED forever.
-    conn.execute(
+    swept = conn.execute(
         text("UPDATE jobs SET status = 'EXPIRED', updated_at = now() WHERE edge_id = :e AND status = 'DISPATCHED' "
-             "AND expires_at < now() - interval '5 minutes'"),
+             "AND expires_at < now() - interval '5 minutes' RETURNING operation, target_id"),
         {"e": p.edge_id},
-    )
+    ).all()
+    for s_ in swept:  # a bench write that was sent and never reported may have been applied: lock the target (ADR-0030 item 6)
+        if s_.operation in bench.BENCH_OPS and _blocked_reason(s_.operation):
+            bench.lock_target(conn, s_.target_id, "bench write dispatched and never reported")
     row = conn.execute(
         text(
             f"SELECT {COLS}, nonce FROM jobs WHERE edge_id = :e AND status = 'APPROVED' "  # noqa: S608
@@ -251,18 +270,32 @@ def next_job(
         cas(conn, row.id, "EXPIRED")
         response.status_code = 204
         return None
-    if _blocked_reason(row.operation):  # defence in depth: a write can never be dispatched
+    if _write_gate(conn, p.tenant_id, row, "dispatch"):  # defence in depth: a write is never dispatched unless a gate passes NOW
         cas(conn, row.id, "CANCELLED")
         response.status_code = 204
         return None
     approvals = [str(r.id) for r in conn.execute(text("SELECT id FROM job_approvals WHERE job_id = :j"), {"j": row.id})]
+    issued = datetime.now(UTC)
     envelope = {
         "schema_version": "1.0", "job_id": str(row.id), "tenant_id": str(p.tenant_id), "edge_id": str(p.edge_id),
         "target_id": str(row.target_id), "operation": row.operation, "idempotency_key": row.idempotency_key,
-        "issued_at": datetime.now(UTC).isoformat(), "expires_at": row.expires_at.isoformat(), "nonce": row.nonce,
+        "issued_at": issued.isoformat(), "expires_at": row.expires_at.isoformat(), "nonce": row.nonce,
         "intent_sha256": row.intent_hash.strip(), "policy_version": POLICY_VERSION, "approval_ids": approvals,
     }
-    if row.operation == "refresh" and row.target_type == "cpe":
+    bench_job = row.operation in bench.BENCH_OPS and _blocked_reason(row.operation) is not None
+    if bench_job:
+        # ADR-0030: the bench write names the ACS device the Edge must confirm (OUI/class/serial) and carries its single-use authorization,
+        # the owner epoch and an end of validity that is never later than the authorization window; all covered by the signature
+        auth = conn.execute(text("SELECT id, window_end FROM bench_authorizations WHERE job_id = :j"), {"j": row.id}).first()
+        if auth is None or row.owner_epoch is None:
+            cas(conn, row.id, "CANCELLED")
+            response.status_code = 204
+            return None
+        envelope["authorization_id"], envelope["authorization_ends_at"] = str(auth.id), auth.window_end.isoformat()
+        envelope["owner_epoch"] = row.owner_epoch
+        # the envelope is also short-lived on its own (bench.ENVELOPE_TTL), so a copy that waits in transit or in a queue dies in minutes
+        envelope["expires_at"] = min(row.expires_at, auth.window_end, issued + bench.ENVELOPE_TTL).isoformat()
+    if (row.operation == "refresh" or bench_job) and row.target_type == "cpe":
         # The ACS device id the Edge may ask about (ADR-SD-002 item 4), covered by the signature. A CPE without a TR-069 binding keeps the
         # old behaviour (a plain collection round); the Edge validates the value again and only acts when active reads are enabled.
         ref = conn.execute(
@@ -272,8 +305,14 @@ def next_job(
         ).scalar()
         if ref and TARGET_REF_RE.fullmatch(ref):
             envelope["target_ref"] = ref
+        elif bench_job:  # a bench write without the device it must confirm cannot be sent
+            cas(conn, row.id, "CANCELLED")
+            response.status_code = 204
+            return None
     envelope["signature"] = jobsign.sign(jobsign.load_private(settings.job_signing_key), envelope)
-    cas(conn, row.id, "DISPATCHED")
+    if not cas(conn, row.id, "DISPATCHED"):  # the emission is the transition: no confirmed transition, no envelope leaves
+        response.status_code = 204
+        return None
     outbox.enqueue(conn, tenant_id=p.tenant_id, aggregate_type="job", aggregate_id=row.id, event_type="job.dispatched",
                    payload={"operation": row.operation, "edge_id": str(p.edge_id)})
     return envelope
@@ -298,5 +337,7 @@ def job_result(
     if not cas(conn, job_id, to, extra=", result = CAST(:res AS jsonb)",
                params={"res": json.dumps({"detail": body.detail, "postcheck_ok": body.postcheck_ok})}):
         raise HTTPException(409, f"illegal transition from {row.status} to {to}")
+    if to in ("FAILED", "UNKNOWN") and row.operation in bench.BENCH_OPS and _blocked_reason(row.operation):
+        bench.lock_target(conn, row.target_id, f"bench write ended {to}")  # no retry, no new write until `bench-unlock`
     outbox.enqueue(conn, tenant_id=p.tenant_id, aggregate_type="job", aggregate_id=job_id, event_type=f"job.{to.lower()}",
                    payload={"operation": row.operation})

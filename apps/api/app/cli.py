@@ -51,6 +51,18 @@ def main(argv: list[str] | None = None) -> None:
     cs.add_argument("certification", choices=["identified", "observed", "certified"])
     cs.add_argument("--evidence", help="reference to the evidence (doc/commit/ticket); REQUIRED for observed/certified")
     cs.add_argument("--verified-at", help="ISO-8601 time the evidence was verified; REQUIRED for observed/certified")
+    cs.add_argument("--evidence-file", help="bench operations (ADR-0030): path of the bench evidence file; every field is checked")
+    bt = sub.add_parser("bench-target-add", help="ADR-0030: add a CPE to the closed list of bench targets (owner-only)")
+    bt.add_argument("tenant_id"); bt.add_argument("cpe_id"); bt.add_argument("edge_id"); bt.add_argument("--note")
+    br = sub.add_parser("bench-target-remove", help="ADR-0030: remove a bench target (refused while it has open authorizations or jobs)")
+    br.add_argument("tenant_id"); br.add_argument("cpe_id")
+    ba = sub.add_parser("bench-authorize", help="ADR-0030: record the PRIOR single-use authorization for one bench maneuver (owner-only)")
+    ba.add_argument("tenant_id"); ba.add_argument("operation"); ba.add_argument("cpe_id")
+    ba.add_argument("--from", dest="start", required=True, help="ISO-8601 start of the window")
+    ba.add_argument("--to", dest="end", required=True, help="ISO-8601 end of the window (at most 4 h after the start)")
+    ba.add_argument("--by", required=True, help="who authorizes (the responsible person)")
+    bu = sub.add_parser("bench-unlock", help="ADR-0030: clear the write lock of a bench target after a documented reconciliation")
+    bu.add_argument("tenant_id"); bu.add_argument("cpe_id"); bu.add_argument("--reason", required=True)
     fs = sub.add_parser("feature-set", help="turn a per-tenant feature flag on/off (owner-only; overrides the code default)")
     fs.add_argument("tenant_id"); fs.add_argument("feature"); fs.add_argument("state", choices=["on", "off", "default"])
     sp = sub.add_parser("set-password", help="set a user's password (owner-only); ends all their sessions")
@@ -88,6 +100,18 @@ def main(argv: list[str] | None = None) -> None:
             valid = {(e.operation, e.protocol) for kind in ("cpe", "olt") for e in catalog_for(kind, OPERATIONS)}
             if (a.operation, a.protocol) not in valid:  # a row the API could never show would hide the recorded state
                 sys.exit(f"{a.operation!r} is not catalogued over {a.protocol!r}; valid pairs: {sorted(valid)}")
+            from app.core import bench
+            if a.operation in bench.BENCH_OPS and a.certification != "identified":  # ADR-0030 item 7: the evidence is a checked file
+                if not a.evidence_file:
+                    sys.exit("a bench operation needs --evidence-file (every ADR-0030 field is checked)")
+                try:
+                    gaps = bench.evidence_missing(open(a.evidence_file, encoding="utf-8").read())
+                except OSError as exc:
+                    sys.exit(f"cannot read the evidence file: {exc}")
+                if gaps:
+                    sys.exit("the evidence file is incomplete: " + "; ".join(gaps))
+                if a.certification == "certified":
+                    sys.exit("`certified` is not granted by ADR-0030: bench evidence supports `observed` only")
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
             cid = c.execute(
                 text("INSERT INTO device_capabilities (tenant_id, vendor, model, firmware, protocol, operation, status, certification, "
@@ -106,10 +130,71 @@ def main(argv: list[str] | None = None) -> None:
                     "status": a.status, "certification": a.certification})},
             )
             print(f"capability {a.operation}/{a.protocol} on {a.vendor} {a.model} {a.firmware}: {a.status}/{a.certification}")
+        elif a.cmd == "bench-target-add":
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            cpe = c.execute(text("SELECT edge_id FROM cpes WHERE id = :c"), {"c": a.cpe_id}).first()
+            if cpe is None or str(cpe.edge_id) != a.edge_id:  # the target's Edge is the CPE's owner Edge; no other pairing
+                sys.exit("cpe not found for this tenant, or it is owned by another edge")
+            # the generation never goes back: a target that was removed and is added again gets a HIGHER owner_epoch, so an envelope issued
+            # for an older generation can never match again (ADR-0029 fencing)
+            last = c.execute(text("SELECT last_epoch FROM bench_target_epochs WHERE cpe_id = :c"), {"c": a.cpe_id}).scalar() or 0
+            c.execute(text("INSERT INTO bench_targets (tenant_id, cpe_id, edge_id, note, owner_epoch) VALUES (:t,:c,:e,:n,:ep)"),
+                      {"t": a.tenant_id, "c": a.cpe_id, "e": a.edge_id, "n": a.note, "ep": last + 1})
+            print(f"bench target added: cpe {a.cpe_id} (edge {a.edge_id}), owner_epoch {last + 1}")
+        elif a.cmd == "bench-target-remove":
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            busy = c.execute(
+                text("SELECT (SELECT count(*) FROM bench_authorizations WHERE cpe_id = :c AND state = 'open' AND window_end > now()), "
+                     "(SELECT count(*) FROM jobs WHERE target_id = :c AND status IN "
+                     "('PENDING_APPROVAL','APPROVED','DISPATCHED','ACCEPTED','DEVICE_PENDING','VERIFYING'))"),
+                {"c": a.cpe_id}).one()
+            if busy[0] or busy[1]:
+                sys.exit("refused: the target has open authorizations or jobs in flight")
+            c.execute(text("DELETE FROM bench_authorizations WHERE cpe_id = :c AND state = 'open'"), {"c": a.cpe_id})
+            c.execute(text("INSERT INTO bench_target_epochs (tenant_id, cpe_id, last_epoch) "
+                           "SELECT tenant_id, cpe_id, owner_epoch FROM bench_targets WHERE cpe_id = :c "
+                           "ON CONFLICT (tenant_id, cpe_id) DO UPDATE SET "
+                           "last_epoch = GREATEST(bench_target_epochs.last_epoch, EXCLUDED.last_epoch)"),
+                      {"c": a.cpe_id})
+            c.execute(text("DELETE FROM bench_targets WHERE cpe_id = :c"), {"c": a.cpe_id})
+            print("bench target removed")
+        elif a.cmd == "bench-authorize":
+            from datetime import datetime
+
+            from app.core import bench
+            if a.operation not in bench.BENCH_OPS:
+                sys.exit(f"{a.operation!r} is not in the bench catalog: {sorted(bench.BENCH_OPS)}")
+            if not bench.EDGE_SUPPORT:
+                sys.exit("refused: no bench authorization can be recorded until the Edge-side bench gate exists and is tested (ADR-0030)")
+            start, end = datetime.fromisoformat(a.start), datetime.fromisoformat(a.end)
+            if start.tzinfo is None or end.tzinfo is None:
+                sys.exit("--from/--to need a time zone (e.g. 2026-10-30T14:00:00+00:00)")
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            aid = c.execute(
+                text("INSERT INTO bench_authorizations "
+                     "(tenant_id, operation, cpe_id, params_hash, window_start, window_end, authorized_by) "
+                     "VALUES (:t,:o,:c,:h,:s,:e,:by) RETURNING id"),
+                {"t": a.tenant_id, "o": a.operation, "c": a.cpe_id, "h": bench.params_hash({}), "s": start, "e": end, "by": a.by}).scalar()
+            print(f"authorization {aid}: {a.operation} on {a.cpe_id}, {start.isoformat()} .. {end.isoformat()}, single use")
+        elif a.cmd == "bench-unlock":
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            n = c.execute(
+                text("UPDATE bench_targets SET write_locked = false, lock_reason = NULL WHERE cpe_id = :c AND write_locked RETURNING id"),
+                {"c": a.cpe_id}).first()
+            if n is None:
+                sys.exit("the target is not locked, or is not a bench target")
+            c.execute(text("INSERT INTO events_outbox (tenant_id, aggregate_type, aggregate_id, event_type, schema_version, payload) "
+                           "VALUES (:t,'bench_target',:i,'bench.unlocked','1',CAST(:p AS jsonb))"),
+                      {"t": a.tenant_id, "i": n.id, "p": json.dumps({"reason": a.reason[:300]})})
+            print("write lock cleared")
         elif a.cmd == "feature-set":
             from app.core.features import FEATURES
             if a.feature not in FEATURES:
                 sys.exit(f"unknown feature {a.feature!r}; known: {', '.join(sorted(FEATURES))}")
+            if a.feature == "bench_writes" and a.state == "on":
+                from app.core import bench
+                if not bench.EDGE_SUPPORT:
+                    sys.exit("refused: bench_writes cannot be turned on until the Edge-side bench gate exists and is tested (ADR-0030)")
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
             if a.state == "default":
                 c.execute(text("DELETE FROM tenant_features WHERE tenant_id = :t AND feature = :f"), {"t": a.tenant_id, "f": a.feature})

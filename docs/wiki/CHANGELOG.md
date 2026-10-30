@@ -147,3 +147,10 @@
 ## Unreleased — ADR-0030 (Proposed): homologação em bancada
 - Só documento (Codex approve em 6 rodadas): escopo restrito à ONT de bancada em três lugares independentes, conferência física antes de cada manobra, catálogo de manobras (H2 reboot, H3 SSID, H4 ONU na OLT), gate com seis condições (inclui autorização prévia de uso único), claim durável, trava de escrita e evidência verificável. Nenhum código, nenhuma escrita em equipamento.
 
+## Unreleased — PR 56 (ADR-0030, H0 lado nuvem): gate de bancada
+- Migração 0021: `bench_targets` e `bench_authorizations` (escritas só pelo owner CLI; o app lê, trava o alvo e consome a autorização) e `jobs.authorization_id`/`owner_epoch`. Flag `bench_writes` (desligada). `app/core/bench.py`: catálogo de manobras (`reboot_cpe` sem parâmetros), gate de seis condições fail-closed (flag, alvo de bancada destravado e Edge registrado, capacidade `observed` do perfil exato, parâmetros do catálogo, autorização PRÉVIA de uso único), `HOMOLOGATED_WRITES` continua vazio e bloqueia todo o resto.
+- Jobs: aprovação mínima de 1 pessoa distinta; a autorização é consumida de forma atômica na aprovação; envelope assinado leva `authorization_id`, `authorization_ends_at`, `owner_epoch` e `target_ref`, com validade nunca maior que a janela; o despacho reverifica tudo; qualquer resultado que não seja sucesso confirmado, ou job despachado e nunca reportado, trava o alvo (`bench-unlock`).
+- Owner CLI: `bench-target-add/remove`, `bench-authorize`, `bench-unlock`; `capability-set` de operação de bancada exige arquivo de evidência com todos os campos e nunca concede `certified`. Modelo em `docs/wiki/bench/TEMPLATE.md`.
+- `bench.EDGE_SUPPORT = False`: o servidor, o owner CLI e os testes recusam habilitar, autorizar e despachar até o PR do Edge; envelope de bancada vive no máximo 2 min; `owner_epoch` nunca volta (tabela `bench_target_epochs`); nenhum envelope sai sem a transição DISPATCHED confirmada (Codex approve em 3 rodadas).
+- Ainda NÃO feito (PR 57): lado Edge (configuração `bench`, conferência do CPE no ACS, claim durável, arrendamento) e a execução real da H2. Nenhuma escrita em equipamento.
+

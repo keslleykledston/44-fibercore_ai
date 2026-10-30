@@ -226,3 +226,7 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - Depois de um `refresh` real (11 grupos, `completed=11 faulted=0 readable_metrics=7`) e da entrega do estado à nuvem, `POST /v1/diagnostics/jobs` (conta de serviço de ensaio, modo passivo): `status=complete`, `data_quality=fresh`, `reproducible=true`, regras R-D001 v1 e R-D002 v1. Evidências (todas `available`): ONU online e RX -13,04 dBm (OLT real), enlace WAN Up, conexão PPP Connected e uptime (CPE, `genieacs_nbi`). Nenhum achado: a ONT de bancada está saudável e o job não inventou nada.
 - Ainda NOT_RUN: job com queda real (só em teste automatizado) e tela que consuma o job.
 
+## 2026-10-30 — gate de bancada, lado nuvem (PR 56, ADR-0030 H0)
+- `make test-api` 354 passed (cada uma das condições do gate recusa com o seu motivo; flag desligada mantém `operation_not_homologated`; firmware exato; gate global intacto para `set_wifi_ssid`/`provision_onu`; autorização consumida com a aprovação, de uso único e sem rastro quando a aprovação é recusada; envelope assinado com `authorization_id`/`owner_epoch`/`target_ref` e validade curta; janela reverificada no despacho; trava de escrita em falha, UNKNOWN e job não reportado; role do app sem escrita nas listas de bancada; isolamento entre tenants; owner CLI; evidência checada). ruff só os 5 E501 antigos; validate_addendum_v22 PASS; secrets-scan sem vazamento.
+- NOT_RUN: qualquer escrita (o caminho está desligado por `EDGE_SUPPORT=False` até o PR do Edge). Nada foi enviado a equipamento.
+
