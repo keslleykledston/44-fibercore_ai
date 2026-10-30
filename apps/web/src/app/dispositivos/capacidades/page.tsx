@@ -7,6 +7,7 @@ import type { Capability, Cpe, Olt } from "@/lib/types";
 const OP: Record<string, string> = { collect: "Coleta de inventário", refresh: "Atualizar leitura", reboot_cpe: "Reiniciar CPE", set_wifi_ssid: "Alterar nome do Wi-Fi", provision_onu: "Provisionar ONU", onu_reset: "Reiniciar ONU na OLT", onu_deactivate: "Desativar ONU na OLT" };
 const CERT: Record<string, string> = { identified: "Identificado", observed: "Observado", certified: "Certificado" };
 const MAX_PROFILES = 40;
+const CPE_LIMIT = 1000, OLT_LIMIT = 200; // limites das listas da API: bateu no limite, a matriz pode não cobrir todos os perfis
 
 type Profile = { kind: "cpe" | "olt"; vendor: string | null; model: string | null; firmware: string | null; id: string; count: number };
 
@@ -23,18 +24,23 @@ function profiles(cpes: Cpe[], olts: Olt[]): Profile[] {
 }
 
 export default async function Capacidades() {
-  const [cpes, olts] = await Promise.all([apiSafe<Cpe[]>("/v1/cpes?limit=1000"), apiSafe<Olt[]>("/v1/olts?limit=200")]);
+  const [cpes, olts] = await Promise.all([apiSafe<Cpe[]>(`/v1/cpes?limit=${CPE_LIMIT}`), apiSafe<Olt[]>(`/v1/olts?limit=${OLT_LIMIT}`)]);
   if (cpes.status === 403 || olts.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver o inventário." /></AppShell>;
   const all = profiles(cpes.data ?? [], olts.data ?? []);
   const shown = all.slice(0, MAX_PROFILES);
   const rows = await Promise.all(shown.map(async (p) => ({ p, caps: await apiSafe<Capability[]>(`/v1/${p.kind === "cpe" ? "cpes" : "olts"}/${p.id}/capabilities`) })));
+  const gaps = [
+    cpes.data === null ? "A lista de CPEs não carregou: os perfis de CPE não aparecem." : cpes.data.length >= CPE_LIMIT ? `A lista de CPEs foi limitada a ${CPE_LIMIT}: pode haver perfis de CPE que não aparecem.` : null,
+    olts.data === null ? "A lista de OLTs não carregou: os perfis de OLT não aparecem." : olts.data.length >= OLT_LIMIT ? `A lista de OLTs foi limitada a ${OLT_LIMIT}: pode haver perfis de OLT que não aparecem.` : null,
+  ].filter((x): x is string => x !== null);
   const ops = [...new Set(rows.flatMap((r) => (r.caps.data ?? []).map((c) => c.name)))];
   return (
     <AppShell active="/rede" user="1">
       <PageHeader title="Capacidades" subtitle="O que cada modelo e firmware tem comprovado, por operação (somente leitura)" helpSlug="rede/capacidades" />
       <DevicesTabs current="/dispositivos/capacidades" />
-      {cpes.data === null && olts.data === null ? <ErrorState title="Falha ao carregar o inventário" /> : rows.length === 0 ? <EmptyState title="Nenhum dispositivo coletado" /> : (
+      {cpes.data === null && olts.data === null ? <ErrorState title="Falha ao carregar o inventário" /> : rows.length === 0 && gaps.length === 0 ? <EmptyState title="Nenhum dispositivo coletado" /> : (
         <div data-testid="capabilities-ready">
+          {gaps.length > 0 && <div role="status" data-testid="capabilities-incomplete" className="panel mb-4 border-warn p-4 text-sm text-warn"><strong>Matriz incompleta.</strong> {gaps.join(" ")}</div>}
           <div className="panel overflow-x-auto">
             <table className="w-full min-w-[720px] text-sm">
               <caption className="sr-only">Capacidades por perfil de dispositivo</caption>

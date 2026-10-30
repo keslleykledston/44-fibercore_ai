@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18d3a-0f79-7493-bdf2-78ff93fdf240).
+[codex] Turn started (01a18d3a-0fb2-7161-a3b3-211a2ae23aba).
+[codex] Assistant message captured: Vou comparar o branch com `main` e rastrear especialmente o endpoint por ID, o comportamento ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/app/api/inventory....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/app/api/inventory.... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- apps/web/src/app/dispositiv...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- apps/web/src/app/dispositiv... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"def require|TENANT_CONN|CREATE POLICY.*cpes|cpes.*POLICY|/v1/cpes|comp...
+[codex] Command completed: /bin/bash -lc "rg -n \"def require|TENANT_CONN|CREATE POLICY.*cpes|cpes.*POLICY|/v1/cpes|comp... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"function apiSafe|const apiSafe|export.*apiSafe\" apps/web/src/lib/api....
+[codex] Command completed: /bin/bash -lc "rg -n \"function apiSafe|const apiSafe|export.*apiSafe\" apps/web/src/lib/api.... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '20,42p' apps/web/src/lib/api.ts; sed -n '1355,1395p' contracts/fiberco...
+[codex] Command completed: /bin/bash -lc "sed -n '20,42p' apps/web/src/lib/api.ts; sed -n '1355,1395p' contracts/fiberco... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviaria ainda: a matriz pode parecer completa me...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviaria ainda: a matriz pode parecer completa mesmo quando inventários falham parcialmente ou são truncados pelos limites das APIs.
+
+Findings:
+- [medium] A matriz oculta falhas parciais e truncamento dos inventários (apps/web/src/app/dispositivos/capacidades/page.tsx:26-36)
+  Se a listagem de CPEs falhar mas a de OLTs funcionar, `profiles(cpes.data ?? [], olts.data ?? [])` descarta silenciosamente os CPEs e a página ainda renderiza uma matriz como pronta. Além disso, as consultas pedem no máximo 1.000 CPEs e 200 OLTs; `all.length` e o aviso de perfis omitidos contam somente os resultados já limitados, sem indicar que o inventário completo pode ser maior. O usuário pode concluir que a matriz cobre o provedor quando faltam perfis inteiros.
+  Recommendation: Mostre um estado de erro para cada inventário que falhar e evite apresentar a matriz como completa quando as listagens estiverem limitadas; implemente paginação ou exponha e mostre explicitamente a truncagem de cada fonte.
