@@ -353,3 +353,31 @@ func TestBenchPacingConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestBenchOLTConfig(t *testing.T) {
+	dev := `{"oui":"00259E","product_class":"EG8145V5","serial":"48575443E2247AA5"}`
+	olts := `,"olts":[{"name":"OLT-A","vendor":"huawei","address":"10.0.0.1:22","username":"u","secret_file":"/s","host_key_sha256":"SHA256:abc","pon_ports":["0/0/14"]}]`
+	mk := func(ops, bench string) string {
+		return `,"nbi_url":"http://127.0.0.1:7557","jobs_enabled":true,"job_public_key":"k","allowlist":["10.0.0.1:22"],"allowed_operations":[` + ops + `]` + olts +
+			`,"bench":{"bench_writes_enabled":true,"devices":[` + dev + `]` + bench + `}`
+	}
+	goodOLT := `,"olt":{"name":"OLT-A","frame":0,"slot":0,"port":14,"ont_id":10,"gpon_serial":"48575443E2247AA5"}`
+	if _, err := Load(write(t, 0o600, good(mk(`"collect","onu_reset"`, goodOLT))), "v"); err != nil {
+		t.Fatalf("valid: %v", err)
+	}
+	bad := map[string]string{
+		"ops without olt": mk(`"collect","onu_reset"`, ""),
+		"unknown olt":     mk(`"collect","onu_reset"`, strings.Replace(goodOLT, "OLT-A", "OLT-X", 1)),
+		"serial mismatch": mk(`"collect","onu_reset"`, strings.Replace(goodOLT, "48575443E2247AA5", "48575443AAAAAAAA", 1)),
+		"lower case":      mk(`"collect","onu_reset"`, strings.Replace(goodOLT, "48575443E2247AA5", "48575443e2247aa5", 1)),
+		"port 16":         mk(`"collect","onu_reset"`, strings.Replace(goodOLT, `"port":14`, `"port":16`, 1)),
+		"ont id 128":      mk(`"collect","onu_reset"`, strings.Replace(goodOLT, `"ont_id":10`, `"ont_id":128`, 1)),
+		"gap below floor": mk(`"collect","onu_reset"`, strings.Replace(goodOLT, `}`, `,"min_gap_seconds":30}`, 1)),
+		"wait too long":   mk(`"collect","onu_reset"`, strings.Replace(goodOLT, `}`, `,"wait_seconds":601}`, 1)),
+	}
+	for name, extra := range bad {
+		if _, err := Load(write(t, 0o600, good(extra)), "v"); err == nil {
+			t.Errorf("%s: must be refused", name)
+		}
+	}
+}

@@ -173,3 +173,7 @@
 ## Unreleased — PR 62 (Edge: ritmo da bancada configurável, motivo local da recusa)
 - `bench.min_interval_seconds` (0 = 30 min; mínimo 60) e `bench.max_per_hour` (0 = 2; máximo 20) na configuração do Edge, a pedido do responsável durante a homologação; o padrão do produto continua 30 min. O Edge passa a logar localmente o motivo exato de cada recusa/falha de manobra (nada disso viaja à nuvem).
 
+## Unreleased — PR 63 (ADR-0030 H4 `onu_reset` / `onu_deactivate`, código; nenhuma manobra executada)
+- Nuvem: operações `onu_reset`/`onu_deactivate` (alvo = CPE de bancada, sem parâmetros), perfil de registro = o da OLT alcançada pelo vínculo ONU↔CPE confirmado, CLI aceita os pares `olt`.
+- Edge: `internal/olt/bench.go` (lista fechada e exata de comandos, identidade na mesma sessão, reativação sempre, recuperação), `collector.OLT.Exclusive` (mesmo guard das coletas), seção `bench.olt`, execução do runner com ritmo e autorização gastos só depois da identidade.
+

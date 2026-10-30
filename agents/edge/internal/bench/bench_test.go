@@ -11,8 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/collector"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/jobs"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/nbi"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/olt"
 )
 
 const (
@@ -282,5 +284,93 @@ func TestSSIDGatesAreTheSameAsTheRebootOnes(t *testing.T) {
 	e.acs.idErr = nbi.ErrBenchIdentity
 	if res := e.r.Run(context.Background(), ssidEnvelope(benchRef)); res.State != "failed" || len(e.acs.ssidCalls) != 0 || e.cl.State(authID) != "" {
 		t.Fatalf("identity: %+v", res)
+	}
+}
+
+// ---- H4: OLT maneuvers ----
+
+func oltEnv(op string) *jobs.Envelope {
+	x := envelope(benchRef)
+	x.Operation = op
+	return x
+}
+
+func TestRunOLTOutcomesAndTheOrderOfTheGates(t *testing.T) {
+	cases := []struct {
+		name    string
+		out     olt.ManeuverOutcome
+		err     error
+		claim   bool // does the fake driver call beforeSend (i.e. the identity passed)?
+		state   string
+		post    bool
+		claimSt string
+	}{
+		{"done", olt.ManeuverOutcome{Sent: true, Done: true, Detail: "ok"}, nil, true, "succeeded", true, jobs.ClaimDone},
+		{"no return", olt.ManeuverOutcome{Sent: true}, olt.ErrBenchOLTNoReturn, true, "failed", false, jobs.ClaimUnknown},
+		{"stuck", olt.ManeuverOutcome{Sent: true}, olt.ErrBenchOLTStuck, true, "failed", false, jobs.ClaimUnknown},
+		{"refused", olt.ManeuverOutcome{}, olt.ErrBenchOLTRefused, true, "failed", false, jobs.ClaimFailed},
+		{"identity", olt.ManeuverOutcome{}, olt.ErrBenchOLTIdentity, false, "failed", false, ""},
+		{"guard", olt.ManeuverOutcome{}, collector.ErrOLTNotDue, false, "failed", false, ""},
+	}
+	for _, op := range []string{"onu_reset", "onu_deactivate"} {
+		for _, c := range cases {
+			e := setup(t)
+			e.lease(t, jobs.LeaseTarget{TargetRef: benchRef, OwnerEpoch: 2})
+			var gotOp string
+			e.r.OLT = func(_ context.Context, o string, _ time.Time, before func() error) (olt.ManeuverOutcome, error) {
+				gotOp = o
+				if c.claim {
+					if err := before(); err != nil {
+						return olt.ManeuverOutcome{}, err
+					}
+				}
+				return c.out, c.err
+			}
+			res := e.r.Run(context.Background(), oltEnv(op))
+			if res.State != c.state || res.Postcheck != c.post || e.cl.State(authID) != c.claimSt || gotOp != op {
+				t.Errorf("%s/%s: %+v claim=%q op=%q", op, c.name, res, e.cl.State(authID), gotOp)
+			}
+			if len(e.acs.rebootCalls)+len(e.acs.ssidCalls) != 0 || e.acs.identityCalls != 0 {
+				t.Errorf("%s/%s: the TR-069 side must not be touched", op, c.name)
+			}
+		}
+	}
+}
+
+func TestRunOLTNeedsLeaseAndExecutorAndSpendsNothingWithoutThem(t *testing.T) {
+	e := setup(t)
+	called := false
+	e.r.OLT = func(context.Context, string, time.Time, func() error) (olt.ManeuverOutcome, error) {
+		called = true
+		return olt.ManeuverOutcome{}, nil
+	}
+	if res := e.r.Run(context.Background(), oltEnv("onu_reset")); res.State != "failed" || called {
+		t.Fatalf("no lease: %+v", res)
+	}
+	e.lease(t, jobs.LeaseTarget{TargetRef: prodRef, OwnerEpoch: 2})
+	if res := e.r.Run(context.Background(), oltEnv("onu_reset")); res.State != "failed" || called {
+		t.Fatalf("lease for another device: %+v", res)
+	}
+	e = setup(t)
+	e.lease(t, jobs.LeaseTarget{TargetRef: benchRef, OwnerEpoch: 2})
+	if res := e.r.Run(context.Background(), oltEnv("onu_reset")); res.State != "failed" || e.cl.State(authID) != "" {
+		t.Fatalf("no executor configured: %+v", res)
+	}
+}
+
+func TestRunOLTPacingAndClaimAreSpentOnlyAfterTheIdentity(t *testing.T) {
+	e := setup(t)
+	e.lease(t, jobs.LeaseTarget{TargetRef: benchRef, OwnerEpoch: 2})
+	e.r.Guard = okGuard{err: nbi.ErrRefreshTooSoon}
+	sent := false
+	e.r.OLT = func(_ context.Context, _ string, _ time.Time, before func() error) (olt.ManeuverOutcome, error) {
+		if err := before(); err != nil {
+			return olt.ManeuverOutcome{}, err
+		}
+		sent = true
+		return olt.ManeuverOutcome{Sent: true, Done: true}, nil
+	}
+	if res := e.r.Run(context.Background(), oltEnv("onu_reset")); res.State != "failed" || sent || e.cl.State(authID) != "" {
+		t.Fatalf("pacing: %+v sent=%v", res, sent)
 	}
 }

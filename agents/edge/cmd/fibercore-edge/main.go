@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -119,6 +120,7 @@ func main() {
 			OnSkip: func(reason string, n int) { log.Info("genieacs: devices left out", "reason", reason, "count", n) }})
 	}
 
+	var oltCol *collector.OLT
 	if len(cfg.OLTs) > 0 {
 		oc := &collector.OLT{EdgeID: cfg.EdgeID, Guard: collector.FileGuard{Path: guardPath},
 			OnCollected: func(name string, took time.Duration, items int, err error) {
@@ -170,6 +172,7 @@ func main() {
 				},
 			})
 		}
+		oltCol = oc
 		collectors = append(collectors, oc)
 	}
 
@@ -215,6 +218,43 @@ func main() {
 				Lease: &jobs.LeaseHolder{Pub: pub, EdgeID: cfg.EdgeID, TenantID: cfg.TenantID},
 				// per-device pacing (default 30 min, 2 per hour; the configuration may lower it down to the floor); reservation persisted before sending
 				Guard: &nbi.RefreshGuard{Path: config.BenchGuardFile(cfg.QueuePath), MinPerDevice: minGap, MaxPerHour: perHour},
+			}
+			if bo := cfg.Bench.OLT; bo != nil {
+				if oltCol == nil {
+					log.Error("bench.olt needs the olts collector")
+					os.Exit(2)
+				}
+				onu := olt.BenchONU{Frame: bo.Frame, Slot: bo.Slot, Port: bo.Port, OntID: bo.OntID, GPONSerial: strings.ToUpper(bo.GPONSerial)}
+				gap, wait := 15*time.Minute, 4*time.Minute
+				if bo.MinGapSeconds > 0 {
+					gap = time.Duration(bo.MinGapSeconds) * time.Second
+				}
+				if bo.WaitSeconds > 0 {
+					wait = time.Duration(bo.WaitSeconds) * time.Second
+				}
+				var src collector.OLTSource
+				for _, x := range oltCol.Sources {
+					if x.Name == bo.Name {
+						src = x
+					}
+				}
+				benchRunner.OLT = func(ctx context.Context, op string, notAfter time.Time, before func() error) (olt.ManeuverOutcome, error) {
+					var out olt.ManeuverOutcome
+					xerr := oltCol.Exclusive(ctx, bo.Name, gap, func() error {
+						cctx, cancel := context.WithTimeout(ctx, wait+3*time.Minute) // login + commands + the wait for the ONU to come back
+						defer cancel()
+						raw, closeFn, err := src.Open(cctx)
+						if err != nil {
+							return err
+						}
+						defer closeFn()
+						var rerr error
+						out, rerr = olt.RunBenchManeuver(cctx, raw, onu, op, notAfter, before, wait, 10*time.Second, time.Now)
+						return rerr
+					})
+					return out, xerr
+				}
+				log.Warn("bench OLT maneuvers ENABLED for ONE ONU", "olt", bo.Name, "min_gap", gap.String())
 			}
 			log.Warn("bench writes ENABLED for a closed list of devices", "devices", len(devs), "min_interval", minGap.String(), "max_per_hour", perHour)
 		}

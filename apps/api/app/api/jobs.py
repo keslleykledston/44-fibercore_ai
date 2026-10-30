@@ -48,6 +48,9 @@ OPERATIONS: dict[str, Operation] = {
     "refresh": Operation("R0", "cpe", False, 0),
     "reboot_cpe": Operation("R1", "cpe", True, 0),
     "set_wifi_ssid": Operation("R2", "cpe", True, 1),
+    # ADR-0030 H4 (bench only): the ONU of the bench CPE, on the OLT. The target is the bench CPE; the Edge resolves the ONU from its own local list.
+    "onu_reset": Operation("R2", "cpe", True, 1),
+    "onu_deactivate": Operation("R2", "cpe", True, 1),
     "provision_onu": Operation("R3", "olt", True, 2),
 }
 # (operation) names whose firmware/model/transport homologation is complete. EMPTY by design in Sprint 3.

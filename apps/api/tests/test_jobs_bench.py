@@ -34,6 +34,9 @@ def _cleanup(migrated, monkeypatch):
         c.execute(text("DELETE FROM bench_targets"))
         c.execute(text("DELETE FROM bench_target_epochs"))
         c.execute(text("DELETE FROM device_capabilities"))
+        c.execute(text("DELETE FROM onu_cpe_links WHERE cpe_id IN (SELECT id FROM cpes WHERE canonical_serial LIKE 'BNCH-%')"))
+        c.execute(text("DELETE FROM onus WHERE serial LIKE 'HWTCH4%'"))
+        c.execute(text("DELETE FROM olts WHERE name = 'OLT-H4'"))
         c.execute(text("DELETE FROM cpe_protocol_bindings WHERE cpe_id IN (SELECT id FROM cpes WHERE canonical_serial LIKE 'BNCH-%')"))
         c.execute(text("DELETE FROM cpes WHERE canonical_serial LIKE 'BNCH-%'"))
 
@@ -285,7 +288,7 @@ def test_bench_evidence_file_check_and_the_catalog():
     assert "Aprovador" in bench.evidence_missing("\n".join(ok.splitlines()[:-4]))
     assert bench.evidence_missing(ok + "\n- **Nota:** 192.168.0.1")[-1].startswith("conteúdo sensível")
     assert bench.evidence_missing(ok + "\nsenha: x")[-1].startswith("conteúdo sensível")
-    assert set(bench.BENCH_OPS) == {"reboot_cpe", "set_wifi_ssid"} and bench.MIN_APPROVALS == 1
+    assert set(bench.BENCH_OPS) == {"reboot_cpe", "set_wifi_ssid", "onu_reset", "onu_deactivate"} and bench.MIN_APPROVALS == 1
     assert all(jobs_mod.OPERATIONS[o].writes for o in bench.BENCH_OPS)  # the catalog is a subset of the engine's write operations
 
 
@@ -371,7 +374,7 @@ def test_the_shipped_default_has_the_edge_support_but_every_other_condition_stay
     import importlib
 
     assert importlib.reload(bench).EDGE_SUPPORT is True   # flipped by the PR that implements and tests the Edge side
-    assert bench.BENCH_OPS.keys() == {"reboot_cpe", "set_wifi_ssid"}   # H2 and H3; H4 needs an ADR amendment
+    assert bench.BENCH_OPS.keys() == {"reboot_cpe", "set_wifi_ssid", "onu_reset", "onu_deactivate"}   # H2, H3 and H4 (ADR-0030)
     assert features_default("bench_writes") is False      # the tenant flag still defaults off
 
 
@@ -662,3 +665,78 @@ def test_owner_cli_records_the_ssid_in_the_authorization_hash(client, seed, inv,
     with pytest.raises(SystemExit, match="outside the bench catalog"):
         cli.main(["bench-authorize", str(seed["A"]), "reboot_cpe", cpe, "--from", now.isoformat(), "--to", (now + timedelta(minutes=5)).isoformat(),
                   "--by", "r", "--ssid", "BANCADA-H3"])      # a reboot takes no parameter
+
+
+# ---- H4 (onu_reset / onu_deactivate): the registry profile is the OLT's, reached through the one confirmed ONU<->CPE link ----------------------
+OLT_PROFILE = ("Huawei", "MA5608T", "MA5600V800R015")
+
+
+def _olt_link(migrated, seed, inv, cpe, onus=1, status="confirmed"):
+    t = str(seed["A"])
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": t})
+        olt = c.execute(text("INSERT INTO olts (tenant_id, edge_id, name, vendor, model, firmware, support_level) VALUES (:t,:e,'OLT-H4',:v,:m,:f,'observed') "
+                             "RETURNING id"), {"t": t, "e": str(inv["a1"]["edge"]), "v": OLT_PROFILE[0], "m": OLT_PROFILE[1], "f": OLT_PROFILE[2]}).scalar()
+        for i in range(onus):
+            onu = c.execute(text("INSERT INTO onus (tenant_id, olt_id, serial, status) VALUES (:t,:o,:s,'online') RETURNING id"),
+                            {"t": t, "o": olt, "s": f"HWTCH4{i:010d}"}).scalar()
+            c.execute(text("INSERT INTO onu_cpe_links (tenant_id, onu_id, cpe_id, status, confidence, evidence, reviewed_by, reviewed_at) "
+                           "VALUES (:t,:u,:c,:s,0.99,CAST('{\"rule\":\"test\"}' AS jsonb),:r,:ra)"),
+                      {"t": t, "u": onu, "c": cpe, "s": status, "r": uuid4() if status != "suggested" else None,
+                       "ra": datetime.now(UTC) if status != "suggested" else None})
+    return olt
+
+
+def _olt_registry(migrated, seed, op, cert="observed", protocol="olt"):
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("INSERT INTO device_capabilities (tenant_id, vendor, model, firmware, protocol, operation, status, certification, verified_at, "
+                       "evidence_ref) VALUES (:t,:v,:m,:f,:p,:o,'supported',:c,now(),'docs/wiki/bench/H4-test.md')"),
+                  {"t": str(seed["A"]), "v": OLT_PROFILE[0], "m": OLT_PROFILE[1], "f": OLT_PROFILE[2], "p": protocol, "o": op, "c": cert})
+
+
+def _h4(client, seed, inv, migrated, op="onu_reset", **kw):
+    _flag(migrated, seed["A"])
+    cpe = _cpe(client, inv, seed)
+    _bench(migrated, seed, inv, cpe, op=op, capability=False, **{k: v for k, v in kw.items() if k in ("first_run", "authorization")})
+    return cpe, hdr(client, "alice", seed, "A")
+
+
+@pytest.mark.parametrize("op", ["onu_reset", "onu_deactivate"])
+def test_h4_opens_with_the_olt_profile_reached_through_the_confirmed_link_and_carries_no_params(client, seed, inv, migrated, op):
+    cpe, h = _h4(client, seed, inv, migrated, op=op)
+    _olt_link(migrated, seed, inv, cpe)
+    _olt_registry(migrated, seed, op)
+    jid = _preview(client, h, cpe, op).json()["id"]
+    assert client.post(f"/v1/jobs/{jid}/submit", headers=h).status_code == 200
+    done = client.post(f"/v1/jobs/{jid}/approve", headers=h)
+    assert done.status_code == 200 and done.json()["status"] == "APPROVED", done.text
+    env = client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1")).json()
+    assert env["operation"] == op and env["target_ref"] == EXT and "params" not in env
+    assert not list(Draft202012Validator(SCHEMA).iter_errors(env)) and jobsign.verify(_pub_b64(), env)
+
+
+@pytest.mark.parametrize("case", ["no_link", "suggested_link", "cpe_profile_only", "other_operation"])  # (the database allows one confirmed link per CPE)
+def test_h4_refuses_without_the_exact_olt_profile(client, seed, inv, migrated, case):
+    cpe, h = _h4(client, seed, inv, migrated)
+    if case == "no_link":
+        _olt_registry(migrated, seed, "onu_reset")
+    elif case == "suggested_link":
+        _olt_link(migrated, seed, inv, cpe, status="suggested"); _olt_registry(migrated, seed, "onu_reset")
+    elif case == "cpe_profile_only":
+        _olt_link(migrated, seed, inv, cpe); _olt_registry(migrated, seed, "onu_reset", protocol="tr069")
+    else:
+        _olt_link(migrated, seed, inv, cpe); _olt_registry(migrated, seed, "onu_deactivate")
+    jid = _preview(client, h, cpe, "onu_reset").json()["id"]
+    r = client.post(f"/v1/jobs/{jid}/submit", headers=h)
+    assert r.status_code == 409 and r.json()["detail"] == "capability_not_observed", r.text
+
+
+def test_h4_ops_take_no_params_and_the_cli_knows_the_olt_pairs(client, seed, inv, migrated, admin_url, monkeypatch):
+    from app import cli
+
+    cpe, h = _h4(client, seed, inv, migrated)
+    assert _preview(client, h, cpe, "onu_reset", {"ssid": "BANCADA-H3"}).status_code == 422
+    monkeypatch.setenv("ADMIN_DATABASE_URL", admin_url)
+    cli.main(["capability-set", str(seed["A"]), *OLT_PROFILE, "olt", "onu_reset", "supported", "identified", "--evidence", "docs/x.md",
+              "--verified-at", "2026-10-30T00:00:00+00:00"])

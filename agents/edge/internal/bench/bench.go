@@ -11,8 +11,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/collector"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/jobs"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/nbi"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/olt"
 )
 
 type ACS interface {
@@ -22,6 +24,10 @@ type ACS interface {
 }
 
 type Guard interface{ Reserve(deviceID string) error }
+
+// OLTExec runs an H4 maneuver over ONE guarded OLT session (implemented in main with collector.OLT.Exclusive and olt.RunBenchManeuver).
+// beforeSend is called by the driver once the ONU's identity is confirmed on the OLT and right before the first changing command.
+type OLTExec func(ctx context.Context, op string, notAfter time.Time, beforeSend func() error) (olt.ManeuverOutcome, error)
 
 type Result struct {
 	State     string // accepted-final states for the Cloud: "succeeded" | "failed"
@@ -35,6 +41,7 @@ type Runner struct {
 	Claims      *jobs.Claims
 	Guard       Guard
 	ACS         ACS
+	OLT         OLTExec       // H4; nil = the OLT maneuvers fail closed
 	RestoreFile string        // H3: where the original SSID is kept (local only) until the restore is confirmed
 	Wait        time.Duration // how long to wait for the CPE to boot again
 	Poll        time.Duration
@@ -63,7 +70,7 @@ func (r *Runner) deny(env *jobs.Envelope, detail string, err error) Result {
 
 // Run executes one verified bench envelope. At most one runs at a time on this Edge.
 func (r *Runner) Run(ctx context.Context, env *jobs.Envelope) Result {
-	if !jobs.BenchWriteOps[env.Operation] || (env.Operation != "reboot_cpe" && env.Operation != "set_wifi_ssid") {
+	if !jobs.BenchWriteOps[env.Operation] {
 		return fail("operation not supported on the bench")
 	}
 	if !r.busy.CompareAndSwap(false, true) {
@@ -80,6 +87,9 @@ func (r *Runner) Run(ctx context.Context, env *jobs.Envelope) Result {
 	}
 	if err := r.Lease.Check(env.TargetRef, env.OwnerEpoch); err != nil {
 		return r.deny(env, "no valid Cloud lease for this target", err)
+	}
+	if env.Operation == "onu_reset" || env.Operation == "onu_deactivate" {
+		return r.oltOp(ctx, env, notAfter) // the identity of THIS ONU is confirmed on the OLT itself, in the maneuver's own session
 	}
 	if err := r.ACS.BenchIdentity(ctx, dev, r.now()); err != nil {
 		if errors.Is(err, nbi.ErrBenchOffline) {
@@ -162,6 +172,52 @@ func deadline(env *jobs.Envelope) (time.Time, error) {
 		return end, nil
 	}
 	return exp, nil
+}
+
+// oltOp is H4. The pacing slot and the single-use authorization are spent only inside beforeSend, i.e. after the ONU was confirmed on the OLT.
+func (r *Runner) oltOp(ctx context.Context, env *jobs.Envelope, notAfter time.Time) Result {
+	if r.OLT == nil {
+		return r.deny(env, "olt maneuvers are not enabled on this edge", nil)
+	}
+	claimed := false
+	before := func() error {
+		if !r.now().Before(notAfter) {
+			return errors.New("envelope or authorization window already over")
+		}
+		if err := r.Guard.Reserve(env.TargetRef); err != nil {
+			return err
+		}
+		if err := r.Claims.Claim(env.AuthorizationID, env.JobID, env.TargetRef, env.OwnerEpoch); err != nil {
+			return err
+		}
+		claimed = true
+		return nil
+	}
+	out, err := r.OLT(ctx, env.Operation, notAfter, before)
+	r.logOutcome(env, out.Detail, err)
+	switch {
+	case !claimed:
+		switch {
+		case errors.Is(err, collector.ErrOLTNotDue):
+			return fail("olt guard: another session was too recent")
+		case errors.Is(err, olt.ErrBenchOLTIdentity):
+			return fail("onu identity not confirmed on the olt")
+		default:
+			return fail("olt maneuver not started")
+		}
+	case err == nil && out.Done:
+		r.finish(env, jobs.ClaimDone)
+		return Result{State: "succeeded", Detail: out.Detail, Postcheck: true}
+	case errors.Is(err, olt.ErrBenchOLTStuck):
+		r.finish(env, jobs.ClaimUnknown)
+		return Result{State: "failed", Detail: "the ONU may be left deactivated; operator must run ont activate on the OLT"}
+	case !out.Sent:
+		r.finish(env, jobs.ClaimFailed)
+		return fail("olt command not sent or refused; nothing changed")
+	default:
+		r.finish(env, jobs.ClaimUnknown)
+		return Result{State: "failed", Detail: "outcome unknown; operator check required"}
+	}
 }
 
 func (r *Runner) logOutcome(env *jobs.Envelope, detail string, err error) {

@@ -100,6 +100,8 @@ def main(argv: list[str] | None = None) -> None:
                 sys.exit(f"unknown operation {a.operation!r}; known: {', '.join(sorted(OPERATIONS))}")
             from app.core.capabilities import catalog_for
             valid = {(e.operation, e.protocol) for kind in ("cpe", "olt") for e in catalog_for(kind, OPERATIONS)}
+            from app.core import bench as _bench
+            valid |= {(n, sp.protocol) for n, sp in _bench.BENCH_OPS.items()}   # the bench catalog names its own (operation, protocol) pairs
             if (a.operation, a.protocol) not in valid:  # a row the API could never show would hide the recorded state
                 sys.exit(f"{a.operation!r} is not catalogued over {a.protocol!r}; valid pairs: {sorted(valid)}")
             from app.core import bench

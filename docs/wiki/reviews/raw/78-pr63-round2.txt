@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18b4d-f2ab-75e3-9a5d-715f4a365a72).
+[codex] Turn started (01a18b4d-f2e4-79e1-a1da-a6af0bdc068f).
+[codex] Assistant message captured: I’ll inspect the exact diff against `main`, then trace the claim, deadline, identity reread, ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/bench/...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/bench/... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=50 main...HEAD -- agents/edge/cmd/fibercore-e...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=50 main...HEAD -- agents/edge/cmd/fibercore-e... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '219,300p'; nl -ba agent...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '219,300p'; nl -ba agent... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: the authorization window can expire ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: the authorization window can expire while the durable pacing and claim writes run, after the last deadline check but before the OLT mutation is sent.
+
+Findings:
+- [high] Deadline is not rechecked after claim persistence (agents/edge/internal/olt/bench.go:184-188)
+  The driver checks `notAfter` immediately before calling `beforeSend`, but that callback performs `Guard.Reserve` and `Claims.Claim` before returning. If either durable write blocks long enough for the window to expire, `beforeSend` still succeeds and the driver sends the reset or deactivate command without another deadline check. This leaves a real path to mutate the ONU after the authorized window, while spending the claim and pacing slot. Recheck the deadline after both writes and immediately before the first changing command; if it has expired, do not send and record the claim outcome accordingly.
+  Recommendation: Add a final deadline check after `beforeSend()` returns and directly before the reset/deactivate send; ensure expiration there prevents transmission.

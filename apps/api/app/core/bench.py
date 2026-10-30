@@ -36,6 +36,9 @@ class BenchOp:
 BENCH_OPS: dict[str, BenchOp] = {
     "reboot_cpe": BenchOp("tr069", frozenset()),
     "set_wifi_ssid": BenchOp("tr069", frozenset({"ssid"})),   # H3: 2.4 GHz radio (instance 1) only; the Edge restores the original value
+    # H4: the bench ONU on the real OLT. No parameter at all: port and ONT-ID come from the Edge's LOCAL list, never from here.
+    "onu_reset": BenchOp("olt", frozenset()),
+    "onu_deactivate": BenchOp("olt", frozenset()),    # a cycle: deactivate, verify, REACTIVATE, verify
 }
 # the ONLY values a parameter may take, per operation (ADR-0030 item 4); anything else is refused at preview, at the gate and again at the Edge
 SSID_RE = re.compile(r"BANCADA-[A-Z0-9]{1,16}")
@@ -111,8 +114,16 @@ def gate(conn: Connection, tenant_id: UUID, job, *, mode: str) -> str | None:
         return "target_write_locked"
     if job.edge_id is None or bt.edge_id != job.edge_id:
         return "bench_edge_mismatch"
-    cpe = conn.execute(text("SELECT vendor, model, firmware FROM cpes WHERE tenant_id = :t AND id = :c"),
-        {"t": tenant_id, "c": job.target_id}).first()
+    if spec.protocol == "olt":
+        # the registry profile is the OLT's: exactly one confirmed ONU<->CPE link, whose ONU belongs to an OLT with a known profile
+        rows = conn.execute(
+            text("SELECT ol.vendor, ol.model, ol.firmware FROM onu_cpe_links l JOIN onus u ON u.tenant_id = l.tenant_id AND u.id = l.onu_id "
+                 "JOIN olts ol ON ol.tenant_id = u.tenant_id AND ol.id = u.olt_id "
+                 "WHERE l.tenant_id = :t AND l.cpe_id = :c AND l.status = 'confirmed'"), {"t": tenant_id, "c": job.target_id}).all()
+        cpe = rows[0] if len(rows) == 1 else None
+    else:
+        cpe = conn.execute(text("SELECT vendor, model, firmware FROM cpes WHERE tenant_id = :t AND id = :c"),
+                           {"t": tenant_id, "c": job.target_id}).first()
     if cpe is None or not (cpe.vendor and cpe.model and cpe.firmware):
         return "capability_not_observed"
     certs = {r.certification: r for r in conn.execute(

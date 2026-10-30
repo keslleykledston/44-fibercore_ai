@@ -1,0 +1,22 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18b4f-4145-79f3-ba3d-a6ad8440d527).
+[codex] Turn started (01a18b4f-4181-79a0-bdff-0ab8533ebb42).
+[codex] Assistant message captured: I’ll inspect the branch diff against `main`, focusing on whether the send-time deadline guard...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- agents/edg...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- agents/edg... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "RunBenchManeuver|OLTExec|beforeSend|now :=|Now:" agents/edge/cmd/fiberc...
+[codex] Command completed: /bin/bash -lc 'rg -n "RunBenchManeuver|OLTExec|beforeSend|now :=|Now:" agents/edge/cmd/fiberc... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"type Session interface|func \\(.*\\) Run\\(\" agents/edge/internal/olt...
+[codex] Command failed: /bin/bash -lc "rg -n \"type Session interface|func \\(.*\\) Run\\(\" agents/edge/internal/olt... (exit 2)
+[codex] Running command: /bin/bash -lc "sed -n '20,42p' agents/edge/internal/olt/driver.go; sed -n '90,125p' agents/ed...
+[codex] Command completed: /bin/bash -lc "sed -n '20,42p' agents/edge/internal/olt/driver.go; sed -n '90,125p' agents/ed... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"No material blocker found: the deadline check is inside the c...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+No material blocker found: the deadline check is inside the command wrapper for reset/deactivate, and activation remains allowed for recovery.
+
+No material findings.
