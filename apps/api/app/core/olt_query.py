@@ -3,8 +3,9 @@
 The cloud knows the SAME typed catalog as the Edge (agents/edge/internal/olt/query.go; a test compares the two so they cannot drift), accepts only a closed
 intent per query (`query_id` plus exactly the integer fields of that query's scope), and stamps the OLT identity and the catalog version into it, so that
 the intent hash, the audit and the signed envelope all cover them. What this module does NOT do: reach any equipment. The channel that carries a query
-to the Edge's CLI session (persistent queue, ownership lease, parsers) is the Edge side of ADR-0029 and is still missing: `EDGE_SUPPORT` stays False
-until it exists and is tested, so nothing is dispatched and the tenant flag cannot be turned on.
+to the Edge's CLI session (durable queue, ownership lease, typed parsers) exists on the Edge side (agents/edge, ADR-0029 slices 2-4) and was rehearsed in
+simulators; `EDGE_SUPPORT` is True from slice 5, but nothing is offered or dispatched until the tenant flag `olt_query` is turned on (owner CLI `feature-set`),
+and each OLT also needs `olt_query_enabled` + `cloud_id` in its Edge's configuration.
 """
 from __future__ import annotations
 
@@ -63,8 +64,8 @@ BY_ID = {q.id: q for q in CATALOG}
 # supervised rehearsal in the LAB. Being in the catalog is not being offered.
 ROLLOUT: frozenset[str] = frozenset({"olt.version", "olt.board"})
 
-# the Edge side of the channel (queue, lease, parsers) does not exist yet: nothing is dispatched and the tenant flag cannot be turned on while False
-EDGE_SUPPORT = False
+# the Edge side of the channel (queue, lease, parsers) exists; the tenant flag and the Edge's own configuration still decide whether anything runs
+EDGE_SUPPORT = True
 
 # an olt_query envelope is short-lived on its own: a copy that waits in transit or in a queue dies in minutes
 ENVELOPE_TTL = timedelta(minutes=10)

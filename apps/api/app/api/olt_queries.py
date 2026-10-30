@@ -1,7 +1,7 @@
 """Read-only queries of the OLT from its screen (ADR-0029): the cloud half of the `olt_query` job.
 
 A request here is the existing job (preview, then submit), with the closed intent the job engine builds and checks. Nothing in this module reaches
-equipment: while the Edge channel does not exist (`olt_query.EDGE_SUPPORT`) every request is refused with `olt_query_disabled` and no job is created.
+equipment: while the tenant flag `olt_query` is off (or the channel is switched off in code, `olt_query.EDGE_SUPPORT`) every request is refused with `olt_query_disabled` and no job is created.
 """
 from __future__ import annotations
 

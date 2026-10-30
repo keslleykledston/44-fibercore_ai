@@ -1,5 +1,5 @@
 """`olt_query` (ADR-0029), cloud half: the closed intent, the gates (flag, Edge channel, rollout, permission, quota) and what the signed envelope carries.
-Nothing here reaches equipment, and the channel stays refused in this build (`EDGE_SUPPORT` False) unless a test turns it on for itself."""
+Nothing here reaches equipment. The tenant flag decides whether anything is offered; a test that needs the channel switched off sets `EDGE_SUPPORT` False itself."""
 from __future__ import annotations
 
 import re
@@ -75,7 +75,7 @@ def test_every_scope_takes_exactly_its_fields():
         olt_query.check_params("olt.reboot", {})
 
 
-def test_nothing_is_offered_nor_created_while_the_edge_channel_does_not_exist(client, seed, inv, olt, migrated):
+def test_nothing_is_offered_nor_created_while_the_tenant_flag_is_off(client, seed, inv, olt, migrated):
     h = hdr(client, "alice", seed, "A")
     cat = client.get(f"/v1/olts/{olt}/queries", headers=h).json()
     assert cat["enabled"] is False and not any(i["offered"] for i in cat["items"]) and cat["catalog_version"] == olt_query.catalog_version()
@@ -87,7 +87,8 @@ def test_nothing_is_offered_nor_created_while_the_edge_channel_does_not_exist(cl
         assert c.execute(text("SELECT count(*) FROM jobs WHERE operation = 'olt_query'")).scalar_one() == 0
 
 
-def test_the_flag_alone_is_not_enough_and_the_cli_refuses_it(client, seed, inv, olt, migrated, monkeypatch):
+def test_the_flag_alone_is_not_enough_when_the_channel_is_switched_off_in_code_and_the_cli_refuses_it(client, seed, inv, olt, migrated, monkeypatch):
+    monkeypatch.setattr(olt_query, "EDGE_SUPPORT", False)
     with migrated.begin() as c:
         c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
         c.execute(text("INSERT INTO tenant_features (tenant_id, feature, enabled) VALUES (:t,'olt_query',true)"), {"t": seed["A"]})
@@ -98,8 +99,9 @@ def test_the_flag_alone_is_not_enough_and_the_cli_refuses_it(client, seed, inv, 
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
             c.execute(text("DELETE FROM tenant_features WHERE tenant_id = :t AND feature = 'olt_query'"), {"t": seed["A"]})
     from app import cli
-    src = Path(cli.__file__).read_text()
-    assert 'a.feature == "olt_query" and a.state == "on"' in src and "olt_query.EDGE_SUPPORT" in src
+    monkeypatch.setenv("ADMIN_DATABASE_URL", str(migrated.url.render_as_string(hide_password=False)))
+    with pytest.raises(SystemExit, match="cannot be turned on"):
+        cli.main(["feature-set", str(seed["A"]), "olt_query", "on"])
 
 
 def test_a_request_becomes_a_closed_signed_intent(client, seed, inv, olt, on):
@@ -321,9 +323,9 @@ def test_the_lease_names_the_olts_this_edge_owns_with_their_epoch(client, seed, 
 
 
 def test_no_lease_without_the_flag_or_the_channel(client, seed, inv, olt, migrated, monkeypatch):
-    assert _lease(client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1"))) is None
-    monkeypatch.setattr(olt_query, "EDGE_SUPPORT", True)
     assert _lease(client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1"))) is None      # the flag is off
+    monkeypatch.setattr(olt_query, "EDGE_SUPPORT", False)
+    assert _lease(client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1"))) is None      # the channel is switched off in code
 
 
 def test_the_envelope_carries_the_owner_epoch(client, seed, inv, olt, on, migrated):
