@@ -11,6 +11,8 @@
 
 ## Perfil de papéis
 
+> A matriz REAL de papéis × permissões e de rotas × permissão está em `docs/security/RBAC_MATRIX.md` (gerada do código; ADR-0031). A tabela abaixo é a intenção de produto, não o que o código concede hoje.
+
 | Papel | Listar estado | CSV/ERP | Ler Wi-Fi | Reboot | Provisionar | Releases |
 |---|---|---|---|---|---|---|
 | ISP Admin | sim | sim | sim | autorizar | aprovar | aprovar tenant |
