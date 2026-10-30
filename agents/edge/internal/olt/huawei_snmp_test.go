@@ -540,7 +540,7 @@ func TestLastDownsReadsOnlyTheTargetsAndOnlyAcceptsATimeWhoseSerialMatches(t *te
 	}
 }
 
-func TestLastDownsCostsAboutOneRequestPerTenOnusAndRefusesWhatIsNotAGponPort(t *testing.T) {
+func TestLastDownsCostsOneRequestPerFiveOnusAndRefusesWhatIsNotAGponPort(t *testing.T) {
 	const ifx = 4194307584
 	m := newPon14()
 	var targets []DownTarget
@@ -548,8 +548,9 @@ func TestLastDownsCostsAboutOneRequestPerTenOnusAndRefusesWhatIsNotAGponPort(t *
 		targets = append(targets, DownTarget{PonPath: "0/0/14", OntID: id, Serial: fakeSerial(id)})
 	}
 	cm := &countingMIB{fakeMIB: m}
-	if _, err := (HuaweiSNMP{}).LastDowns(context.Background(), cm, targets); err != nil || cm.requests != 2 {
-		t.Fatalf("12 ONUs = 2 requests (10 + 2, the port check rides the first): requests=%d err=%v", cm.requests, err)
+	if _, err := (HuaweiSNMP{}).LastDowns(context.Background(), cm, targets); err != nil || cm.requests != 3 || cm.maxOIDs > snmpGetOIDs {
+		t.Fatalf("12 ONUs = 3 requests (4 + 5 + 3; the port check rides the first), none above %d OIDs: requests=%d max=%d err=%v",
+			snmpGetOIDs, cm.requests, cm.maxOIDs, err)
 	}
 	m.vals[fmt.Sprintf("%s.%d", oidIfDesc, ifx)] = SNMPValue{Bytes: []byte("Ethernet0/0/1"), IsBytes: true}
 	if got, err := (HuaweiSNMP{}).LastDowns(context.Background(), m, targets); err == nil || len(got) != 0 {
@@ -569,10 +570,11 @@ func TestLastDownsCostsAboutOneRequestPerTenOnusAndRefusesWhatIsNotAGponPort(t *
 
 type countingMIB struct {
 	*fakeMIB
-	requests int
+	requests, maxOIDs int
 }
 
 func (c *countingMIB) Get(ctx context.Context, oids []string) (map[string]SNMPValue, error) {
 	c.requests++
+	c.maxOIDs = max(c.maxOIDs, len(oids))
 	return c.fakeMIB.Get(ctx, oids)
 }

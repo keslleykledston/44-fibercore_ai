@@ -246,12 +246,15 @@ type LastDownReader interface {
 	LastDowns(ctx context.Context, r SNMPReader, targets []DownTarget) (map[string]time.Time, error)
 }
 
-// downPairs is how many ONUs one GET carries (two OIDs each: the time and the serial that proves the ONT-ID still names that ONU).
-const downPairs = 10
+// snmpGetOIDs is the most OIDs the transport puts in ONE request (snmpClient.Get splits anything longer into several paced requests).
+const snmpGetOIDs = 10
+
+// downPairs is how many ONUs one request carries: two OIDs each, the time and the serial that proves the ONT-ID still names that ONU.
+const downPairs = snmpGetOIDs / 2
 
 // LastDowns reads, for the offline ONUs of ONE port, hwGponDeviceOntControlLastDownTime (col 23) together with the ONT's serial (col 3 of the
 // serial table). A time is accepted only when the serial the OLT reports for that ONT-ID is the target's: if the table moved since the CLI
-// listing the ONU is simply not reported. About one request per ten ONUs plus one for the port check; the agent is paced by the reader.
+// listing the ONU is simply not reported. One request per five ONUs (the first one carries four plus the port check); the reader paces them.
 func (HuaweiSNMP) LastDowns(ctx context.Context, r SNMPReader, targets []DownTarget) (map[string]time.Time, error) {
 	out := map[string]time.Time{}
 	if len(targets) == 0 {
@@ -272,6 +275,7 @@ func (HuaweiSNMP) LastDowns(ctx context.Context, r SNMPReader, targets []DownTar
 		var oids []string
 		if first { // the ifIndex formula must land on a real GPON port, or nothing from this port is trusted
 			oids = append(oids, descOID)
+			n = min(downPairs-1, len(targets)) // the port check takes one OID of the first request
 		}
 		for _, t := range targets[:n] {
 			oids = append(oids, fmt.Sprintf("%s.46.1.23.%d.%d", hwXpon, ifx, t.OntID), fmt.Sprintf("%s.43.1.3.%d.%d", hwXpon, ifx, t.OntID))
