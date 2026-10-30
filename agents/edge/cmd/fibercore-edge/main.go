@@ -172,7 +172,10 @@ func main() {
 				},
 			}
 			if d := o.DownTimes; d != nil { // read-only: the OLT's last down time of offline ONUs, over this same CLI session
-				src.DownTimes = &collector.DownTimesSource{MaxPerRound: d.Max()}
+				src.DownTimes = &collector.DownTimesSource{MaxPerRound: d.Max(),
+					Report: func(name string, picked, read, found int, why map[string]int) {
+						log.Info("olt last down times", "olt", name, "picked", picked, "read", read, "found", found, "why_not", why)
+					}}
 			}
 			if l := o.LastDown; l != nil { // read-only SNMP side channel: the OLT's own "last down time" of the offline ONUs
 				l := l

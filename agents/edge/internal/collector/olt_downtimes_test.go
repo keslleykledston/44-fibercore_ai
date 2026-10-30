@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -32,9 +33,9 @@ func (d dtDriver) SnapshotWithDownTimes(ctx context.Context, s olt.Session, port
 		*d.asked = append(*d.asked, u.Serial)
 		if t, ok := d.times[u.Serial]; ok && !d.nopeS[u.Serial] {
 			tt := t
-			r.Done(u.Serial, &tt)
+			r.Done(u.Serial, &tt, nil)
 		} else {
-			r.Done(u.Serial, nil)
+			r.Done(u.Serial, nil, olt.ErrNoDownRecord)
 		}
 	}
 	return snap, nil
@@ -162,4 +163,59 @@ func TestUnknownStateDoesNotForgetTheDownTime(t *testing.T) {
 	if got := collectDT(t, o); got["HWTC00000001"] == "" || len(*asked) != 1 {
 		t.Fatalf("unknown says nothing about the outage: %v %v", got, *asked)
 	}
+}
+
+func TestDownTimesRoundIsReportedWithCountsAndReasonsOnly(t *testing.T) {
+	o, _, _, drv, _ := newDT(t, 3, 4)
+	drv.nopeS["HWTC00000002"] = true
+	var picked, read, found int
+	var why map[string]int
+	got := make(chan struct{})
+	o.Sources[0].DownTimes.Report = func(_ string, p, r, f int, w map[string]int) { picked, read, found, why = p, r, f, w; close(got) }
+	collectDT(t, o)
+	select {
+	case <-got:
+	case <-time.After(5 * time.Second):
+		t.Fatal("report not delivered")
+	}
+	if picked != 3 || read != 3 || found != 2 || why[olt.ErrNoDownRecord.Error()] != 1 {
+		t.Fatalf("picked=%d read=%d found=%d why=%v", picked, read, found, why)
+	}
+}
+
+func TestReportThatBlocksOrPanicsNeverStopsTheCollection(t *testing.T) {
+	o, clock, _, _, _ := newDT(t, 2, 6)
+	release := make(chan struct{})
+	calls := 0
+	var mu sync.Mutex
+	o.Sources[0].DownTimes.Report = func(string, int, int, int, map[string]int) {
+		mu.Lock()
+		calls++
+		n := calls
+		mu.Unlock()
+		if n == 1 {
+			<-release // blocked "log write"
+		}
+		if n == 2 {
+			panic("boom")
+		}
+	}
+	done := make(chan map[string]string, 1)
+	go func() { done <- collectDT(t, o) }()
+	select {
+	case got := <-done:
+		if got["HWTC00000001"] == "" {
+			t.Fatalf("the collection must carry its times: %v", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a blocked Report stopped the collection")
+	}
+	clock.add(16 * time.Minute)
+	collectDT(t, o) // the first Report is still blocked: this round's report is dropped, not queued, and nothing waits
+	close(release)
+	time.Sleep(50 * time.Millisecond)
+	clock.add(16 * time.Minute)
+	collectDT(t, o) // a Report that panics is contained
+	clock.add(16 * time.Minute)
+	collectDT(t, o)
 }
