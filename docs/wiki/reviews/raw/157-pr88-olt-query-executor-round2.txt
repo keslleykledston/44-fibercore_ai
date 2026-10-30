@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18ea2-d098-73e2-b36a-21af178de641).
+[codex] Turn started (01a18ea2-d0d1-7b20-8ba0-87fc7ef6d582).
+[codex] Assistant message captured: Vou conferir o diff completo contra `main`, com atenção especial ao contexto/prazo usado no `...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/agent/...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/agent/... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=35 HEAD''^ HEAD -- agents/edge/internal/colle...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=35 HEAD''^ HEAD -- agents/edge/internal/colle... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'RunQuery|func \\(.*Query' agents/edge/internal/olt && nl -ba agents/edg...
+[codex] Command completed: /bin/bash -lc "rg -n 'RunQuery|func \\(.*Query' agents/edge/internal/olt && nl -ba agents/edg... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviaria ainda: o limite de 30 s é verificado só ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviaria ainda: o limite de 30 s é verificado só uma vez, então uma consulta subsequente pode começar com menos tempo restante que o mínimo declarado.
+
+Findings:
+- [medium] O limite mínimo de 30 s não é reavaliado entre consultas (agents/edge/internal/collector/olt_queries.go:72-83)
+  `Drain` verifica o tempo restante antes de entrar no loop, mas pode executar várias consultas na mesma sessão. Se a primeira consulta consumir tempo suficiente para deixar menos de 30 s, a iteração seguinte ainda faz `Claim` e chama `q.Run`. Isso viola a condição de que nenhuma consulta comece quando restam menos de 30 s e pode iniciar uma chamada de dispositivo sem a janela que o código declara necessária. Reavalie o prazo antes de cada claim e mantenha a consulta na fila quando a janela tiver caído abaixo do mínimo.
+  Recommendation: Mover a checagem do deadline para dentro do loop, antes de `Claim`, e retornar sem claim quando restarem menos de `minQueryWindow`.

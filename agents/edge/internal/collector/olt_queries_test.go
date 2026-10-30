@@ -197,3 +197,31 @@ func TestQueriesNeverOutliveTheCollectionsTimeBox(t *testing.T) {
 		t.Fatalf("a cancelled collection starts nothing: %d", n)
 	}
 }
+
+func TestTheWindowIsAskedBeforeEveryClaim(t *testing.T) {
+	sess := &qSession{inner: r015Session{}}
+	o, store := queryRig(t, sess)
+	for _, id := range []string{"a", "b", "c"} {
+		enqueue(t, store, id, "olt.version")
+	}
+	// the box has 40 s left: the first query starts (>= 30 s), and the running clock is shortened by a context that ends right after it
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	defer cancel()
+	o.Queries.Run = func(c context.Context, s olt.Session, id string, p olt.Params) (olt.QueryResult, error) {
+		res, err := olt.HuaweiR015{}.RunQueryInConfig(c, s, id, p)
+		cancel() // the time is gone when the query returns
+		return res, err
+	}
+	if n := o.Queries.Drain(ctx, o.Sources[0], sess, qCloud, "s"); n != 1 {
+		t.Fatalf("only the first query may start: %d", n)
+	}
+	waiting := 0
+	for _, id := range []string{"a", "b", "c"} {
+		if e, _, _ := store.Get(id); e.State == oltquery.Queued {
+			waiting++
+		}
+	}
+	if waiting != 2 {
+		t.Fatalf("the others wait for the next window, unclaimed: %d", waiting)
+	}
+}

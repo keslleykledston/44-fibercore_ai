@@ -70,14 +70,12 @@ func (q *Queries) Drain(ctx context.Context, src OLTSource, raw olt.Session, clo
 		return 0 // an unreadable queue file means nothing is claimed
 	}
 	// Only inside the time the collection still has: a query never extends the round (ctx is the collection's own time box). Too little left = none starts.
-	if dl, ok := ctx.Deadline(); ok && time.Until(dl) < minQueryWindow {
-		return 0
-	}
 	ctx, cancel := context.WithTimeout(ctx, q.timeout())
 	defer cancel()
 	sess := olt.NewBudget(olt.ReadOnlySession{Inner: raw, Allowed: src.Driver.Allowed}, queryCommandsEach*oltquery.PerSession, queryMaxBytes)
 	for {
-		if ctx.Err() != nil {
+		// asked before EVERY claim, not once: whatever the previous query used, a new one starts only with the minimum window left
+		if dl, ok := ctx.Deadline(); ctx.Err() != nil || (ok && time.Until(dl) < minQueryWindow) {
 			return ran
 		}
 		e, err := q.Store.Claim(cloudID, session) // CLAIMED is on disk before anything is sent
