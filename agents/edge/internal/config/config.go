@@ -36,8 +36,11 @@ type Config struct {
 	JobPublicKey     string       `json:"job_public_key"`     // base64 Ed25519 public key of the Cloud, pinned locally
 	AllowedOps       []string     `json:"allowed_operations"` // narrows the compile-time read-only set (collect, refresh)
 	Bench            *BenchConfig `json:"bench"`              // ADR-0030: closed list of bench devices that may receive homologated writes (nil = none)
-	RefreshTasks     bool         `json:"refresh_tasks"`      // ADR-SD-002 item 4: let signed refresh jobs ask the ACS to read ONE CPE (needs nbi_url + jobs_enabled)
-	Version          string       `json:"-"`
+	// OLTQueryEnabled (ADR-0029): run the Cloud's approved read-only OLT queries, in the collection's own CLI session. Needs jobs_enabled, "olt_query" in
+	// allowed_operations (explicit) and at least one huawei_ma56_r015 OLT with cloud_id. Off by default.
+	OLTQueryEnabled bool   `json:"olt_query_enabled"`
+	RefreshTasks    bool   `json:"refresh_tasks"` // ADR-SD-002 item 4: let signed refresh jobs ask the ACS to read ONE CPE (needs nbi_url + jobs_enabled)
+	Version         string `json:"-"`
 }
 
 // BenchConfig is the Edge's own, independent copy of the bench list (ADR-0030): the Cloud can name a device, never add one here.
@@ -101,6 +104,8 @@ type OLTConfig struct {
 	// DownTimes (CLI huawei entries with profile huawei_ma56_r015 only): read the OLT's own "last down time" of the offline ONUs over the CLI
 	// session of the collection itself (`display ont register-info`, read-only), a few ONUs per collection. Exclusive with last_down.
 	DownTimes *DownTimesConfig `json:"down_times"`
+	// CloudID is the id of this OLT in the Cloud (lower-case UUID): what an olt_query job names. Only OLTs that have it take queries.
+	CloudID string `json:"cloud_id"`
 }
 
 // DownTimesConfig is the CLI read of the OLT's last down times (see OLTConfig.DownTimes).
@@ -272,6 +277,31 @@ func (c *Config) Validate() error {
 			errs = append(errs, errors.New("bench writes need \"reboot_cpe\" and/or \"set_wifi_ssid\" listed in allowed_operations (explicit)"))
 		}
 	}
+	if c.OLTQueryEnabled {
+		withOpt := false
+		for _, o := range c.AllowedOps {
+			withOpt = withOpt || o == "olt_query"
+		}
+		eligible := 0
+		for _, o := range c.OLTs {
+			if o.CloudID != "" && o.Transport != "snmp" && o.Profile == "huawei_ma56_r015" && len(o.PonPorts) > 0 { // the queries follow the collection, which must have entered config mode
+				eligible++
+			}
+		}
+		if !c.JobsEnabled || !withOpt || eligible == 0 {
+			errs = append(errs, errors.New("olt_query_enabled needs jobs_enabled, \"olt_query\" in allowed_operations and at least one huawei_ma56_r015 CLI olt with cloud_id"))
+		}
+	}
+	cloudIDs := map[string]bool{}
+	for i, o := range c.OLTs {
+		if o.CloudID == "" {
+			continue
+		}
+		if !cloudIDRe.MatchString(o.CloudID) || cloudIDs[o.CloudID] || o.Transport == "snmp" || o.Profile != "huawei_ma56_r015" {
+			errs = append(errs, fmt.Errorf("olts[%d]: cloud_id must be a unique lower-case UUID, on a huawei_ma56_r015 CLI olt", i))
+		}
+		cloudIDs[o.CloudID] = true
+	}
 	if c.JobsEnabled && c.JobPublicKey == "" {
 		errs = append(errs, errors.New("jobs_enabled requires job_public_key (pinned locally, never fetched from the Cloud)"))
 	}
@@ -438,6 +468,13 @@ func (b BenchConfig) BenchPacing() (time.Duration, int) {
 }
 
 var gponSerialRe = regexp.MustCompile(`^[0-9A-F]{16}$`)
+
+var cloudIDRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// OLTQueriesFile is the durable queue of the read-only OLT queries (ADR-0029); it lives next to the Edge queue.
+func OLTQueriesFile(queuePath string) string {
+	return filepath.Join(filepath.Dir(queuePath), "olt-queries.json")
+}
 
 var benchPartRe = regexp.MustCompile(`^[A-Za-z0-9._]{2,64}$`)
 

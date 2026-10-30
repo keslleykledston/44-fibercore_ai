@@ -1093,9 +1093,10 @@ paths:
       operationId: reportJobResult
       description: SUCCEEDED só com postcheck_ok=true; sem pós-check o estado é UNKNOWN.
       parameters: [{name: jobId, in: path, required: true, schema: {type: string, format: uuid}}]
-      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [state], properties: {state: {type: string, enum: [accepted, succeeded, failed]}, detail: {type: string, maxLength: 500}, postcheck_ok: {type: boolean}}}}}}
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [state], properties: {state: {type: string, enum: [accepted, succeeded, failed]}, detail: {type: string, maxLength: 500}, postcheck_ok: {type: boolean}, data: {type: object, description: 'somente olt_query bem-sucedida: o resultado TIPADO e fechado da consulta (olt.version ou olt.board); outro formato vira FAILED invalid_result e nada é armazenado; nunca saída crua do equipamento'}}}}}}
       responses:
         '204': {description: Registrado}
+        '422': {description: data em operação que não é olt_query, ou junto de um resultado que não é sucesso}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
   /copilot/suggestions:
