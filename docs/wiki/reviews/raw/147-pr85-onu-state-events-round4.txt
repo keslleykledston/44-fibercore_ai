@@ -1,0 +1,18 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18e82-2796-7ed1-aa52-4405e5af0224).
+[codex] Turn started (01a18e82-27d4-7f22-bf02-53f2c4830ee2).
+[codex] Assistant message captured: Vou conferir o diff contra `main`, seguindo especialmente os limites de permissão e a execuçã...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- apps/web/src/app/rede/onu/'...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- apps/web/src/app/rede/onu/'... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"Não encontrei risco material restante no diff. A poda exige u...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+Não encontrei risco material restante no diff. A poda exige um chamador com BYPASSRLS/superuser e mantém o último evento anterior ao corte por ONU; a trilha continua protegida por RLS e sem escrita direta pela role da aplicação.
+
+No material findings.

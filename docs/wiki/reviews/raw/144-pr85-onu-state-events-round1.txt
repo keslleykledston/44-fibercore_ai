@@ -1,0 +1,38 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18e7b-2d34-7df0-959e-a55b862f0fa1).
+[codex] Turn started (01a18e7b-2d6f-7ed2-ae69-4518b0f4b9c8).
+[codex] Assistant message captured: Vou inspecionar o diff real contra `main` e seguir os caminhos de banco, API e interface nos ...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- apps/api/app/api/inventory....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- apps/api/app/api/inventory.... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "tenant_id|app.tenant_id|SET LOCAL|set_config|SECURITY DEFINER|CREATE RO...
+[codex] Command completed: /bin/bash -lc 'rg -n "tenant_id|app.tenant_id|SET LOCAL|set_config|SECURITY DEFINER|CREATE RO... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '45,110p' apps/api/alembic/versions/0005_inventory.py; sed -n '1,90p' a...
+[codex] Command completed: /bin/bash -lc "sed -n '45,110p' apps/api/alembic/versions/0005_inventory.py; sed -n '1,90p' a... (exit 0)
+[codex] Assistant message captured: Encontrei duas áreas que merecem validação mais estreita: a atualização do status de ONU ocor...
+[codex] Running command: /bin/bash -lc "sed -n '1,180p' apps/api/app/api/inventory.py; rg -n \"def scoped_connection|T...
+[codex] Command completed: /bin/bash -lc "sed -n '1,180p' apps/api/app/api/inventory.py; rg -n \"def scoped_connection|T... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '155,240p' apps/api/app/api/inventory.py; sed -n '1,100p' apps/api/app/...
+[codex] Command failed: /bin/bash -lc "sed -n '155,240p' apps/api/app/api/inventory.py; sed -n '1,100p' apps/api/app/... (exit 2)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=5 main...HEAD -- apps/web/src/app/rede/offlin...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=5 main...HEAD -- apps/web/src/app/rede/offlin... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a reconstrução da disponibilidade ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a reconstrução da disponibilidade pode exagerar quedas em timestamps empatados, e `/unstable` varre todo o histórico sem limitar o custo por tenant.
+
+Findings:
+- [high] Empates no horário observado criam quedas e segmentos arbitrários (apps/api/app/api/inventory.py:406-412)
+  `_availability` ordena eventos por `at, created_at`, mas `created_at` reflete inserção/transação, não a ordem real das observações. Duas mudanças aplicadas em sequência podem ter o mesmo `observed_at` (ou timestamps distintos podem ser truncados à mesma precisão); o segmento intermediário tem duração zero, mas a contagem de quedas ainda soma cada evento `online → down` em `at >= :s`. Um empate mal ordenado pode, portanto, registrar uma queda que não ocorreu na sequência efetiva e afetar o ranking de instabilidade. Use uma ordem causal persistida, ou deduplique/defina explicitamente a semântica para tempos iguais; não conte transições cuja ordem não possa ser estabelecida.
+  Recommendation: Persistir um ordinal monotônico de aplicação por ONU e ordenar por ele; alternativamente tratar empates como ambíguos e excluí-los das contagens com documentação explícita.
+- [high] `/unstable` processa o histórico completo antes dos filtros e paginação (apps/api/app/api/inventory.py:504-511)
+  A rota chama `_availability(conn, None, days)`, que lê e calcula `lead()` sobre todos os eventos visíveis do tenant; só depois ordena em Python, corta por `limit` e filtra `olt_id` na consulta de metadados. Assim `limit` não limita o trabalho, `olt_id` não reduz a agregação e a tabela cresce sem retenção. Um tenant com histórico volumoso pode tornar a rota muito lenta ou consumir recursos compartilhados; ONUs apagadas também deixam de ter eventos pelo `ON DELETE CASCADE`, mas eventos antigos de ONUs ativas permanecem indefinidamente. Faça agregação e filtros no SQL, aplique paginação/ranking no banco e estabeleça retenção/particionamento ou estratégia de resumo.
+  Recommendation: Mover o ranking, `min_drops`, `olt_id` e `limit` para a consulta SQL, garantindo que o filtro de tenant e a janela sejam aplicados antes da janela analítica; definir política de retenção para a tabela.
+- [medium] A migração transforma estado atual em baseline no instante histórico da queda (apps/api/alembic/versions/0028_onu_state_events.py:44-48)
+  Para ONUs que já estão offline, o backfill grava uma baseline com `at = down_since` ou `olt_down_at` (linha 47), embora só conheça o estado atual no momento da migração. Isso inventa continuidade anterior ao início real do histórico: uma `down_since` antiga permite contar horas offline e disponibilidade como se houvesse eventos confiáveis desde aquela data. Também não há baseline anterior para delimitar períodos conhecidos, então `unknown` antes da primeira observação pode ser tratado como estado conhecido até o evento baseline. O comentário diz que o estado é conhecido na execução da migração, mas o timestamp retroage.
+  Recommendation: Registrar baseline de implantação em `now()` para começar a disponibilidade na data em que a trilha passou a existir; caso se queira aproveitar `down_since`, armazenar essa origem separadamente e não apresentá-la como histórico de estado observado.

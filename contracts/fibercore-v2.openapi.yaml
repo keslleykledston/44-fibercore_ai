@@ -367,6 +367,22 @@ paths:
             text/csv: {schema: {type: string}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /onus/unstable:
+    get:
+      tags: [Network]
+      operationId: listUnstableOnus
+      summary: ONUs instáveis (inventory:read) — as que caíram pelo menos `min_drops` vezes nos últimos `days` dias, as piores primeiro, com as horas fora do ar na janela. Conta o que o Edge OBSERVOU (queda e volta entre duas coletas não aparecem)
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceOptional'
+        - {name: days, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 365, default: 30}}
+        - {name: min_drops, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000, default: 3}}
+        - {name: olt_id, in: query, required: false, schema: {type: string, format: uuid}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000, default: 100}}
+      responses:
+        '200':
+          description: "{criteria, truncated, count, items[{onu_id, serial, olt, pon_path, status, window_days, offline_hours, drops, known_hours, availability_pct}]}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /onus/{onu_id}:
     get:
       tags: [Network]
@@ -376,6 +392,18 @@ paths:
       responses:
         '200':
           description: "{id, serial, status, rx_dbm, freshness, last_online_at, down_since, olt{}, pon{path,onus,online}, incident{}|null, incident_hidden, provenance{state,olt,pon?}, source}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: ONU inexistente ou de outro provedor}
+  /onus/{onu_id}/history:
+    get:
+      tags: [Network]
+      operationId: getOnuHistory
+      summary: Mudanças de estado de UMA ONU, da mais recente para a mais antiga (inventory:read), com quedas, horas fora do ar e disponibilidade na janela. A primeira linha da ONU é a BASELINE (primeira observação), que diz o que se sabia e não que algo aconteceu. O histórico só é escrito pelo gatilho da tabela onus (a role da aplicação só lê)
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: onu_id, in: path, required: true, schema: {type: string, format: uuid}}, {name: days, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 365, default: 30}}, {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 500, default: 50}}]
+      responses:
+        '200':
+          description: "{onu_id, summary{window_days, offline_hours, drops, known_hours, availability_pct|null}, truncated, events[{id, from|null, to, at, baseline}]}"
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {description: ONU inexistente ou de outro provedor}
@@ -1693,6 +1721,8 @@ components:
               observed_at: {type: [string, 'null'], format: date-time}
               olt_observed_at: {type: [string, 'null'], format: date-time}
               freshness: {$ref: '#/components/schemas/Freshness'}
+              drops_30d: {type: integer, description: "Quedas (online → fora do ar) observadas nos últimos 30 dias, do histórico onu_state_events"}
+              offline_hours_30d: {type: number, description: "Horas em que a ONU esteve fora do ar nos últimos 30 dias (o último estado vale até agora)"}
     Olt:
       type: object
       required: [id, name, vendor, edge_id, support_level, onu_count, freshness]

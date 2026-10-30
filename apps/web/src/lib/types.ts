@@ -52,6 +52,7 @@ export type OfflineBasis = "transition_observed" | "olt_reported" | "since_last_
 export type OfflineOnu = {
   onu_id: string; serial: string; olt: string; pon_path: string | null; status: "offline" | "los" | "dying_gasp"; offline_since: string; offline_hours: number;
   basis: OfflineBasis; last_online_at: string | null; observed_at: string | null; olt_observed_at: string | null; freshness: string;
+  drops_30d?: number; offline_hours_30d?: number;
 };
 export type OfflineOnuReport = {
   generated_at: string; criteria: { min_hours: number; olt_id: string | null; pon_path: string | null; include_stale: boolean };
@@ -111,3 +112,9 @@ export type TeamActivity = { truncated: boolean; items: TeamActivityItem[] };
 export type InvitePreview =
   | { state: "invalid" | "used" | "revoked" | "expired" }
   | { state: "valid"; purpose: "invite" | "reset"; tenant_name: string; email: string; name: string | null; role_label: string | null; inviter: string | null; expires_at: string; account_exists: boolean };
+
+export type OnuHistory = {
+  onu_id: string; truncated: boolean;
+  summary: { window_days: number; offline_hours: number; drops: number; known_hours: number; availability_pct: number | null };
+  events: { id: string; from: string | null; to: string; at: string; baseline: boolean }[];
+};

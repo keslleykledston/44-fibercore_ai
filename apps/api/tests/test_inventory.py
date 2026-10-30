@@ -458,7 +458,7 @@ def test_offline_report_csv_neutralises_formulas_and_carries_the_exclusions(clie
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
     assert int(r.headers["X-Excluded-Unknown-Start"]) >= 1 and r.headers["X-Excluded-Stale"] == "0" and r.headers["X-Truncated"] == "false"
     lines = r.text.strip().splitlines()
-    assert lines[0] == "serial,olt,pon_path,status,offline_since,offline_hours,basis,last_online_at,observed_at,olt_observed_at,freshness"
+    assert lines[0] == "serial,olt,pon_path,status,offline_since,offline_hours,basis,last_online_at,observed_at,olt_observed_at,freshness,drops_30d,offline_hours_30d"
     assert len(lines) == 4 and any(l.startswith("'=OFF-FORMULA-1,") for l in lines)   # a leading = would run as a formula in a spreadsheet
 
 
