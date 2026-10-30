@@ -45,3 +45,8 @@ Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetido
 - `/assinantes/diagnostico/[id]`, BFF de execução, `onu_id` no escopo, `pon_id` no contexto; Codex 5 rodadas → approve; pytest 238, E2E 48; Lovable 2º lote (4,7 créditos). Deploy no LAB feito.
 ## 2026-10-29 — PRs 41 e 42
 - FC22-008: `AC_VALIDATION_FC22-008.md` (+2 testes, mutante reprovado; Codex achou citação errada de teste). FC22-009: `/v1/incidents` com `impact`/`summary`/`order=priority` (prioridade ANTES do limite; todos os Edges silenciosos classificam), `/v1/incidents/{id}`, `/noc` com 4 KPIs e painel lateral. Lovable 3º lote (5,2 créditos). pytest 251, E2E 49. Deploy no LAB feito.
+
+## 2026-10-30 — bancada (ADR-0030) até o H2 pronto
+- PR 57 (Edge: claim durável, lease assinada, identidade relida do ACS, única tarefa `reboot`, prazo `notAfter`), PR 58 (primeira execução, migração 0022, advisory lock), PR 59 (firmware). Codex: 2, 5 e 5 rodadas, approve. `make test-api` 373 passed; `go test -race ./...` PASS.
+- Deploy LAB: backup `fibercore-20261030T030646Z.dump`; Alembic 0022; Edge novo; bancada ligada (alvo, registro identified, flag, seção bench no Edge). Nada enviado a equipamento.
+
