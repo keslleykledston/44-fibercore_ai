@@ -66,7 +66,7 @@ export default async function CpeDetalhe({ params }: { params: Promise<{ id: str
         </Card>
         <Card title="Ações" testid="cpe-actions">
           {actions.data === null ? <p className="text-sm text-muted">{actions.status === 403 ? "Seu papel não permite ver as ações deste equipamento." : "As ações não estão disponíveis agora."}</p> : <CpeActions cpeId={id} actions={actions.data.items} />}
-          <p className="mt-3 text-xs text-muted">Só aparecem como disponíveis as ações já observadas neste modelo e firmware. Pedir cria um pedido de operação que outra pessoa aprova em Operações.</p>
+          <p className="mt-3 text-xs text-muted">Só aparecem como disponíveis as ações já observadas neste modelo e firmware. Pedir cria um pedido de operação, aprovado em Operações pelas regras de lá.</p>
         </Card>
         <Card title="Capacidades" testid="cpe-capabilities">
           {caps.data ? <CapabilityGate caps={caps.data} title="Operações neste perfil" /> : <p className="text-sm text-muted">O registro de capacidades não está disponível.</p>}

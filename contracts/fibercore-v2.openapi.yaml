@@ -627,7 +627,7 @@ paths:
     post:
       tags: [CPE]
       operationId: requestCpeReboot
-      summary: Pede o reinício do CPE pelo fluxo de jobs existente (devices:act:reboot_cpe + jobs:request). Recusa com 409 capability_not_observed ANTES de criar job. Depois cria o job e o submete; se o portão de escrita o recusar (operation_not_homologated, target_not_bench, authorization_missing…) o job é CANCELADO e a resposta é outcome=blocked. Nada chega ao Edge sem a aprovação de outra pessoa
+      summary: Pede o reinício do CPE pelo fluxo de jobs existente (devices:act:reboot_cpe + jobs:request). Recusa com 409 capability_not_observed ANTES de criar job. Depois cria o job e o submete; se o portão de escrita o recusar (operation_not_homologated, target_not_bench, authorization_missing…) o job é CANCELADO e a resposta é outcome=blocked. Nada chega ao Edge sem a aprovação do motor de jobs; na bancada (ADR-0030) a aprovação pode ser do próprio solicitante, por decisão do responsável, e a autorização prévia dele é o que vale
       parameters: [{$ref: '#/components/parameters/TenantId'}, {name: cpeId, in: path, required: true, schema: {type: string, format: uuid}}, {name: Idempotency-Key, in: header, required: true, schema: {type: string}}]
       requestBody:
         required: true

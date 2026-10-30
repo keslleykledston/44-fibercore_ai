@@ -46,7 +46,7 @@ function ActionRow({ cpeId, a }: { cpeId: string; a: CpeAction }) {
         {result ? (
           <div className="grid gap-3 text-sm" data-testid="action-result" role="status">
             {result.kind === "submitted"
-              ? <p><strong>Pedido criado.</strong> Ele aguarda a aprovação de outra pessoa em Operações. Nada foi executado no equipamento.</p>
+              ? <p><strong>Pedido criado.</strong> Ele aguarda a aprovação em Operações, pelas regras de lá. Nada foi executado no equipamento.</p>
               : <p><strong>O pedido não seguiu.</strong> {ACTION_BLOCKED[result.reason ?? ""] ?? "O motor de operações recusou. Nada foi enviado."}</p>}
             {result.jobId && <Link href="/operacoes" className="inline-flex min-h-touch items-center text-accent hover:underline">Ver em Operações</Link>}
             <button type="button" onClick={close} className="min-h-touch rounded-btn border border-line px-3">Fechar</button>
@@ -57,7 +57,7 @@ function ActionRow({ cpeId, a }: { cpeId: string; a: CpeAction }) {
               <p className="font-medium">O que acontece</p>
               <ul className="mt-1 list-disc pl-5 text-muted">
                 <li>Isto só <strong>cria um pedido de operação</strong>; nada é enviado ao equipamento agora.</li>
-                <li>Outra pessoa precisa aprovar, e hoje nenhuma escrita está homologada fora do equipamento de bancada com autorização prévia do responsável.</li>
+                <li>O pedido é aprovado em Operações pelas regras de lá. Hoje nenhuma escrita está homologada; só o equipamento de bancada, com a autorização prévia do responsável, chega a seguir (nele, quem pediu pode aprovar: a decisão é a autorização do responsável).</li>
                 <li>Se o motor de operações não deixar o pedido seguir, ele é cancelado e você vê o motivo.</li>
               </ul>
             </div>

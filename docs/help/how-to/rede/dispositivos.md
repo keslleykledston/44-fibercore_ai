@@ -32,7 +32,7 @@ ui_route: "/dispositivos"
 
 1. No detalhe do CPE, em **Ações**, a ação só aparece como disponível se ela já foi **observada** neste modelo e firmware e o seu papel pode pedi-la. Caso contrário o motivo aparece escrito.
 2. Clique em **Pedir…**, leia o aviso e, no Wi-Fi, informe o nome (na bancada, começa com `BANCADA-`). Clique em **Criar pedido**.
-3. O pedido segue o fluxo de sempre: outra pessoa aprova em **Operações**. Hoje nenhuma escrita está homologada, então só o equipamento de bancada, com autorização prévia do responsável, chega a seguir; nos demais casos o pedido é cancelado na hora e a tela diz o motivo (“Nada foi enviado”).
+3. O pedido segue o fluxo de sempre e é aprovado em **Operações**, pelas regras de lá (na bancada, a decisão é a autorização prévia do responsável, e quem pediu pode aprovar). Hoje nenhuma escrita está homologada, então só o equipamento de bancada, com autorização prévia do responsável, chega a seguir; nos demais casos o pedido é cancelado na hora e a tela diz o motivo (“Nada foi enviado”).
 
 ## Se algo não funcionar
 
