@@ -199,3 +199,7 @@
 ## Unreleased — PR 82
 - API: `GET /v1/cpes/{id}/actions` e `POST /v1/cpes/{id}/actions/{reboot_cpe|set_wifi_ssid}`; permissões `devices:act:reboot_cpe` (isp_admin, engineer, noc_n2) e `devices:act:set_wifi_ssid` (isp_admin, engineer). O pedido reaproveita preview+submit do motor de jobs (nenhum caminho novo de escrita; `HOMOLOGATED_WRITES` continua vazio) e é recusado antes de criar job se o registro não tem entrada observada para o perfil.
 - Web: card **Ações** no detalhe do CPE.
+
+## Unreleased — PR 83
+- API: migração 0026. `POST/GET /v1/bench/authorizations`, `DELETE /v1/bench/authorizations/{id}`; permissão `bench:authorize` (noc_n2, engineer, isp_admin; OLT-side só engineer/isp_admin); funções SQL `app_bench_authorize`/`app_bench_revoke` (conexão dedicada). O motor de jobs recusa (`authorizer_not_independent`) autorização da API em job cujo solicitante/aprovador é o autorizador.
+- Web: card **Autorização de bancada** no CPE de bancada.

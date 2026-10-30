@@ -71,3 +71,24 @@ export const ACTION_ERROR: Record<string, string> = {
   forbidden: "Seu papel não permite esta ação.",
   failed: "Falha inesperada. Tente em instantes.",
 };
+
+export const BENCH_OP_LABEL: Record<string, string> = {
+  reboot_cpe: "Reiniciar o equipamento (CPE)", set_wifi_ssid: "Trocar o nome do Wi-Fi (CPE)",
+  onu_reset: "Reiniciar a ONU na OLT", onu_deactivate: "Ciclo desativar/reativar a ONU na OLT",
+};
+export const BENCH_ERROR: Record<string, string> = {
+  role_cannot_authorize: "Seu papel não pode autorizar esta manobra.",
+  target_not_bench: "Este equipamento não é um alvo de bancada.",
+  target_write_locked: "O alvo de bancada está travado até o responsável reconciliar a última manobra.",
+  bench_writes_disabled: "As escritas de bancada estão desligadas neste provedor.",
+  authorization_already_open: "Já existe uma autorização ativa para esta manobra neste equipamento. Espere ela vencer ou encerre-a.",
+  authorization_not_found: "Esta autorização não existe mais.",
+  authorization_not_open: "Esta autorização já foi usada, encerrada ou venceu.",
+  owner_authorization: "Esta autorização foi gravada pelo responsável no servidor; só ele a remove.",
+  edge_support_missing: "O Edge ainda não suporta escritas de bancada.",
+  bad_request: "Confira a manobra, o nome do Wi-Fi (BANCADA-…) e o tempo (5 a 120 minutos).",
+  session: "Sua sessão expirou. Recarregue a página e entre de novo.",
+  forbidden: "Seu papel não permite esta ação.",
+  unavailable: "Serviço indisponível. Tente em instantes.",
+  failed: "Falha inesperada. Tente em instantes.",
+};

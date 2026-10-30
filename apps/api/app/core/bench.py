@@ -98,14 +98,24 @@ def profile_for(conn: Connection, tenant_id: UUID, cpe_id, protocol: str):
     return conn.execute(text("SELECT vendor, model, firmware FROM cpes WHERE tenant_id = :t AND id = :c"), {"t": tenant_id, "c": cpe_id}).first()
 
 
+# Which role may authorize which bench operation through the API (mirrors the SQL table rbac_bench_authorizers, tested equal). The maneuvers on the OLT
+# side (onu_reset, onu_deactivate) are for the engineering roles; the operator role covers the two CPE operations.
+BENCH_AUTHORIZERS: dict[str, frozenset[str]] = {
+    "noc_n2": frozenset({"reboot_cpe", "set_wifi_ssid"}),
+    "engineer": frozenset(BENCH_OPS),
+    "isp_admin": frozenset(BENCH_OPS),
+}
+
+
 def params_hash(params: dict) -> str:
     return hashlib.sha256(json.dumps(params, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def gate(conn: Connection, tenant_id: UUID, job, *, mode: str) -> str | None:
+def gate(conn: Connection, tenant_id: UUID, job, *, mode: str, by: UUID | None = None) -> str | None:
     """None if the bench write may proceed, else a short reason code. mode: 'submit'/'approve' check an OPEN authorization; 'consume' also
     consumes it (atomically, in the caller's transaction) and records it on the job; 'dispatch' requires the authorization already consumed
-    by THIS job and still inside its window."""
+    by THIS job and still inside its window. `by` is the person acting now (submitting or approving): an authorization given through the API never
+    serves a job whose requester or approver is the person who authorized it (the owner's host authorizations carry no such person)."""
     spec = BENCH_OPS.get(job.operation)
     if spec is None or job.target_type != "cpe":
         return "operation_not_homologated"
@@ -151,11 +161,15 @@ def gate(conn: Connection, tenant_id: UUID, job, *, mode: str) -> str | None:
         if a.first_run == observed:  # a first-run authorization only ever serves the no-`observed` state, a normal one only the other
             return "capability_not_observed" if a.first_run is False else "authorization_missing"
         return None if a.window_end > conn.execute(text("SELECT now()")).scalar_one() else "authorization_expired"
+    base = ("SELECT id FROM bench_authorizations WHERE tenant_id = :t AND operation = :o AND cpe_id = :c AND params_hash = :h AND state = 'open' "
+            "AND first_run = NOT :obs AND now() >= window_start AND now() < window_end")
+    args = {"t": tenant_id, "o": job.operation, "c": job.target_id, "h": ph, "obs": observed, "rq": job.requested_by, "by": by}
     a = conn.execute(
-        text("SELECT id FROM bench_authorizations WHERE tenant_id = :t AND operation = :o AND cpe_id = :c AND params_hash = :h AND state = 'open' "
-             "AND first_run = NOT :obs AND now() >= window_start AND now() < window_end ORDER BY window_end LIMIT 1 FOR UPDATE"),
-        {"t": tenant_id, "o": job.operation, "c": job.target_id, "h": ph, "obs": observed}).first()
+        text(base + " AND (authorized_via <> 'api' OR (authorized_by_user_id IS DISTINCT FROM CAST(:rq AS uuid) "
+                    "AND authorized_by_user_id IS DISTINCT FROM CAST(:by AS uuid))) ORDER BY window_end LIMIT 1 FOR UPDATE"), args).first()
     if a is None:  # without an `observed` entry only a first_run authorization counts; its absence is a registry problem, not a missing one
+        if observed and conn.execute(text(base + " LIMIT 1"), args).first() is not None:
+            return "authorizer_not_independent"   # one exists, but the person who gave it is the requester or the approver
         return "authorization_missing" if observed else "capability_not_observed"
     if mode == "consume":
         done = conn.execute(
