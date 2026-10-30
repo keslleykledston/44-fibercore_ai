@@ -1,0 +1,32 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18f19-a301-73c1-b22d-587d2af7a1b8).
+[codex] Turn started (01a18f19-a579-7711-8552-9ab5204c5baf).
+[codex] Assistant message captured: Vou examinar o diff contra `main` e rastrear os fluxos de confiança, mutação e polling aponta...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Olt...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Olt... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,240p' apps/web/src/components/EntityDetailDrawer.tsx; sed -n '1,200p...
+[codex] Command failed: /bin/bash -lc "sed -n '1,240p' apps/web/src/components/EntityDetailDrawer.tsx; sed -n '1,200p... (exit 2)
+[codex] Running command: /bin/bash -lc "rg -n \"def.*job|/jobs/\\{job_id\\}|@.*jobs|operation.*olt_query|result.*data|...
+[codex] Command completed: /bin/bash -lc "rg -n \"def.*job|/jobs/\\{job_id\\}|@.*jobs|operation.*olt_query|result.*data|... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '140,205p;279,306p'; nl -ba apps/api/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '140,205p;279,306p'; nl -ba apps/api/... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'olt_query:run|ROLE_PERMISSIONS|isp_admin|noc_n2' apps/api/app/core/secu...
+[codex] Command completed: /bin/bash -lc "rg -n 'olt_query:run|ROLE_PERMISSIONS|isp_admin|noc_n2' apps/api/app/core/secu... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '18,36p' apps/api/app/core/security.py; nl -ba apps/web/src/app/bff/olt...
+[codex] Command completed: /bin/bash -lc "sed -n '18,36p' apps/api/app/core/security.py; nl -ba apps/web/src/app/bff/olt... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: fechar a gaveta não interrompe o po...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: fechar a gaveta não interrompe o polling, e uma resposta atrasada pode associar o job à consulta errada; a API então rejeita a chave reutilizada ou a tela interpreta o resultado pelo tipo errado.
+
+Findings:
+- [medium] Fechar a gaveta mantém polling ativo (apps/web/src/components/OltQueries.tsx:65-78)
+  O efeito do polling depende de `phase` e `chosen`, mas não de `open`; `close()` só fecha a gaveta. Enquanto o componente da OLT continuar montado na página de Rede, o intervalo segue consultando `/bff/jobs/{id}` a cada 10 s, mesmo com a gaveta fechada, até o job terminar ou atingir 25 min. Isso mantém requisições e timers ativos sem a tela visível. Pare o polling ao fechar e retome-o ao reabrir, ou mova o estado do job para um mecanismo que não faça polling oculto.
+  Recommendation: Inclua `open` no ciclo de vida do polling e limpe o intervalo quando a gaveta fechar; preserve o job para retomar a consulta ao reabrir.
+- [medium] A seleção pode divergir do job durante o envio (apps/web/src/components/OltQueries.tsx:80-88)
+  A seleção continua habilitada enquanto `busy` está ativo. Se a pessoa trocar a consulta enquanto o POST aguarda resposta, o job criado para o valor original de `chosen` entra em `waiting`, mas o efeito captura a seleção nova para exibir o resultado. A resposta pode então ser validada como outro tipo e descartada; se o pedido falhar e a pessoa tentar a consulta nova, a mesma chave de idempotência será reutilizada para outra intenção, que a API rejeita com 409. Desabilite a seleção durante o envio e associe `queryId` e chave ao pedido enviado, em vez de ler `chosen` após a resposta.
+  Recommendation: Capture a consulta e a chave antes do POST; mantenha essa consulta no estado de espera e só permita nova seleção após resultado terminal ou falha.

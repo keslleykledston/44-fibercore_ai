@@ -24,7 +24,7 @@ test("consultas da OLT: com a flag desligada nada é oferecido e o motivo aparec
   await expect(page.getByTestId("olt-queries-none")).toBeVisible();
   await expect(page.getByTestId("olt-queries")).toContainText("desligada para este provedor");
   await expect(page.getByRole("button", { name: "Pedir consulta" })).toHaveCount(0);
-  const a11y = await new AxeBuilder({ page }).include("dialog").analyze();
+  const a11y = await new AxeBuilder({ page: page as never }).include("dialog").analyze();
   expect(a11y.violations.filter((v) => ["serious", "critical"].includes(v.impact ?? ""))).toEqual([]);
 });
 
@@ -44,7 +44,7 @@ test("consultas da OLT: pede olt.version, espera a janela e mostra o resultado t
   await expect(res).toContainText("MA5608T");
   await expect(res).toContainText("MA5600V800R015C00");
   await expect(res).toContainText("1030 d");
-  const a11y = await new AxeBuilder({ page }).include("dialog").analyze();
+  const a11y = await new AxeBuilder({ page: page as never }).include("dialog").analyze();
   expect(a11y.violations.filter((v) => ["serious", "critical"].includes(v.impact ?? ""))).toEqual([]);
 });
 
@@ -88,4 +88,30 @@ test("consultas da OLT: erros da API viram mensagens estáveis", async ({ page }
   await openDrawer(page);
   await page.getByRole("button", { name: "Pedir consulta" }).click();
   await expect(page.getByTestId("olt-queries-error")).toContainText("Limite de consultas por hora");
+});
+
+test("consultas da OLT: fechar a gaveta para o polling e reabrir retoma o MESMO pedido; trocar a seleção não muda o que foi pedido", async ({ page }) => {
+  let polls = 0;
+  const posted: string[] = [];
+  await page.route("**/bff/olts/*/queries", (r) => r.fulfill({ json: CATALOG_ON }));
+  await page.route("**/bff/olts/*/queries/*", async (r) => { posted.push(new URL(r.request().url()).pathname.split("/").pop() ?? ""); await r.fulfill({ json: { ok: true, outcome: "submitted", job_id: JOB } }); });
+  await page.route(`**/bff/jobs/${JOB}`, (r) => { polls++; return r.fulfill({ json: polls < 3 ? { status: "ACCEPTED", detail: null, data: null } : { status: "SUCCEEDED", detail: "typed result", data: VERSION } }); });
+  await page.clock.install();
+  await openDrawer(page);
+  await page.getByRole("radio", { name: /Software, patch e uptime/ }).check();
+  await page.getByRole("button", { name: "Pedir consulta" }).click();
+  await expect(page.getByTestId("olt-queries-waiting")).toBeVisible();
+  expect(posted).toEqual(["olt.version"]);
+  await page.clock.fastForward(11_000);
+  await expect.poll(() => polls).toBe(1);
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("entity-drawer")).toBeHidden();
+  await page.clock.fastForward(60_000);
+  expect(polls).toBe(1);                                       // closed: nobody is asking
+  await page.getByTestId("olt-queries-open").first().click();
+  await expect(page.getByTestId("olt-queries-waiting")).toBeVisible();   // the same request is still there
+  await page.clock.fastForward(11_000);
+  await page.clock.fastForward(11_000);
+  await expect(page.getByTestId("olt-query-result")).toContainText("MA5608T");
+  expect(posted).toEqual(["olt.version"]);                      // nothing was asked twice
 });

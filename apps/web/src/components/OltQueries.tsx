@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { EntityDetailDrawer } from "@/components/EntityDetailDrawer";
 import { QUERY_ERROR, QUERY_FAILED, QUERY_UNAVAILABLE, readBoard, readVersion, uptimeText, type OltQueryItem } from "@/lib/olt-queries";
 
-type Phase = { kind: "idle" } | { kind: "waiting"; jobId: string; since: number } | { kind: "done"; queryId: string; data: unknown } | { kind: "failed"; reason: string };
+type Phase = { kind: "idle" } | { kind: "waiting"; jobId: string; since: number; queryId: string } | { kind: "done"; queryId: string; data: unknown } | { kind: "failed"; reason: string };
 const POLL_MS = 10_000;
 const GIVE_UP_MS = 25 * 60_000; // o pedido vive 22 min na nuvem; depois disso a tela para de perguntar
 
@@ -63,9 +63,8 @@ export function OltQueries({ oltId, oltName }: { oltId: string; oltName: string 
   }, [open, items, oltId]);
 
   useEffect(() => {
-    if (phase.kind !== "waiting") return;
-    const { jobId, since } = phase;
-    const queryId = chosen;
+    if (phase.kind !== "waiting" || !open) return;   // sem gaveta aberta não há polling; reabrir retoma o MESMO pedido
+    const { jobId, since, queryId } = phase;
     const t = setInterval(async () => {
       if (Date.now() - since > GIVE_UP_MS) { setPhase({ kind: "failed", reason: "expired" }); return; }
       const r = await fetch(`/bff/jobs/${jobId}`, { cache: "no-store" }).catch(() => null);
@@ -75,23 +74,25 @@ export function OltQueries({ oltId, oltName }: { oltId: string; oltName: string 
       else if (["FAILED", "EXPIRED", "CANCELLED", "UNKNOWN"].includes(j.status ?? "")) { setPhase({ kind: "failed", reason: j.status === "UNKNOWN" ? "restart_after_claim" : j.status === "EXPIRED" ? "expired" : (j.detail ?? "") }); key.current = `ui-${crypto.randomUUID()}`; }
     }, POLL_MS);
     return () => clearInterval(t);
-  }, [phase, chosen]);
+  }, [phase, open]);
 
   async function ask(e: React.FormEvent) {
     e.preventDefault();
     if (!chosen) return;
+    const queryId = chosen, idem = `${key.current}-${queryId}`;   // consulta e chave fixadas no envio: trocar a seleção depois não muda o que foi pedido
     setBusy(true); setError(null);
     try {
-      const res = await fetch(`/bff/olts/${oltId}/queries/${chosen}`, { method: "POST", headers: { "content-type": "application/json" }, cache: "no-store", body: JSON.stringify({ key: key.current }) });
+      const res = await fetch(`/bff/olts/${oltId}/queries/${queryId}`, { method: "POST", headers: { "content-type": "application/json" }, cache: "no-store", body: JSON.stringify({ key: idem }) });
       const j = (await res.json().catch(() => ({}))) as { error?: string; job_id?: string | null };
-      if (res.ok && j.job_id) { setPhase({ kind: "waiting", jobId: j.job_id, since: Date.now() }); return; }
+      if (res.ok && j.job_id) { setPhase({ kind: "waiting", jobId: j.job_id, since: Date.now(), queryId }); return; }
       setError(QUERY_ERROR[j.error ?? "failed"] ?? QUERY_ERROR.failed);
     } catch { setError(QUERY_ERROR.failed); } finally { setBusy(false); }
   }
 
   const close = () => { setOpen(false); setError(null); trigger.current?.focus(); };
   const offered = (items ?? []).filter((i) => i.offered && i.fields.length === 0);
-  const title = (items ?? []).find((i) => i.id === chosen)?.title;
+  const shown = phase.kind === "waiting" || phase.kind === "done" ? phase.queryId : chosen;
+  const title = (items ?? []).find((i) => i.id === shown)?.title;
   return (
     <>
       <button ref={trigger} type="button" onClick={() => setOpen(true)} aria-haspopup="dialog" data-testid="olt-queries-open" className="mt-2 min-h-touch rounded-btn border border-line px-3 text-sm hover:bg-bg">Consultar a OLT…</button>
@@ -110,7 +111,7 @@ export function OltQueries({ oltId, oltName }: { oltId: string; oltName: string 
           {items !== null && phase.kind === "idle" && (
             <form onSubmit={ask} className="grid gap-3" data-testid="olt-queries-form">
               {offered.length === 0 ? <p data-testid="olt-queries-none" className="text-muted">Nenhuma consulta está disponível agora para você nesta OLT.</p> : (
-                <fieldset className="grid gap-2"><legend className="mb-1 font-medium">Consulta</legend>
+                <fieldset disabled={busy} className="grid gap-2"><legend className="mb-1 font-medium">Consulta</legend>
                   {offered.map((i) => (
                     <label key={i.id} className="flex min-h-touch items-center gap-2">
                       <input type="radio" name="query" value={i.id} checked={chosen === i.id} onChange={() => setChosen(i.id)} /> {i.title}
