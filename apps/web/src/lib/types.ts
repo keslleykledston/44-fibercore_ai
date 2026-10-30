@@ -27,8 +27,8 @@ export type CpeBlock = {
   provenance: Provenance | null;
 };
 export type OnuCustomer = { association: "approved" | "suggested" | "none"; pending_suggestions: number; display_name?: string; document_last4?: string | null; contract_status?: string };
-export type Member = { user_id: string; email: string; display_name: string; role: string; mfa_enabled: boolean; is_self: boolean };
-export type MemberList = { can_reset_mfa: boolean; members: Member[] };
+export type Member = { user_id: string; email: string; display_name: string; role: string; mfa_enabled: boolean; is_self: boolean; can_change_role?: boolean };
+export type MemberList = { can_reset_mfa: boolean; can_manage_roles?: boolean; members: Member[] };
 export type Capability = { name: string; protocol: string; status: "supported" | "unsupported" | "unknown"; certification: "identified" | "observed" | "certified"; vendor: string | null; model: string | null; firmware: string | null; writes: boolean; blocked_reason: string | null; verified_at: string | null; evidence_ref: string | null };
 export type CustomerOnu = {
   id: string; pon_id: string | null; serial: string; status: string; rx_dbm: number | null; olt: string; pon_path: string | null; provenance: Provenance;
@@ -63,3 +63,12 @@ export type CpeMetric = { metric: string; scope: string; value: unknown; capture
 export type CpeStateView = { cpe_id: string; source: string; metrics: CpeMetric[] };
 export type OnuCpeLink = { id: string; status: "suggested" | "confirmed" | "rejected"; confidence: number; onu: { id: string; serial: string }; cpe: { id: string; canonical_serial: string } };
 export type EdgeRow = { id: string; name: string; site_name: string | null; version: string | null; last_heartbeat_at: string | null; status: "online" | "offline" | "unknown" | "revoked" };
+export type PermissionInfo = { name: string; risk: "R0" | "R1" | "R2" | "R3"; description: string };
+export type RoleInfo = { role: string; label: string; assignable_by_me: boolean; permissions: PermissionInfo[] };
+export type RoleList = { roles: RoleInfo[] };
+export type MeInfo = { id: string; kind: string; tenant_id: string; role: string; permissions: PermissionInfo[] };
+export type RoleChange = {
+  id: string; at: string; from: string | null; to: string | null; reason: string | null; revoked_sessions: number | null;
+  actor: { id: string | null; name: string | null; email: string | null }; target: { id: string; name: string | null; email: string | null };
+};
+export type RoleHistory = { truncated: boolean; items: RoleChange[] };

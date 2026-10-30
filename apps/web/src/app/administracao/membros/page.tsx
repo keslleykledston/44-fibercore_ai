@@ -3,9 +3,9 @@ import { AppShell } from "@/components/AppShell";
 import { MemberMfaReset } from "@/components/MemberMfaReset";
 import { EmptyState, ErrorState, PageHeader } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
+import { roleLabel } from "@/lib/roles";
 import type { MemberList } from "@/lib/types";
 
-const role: Record<string, string> = { isp_admin: "Administrador", engineer: "Engenharia", noc_n2: "NOC N2", noc_n1: "NOC N1", support: "Suporte", auditor: "Auditor", platform_support: "Suporte da plataforma" };
 
 export default async function Membros() {
   const r = await apiSafe<MemberList>("/v1/members");
@@ -22,7 +22,7 @@ export default async function Membros() {
               {r.data.members.map((m) => (
                 <tr key={m.user_id} data-testid={`member-${m.email}`}>
                   <td className="p-3"><div className="font-medium">{m.display_name}{m.is_self ? " (você)" : ""}</div><div className="text-muted">{m.email}</div></td>
-                  <td className="p-3">{role[m.role] ?? m.role}</td>
+                  <td className="p-3">{roleLabel(m.role)}</td>
                   <td className="p-3">{m.mfa_enabled ? <span><span aria-hidden>● </span>Ativo</span> : <span className="text-muted"><span aria-hidden>○ </span>Desativado</span>}</td>
                   <td className="p-3 text-right">{r.data!.can_reset_mfa && !m.is_self && m.mfa_enabled ? <MemberMfaReset userId={m.user_id} name={m.display_name} /> : null}</td>
                 </tr>

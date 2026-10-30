@@ -38,7 +38,7 @@ export default async function Dispositivos({ searchParams }: { searchParams: Pro
               <select name="protocol" defaultValue={f.protocol} className={sel}><option value="">Todos</option>{distinct(all.flatMap((c) => c.bindings.map((b) => b.protocol))).map((v) => <option key={v} value={v}>{protocolLabel(v)}</option>)}</select></label>
             <label className="text-sm">Dado
               <select name="freshness" defaultValue={f.freshness} className={sel}><option value="">Todos</option><option value="fresh">Atualizado</option><option value="stale">Defasado</option><option value="unknown">Sem coleta</option></select></label>
-            <button type="submit" className="min-h-touch rounded-btn bg-accent px-4 font-medium text-white">Filtrar</button>
+            <button type="submit" className="min-h-touch rounded-btn bg-accent px-4 font-medium text-[color:var(--on-accent)]">Filtrar</button>
           </form>
           {shown.length === 0 ? <EmptyState title="Nenhum CPE com esses filtros" hint={all.length === 0 ? "Aguarde a primeira coleta do GenieACS pelo Edge." : "Limpe os filtros."} /> : (
             <div className="panel overflow-x-auto">

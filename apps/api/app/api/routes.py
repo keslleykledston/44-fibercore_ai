@@ -195,7 +195,12 @@ def my_workspaces(
 
 @router.get("/v1/auth/me")
 def me(p: Principal = Depends(get_principal)) -> dict:
-    return {"id": str(p.id), "kind": p.kind, "tenant_id": str(p.tenant_id), "role": p.role}
+    """Who the caller is and what their role may do (from the permission catalog: ADR-0031). Only the caller's OWN role is described."""
+    from app.core.permissions import CATALOG
+    from app.core.security import ROLE_PERMISSIONS
+    mine = ROLE_PERMISSIONS.get(p.role, frozenset())
+    return {"id": str(p.id), "kind": p.kind, "tenant_id": str(p.tenant_id), "role": p.role,
+            "permissions": [{"name": n, "risk": c.risk, "description": c.description} for n, c in CATALOG.items() if n in mine]}
 
 
 # ---- tenant-scoped ---------------------------------------------------------------------------

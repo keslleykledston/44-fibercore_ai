@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { API_URL, EMAIL, PASSWORD, login, totp } from "./helpers";
 import { humanHours, offlineQuery, parseOfflineFilters } from "../src/lib/offline";
 
-const routes = ["/", "/rede", "/rede/offline", "/dispositivos", "/dispositivos/edges", "/dispositivos/capacidades", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/administracao/membros", "/conta/seguranca", "/ajuda", "/ajuda/rede/consultar-onu"];
+const routes = ["/", "/rede", "/rede/offline", "/dispositivos", "/dispositivos/edges", "/dispositivos/capacidades", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/administracao/membros", "/administracao/papeis", "/conta/seguranca", "/ajuda", "/ajuda/rede/consultar-onu"];
 
 test("login inválido mostra erro e não cria sessão", async ({ page, context }) => {
   await page.goto("/login");
@@ -537,4 +537,23 @@ test("Dispositivos: lista de CPEs, detalhe, Edges e capacidades abrem com dado r
   await expect(page.getByTestId("edges-ready")).toBeVisible();
   await page.goto("/dispositivos/capacidades");
   await expect(page.getByTestId("capabilities-ready")).toBeVisible();
+});
+
+test("Papéis e permissões: o administrador vê a matriz, troca o papel de outra pessoa com motivo e a mudança entra no histórico", async ({ page }) => {
+  await login(page);
+  await page.goto("/administracao/papeis");
+  await expect(page.getByTestId("roles-ready")).toBeVisible();
+  await expect(page.getByTestId("my-role")).toContainText("Administrador do provedor");
+  await expect(page.getByTestId("role-matrix")).toBeVisible();
+  const row = page.getByTestId("rolemember-agente@demo.example.com");   // a pessoa do seed (Engenheiro)
+  await expect(row.locator("td").nth(1)).toHaveText("Engenheiro");
+  await expect(page.getByTestId("rolemember-admin@demo.example.com").getByTestId("role-change-open")).toHaveCount(0);   // nunca o próprio papel
+  await row.getByTestId("role-change-open").click();
+  const dlg = page.locator("dialog[open]");   // cada pessoa tem o seu painel; só o aberto interessa
+  await dlg.getByLabel("Novo papel").selectOption({ label: "NOC nível 1" });
+  await dlg.getByLabel(/Motivo/).fill("teste de papel pela tela");
+  await dlg.getByRole("button", { name: "Alterar papel" }).click();
+  await expect(page.getByTestId("rolemember-agente@demo.example.com").locator("td").nth(1)).toHaveText("NOC nível 1");   // a coluna Papel (não o painel escondido)
+  await expect(page.getByTestId("role-history")).toContainText("teste de papel pela tela");
+  await expect(page.getByTestId("role-history")).toContainText("Engenheiro → NOC nível 1");
 });

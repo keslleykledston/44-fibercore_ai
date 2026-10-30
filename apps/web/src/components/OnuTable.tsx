@@ -39,7 +39,7 @@ export function OnuTable({ onus, oltNames }: { onus: Onu[]; oltNames: Record<str
             <div><dt className="text-muted">OLT / PON</dt><dd>{oltNames[sel.olt_id] ?? "—"} · {sel.pon_path ?? "—"}</dd></div>
             <div><dt className="text-muted">Potência recebida (Rx)</dt><dd>{sel.rx_dbm !== null ? `${sel.rx_dbm} dBm` : "—"}</dd></div>
             <div><dt className="text-muted">Dado</dt><dd><DataFreshness freshness={sel.freshness} observedAt={sel.observed_at} /></dd></div>
-            <Link href={`/rede/onu/${sel.id}`} data-testid="onu-360-link" className="mt-2 inline-flex min-h-touch items-center rounded-btn bg-accent px-4 font-medium text-white">Abrir ONU 360</Link>
+            <Link href={`/rede/onu/${sel.id}`} data-testid="onu-360-link" className="mt-2 inline-flex min-h-touch items-center rounded-btn bg-accent px-4 font-medium text-[color:var(--on-accent)]">Abrir ONU 360</Link>
           </dl>
         )}
       </EntityDetailDrawer>

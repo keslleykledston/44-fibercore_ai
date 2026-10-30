@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import Connection, text
 from sqlalchemy.exc import DBAPIError
@@ -171,3 +171,28 @@ def change_member_role(user_id: UUID, body: RoleChangeIn, p: Principal = Depends
             raise HTTPException(409, "conflict_retry") from exc
         raise
     return {"user_id": str(user_id), "role": body.role, "previous_role": res["previous_role"], "revoked_sessions": res["revoked_sessions"]}
+
+
+@router.get("/v1/members/role-history")
+def role_history(limit: int = Query(50, ge=1, le=200), p: Principal = Depends(require("audit:read")), conn: Connection = TENANT_CONN) -> dict:
+    """Role changes of this workspace, newest first: who changed whose role, from what to what, why. Names come from current members only
+    (a person who left shows no name); the reason is the free text the administrator typed and is shown as plain text."""
+    rows = conn.execute(
+        text(
+            "SELECT a.id, a.created_at, a.actor_id, a.target_id, a.evidence_redacted AS ev, "
+            "ua.display_name AS actor_name, ua.email AS actor_email, ut.display_name AS target_name, ut.email AS target_email "
+            "FROM audit_log a "
+            "LEFT JOIN tenant_memberships ma ON ma.tenant_id = a.tenant_id AND ma.user_id = a.actor_id "
+            "LEFT JOIN users_global ua ON ua.id = ma.user_id "
+            "LEFT JOIN tenant_memberships mt ON mt.tenant_id = a.tenant_id AND mt.user_id::text = a.target_id "
+            "LEFT JOIN users_global ut ON ut.id = mt.user_id "
+            "WHERE a.tenant_id = :t AND a.action = 'member.role_change' ORDER BY a.created_at DESC, a.id LIMIT :l"
+        ),
+        {"t": p.tenant_id, "l": limit + 1},
+    ).all()
+    return {"truncated": len(rows) > limit, "items": [
+        {"id": str(r.id), "at": r.created_at.isoformat(), "from": r.ev.get("from"), "to": r.ev.get("to"), "reason": r.ev.get("reason"),
+         "revoked_sessions": r.ev.get("revoked_sessions"),
+         "actor": {"id": str(r.actor_id) if r.actor_id else None, "name": r.actor_name, "email": r.actor_email},
+         "target": {"id": r.target_id, "name": r.target_name, "email": r.target_email}}
+        for r in rows[:limit]]}

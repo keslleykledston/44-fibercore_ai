@@ -33,7 +33,7 @@ export default async function OnusOffline({ searchParams }: { searchParams: Prom
           <input name="pon_path" defaultValue={f.ponPath ?? ""} pattern="[0-9/]{1,32}" className="mt-1 min-h-touch w-full rounded-btn border border-line bg-bg px-3 font-mono" />
         </label>
         <label className="flex min-h-touch items-center gap-2 text-sm"><input type="checkbox" name="include_stale" value="1" defaultChecked={f.includeStale} />Incluir dados defasados</label>
-        <button type="submit" className="min-h-touch rounded-btn bg-accent px-4 font-medium text-white">Filtrar</button>
+        <button type="submit" className="min-h-touch rounded-btn bg-accent px-4 font-medium text-[color:var(--on-accent)]">Filtrar</button>
       </form>
       {rep.data === null ? <ErrorState title="Falha ao carregar o relatório" /> : (
         <div data-testid="offline-report-ready">
