@@ -479,3 +479,20 @@ def test_offline_report_decides_staleness_on_the_onu_and_on_its_olt_before_limit
         c.execute(text("UPDATE onus SET observed_at = now() - interval '72 hours' WHERE serial = 'OFF-LASTON-01'"))
     one = client.get("/v1/onus/offline?min_hours=24&limit=1", headers=h).json()
     assert [i["serial"] for i in one["items"]] == ["OFF-LONG-0001"] and one["truncated"] is True and one["excluded"]["stale"] >= 1
+
+
+def test_offline_report_counts_missing_observation_times_as_stale(client, seed, inv, migrated):
+    h = _offline_setup(client, seed, inv, migrated)
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE olts SET observed_at = NULL WHERE id IN (SELECT olt_id FROM onus WHERE serial = 'OFF-LONG-0001')"))
+    d = client.get("/v1/onus/offline?min_hours=24", headers=h).json()
+    assert "OFF-LONG-0001" not in [i["serial"] for i in d["items"]] and d["excluded"]["stale"] >= 3   # accounted for, not silently dropped
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE olts SET observed_at = now() WHERE id IN (SELECT olt_id FROM onus WHERE serial = 'OFF-LONG-0001')"))
+        c.execute(text("UPDATE onus SET observed_at = NULL WHERE serial = 'OFF-LONG-0001'"))
+    d = client.get("/v1/onus/offline?min_hours=24", headers=h).json()
+    assert "OFF-LONG-0001" not in [i["serial"] for i in d["items"]] and d["excluded"]["stale"] >= 1
+    inc = client.get("/v1/onus/offline?min_hours=24&include_stale=true", headers=h).json()
+    assert next(i for i in inc["items"] if i["serial"] == "OFF-LONG-0001")["freshness"] == "unknown"

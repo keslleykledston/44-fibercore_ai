@@ -385,7 +385,8 @@ def list_offline_onus(
     (counted in `excluded.stale`) unless `include_stale=true`, so an OLT the Edge stopped collecting cannot pass for a long outage."""
     ref = "COALESCE(u.down_since, u.last_online_at)"
     # fresh = the ONU AND its OLT's snapshot were both observed recently; decided in SQL so that the limit and the counts see the same candidates
-    fresh = "(u.observed_at >= now() - make_interval(secs => :fs) AND o.observed_at >= now() - make_interval(secs => :fs))"
+    # two-valued: a missing observation time (both columns are nullable) is stale, never "unknown", so the page and the count agree
+    fresh = "COALESCE(u.observed_at >= now() - make_interval(secs => :fs) AND o.observed_at >= now() - make_interval(secs => :fs), false)"
     base = (f"FROM onus u JOIN olts o ON o.id = u.olt_id AND o.tenant_id = u.tenant_id "  # noqa: S608
             "LEFT JOIN pon_ports pp ON pp.id = u.pon_id AND pp.tenant_id = u.tenant_id "
             "WHERE u.status IN ('offline','los','dying_gasp') AND (CAST(:o AS uuid) IS NULL OR u.olt_id = :o) "
@@ -403,7 +404,7 @@ def list_offline_onus(
     now = datetime.now(UTC)
     items = []
     for r in rows[:limit]:
-        oldest = min(t for t in (r.observed_at, r.olt_observed_at) if t is not None) if (r.observed_at or r.olt_observed_at) else None
+        oldest = min(r.observed_at, r.olt_observed_at) if (r.observed_at and r.olt_observed_at) else None  # a missing time => "unknown"
         items.append({
             "onu_id": str(r.id), "serial": r.serial, "olt": r.olt, "pon_path": r.pon_path, "status": r.status,
             "offline_since": r.since.isoformat(), "offline_hours": round((now - r.since).total_seconds() / 3600, 1),
