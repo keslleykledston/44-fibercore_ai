@@ -36,6 +36,14 @@ type OLTSource struct {
 	Timeout time.Duration
 	// LastDown (CLI sources only): optional read-only SNMP side channel for the OLT's own "last down time" of the offline ONUs.
 	LastDown *LastDownSource
+	// DownTimes (CLI sources only): also read the OLT's own "last down time" of offline ONUs over the CLI session of the collection itself, at most
+	// MaxPerRound ONUs per collection. Needs a driver that implements olt.DownReader. Exclusive with LastDown.
+	DownTimes *DownTimesSource
+}
+
+// DownTimesSource configures the CLI read of the OLT's last down times.
+type DownTimesSource struct {
+	MaxPerRound int // register-info reads per collection (the session is already open; each is one short command)
 }
 
 func (s OLTSource) budget() time.Duration {
@@ -72,6 +80,14 @@ func ponComplete(level olt.Level, raw olt.Session, p olt.PON) bool {
 
 func commandBudget(ports int) int { return 4*ports + 8 }
 
+// downTimesCommands is the extra command allowance of the last-down reads: the reads plus the interface enter/quit of every slot they touch.
+func downTimesCommands(d *DownTimesSource) int {
+	if d == nil {
+		return 0
+	}
+	return d.MaxPerRound + 2*18
+}
+
 type OLT struct {
 	EdgeID  string
 	Sources []OLTSource
@@ -94,6 +110,7 @@ type OLT struct {
 
 	ldMu sync.Mutex
 	ld   map[string]*lastDownState // OLT name -> what the last-down side channel remembers
+	dt   map[string]*dtState       // OLT name -> the last down times read over the CLI (guarded by ldMu)
 	ldWG sync.WaitGroup            // background last-down reads in flight (tests wait on it)
 }
 
@@ -211,7 +228,7 @@ func (o *OLT) collectCLI(ctx context.Context, src OLTSource, observed string) ([
 		return nil, err
 	}
 	defer closeFn()
-	sess := olt.NewBudget(olt.ReadOnlySession{Inner: raw, Allowed: src.Driver.Allowed}, commandBudget(len(src.Ports)), maxBytesPerOLT)
+	sess := olt.NewBudget(olt.ReadOnlySession{Inner: raw, Allowed: src.Driver.Allowed}, commandBudget(len(src.Ports))+downTimesCommands(src.DownTimes), maxBytesPerOLT)
 	id, err := src.Driver.Identify(ctx, sess)
 	if err != nil {
 		return nil, err
@@ -220,10 +237,16 @@ func (o *OLT) collectCLI(ctx context.Context, src OLTSource, observed string) ([
 	if lerr != nil && !src.AllowUnverified {
 		return nil, lerr // unknown firmware: refuse to parse output we have no evidence for
 	}
-	snap, err := src.Driver.Snapshot(ctx, sess, src.Ports)
+	var snap olt.Snapshot
+	if dr, ok := src.Driver.(olt.DownReader); ok && src.DownTimes != nil {
+		snap, err = dr.SnapshotWithDownTimes(ctx, sess, src.Ports, o.downReads(src))
+	} else {
+		snap, err = src.Driver.Snapshot(ctx, sess, src.Ports)
+	}
 	if err != nil {
 		return nil, err
 	}
+	o.applyDownTimes(src, &snap)
 	o.applyLastDown(src, &snap)
 	return o.buildItems(src.Name, observed, id, level, snap, func(p olt.PON) bool { return ponComplete(level, raw, p) })
 }

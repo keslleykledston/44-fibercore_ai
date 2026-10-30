@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18cd6-58ec-71e1-be68-faebb7d35710).
+[codex] Turn started (01a18cd6-5929-72c0-be7c-12513d6da88f).
+[codex] Assistant message captured: Vou ler o diff contra `main` e seguir especialmente os limites de execução CLI e as transiçõe...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- agents/edge/internal/config...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- agents/edge/internal/config... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"func \\(o \\*OLT\\) (refreshLastDown|applyLastDown|downReads|applyDown...
+[codex] Command completed: /bin/bash -lc "rg -n \"func \\(o \\*OLT\\) (refreshLastDown|applyLastDown|downReads|applyDown... (exit 0)
+[codex] Running command: /bin/bash -lc "cat agents/edge/internal/olt/testdata/huawei_ma5608t/MA5600V800R015C00/registe...
+[codex] Command completed: /bin/bash -lc "cat agents/edge/internal/olt/testdata/huawei_ma5608t/MA5600V800R015C00/registe... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: o parser pode aceitar um horário anti...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: o parser pode aceitar um horário antigo quando o registro mais recente está incompleto ou tem data inválida, publicando uma queda anterior como atual.
+
+Findings:
+- [high] Registro mais recente inválido pode fazer o parser herdar uma queda anterior (agents/edge/internal/olt/huawei_r015_downtime.go:64-76)
+  `ParseLastDown` ignora silenciosamente `DownTime` ausente ou inválido em qualquer registro e retorna o maior horário que conseguiu interpretar. Se o registro mais recente estiver malformado, mas um registro anterior tiver horário válido, o coletor grava esse horário antigo em `st.at` e o mantém enquanto a ONU continuar offline. Isso contradiz a garantia de não herdar uma queda anterior e produz um dado plausível, porém incorreto, sem nova tentativa durante o outage. Rejeite a resposta se algum registro contado não tiver os campos temporais necessários ou se o registro mais recente não fornecer um `DownTime` válido; determine a recência pela ordem/índice documentados e teste esse caso.
+  Recommendation: Validar a estrutura temporal de todos os registros e falhar fechado quando o registro mais recente estiver incompleto ou inválido; adicionar teste com um registro antigo válido seguido de um novo registro inválido.

@@ -152,7 +152,7 @@ func main() {
 				drv = olt.ZTE{}
 			}
 			if o.Profile == "huawei_ma56_r015" {
-				drv = olt.HuaweiR015{}
+				drv = olt.HuaweiR015{DownTimes: o.DownTimes != nil}
 			}
 			src := collector.OLTSource{
 				Name: o.Name, Driver: drv, Ports: o.PonPorts, AllowUnverified: o.AllowUnverifiedFirmware,
@@ -170,6 +170,9 @@ func main() {
 					}
 					return s, func() { s.Close() }, nil
 				},
+			}
+			if d := o.DownTimes; d != nil { // read-only: the OLT's last down time of offline ONUs, over this same CLI session
+				src.DownTimes = &collector.DownTimesSource{MaxPerRound: d.Max()}
 			}
 			if l := o.LastDown; l != nil { // read-only SNMP side channel: the OLT's own "last down time" of the offline ONUs
 				l := l
