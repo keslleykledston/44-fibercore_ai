@@ -274,3 +274,7 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - Sonda supervisionada (06:06): a pergunta do reset foi lida e respondida "n"; `ont deactivate`/`ont activate` NÃO pedem confirmação — o `deactivate` da sonda executou e foi desfeito (~8 s, sem reboot da ONT). Incidente de conduta registrado em `docs/wiki/bench/H1-olt-caracterizacao-2026-10-30.md`.
 - PR 65: o Edge passa a responder UMA vez a pergunta observada do reset (e só ela). `go test -race ./...` PASS.
 
+## 2026-10-30 — H4: segunda tentativa de `onu_reset` (job `6b8e7c3f-…`, 06:18): o reset RODOU, o acompanhamento falhou
+- O Edge confirmou a identidade, enviou `ont reset 14 10`, respondeu "y" UMA vez à pergunta observada e o CLI executou: o ACS registrou `1 BOOT` da ONT de bancada às 06:20:09 (≈1 min depois do comando) e ela voltou a informar. O Edge, porém, leu o eco do próprio "y" na linha da pergunta como uma segunda pergunta, abortou o acompanhamento e reportou `FAILED` ("outcome unknown"): bug do Edge (PR 66), não da OLT. Alvo travado; autorização `3b98c1b1-…` consumida.
+- O reset só conta como homologado depois de um job `SUCCEEDED` com a pós-checagem pela OLT (próxima autorização).
+
