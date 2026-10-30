@@ -159,3 +159,7 @@
 - Edge: `internal/bench` (runner), `jobs/claims.go` (claim durável), `jobs/lease.go` (lease assinada, só em memória), `nbi/bench.go` (identidade + única tarefa `reboot`), `BenchWriteOps` separado do `ReadOnlyOps`, seção `bench` na configuração, guard de ritmo próprio, execução fora do laço de poll.
 - Nuvem: `X-Bench-Lease` em toda resposta de `jobs/next`; `bench.EDGE_SUPPORT = True` (precondição, não abertura: flag, alvo, registro e autorização prévia continuam exigidos).
 - Runbook do responsável: `docs/wiki/bench/RUNBOOK-H2-REBOOT.md`. Emenda proposta no ADR-0030 (primeira execução).
+
+## Unreleased — PR 58 (ADR-0030, primeira execução)
+- Migração 0022: `bench_authorizations.first_run`. `bench-authorize --first-run`. O gate aceita, SÓ enquanto não há `observed`/`certified` completo, uma autorização `first_run` + entrada `supported`/`identified` completa do perfil exato; rechecado no despacho.
+

@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18abb-f7c0-78a3-a02a-c1e48bfb4a85).
+[codex] Turn started (01a18abb-f7f8-7240-a1db-6e1434487d6a).
+[codex] Assistant message captured: Vou comparar o branch com `main` e seguir o caminho de autorização até o despacho, além de co...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=35 main...HEAD -- apps/api/app/core/bench.py ...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=35 main...HEAD -- apps/api/app/core/bench.py ... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/bench.py | sed -n '72,130p'; nl -ba apps/api/alembic/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/bench.py | sed -n '72,130p'; nl -ba apps/api/alembic/... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/app/core/bench.py ...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/app/core/bench.py ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship: first_run authorizations can be recorded...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship: first_run authorizations can be recorded repeatedly, including after observed evidence exists, and the gate selects them without tenant scoping; this risks cross-tenant authorization reuse and invalidates the documented one-time boundary.
+
+Findings:
+- [high] Authorization lookup can cross tenant boundaries (apps/api/app/core/bench.py:116-119)
+  The new authorization selection filters by operation, CPE, parameter hash, state, and window, but omits `tenant_id` at submit/approve/consume. The dispatch lookup has the same omission. The application role has SELECT access to this table, and row-level security only isolates rows if the active tenant setting is correct; here the function receives `tenant_id` but never uses it in either authorization query. If duplicate or otherwise reachable matching authorization rows exist across tenants for the same CPE UUID, the gate may lock/consume the wrong tenant's row or accept its dispatch authorization. Add `tenant_id = :t` to every lookup and bind the function's tenant_id; include a regression test with deliberately matching cross-tenant rows.
+  Recommendation: Scope both authorization queries, including dispatch, to `tenant_id`, and test that a matching authorization in another tenant cannot satisfy the gate.
+- [medium] Owner CLI permits multiple first-run authorizations (apps/api/app/cli.py:170-180)
+  `--first-run` is just persisted as a boolean on each inserted authorization; neither the CLI nor a database constraint limits it to one per target/profile/operation or requires that no observed entry already exists. An owner can therefore create several open first_run rows and, while the registry remains only identified, consume them sequentially for multiple writes. After observed exists they are moot at gate time, but previously issued authorizations can still be reused as normal authorizations, and the stated single first-run boundary is unenforced. Enforce a one-shot policy when creating/consuming the authorization (with concurrency-safe DB enforcement or equivalent transaction locking), and reject creation when a complete observed/certified entry already exists.
+  Recommendation: Enforce a single first_run authorization per intended first-run scope and refuse creating it once complete observed/certified capability evidence exists.

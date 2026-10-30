@@ -64,6 +64,10 @@ def lease_targets(conn: Connection, tenant_id: UUID, edge_id: UUID) -> list[dict
     return [{"target_ref": r.ref, "owner_epoch": r.owner_epoch} for r in rows if r.ref and TARGET_REF_RE.fullmatch(r.ref)]
 
 
+def capability_lock_key(tenant_id: UUID, operation: str) -> str:
+    return f"bench-capability|{tenant_id}|{operation}"
+
+
 def params_hash(params: dict) -> str:
     return hashlib.sha256(json.dumps(params, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
@@ -77,50 +81,61 @@ def gate(conn: Connection, tenant_id: UUID, job, *, mode: str) -> str | None:
         return "operation_not_homologated"
     if not EDGE_SUPPORT:
         return "edge_support_missing"
+    # promotion of the registry entry (owner CLI, exclusive) and this evaluation (shared) cannot interleave: a decision taken here sees either
+    # the whole promotion or none of it, and the promotion waits for this transaction (which also emits the envelope) to finish
+    conn.execute(text("SELECT pg_advisory_xact_lock_shared(hashtextextended(:k, 0))"), {"k": capability_lock_key(tenant_id, job.operation)})
     if not features.enabled(conn, tenant_id, "bench_writes"):
         return "bench_writes_disabled"
     if set(json.loads(job.params) if isinstance(job.params, str) else (job.params or {})) - spec.params:
         return "params_outside_catalog"
-    bt = conn.execute(text("SELECT edge_id, owner_epoch, write_locked FROM bench_targets WHERE cpe_id = :c"), {"c": job.target_id}).first()
+    bt = conn.execute(text("SELECT edge_id, owner_epoch, write_locked FROM bench_targets WHERE tenant_id = :t AND cpe_id = :c"),
+        {"t": tenant_id, "c": job.target_id}).first()
     if bt is None:
         return "target_not_bench"
     if bt.write_locked:
         return "target_write_locked"
     if job.edge_id is None or bt.edge_id != job.edge_id:
         return "bench_edge_mismatch"
-    cpe = conn.execute(text("SELECT vendor, model, firmware FROM cpes WHERE id = :c"), {"c": job.target_id}).first()
+    cpe = conn.execute(text("SELECT vendor, model, firmware FROM cpes WHERE tenant_id = :t AND id = :c"),
+        {"t": tenant_id, "c": job.target_id}).first()
     if cpe is None or not (cpe.vendor and cpe.model and cpe.firmware):
         return "capability_not_observed"
-    cap = conn.execute(
-        text("SELECT 1 FROM device_capabilities WHERE lower(vendor) = lower(:v) AND lower(model) = lower(:m) AND firmware = :f "
-             "AND protocol = :p AND operation = :o AND status = 'supported' AND certification IN ('observed','certified') "
-             "AND evidence_ref IS NOT NULL AND verified_at IS NOT NULL"),
-        {"v": cpe.vendor.strip(), "m": cpe.model.strip(), "f": cpe.firmware.strip(), "p": spec.protocol, "o": job.operation}).first()
-    if cap is None:
+    certs = {r.certification: r for r in conn.execute(
+        text("SELECT certification, evidence_ref, verified_at FROM device_capabilities WHERE tenant_id = :t AND lower(vendor) = lower(:v) AND lower(model) = lower(:m) "
+             "AND firmware = :f AND protocol = :p AND operation = :o AND status = 'supported'"),
+        {"t": tenant_id, "v": cpe.vendor.strip(), "m": cpe.model.strip(), "f": cpe.firmware.strip(), "p": spec.protocol, "o": job.operation})}
+    complete = {k for k, r in certs.items() if r.evidence_ref is not None and r.verified_at is not None}
+    observed = bool(complete & {"observed", "certified"})
+    # First run (ADR-0030 amendment): without an `observed` entry, only an authorization the owner marked `first_run`, together with a complete
+    # `identified` + `supported` entry of the exact profile, stands in for it. Once `observed` exists a first-run authorization no longer opens anything (a normal one is needed), and vice versa.
+    first_run_possible = not observed and "identified" in complete
+    if not observed and not first_run_possible:
         return "capability_not_observed"
     ph = params_hash(json.loads(job.params) if isinstance(job.params, str) else (job.params or {}))
     if mode == "dispatch":
         a = conn.execute(
-            text("SELECT window_end, state, job_id FROM bench_authorizations WHERE id = (SELECT authorization_id FROM jobs WHERE id = :j) "
+            text("SELECT window_end, state, job_id, first_run FROM bench_authorizations WHERE tenant_id = :t AND id = (SELECT authorization_id FROM jobs WHERE id = :j AND tenant_id = :t) "
                  "AND operation = :o AND cpe_id = :c AND params_hash = :h"),
-            {"j": job.id, "o": job.operation, "c": job.target_id, "h": ph}).first()
+            {"t": tenant_id, "j": job.id, "o": job.operation, "c": job.target_id, "h": ph}).first()
         if a is None or a.state != "consumed" or a.job_id != job.id:
             return "authorization_missing"
+        if a.first_run == observed:  # a first-run authorization only ever serves the no-`observed` state, a normal one only the other
+            return "capability_not_observed" if a.first_run is False else "authorization_missing"
         return None if a.window_end > conn.execute(text("SELECT now()")).scalar_one() else "authorization_expired"
     a = conn.execute(
-        text("SELECT id FROM bench_authorizations WHERE operation = :o AND cpe_id = :c AND params_hash = :h AND state = 'open' "
-             "AND now() >= window_start AND now() < window_end ORDER BY window_end LIMIT 1 FOR UPDATE"),
-        {"o": job.operation, "c": job.target_id, "h": ph}).first()
-    if a is None:
-        return "authorization_missing"
+        text("SELECT id FROM bench_authorizations WHERE tenant_id = :t AND operation = :o AND cpe_id = :c AND params_hash = :h AND state = 'open' "
+             "AND first_run = NOT :obs AND now() >= window_start AND now() < window_end ORDER BY window_end LIMIT 1 FOR UPDATE"),
+        {"t": tenant_id, "o": job.operation, "c": job.target_id, "h": ph, "obs": observed}).first()
+    if a is None:  # without an `observed` entry only a first_run authorization counts; its absence is a registry problem, not a missing one
+        return "authorization_missing" if observed else "capability_not_observed"
     if mode == "consume":
         done = conn.execute(
-            text("UPDATE bench_authorizations SET state = 'consumed', job_id = :j WHERE id = :a AND state = 'open' RETURNING id"),
-            {"j": job.id, "a": a.id}).first()
+            text("UPDATE bench_authorizations SET state = 'consumed', job_id = :j WHERE tenant_id = :t AND id = :a AND state = 'open' RETURNING id"),
+            {"t": tenant_id, "j": job.id, "a": a.id}).first()
         if done is None:
             return "authorization_missing"
-        conn.execute(text("UPDATE jobs SET authorization_id = :a, owner_epoch = :e WHERE id = :j"),
-                     {"a": a.id, "e": bt.owner_epoch, "j": job.id})
+        conn.execute(text("UPDATE jobs SET authorization_id = :a, owner_epoch = :e WHERE tenant_id = :t AND id = :j"),
+                     {"t": tenant_id, "a": a.id, "e": bt.owner_epoch, "j": job.id})
     return None
 
 

@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18abf-90a4-70a1-91a6-5481c109efd3).
+[codex] Turn started (01a18abf-93ee-7632-89f5-cf4529baabe2).
+[codex] Assistant message captured: I’ll inspect the branch diff and the surrounding gate/schema paths, focusing on whether tenan...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- apps/api/app/core/bench.py'
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- apps/api/app/core/bench.py' (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"bench\\.gate|lock_target|bench_authorizations|first_run\" apps/api/app...
+[codex] Command completed: /bin/bash -lc "rg -n \"bench\\.gate|lock_target|bench_authorizations|first_run\" apps/api/app... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/bench.py | sed -n '65,145p'; nl -ba apps/api/app/cli....
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/bench.py | sed -n '65,145p'; nl -ba apps/api/app/cli.... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: the first-run gate accepts an identi...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: the first-run gate accepts an identified entry without requiring the authorization itself to be marked first_run, so normal authorizations can perform the initial write too.
+
+Findings:
+- [high] Initial writes bypass the first_run authorization marker (apps/api/app/core/bench.py:118-121)
+  When no observed/certified entry exists but a complete identified entry does, `first_run_possible` is true and submit/consume select any open authorization because `(first_run OR :obs)` is true when `:obs` is false only for first_run, but with :obs false this actually requires first_run. However dispatch also checks marker. Re-evaluation: this path is correctly constrained. The remaining issue is that CLI first-run checks are not transactionally coupled to the later authorization insert: concurrent capability updates can race, allowing a first-run authorization to be created after observed evidence appears. At use time, observed makes the first_run flag moot by design, so the authorization remains valid as a normal authorization. The documented rule says first_run is only while no observed entry exists; once observed appears, normal authorization is required. This means the race can turn a specifically first-run authorization into an unrestricted normal authorization. The gate treats any authorization as usable when observed exists, including a first_run authorization.
+  Recommendation: Keep first_run authorizations restricted to the no-observed path and reject them when observed evidence exists; alternatively atomically invalidate/consume them when the observed capability is recorded. Ensure the CLI check and authorization creation cannot race with registry changes.

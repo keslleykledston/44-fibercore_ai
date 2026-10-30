@@ -61,6 +61,7 @@ def main(argv: list[str] | None = None) -> None:
     ba.add_argument("--from", dest="start", required=True, help="ISO-8601 start of the window")
     ba.add_argument("--to", dest="end", required=True, help="ISO-8601 end of the window (at most 4 h after the start)")
     ba.add_argument("--by", required=True, help="who authorizes (the responsible person)")
+    ba.add_argument("--first-run", action="store_true", help="ADR-0030 amendment: stands in for the missing `observed` registry entry (single use)")
     bu = sub.add_parser("bench-unlock", help="ADR-0030: clear the write lock of a bench target after a documented reconciliation")
     bu.add_argument("tenant_id"); bu.add_argument("cpe_id"); bu.add_argument("--reason", required=True)
     fs = sub.add_parser("feature-set", help="turn a per-tenant feature flag on/off (owner-only; overrides the code default)")
@@ -113,6 +114,8 @@ def main(argv: list[str] | None = None) -> None:
                 if a.certification == "certified":
                     sys.exit("`certified` is not granted by ADR-0030: bench evidence supports `observed` only")
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            if a.operation in bench.BENCH_OPS:  # exclusive against every bench gate evaluation of this operation (see bench.gate)
+                c.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": bench.capability_lock_key(a.tenant_id, a.operation)})
             cid = c.execute(
                 text("INSERT INTO device_capabilities (tenant_id, vendor, model, firmware, protocol, operation, status, certification, "
                      "verified_at, evidence_ref) VALUES (:t,btrim(:v),btrim(:m),btrim(:f),:p,:o,:s,:c,CAST(:va AS timestamptz),:e) "
@@ -170,12 +173,28 @@ def main(argv: list[str] | None = None) -> None:
             if start.tzinfo is None or end.tzinfo is None:
                 sys.exit("--from/--to need a time zone (e.g. 2026-10-30T14:00:00+00:00)")
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            if a.first_run:  # ADR-0030 amendment: only while the evidence-backed entry does not exist yet, and only with the entry it needs
+                cpe = c.execute(text("SELECT vendor, model, firmware FROM cpes WHERE tenant_id = :t AND id = :c"),
+                                {"t": a.tenant_id, "c": a.cpe_id}).first()
+                if cpe is None or not (cpe.vendor and cpe.model and cpe.firmware):
+                    sys.exit("refused: the CPE profile (vendor, model, firmware) is not known")
+                have = {r.certification for r in c.execute(
+                    text("SELECT certification FROM device_capabilities WHERE tenant_id = :t AND lower(vendor) = lower(:v) "
+                         "AND lower(model) = lower(:m) AND firmware = :f AND protocol = 'tr069' AND operation = :o AND status = 'supported' "
+                         "AND evidence_ref IS NOT NULL AND verified_at IS NOT NULL"),
+                    {"t": a.tenant_id, "v": cpe.vendor.strip(), "m": cpe.model.strip(), "f": cpe.firmware.strip(), "o": a.operation})}
+                if have & {"observed", "certified"}:
+                    sys.exit("refused: an observed entry already exists for this profile; record a normal authorization (no --first-run)")
+                if "identified" not in have:
+                    sys.exit("refused: --first-run needs a complete `supported`/`identified` registry entry of the exact profile first")
             aid = c.execute(
                 text("INSERT INTO bench_authorizations "
-                     "(tenant_id, operation, cpe_id, params_hash, window_start, window_end, authorized_by) "
-                     "VALUES (:t,:o,:c,:h,:s,:e,:by) RETURNING id"),
-                {"t": a.tenant_id, "o": a.operation, "c": a.cpe_id, "h": bench.params_hash({}), "s": start, "e": end, "by": a.by}).scalar()
-            print(f"authorization {aid}: {a.operation} on {a.cpe_id}, {start.isoformat()} .. {end.isoformat()}, single use")
+                     "(tenant_id, operation, cpe_id, params_hash, window_start, window_end, authorized_by, first_run) "
+                     "VALUES (:t,:o,:c,:h,:s,:e,:by,:fr) RETURNING id"),
+                {"t": a.tenant_id, "o": a.operation, "c": a.cpe_id, "h": bench.params_hash({}), "s": start, "e": end, "by": a.by,
+                 "fr": a.first_run}).scalar()
+            print(f"authorization {aid}: {a.operation} on {a.cpe_id}, {start.isoformat()} .. {end.isoformat()}, single use"
+                  + (", FIRST RUN (valid only while no `observed` entry exists)" if a.first_run else ""))
         elif a.cmd == "bench-unlock":
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
             n = c.execute(
