@@ -247,6 +247,8 @@ func (srv *shellServer) cli(ch ssh.Channel) {
 			srv.mu.Lock()
 			srv.answers = append(srv.answers, ans)
 			srv.mu.Unlock()
+			ch.Write([]byte(ans)) // the device echoes what was typed, on the same line as the question
+			time.Sleep(300 * time.Millisecond)
 			if ans == "y" {
 				ch.Write([]byte("\r\n  ONT reset done\r\n\r\n" + pr()))
 			} else {
@@ -668,5 +670,17 @@ func TestShellRunConfirmAnswersOnlyTheExpectedQuestionOnce(t *testing.T) {
 	_, err = Session(s3).(ConfirmRunner).RunConfirm(context.Background(), "ont reset 14 11", expect, "y")
 	if !errors.Is(err, ErrInteractive) || !errors.Is(err, ErrAfterAnswer) {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestStaleAfterAnswerIsOnlyTheQuestionPlusOurEcho(t *testing.T) {
+	q := "Are you sure to reset the ONT(s)? (y/n)[n]:"
+	for line, want := range map[string]bool{
+		q: true, q + " y": true, q + "y": true, "  " + q + " y  ": true,
+		q + " y and delete the data? (y/n)": false, q + " yes": false, q + " n": false, "Another question? (y/n)": false, q + " y y": false,
+	} {
+		if got := staleAfterAnswer(line, q, "y"); got != want {
+			t.Errorf("%q: got %v want %v", line, got, want)
+		}
 	}
 }

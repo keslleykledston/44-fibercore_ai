@@ -221,6 +221,12 @@ func (s *shell) RunConfirm(ctx context.Context, cmd string, expect *regexp.Regex
 	return s.run(ctx, cmd, expect, answer)
 }
 
+// staleAfterAnswer: the line is exactly the question we answered, or that question plus the echo of our own answer (nothing else).
+func staleAfterAnswer(line, asked, answer string) bool {
+	line, asked, answer = strings.TrimSpace(line), strings.TrimSpace(asked), strings.TrimSpace(answer)
+	return line == asked || line == asked+" "+answer || line == asked+answer
+}
+
 // questionError keeps the text the CLI asked (a prompt, no secrets) so the operator can see what it wanted.
 func questionError(line string) error {
 	line = strings.TrimSpace(line)
@@ -241,7 +247,8 @@ func (s *shell) run(ctx context.Context, cmd string, expect *regexp.Regexp, answ
 		return "", err
 	}
 	crSent, crAt := false, 0
-	answered, ansAt := false, 0
+	answered := false
+	askedLine := "" // the question as shown when the answer was typed
 	pages, spaceAt := 0, 0
 	var final string
 	text, err := s.wait(ctx, func(t string) (bool, error) {
@@ -273,18 +280,17 @@ func (s *shell) run(ctx context.Context, cmd string, expect *regexp.Regexp, answ
 			return false, nil // still the stale prompt: the device has not answered the Enter yet
 		}
 		if questionRe.MatchString(lastLine(c)) {
-			if expect != nil && expect.MatchString(lastLine(c)) {
-				if !answered {
-					answered, ansAt = true, len(tail)
-					_, err := io.WriteString(s.in, answer+"\r") // the one expected confirmation, once
-					return false, err
-				}
-				if len(tail) == ansAt {
-					return false, nil // still the stale question: the device has not reacted to the answer yet
-				}
+			ll := strings.TrimSpace(lastLine(c))
+			if answered && staleAfterAnswer(ll, askedLine, answer) {
+				return false, nil // still the question we answered, now with the echo of our own answer on the line: wait for the device
+			}
+			if !answered && expect != nil && expect.MatchString(lastLine(c)) {
+				answered, askedLine = true, ll
+				_, err := io.WriteString(s.in, answer+"\r") // the one expected confirmation, once
+				return false, err
 			}
 			if answered {
-				return false, errors.Join(questionError(lastLine(c)), ErrAfterAnswer)
+				return false, errors.Join(questionError(lastLine(c)), ErrAfterAnswer) // a DIFFERENT question after the answer
 			}
 			return false, questionError(lastLine(c))
 		}

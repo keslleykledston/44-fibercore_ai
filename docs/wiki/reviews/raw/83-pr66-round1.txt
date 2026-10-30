@@ -1,0 +1,19 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18b78-bee6-7d91-83b5-d923de3b1032).
+[codex] Turn started (01a18b78-c1db-7e63-8ec5-e11e9abafb64).
+[codex] Assistant message captured: I’ll inspect the surrounding `run`/`wait` and prompt parsing logic to check whether the new p...
+[codex] Running command: /bin/bash -lc "sed -n '180,340p' agents/edge/internal/olt/shell.go && sed -n '180,310p' agent...
+[codex] Command completed: /bin/bash -lc "sed -n '180,340p' agents/edge/internal/olt/shell.go && sed -n '180,310p' agent... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: the post-answer prefix check can mis...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: the post-answer prefix check can mistake a distinct confirmation for the echoed question and wait until timeout instead of failing closed immediately.
+
+Findings:
+- [medium] Prefix matching can swallow a distinct follow-up question (agents/edge/internal/olt/shell.go:278-279)
+  After answering, any question line beginning with `askedLine` is treated as the old prompt. A device that asks a distinct question by extending the original text (for example, adding a qualifier after the same question) will be ignored until the command timeout; the code never returns `ErrAfterAnswer` for it. This is an inference from the prefix condition, but it directly weakens the stated different-question detection and delays reporting while the shell is in an uncertain state.
+  Recommendation: Match only the original question plus a recognized answer-echo suffix, or track the exact expected echo and reject any other changed question line immediately.
