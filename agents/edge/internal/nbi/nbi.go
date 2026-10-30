@@ -66,11 +66,11 @@ type deviceInfoRoot struct {
 
 // Only two shapes of firmware identifier are forwarded (this field is written by the device itself, like its serial and model, and nothing
 // else makes it trustworthy): a vendor build token in capitals with letters AND digits ("V5R019C10S350"), or a dotted numeric version
-// ("1.2.3", "V2.0.1"). Free text, lower-case words and anything with spaces or punctuation beyond that are dropped, so the field cannot
+// ("1.2.3", "V2.0.1"; each component up to 9 digits). Free text, lower-case words and anything with spaces or punctuation beyond that are dropped, so the field cannot
 // carry a password-like string; the registry still matches the exact value, so an odd one only fails to match.
 var (
 	firmwareToken   = regexp.MustCompile(`^[A-Z][A-Z0-9]{3,31}$`)
-	firmwareVersion = regexp.MustCompile(`^V?[0-9]{1,4}(\.[0-9]{1,4}){1,5}$`)
+	firmwareVersion = regexp.MustCompile(`^V?[0-9]{1,9}(\.[0-9]{1,9}){1,5}$`)
 	hasDigit        = regexp.MustCompile(`[0-9]`)
 	hasLetter       = regexp.MustCompile(`[A-Z]`)
 )

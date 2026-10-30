@@ -57,6 +57,8 @@ func TestDeviceFirmwareComesFromTheCachedSoftwareVersionAndIsSanitised(t *testin
 		`{"Device":{"DeviceInfo":{"SoftwareVersion":{"_value":"V2.0.1"}}}}`:                       "V2.0.1",
 		`{"Device":{"DeviceInfo":{"SoftwareVersion":{"_value":"1.2.3-Secret12"}}}}`:               "",
 		`{"Device":{"DeviceInfo":{"SoftwareVersion":{"_value":"1.2.3_Abc"}}}}`:                    "",
+		`{"Device":{"DeviceInfo":{"SoftwareVersion":{"_value":"12345.1.2"}}}}`:                    "12345.1.2",
+		`{"Device":{"DeviceInfo":{"SoftwareVersion":{"_value":"1234567890.1"}}}}`:                 "",
 		`{"Device":{"DeviceInfo":{"SoftwareVersion":{"_value":"v1.2.3"}}}}`:                       "",
 		`{"Device":{"DeviceInfo":{"SoftwareVersion":{"_value":"Admin1234"}}}}`:                    "",
 		`{"Device":{"DeviceInfo":{"SoftwareVersion":{"_value":"MySecret-2026"}}}}`:                "",

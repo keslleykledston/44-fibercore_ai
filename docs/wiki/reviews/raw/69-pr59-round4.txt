@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18acc-9640-75b3-974e-af21a61c7acd).
+[codex] Turn started (01a18acc-967b-7030-9df6-f0bf7322494b).
+[codex] Assistant message captured: I’ll inspect the branch diff against `main` and trace the version/token filters through the i...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/nbi/nbi.go | sed -n '50,105p'; git diff --no-ext-d...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/nbi/nbi.go | sed -n '50,105p'; git diff --no-ext-d... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: dotted firmware versions reject vali...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: dotted firmware versions reject valid values with components longer than four digits, contrary to the stated contract.
+
+Findings:
+- [medium] Dotted version regex caps each component at four digits (agents/edge/internal/nbi/nbi.go:73)
+  The requested dotted-version shape allows digit sequences of arbitrary length, but this regex limits the initial component and every dotted component to 1–4 digits. A legitimate cached version such as `12345.1.2` is silently converted to an empty firmware field and cannot match the exact firmware registry entry. Remove the per-component length caps (or document and test an intentional maximum).
+  Recommendation: Use the specified `^V?[0-9]+(\.[0-9]+){1,5}$` pattern and add a test with a component longer than four digits.
