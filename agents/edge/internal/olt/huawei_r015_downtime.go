@@ -40,9 +40,11 @@ var (
 // ErrNoDownRecord: the register-info answer is well-formed but gives no usable down time for this ONU (never went down, or inconsistent).
 var ErrNoDownRecord = errors.New("huawei r015: no usable down time in register-info")
 
-// ParseLastDown returns the most recent DownTime of the registration history of the ONU with this serial. The answer is only trusted when every
-// record is for that serial and the footer total matches the records; the newest record is the one with the greatest DownTime, and it must not
-// have been followed by an UpTime (an ONU that is up again is not "last down").
+// ParseLastDown returns the DownTime of the NEWEST record of the registration history of the ONU with this serial. The answer is only trusted
+// when every record is for that serial, the footer total matches the records and EVERY record has a well-formed UpTime and DownTime (each either
+// "-" or a real time): one malformed record anywhere rejects the answer, so an old outage can never be read as the current one. The newest record
+// is the one with the greatest UpTime (the listing order is not relied on, ties are ambiguous and rejected); its DownTime must be a time at or
+// after its UpTime.
 func ParseLastDown(out, serial string) (time.Time, error) {
 	idx := reRegIndex.FindAllStringIndex(out, -1)
 	if len(idx) == 0 {
@@ -51,7 +53,8 @@ func ParseLastDown(out, serial string) (time.Time, error) {
 	if t := reRegTotal.FindStringSubmatch(out); t == nil || t[1] != strconv.Itoa(len(idx)) {
 		return time.Time{}, fmt.Errorf("%w: record count does not match the footer", ErrNoDownRecord)
 	}
-	var best, latestUp time.Time
+	var newestUp, newestDown time.Time
+	tie, downOK := false, false
 	for i, at := range idx {
 		end := len(out)
 		if i+1 < len(idx) {
@@ -61,21 +64,26 @@ func ParseLastDown(out, serial string) (time.Time, error) {
 		if m := reRegSN.FindStringSubmatch(rec); m == nil || !strings.EqualFold(m[1], serial) {
 			return time.Time{}, fmt.Errorf("%w: record of another ONU", ErrNoDownRecord)
 		}
-		if m := reRegUp.FindStringSubmatch(rec); m != nil {
-			if t, ok := parseRegisterTime(m[1]); ok && t.After(latestUp) {
-				latestUp = t
-			}
+		um, dm := reRegUp.FindStringSubmatch(rec), reRegDown.FindStringSubmatch(rec)
+		if um == nil || dm == nil {
+			return time.Time{}, fmt.Errorf("%w: record without UpTime/DownTime", ErrNoDownRecord)
 		}
-		if m := reRegDown.FindStringSubmatch(rec); m != nil {
-			if t, ok := parseRegisterTime(m[1]); ok && t.After(best) {
-				best = t
-			}
+		up, upOK := parseRegisterTime(um[1])
+		down, dOK := parseRegisterTime(dm[1])
+		if !upOK || (!dOK && strings.TrimSpace(dm[1]) != "-") {
+			return time.Time{}, fmt.Errorf("%w: malformed time in a record", ErrNoDownRecord)
+		}
+		switch {
+		case newestUp.IsZero() || up.After(newestUp):
+			newestUp, newestDown, downOK, tie = up, down, dOK, false
+		case up.Equal(newestUp):
+			tie = true
 		}
 	}
-	if best.IsZero() || latestUp.After(best) {
+	if tie || !downOK || newestDown.Before(newestUp) {
 		return time.Time{}, ErrNoDownRecord
 	}
-	return best, nil
+	return newestDown, nil
 }
 
 // parseRegisterTime reads "2026-01-02 00:00:00-04:00" (the zone is part of the value). "-" and anything else is not a time.

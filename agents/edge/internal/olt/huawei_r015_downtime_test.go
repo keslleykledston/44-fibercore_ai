@@ -27,8 +27,13 @@ func TestParseLastDownTakesTheNewestDownTimeAndChecksTheONU(t *testing.T) {
 		"footer says more records": {strings.Replace(gp, "Total :  2", "Total :  3", 1), "4857544320000077"},
 		"footer missing":           {strings.Replace(gp, "Total :  2", "", 1), "4857544320000077"},
 		"up again after the down":  {strings.Replace(gp, "UpTime              : 2026-01-03", "UpTime              : 2026-02-03", 1), "4857544320000077"},
-		"year out of range":        {strings.ReplaceAll(gp, "2026-01-0", "1999-01-0"), "4857544320000077"},
-		"not a time":               {strings.ReplaceAll(gp, "DownTime            : 2026", "DownTime            : soon 2026"), "4857544320000077"},
+		"newest record has no DownTime (older one valid)": {strings.Replace(gp, "DownTime            : 2026-01-04 00:00:00-04:00", "DownTime            : -", 1), "4857544320000077"},
+		"newest record DownTime malformed (older valid)":  {strings.Replace(gp, "DownTime            : 2026-01-04 00:00:00-04:00", "DownTime            : 2026-13-45 00:00:00-04:00", 1), "4857544320000077"},
+		"an older record is malformed":                    {strings.Replace(gp, "UpTime              : 2026-01-01 00:00:00-04:00", "UpTime              : ???", 1), "4857544320000077"},
+		"a record without DownTime line":                  {strings.Replace(gp, "  DownTime            : 2026-01-02 00:00:00-04:00\n", "", 1), "4857544320000077"},
+		"two records registered at the same instant":      {strings.Replace(gp, "UpTime              : 2026-01-03", "UpTime              : 2026-01-01", 1), "4857544320000077"},
+		"year out of range":                               {strings.ReplaceAll(gp, "2026-01-0", "1999-01-0"), "4857544320000077"},
+		"not a time":                                      {strings.ReplaceAll(gp, "DownTime            : 2026", "DownTime            : soon 2026"), "4857544320000077"},
 	} {
 		if got, err := ParseLastDown(c.out, c.serial); err == nil || !errors.Is(err, ErrNoDownRecord) {
 			t.Errorf("%s: want ErrNoDownRecord, got %v %v", name, got, err)
