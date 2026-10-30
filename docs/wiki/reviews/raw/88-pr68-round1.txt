@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18b94-1abe-7411-8c14-1dd24b568ac0).
+[codex] Turn started (01a18b94-1af8-75a2-aa6e-3ca57a4ff746).
+[codex] Assistant message captured: I’ll inspect the branch diff against `main` and trace the endpoint’s query, authorization, ro...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/inventory....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/inventory.... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "down_since|last_online_at|observed_at =|TENANT_CONN|include_router|inve...
+[codex] Command failed: /bin/bash -lc 'rg -n "down_since|last_online_at|observed_at =|TENANT_CONN|include_router|inve... (exit 2)
+[codex] Running command: /bin/bash -lc "sed -n '145,185p' apps/api/app/api/inventory.py; rg -n \"CREATE POLICY|FORCE R...
+[codex] Command completed: /bin/bash -lc "sed -n '145,185p' apps/api/app/api/inventory.py; rg -n \"CREATE POLICY|FORCE R... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship: stale suppression checks ONU freshness i...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship: stale suppression checks ONU freshness instead of OLT freshness, and pagination applies before stale rows are removed, so the report can misclassify and omit valid outages.
+
+Findings:
+- [medium] Stale-OLT exclusion uses ONU freshness (apps/api/app/api/inventory.py:394-402)
+  The endpoint claims to exclude rows from stale OLTs, but computes freshness from `u.observed_at`; the joined OLT’s `o.observed_at` is not selected or checked. If ONU observations and OLT snapshots have different ages, the report can include an outage from an OLT whose collection has stopped, or exclude an ONU even though its OLT is being collected. This undermines the report’s stated stale-OLT guarantee and can mislead outage follow-up.
+  Recommendation: Select `o.observed_at` and base stale exclusion and reported OLT freshness on that timestamp; add cases where the ONU and OLT observation timestamps differ.
+- [medium] Stale filtering after LIMIT can hide eligible outages (apps/api/app/api/inventory.py:395-403)
+  The query limits to the oldest `limit + 1` rows before freshness is checked in Python. If those rows are stale, they are discarded after the limit, while newer fresh rows that could fill the page are never fetched. The endpoint can therefore return an empty or underfilled report despite eligible outages, and `truncated` describes the pre-filter query rather than the returned eligible set.
+  Recommendation: Apply freshness filtering in SQL before ordering and limiting, using the OLT snapshot timestamp, and compute truncation and excluded counts over the same filtered candidate set.

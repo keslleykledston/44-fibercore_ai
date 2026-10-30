@@ -333,6 +333,24 @@ paths:
         '200':
           description: Inventário ONU
           content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Onu'}}}}
+  /onus/offline:
+    get:
+      tags: [Network]
+      operationId: listOfflineOnus
+      summary: ONUs offline há pelo menos `min_hours`, as mais antigas primeiro (agendar retirada, contatar o cliente). O início da queda traz a BASE (`transition_observed` = visto online e depois fora, exato; `since_last_online` = visto online pela última vez nesse instante, a queda dura NO MÁXIMO isso). ONU nunca vista online não tem início conhecido e só é contada em `excluded.unknown_start`; linhas com ONU OU snapshot da OLT velhos (>15 min) ficam fora (`excluded.stale`, decidido antes do `limit`) salvo `include_stale=true`. `format=csv` devolve o mesmo conteúdo em CSV (cabeçalhos X-Excluded-*). inventory:read
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceOptional'
+        - {name: min_hours, in: query, required: false, schema: {type: number, minimum: 0, maximum: 8760, default: 24}}
+        - {name: olt_id, in: query, required: false, schema: {type: string, format: uuid}}
+        - {name: pon_path, in: query, required: false, schema: {type: string, pattern: '^[0-9/]{1,32}$'}}
+        - {name: include_stale, in: query, required: false, schema: {type: boolean, default: false}}
+        - {name: format, in: query, required: false, schema: {type: string, enum: [json, csv], default: json}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 5000, default: 500}}
+      responses:
+        '200':
+          description: "{generated_at, criteria{}, excluded{stale,unknown_start}, truncated, count, items[{onu_id, serial, olt, pon_path, status, offline_since, offline_hours, basis, last_online_at, observed_at, olt_observed_at, freshness}]} ou text/csv"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /onus/{onu_id}:
     get:
       tags: [Network]

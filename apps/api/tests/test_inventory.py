@@ -1,4 +1,5 @@
 
+import json
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
@@ -387,3 +388,111 @@ def test_one_device_over_two_protocols_makes_one_cpe_with_two_bindings_and_the_f
     rows = {x["canonical_serial"]: x for x in client.get("/v1/cpes", headers=hdr(client, "alice", seed, "A")).json()}
     assert rows["MULTI-PROTO-1"]["vendor"] == "FirstVendor" and {b["protocol"] for b in rows["MULTI-PROTO-1"]["bindings"]} == {"tr069", "tr369"}
     assert "MULTI-OTHER-1" in rows
+
+
+# ---- ONUs offline for at least X hours (backlog report) ----
+def _age(migrated, seed, serial, down_hours=None, last_online_hours=None, observed_hours=None):
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text(
+            "UPDATE onus SET down_since = CASE WHEN CAST(:d AS float) IS NULL THEN NULL ELSE now() - CAST(:d AS float) * interval '1 hour' END, "
+            "last_online_at = CASE WHEN CAST(:l AS float) IS NULL THEN NULL ELSE now() - CAST(:l AS float) * interval '1 hour' END, "
+            "observed_at = CASE WHEN CAST(:o AS float) IS NULL THEN observed_at ELSE now() - CAST(:o AS float) * interval '1 hour' END "
+            "WHERE serial = :s"), {"d": down_hours, "l": last_online_hours, "o": observed_hours, "s": serial})
+
+
+def _offline_setup(client, seed, inv, migrated):
+    body = snap(inv)
+    body["onus"] = [
+        {"serial": "OFF-LONG-0001", "pon_path": "0/1/0", "status": "offline", "rx_dbm": None},
+        {"serial": "OFF-SHORT-001", "pon_path": "0/1/0", "status": "offline", "rx_dbm": None},
+        {"serial": "OFF-LASTON-01", "pon_path": "0/1/1", "status": "los", "rx_dbm": None},
+        {"serial": "OFF-UNKNOWN-1", "pon_path": "0/1/1", "status": "offline", "rx_dbm": None},
+        {"serial": "OFF-ONLINE-01", "pon_path": "0/1/0", "status": "online", "rx_dbm": -20.0},
+        {"serial": "=OFF-FORMULA-1", "pon_path": "0/1/0", "status": "offline", "rx_dbm": None},
+    ]
+    body["pons"] = [{"pon_path": "0/1/0", "status": "up", "complete": False}, {"pon_path": "0/1/1", "status": "up", "complete": False}]
+    assert client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a1"), json=body).status_code == 202
+    _age(migrated, seed, "OFF-LONG-0001", down_hours=30, last_online_hours=31)
+    _age(migrated, seed, "OFF-SHORT-001", down_hours=5, last_online_hours=6)
+    _age(migrated, seed, "OFF-LASTON-01", down_hours=None, last_online_hours=50)
+    _age(migrated, seed, "OFF-UNKNOWN-1", down_hours=None, last_online_hours=None)
+    _age(migrated, seed, "=OFF-FORMULA-1", down_hours=26, last_online_hours=27)
+    return hdr(client, "alice", seed, "A")
+
+
+def test_offline_report_lists_long_outages_first_with_an_honest_basis(client, seed, inv, migrated):
+    h = _offline_setup(client, seed, inv, migrated)
+    r = client.get("/v1/onus/offline?min_hours=24", headers=h)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    got = [(i["serial"], i["basis"]) for i in d["items"]]
+    assert got == [("OFF-LASTON-01", "since_last_online"), ("OFF-LONG-0001", "transition_observed"), ("=OFF-FORMULA-1", "transition_observed")]
+    assert d["excluded"]["stale"] == 0 and d["excluded"]["unknown_start"] >= 1 and d["count"] == 3 and d["truncated"] is False  # (other tests leave ONUs too)
+    first = d["items"][0]
+    assert first["offline_hours"] >= 49.9 and first["pon_path"] == "0/1/1" and first["status"] == "los" and first["freshness"] == "fresh"
+    assert "customer" not in json.dumps(d).lower()              # no personal data: serial, OLT and PON only
+    short = client.get("/v1/onus/offline?min_hours=1", headers=h).json()
+    assert [i["serial"] for i in short["items"]][:2] == ["OFF-LASTON-01", "OFF-LONG-0001"] and "OFF-SHORT-001" in [i["serial"] for i in short["items"]]
+    assert "OFF-ONLINE-01" not in [i["serial"] for i in short["items"]]
+    only_pon = client.get("/v1/onus/offline?min_hours=1&pon_path=0/1/0", headers=h).json()
+    assert {i["pon_path"] for i in only_pon["items"]} == {"0/1/0"}
+    assert client.get("/v1/onus/offline?pon_path=0/1/0;drop", headers=h).status_code == 422
+    assert client.get("/v1/onus/offline?min_hours=-1", headers=h).status_code == 422
+
+
+def test_offline_report_leaves_out_stale_olt_data_unless_asked_and_is_tenant_isolated(client, seed, inv, migrated):
+    h = _offline_setup(client, seed, inv, migrated)
+    _age(migrated, seed, "OFF-LONG-0001", down_hours=30, last_online_hours=31, observed_hours=72)   # the OLT stopped being collected
+    d = client.get("/v1/onus/offline?min_hours=24", headers=h).json()
+    assert "OFF-LONG-0001" not in [i["serial"] for i in d["items"]] and d["excluded"]["stale"] == 1
+    d2 = client.get("/v1/onus/offline?min_hours=24&include_stale=true", headers=h).json()
+    row = next(i for i in d2["items"] if i["serial"] == "OFF-LONG-0001")
+    assert row["freshness"] == "stale"
+    assert client.get("/v1/onus/offline?min_hours=0", headers=hdr(client, "bob", seed, "B")).json()["items"] == []
+
+
+def test_offline_report_csv_neutralises_formulas_and_carries_the_exclusions(client, seed, inv, migrated):
+    h = _offline_setup(client, seed, inv, migrated)
+    r = client.get("/v1/onus/offline?min_hours=24&format=csv", headers=h)
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
+    assert int(r.headers["X-Excluded-Unknown-Start"]) >= 1 and r.headers["X-Excluded-Stale"] == "0" and r.headers["X-Truncated"] == "false"
+    lines = r.text.strip().splitlines()
+    assert lines[0] == "serial,olt,pon_path,status,offline_since,offline_hours,basis,last_online_at,observed_at,olt_observed_at,freshness"
+    assert len(lines) == 4 and any(l.startswith("'=OFF-FORMULA-1,") for l in lines)   # a leading = would run as a formula in a spreadsheet
+
+
+def test_offline_report_decides_staleness_on_the_onu_and_on_its_olt_before_limiting(client, seed, inv, migrated):
+    h = _offline_setup(client, seed, inv, migrated)
+    # the ONUs were observed recently but their OLT snapshot is old: the OLT stopped being collected, so none of them may pass for a long outage
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE olts SET observed_at = now() - interval '48 hours' WHERE id IN (SELECT olt_id FROM onus WHERE serial = 'OFF-LONG-0001')"))
+    d = client.get("/v1/onus/offline?min_hours=24", headers=h).json()
+    assert "OFF-LONG-0001" not in [i["serial"] for i in d["items"]] and d["excluded"]["stale"] >= 3
+    assert next(i for i in client.get("/v1/onus/offline?min_hours=24&include_stale=true", headers=h).json()["items"]
+                if i["serial"] == "OFF-LONG-0001")["freshness"] == "stale"
+    # stale rows never take a place in the page: with limit=1 the oldest FRESH eligible ONU still comes back
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE olts SET observed_at = now() WHERE id IN (SELECT olt_id FROM onus WHERE serial = 'OFF-LONG-0001')"))
+        c.execute(text("UPDATE onus SET observed_at = now() - interval '72 hours' WHERE serial = 'OFF-LASTON-01'"))
+    one = client.get("/v1/onus/offline?min_hours=24&limit=1", headers=h).json()
+    assert [i["serial"] for i in one["items"]] == ["OFF-LONG-0001"] and one["truncated"] is True and one["excluded"]["stale"] >= 1
+
+
+def test_offline_report_counts_missing_observation_times_as_stale(client, seed, inv, migrated):
+    h = _offline_setup(client, seed, inv, migrated)
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE olts SET observed_at = NULL WHERE id IN (SELECT olt_id FROM onus WHERE serial = 'OFF-LONG-0001')"))
+    d = client.get("/v1/onus/offline?min_hours=24", headers=h).json()
+    assert "OFF-LONG-0001" not in [i["serial"] for i in d["items"]] and d["excluded"]["stale"] >= 3   # accounted for, not silently dropped
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE olts SET observed_at = now() WHERE id IN (SELECT olt_id FROM onus WHERE serial = 'OFF-LONG-0001')"))
+        c.execute(text("UPDATE onus SET observed_at = NULL WHERE serial = 'OFF-LONG-0001'"))
+    d = client.get("/v1/onus/offline?min_hours=24", headers=h).json()
+    assert "OFF-LONG-0001" not in [i["serial"] for i in d["items"]] and d["excluded"]["stale"] >= 1
+    inc = client.get("/v1/onus/offline?min_hours=24&include_stale=true", headers=h).json()
+    assert next(i for i in inc["items"] if i["serial"] == "OFF-LONG-0001")["freshness"] == "unknown"

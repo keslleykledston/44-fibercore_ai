@@ -108,3 +108,6 @@
 - H2 (`reboot_cpe`), H3 (`set_wifi_ssid`) e H4 (`onu_reset`, `onu_deactivate`) REAIS na ONT de bancada, todos `observed` e aceitos. Próximas autorizações são NORMAIS (sem `--first-run`).
 - Pendentes: (1) cooldown pós-falha da bancada configurável no Edge (hoje 15 min em memória; editar o arquivo não adianta sem reiniciar); (2) relatório de ONUs offline há X horas; (3) 2º modelo de ONU (`bench.olt` vira lista + emenda do ADR-0030); (4) `olt_query` (ADR-0029); (5) persistência do SSID após reboot (teste opcional).
 
+## Atualização 2026-10-30 (backlog)
+- Feito: cooldown pós-falha da bancada configurável (PR 67) e relatório `GET /v1/onus/offline` (PR 68; JSON/CSV; sem tela ainda). Próximos: tela do relatório (Next.js, com Lovable só para o visual), histórico de transições online/offline (`onu_state_events`, migração) para tempo acumulado, 2º modelo de ONU, `olt_query` (ADR-0029).
+

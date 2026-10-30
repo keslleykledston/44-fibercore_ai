@@ -1,0 +1,29 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18b96-a3ff-79d2-bb36-b939bbe3a8f0).
+[codex] Turn started (01a18b96-a704-7be2-9aa9-3d7a6207f508).
+[codex] Assistant message captured: I’ll inspect the branch diff against `main`, focusing on the SQL candidate set, stale-count c...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/inventory....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/inventory.... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '345,450p'; nl -ba apps/api/test...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '345,450p'; nl -ba apps/api/test... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "offline|fresh|stale" apps/api/tests/test_inventory.py | tail -35; git d...
+[codex] Command completed: /bin/bash -lc 'rg -n "offline|fresh|stale" apps/api/tests/test_inventory.py | tail -35; git d... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "CREATE TABLE (olts|onus)|observed_at.*NOT NULL|down_since|last_online_a...
+[codex] Command failed: /bin/bash -lc 'rg -n "CREATE TABLE (olts|onus)|observed_at.*NOT NULL|down_since|last_online_a... (exit 2)
+[codex] Running command: /bin/bash -lc "rg -n \"CREATE TABLE.*onus|CREATE TABLE.*olts|down_since|last_online_at\" apps...
+[codex] Command completed: /bin/bash -lc "rg -n \"CREATE TABLE.*onus|CREATE TABLE.*olts|down_since|last_online_at\" apps... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '15,75p' apps/api/alembic/versions/0005_inventory.py; sed -n '135,185p'...
+[codex] Command completed: /bin/bash -lc "sed -n '15,75p' apps/api/alembic/versions/0005_inventory.py; sed -n '135,185p'... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Hold shipment: the stale filter excludes rows with mi...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Hold shipment: the stale filter excludes rows with missing observation timestamps, but the stale count silently omits them, so the report can claim zero stale exclusions while returning fewer rows than eligible outage records imply.
+
+Findings:
+- [medium] Missing timestamps are excluded but not counted as stale (apps/api/app/api/inventory.py:388-399)
+  `olts.observed_at` and `onus.observed_at` are nullable in the schema. When either is NULL, `fresh` evaluates to SQL NULL; the page predicate excludes that row, but `NOT fresh` also evaluates to NULL, so the stale-count query does not count it. The response can therefore omit due outages without accounting for them in `excluded.stale`, undermining the stated count of stale candidates. Treat missing timestamps as stale in both predicates, for example with `COALESCE(..., false)` or explicit `IS NULL` checks, and cover null ONU and OLT timestamps.
+  Recommendation: Make the freshness predicate two-valued and count missing ONU or OLT timestamps as stale; add a test with a due outage whose OLT observation timestamp is NULL.
