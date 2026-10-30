@@ -54,7 +54,9 @@ func TestBadCredentialsFormat(t *testing.T) {
 func TestDeviceFirmwareComesFromTheCachedSoftwareVersionAndIsSanitised(t *testing.T) {
 	cases := map[string]string{
 		`{"InternetGatewayDevice":{"DeviceInfo":{"SoftwareVersion":{"_value":"V5R019C10S350"}}}}`: "V5R019C10S350",
-		`{"Device":{"DeviceInfo":{"SoftwareVersion":{"_value":"V2.0.1-b12"}}}}`:                   "V2.0.1-b12",
+		`{"Device":{"DeviceInfo":{"SoftwareVersion":{"_value":"V2.0.1"}}}}`:                       "V2.0.1",
+		`{"Device":{"DeviceInfo":{"SoftwareVersion":{"_value":"1.2.3-Secret12"}}}}`:               "",
+		`{"Device":{"DeviceInfo":{"SoftwareVersion":{"_value":"1.2.3_Abc"}}}}`:                    "",
 		`{"Device":{"DeviceInfo":{"SoftwareVersion":{"_value":"Admin1234"}}}}`:                    "",
 		`{"Device":{"DeviceInfo":{"SoftwareVersion":{"_value":"MySecret-2026"}}}}`:                "",
 		`{"Device":{"DeviceInfo":{"SoftwareVersion":{"_value":"hunter2hunter2"}}}}`:               "",
