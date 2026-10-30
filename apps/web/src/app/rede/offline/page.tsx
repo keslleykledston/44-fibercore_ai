@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DevicesTabs } from "@/components/DevicesTabs";
 import { AppShell } from "@/components/AppShell";
 import { DataFreshness, EmptyState, ErrorState, Kpi, PageHeader, StatusPill } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
@@ -17,6 +18,7 @@ export default async function OnusOffline({ searchParams }: { searchParams: Prom
       <PageHeader title="ONUs offline" subtitle="Quem está fora do ar há mais tempo, com a base de cada horário" helpSlug="rede/onus-offline">
         <Link href="/rede" className="inline-flex min-h-touch items-center rounded-btn px-3 text-sm text-accent underline-offset-4 hover:underline">Voltar à Rede</Link>
       </PageHeader>
+      <DevicesTabs current="/rede/offline" />
       <form method="get" role="search" aria-label="Filtros" className="panel mb-6 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[140px_1fr_160px_auto_auto] lg:items-end">
         <label className="text-sm">Fora do ar há pelo menos (horas)
           <input name="min_hours" type="number" min={0} max={8760} step="any" defaultValue={f.minHours} className="mt-1 min-h-touch w-full rounded-btn border border-line bg-bg px-3" />

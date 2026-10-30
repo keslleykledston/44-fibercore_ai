@@ -413,6 +413,19 @@ paths:
         '200':
           description: Inventário CPE com fontes CWMP/USP
           content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Cpe'}}}}
+  /cpes/{cpe_id}:
+    get:
+      tags: [CPE]
+      operationId: getCpe
+      summary: Um CPE pelo id (a lista é limitada; o detalhe não depende dela). CPE de outro provedor = 404
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: cpe_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200':
+          description: O CPE com suas ligações de protocolo
+          content: {application/json: {schema: {$ref: '#/components/schemas/Cpe'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: CPE inexistente ou de outro provedor}
   /onu-cpe-links/suggest:
     post:
       tags: [Inventory]

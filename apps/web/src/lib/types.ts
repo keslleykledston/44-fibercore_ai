@@ -57,3 +57,9 @@ export type OfflineOnuReport = {
   generated_at: string; criteria: { min_hours: number; olt_id: string | null; pon_path: string | null; include_stale: boolean };
   excluded: { stale: number; unknown_start: number }; truncated: boolean; count: number; items: OfflineOnu[];
 };
+export type CpeBinding = { protocol: string; connector_id: string; external_id: string };
+export type Cpe = { id: string; canonical_serial: string; vendor: string | null; model: string | null; firmware: string | null; bindings: CpeBinding[]; observed_at: string | null; freshness: string };
+export type CpeMetric = { metric: string; scope: string; value: unknown; captured_at: string; received_at: string; age_seconds: number; fresh: boolean };
+export type CpeStateView = { cpe_id: string; source: string; metrics: CpeMetric[] };
+export type OnuCpeLink = { id: string; status: "suggested" | "confirmed" | "rejected"; confidence: number; onu: { id: string; serial: string }; cpe: { id: string; canonical_serial: string } };
+export type EdgeRow = { id: string; name: string; site_name: string | null; version: string | null; last_heartbeat_at: string | null; status: "online" | "offline" | "unknown" | "revoked" };

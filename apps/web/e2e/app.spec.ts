@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { API_URL, EMAIL, PASSWORD, login, totp } from "./helpers";
 import { humanHours, offlineQuery, parseOfflineFilters } from "../src/lib/offline";
 
-const routes = ["/", "/rede", "/rede/offline", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/administracao/membros", "/conta/seguranca", "/ajuda", "/ajuda/rede/consultar-onu"];
+const routes = ["/", "/rede", "/rede/offline", "/dispositivos", "/dispositivos/edges", "/dispositivos/capacidades", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/administracao/membros", "/conta/seguranca", "/ajuda", "/ajuda/rede/consultar-onu"];
 
 test("login inválido mostra erro e não cria sessão", async ({ page, context }) => {
   await page.goto("/login");
@@ -488,7 +488,7 @@ test("Membros: administrador redefine o MFA de outra pessoa com senha + segundo 
 test("ONUs offline: tela mostra as contagens e o CSV sai pelo BFF (só leitura)", async ({ page }) => {
   await login(page);
   await page.getByRole("link", { name: "Rede" }).first().click();
-  await page.getByTestId("offline-link").click();
+  await page.getByRole("navigation", { name: "Rede e dispositivos" }).getByRole("link", { name: "ONUs offline" }).click();
   await expect(page.getByTestId("offline-report-ready")).toBeVisible();
   await expect(page.getByTestId("kpi-Sem horário de início")).toHaveText("2"); // as 2 ONUs do seed nunca foram vistas online: contadas, não listadas
   await expect(page.getByTestId("empty-state")).toBeVisible();
@@ -517,4 +517,24 @@ test("filtros do relatório offline: o que não passa na validação nunca chega
   expect(ok).toEqual({ minHours: 48.5, oltId: id, ponPath: "0/0/14", includeStale: true });
   expect(offlineQuery(ok, { format: "csv" })).toBe(`min_hours=48.5&format=csv&olt_id=${id}&pon_path=0%2F0%2F14&include_stale=true`);
   expect([humanHours(0.2), humanHours(5), humanHours(50), humanHours(48)]).toEqual(["12 min", "5 h", "2 d 2 h", "2 d"]);
+});
+
+test("Dispositivos: lista de CPEs, detalhe, Edges e capacidades abrem com dado real do seed (somente leitura)", async ({ page }) => {
+  await login(page);
+  await page.goto("/dispositivos");
+  await expect(page.getByTestId("cpe-list-ready")).toBeVisible();
+  const first = page.locator("tbody tr td a").first();
+  await expect(first).toBeVisible();
+  await first.click();
+  await expect(page.getByTestId("cpe360-ready")).toBeVisible();
+  await expect(page.getByTestId("cpe-identity")).toBeVisible();
+  await expect(page.getByTestId("cpe-state")).toBeVisible();
+  await expect(page.getByTestId("cpe-capabilities")).toBeVisible();
+  expect((await page.goto("/dispositivos/nao-e-uuid"))?.status()).toBe(404);
+  await page.goto("/dispositivos?freshness=drop%20table&vendor=%3Cscript%3E");
+  await expect(page.getByTestId("empty-state")).toBeVisible(); // filtro inválido/sem correspondência: nada é executado nem quebra a tela
+  await page.goto("/dispositivos/edges");
+  await expect(page.getByTestId("edges-ready")).toBeVisible();
+  await page.goto("/dispositivos/capacidades");
+  await expect(page.getByTestId("capabilities-ready")).toBeVisible();
 });
