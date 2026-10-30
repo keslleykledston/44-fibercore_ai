@@ -200,3 +200,9 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
   - Ainda NOT_RUN: transporte `cpe_state` Edge→cloud (migração 0019) e uso do dado nas regras R-D002..004.
 - **Refresh com 11 grupos (instâncias WAN 1..4) na ONT de bancada, LAB, 2026-10-29 (Edge 0.3.2-lab-0d741fa):** `completed=11 faulted=0 queued=0 cleaned=0; readable_metrics=7`. Estado da conexão PPP (instância 3) e uptime lidos além do link e dos 2 rádios. Faults no ACS antes/depois: 1/1 (nenhum da ONT); tarefas 3/3. `go vet ./... && go test -race ./...` PASS (Edge). Contrato dos 11 grupos fixado por teste.
 
+## 2026-10-30 — `cpe_state` (PR 53) na LAB, com dado real
+- Backup `fibercore-20261030T002127Z.dump` antes; `make up-prod`: migração 0019 aplicada (`alembic_version`=0019, tabela `cpe_state` criada), API saudável.
+- Edge `0.4.0-lab-d17f128` no host do GenieACS (jobs + `refresh_tasks` mantidos). Na primeira rodada de coleta chegaram 7 linhas em `cpe_state` da ONT Huawei EG8145V5 de bancada: link da WAN Up; conexão PPP (instância 3) Connected e uptime; rádios 1 e 5 Enabled com canais 1 e 36; `captured_at` é a hora de leitura guardada pelo ACS, `received_at` a hora do servidor.
+- `make test-api` 306 passed; `go vet ./... && go test -race ./...` PASS (Edge); ruff só os 5 E501 antigos das migrações 0013–0015; secrets-scan sem vazamento; validate_help e validate_addendum_v22 PASS. Contrato OpenAPI atualizado (YAML válido).
+- Ainda NOT_RUN: uso do estado por regra (R-D002…R-D004) e no Visão 360; leitura do estado com mais de uma ONT; CPE real de cliente (nenhum foi tocado).
+
