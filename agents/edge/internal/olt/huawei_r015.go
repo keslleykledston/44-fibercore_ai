@@ -163,6 +163,9 @@ func parseR015Port(pt r015Port, info, optical string) ([]ONU, PON) {
 			clean = false
 		}
 		u := ONU{Serial: strings.ToUpper(m[5]), PonPath: pt.path, Status: status}
+		if id, err := strconv.Atoi(m[4]); err == nil && id >= 0 && id < maxONTs {
+			u.OntID, u.HasOntID = id, true
+		}
 		if v, ok := rx[m[4]]; ok && status == "online" { // an offline ONT may show a stale reading
 			u.RxDBm = v
 		}

@@ -25,38 +25,36 @@ func (d ldCLI) Snapshot(context.Context, olt.Session, []string) (olt.Snapshot, e
 	return olt.Snapshot{PONs: []olt.PON{{Path: "0/0/1", Status: "up"}, {Path: "0/0/2", Status: "up"}}, ONUs: append([]olt.ONU(nil), *d.onus...)}, nil
 }
 
-// ldSNMP records which PONs it was asked for and answers with the times of the ONUs it is told about.
+// ldSNMP is the last-down reader: it records the targets it was asked for (one call per PON) and answers with the times it is told about.
 type ldSNMP struct {
-	calls *[][]string
+	calls *[][]string // per call: "pon/ontid" of every target
 	down  map[string]time.Time
 	err   error
 	hook  func() // runs while the read is "in flight" (before it answers)
 }
 
-func (ldSNMP) Vendor() string { return "huawei" }
-func (ldSNMP) Identify(context.Context, olt.SNMPReader, []string) (olt.Identity, error) {
-	return olt.Identity{}, nil
-}
-func (d ldSNMP) Snapshot(ctx context.Context, _ olt.SNMPReader, ports []string) (olt.Snapshot, error) {
-	*d.calls = append(*d.calls, append([]string(nil), ports...))
+func (d ldSNMP) LastDowns(ctx context.Context, _ olt.SNMPReader, targets []olt.DownTarget) (map[string]time.Time, error) {
+	var seen []string
+	for _, t := range targets {
+		seen = append(seen, fmt.Sprintf("%s/%d", t.PonPath, t.OntID))
+	}
+	*d.calls = append(*d.calls, seen)
 	if d.hook != nil {
 		d.hook()
 	}
 	if err := ctx.Err(); err != nil {
-		return olt.Snapshot{}, err
+		return nil, err
 	}
 	if d.err != nil {
-		return olt.Snapshot{}, d.err
+		return nil, d.err
 	}
-	var s olt.Snapshot
-	for serial, t := range d.down {
-		t := t
-		s.ONUs = append(s.ONUs, olt.ONU{Serial: serial, PonPath: ports[0], Status: "offline", LastDownAt: &t})
+	out := map[string]time.Time{}
+	for _, t := range targets {
+		if at, ok := d.down[t.Serial]; ok {
+			out[t.Serial] = at
+		}
 	}
-	// an ONU that is online for the OLT must not be given a time even if the driver mistakenly carried one
-	online := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-	s.ONUs = append(s.ONUs, olt.ONU{Serial: "ONLINE-1", PonPath: ports[0], Status: "online", LastDownAt: &online})
-	return s, nil
+	return out, nil
 }
 
 // ldClock is a clock that tests move while background reads are running.
@@ -85,8 +83,9 @@ func newLD(t *testing.T, snmpErr error) ldHarness {
 	t.Helper()
 	clock := &ldClock{t: time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)}
 	onus := []olt.ONU{
-		{Serial: "HWTC00000001", PonPath: "0/0/1", Status: "offline"},
-		{Serial: "HWTC00000002", PonPath: "0/0/2", Status: "online"},
+		{Serial: "HWTC00000001", PonPath: "0/0/1", Status: "offline", OntID: 7, HasOntID: true},
+		{Serial: "HWTC00000002", PonPath: "0/0/2", Status: "online", OntID: 3, HasOntID: true},
+		{Serial: "HWTC00000003", PonPath: "0/0/1", Status: "offline"}, // the listing gave no ONT-ID: it cannot be addressed
 	}
 	var calls [][]string
 	var opens int
@@ -134,8 +133,8 @@ func TestLastDownIsReadForPonsWithOfflineOnusAndTravelsWithTheNextSnapshot(t *te
 		t.Fatalf("the first snapshot cannot carry a time yet (the side channel runs AFTER the CLI read): %v", got)
 	}
 	// the same Collect call that saw the offline ONU then read its time: one call, only the PON that has an offline ONU
-	if len(*h.calls) != 1 || !reflect.DeepEqual((*h.calls)[0], []string{"0/0/1"}) {
-		t.Fatalf("SNMP must read only the PON that has an offline ONU: %v", *h.calls)
+	if len(*h.calls) != 1 || !reflect.DeepEqual((*h.calls)[0], []string{"0/0/1/7"}) {
+		t.Fatalf("SNMP must read only the offline ONU that has an ONT-ID, on its own PON: %v", *h.calls)
 	}
 	h.clock.add(16 * time.Minute)
 	got := h.collect(t)
@@ -226,16 +225,18 @@ func TestLastDownNeverBlocksTheRoundAndALateAnswerNeverRevivesAClearedTime(t *te
 func TestLastDownContinuesWhereTheBudgetRanOutInsteadOfRereadingTheSamePons(t *testing.T) {
 	var snapOnus []olt.ONU
 	var ports []string
-	for i := 0; i < 20; i++ {
+	byPon := map[string][]olt.DownTarget{}
+	for i := 0; i < 6; i++ {
 		p := fmt.Sprintf("0/1/%02d", i)
 		ports = append(ports, p)
-		snapOnus = append(snapOnus, olt.ONU{Serial: fmt.Sprintf("HWTC%08d", i), PonPath: p, Status: "offline"})
+		snapOnus = append(snapOnus, olt.ONU{Serial: fmt.Sprintf("HWTC%08d", i), PonPath: p, Status: "offline", OntID: i, HasOntID: true})
+		byPon[p] = []olt.DownTarget{{PonPath: p, OntID: i, Serial: fmt.Sprintf("HWTC%08d", i)}}
 	}
 	var calls [][]string
 	slow := true
 	drv := &ldSNMP{calls: &calls, down: map[string]time.Time{}}
 	drv.hook = func() {
-		if slow && len(calls) == 2 { // the second chunk of the first run never answers in time
+		if slow && len(calls) == 3 { // the third PON of the first run never answers in time
 			time.Sleep(120 * time.Millisecond)
 		}
 	}
@@ -243,19 +244,19 @@ func TestLastDownContinuesWhereTheBudgetRanOutInsteadOfRereadingTheSamePons(t *t
 		Open: func(context.Context) (olt.SNMPReader, func(), error) { return nil, func() {}, nil }}}
 	o := &OLT{}
 	o.applyLastDown(src, &olt.Snapshot{ONUs: snapOnus})
-	if err := o.readLastDown(context.Background(), src, ports, 1); err != nil {
+	if err := o.readLastDown(context.Background(), src, ports, byPon, 1); err != nil {
 		t.Fatalf("running out of OUR budget is not a failure of the agent: %v", err)
 	}
-	if len(calls) != 2 || len(calls[0]) != lastDownChunk {
-		t.Fatalf("first run: one full chunk, then the budget ends: %v", calls)
+	if len(calls) != 3 {
+		t.Fatalf("first run: two PONs finished, the third ran out of budget: %v", calls)
 	}
 	slow = false
 	calls = nil
-	if err := o.readLastDown(context.Background(), src, ports, 1); err != nil {
+	if err := o.readLastDown(context.Background(), src, ports, byPon, 1); err != nil {
 		t.Fatal(err)
 	}
-	if len(calls) == 0 || calls[0][0] != ports[lastDownChunk] {
-		t.Fatalf("the next run must start after the last PON that was finished (%s), not at the first again: %v", ports[lastDownChunk-1], calls)
+	if len(calls) == 0 || calls[0][0] != "0/1/02/2" {
+		t.Fatalf("the next run must start after the last PON that was finished (%s), not at the first again: %v", ports[1], calls)
 	}
 	if got := rotate([]string{"a", "b", "c"}, "b"); !reflect.DeepEqual(got, []string{"c", "a", "b"}) {
 		t.Fatalf("rotate: %v", got)
@@ -268,12 +269,14 @@ func TestLastDownContinuesWhereTheBudgetRanOutInsteadOfRereadingTheSamePons(t *t
 func TestLastDownOpenCutByOurOwnBudgetIsNotAFailure(t *testing.T) {
 	src := OLTSource{Name: "OLT-OPEN", LastDown: &LastDownSource{Key: "k", Every: time.Hour, Timeout: time.Millisecond,
 		Open: func(ctx context.Context) (olt.SNMPReader, func(), error) { <-ctx.Done(); return nil, nil, ctx.Err() }}}
-	if err := (&OLT{}).readLastDown(context.Background(), src, []string{"0/0/1"}, 0); err != nil {
+	if err := (&OLT{}).readLastDown(context.Background(), src, []string{"0/0/1"}, nil, 0); err != nil {
 		t.Fatalf("our own deadline while opening must not start the agent's cooldown: %v", err)
 	}
-	src.LastDown.Open = func(context.Context) (olt.SNMPReader, func(), error) { return nil, nil, errors.New("community file unreadable") }
+	src.LastDown.Open = func(context.Context) (olt.SNMPReader, func(), error) {
+		return nil, nil, errors.New("community file unreadable")
+	}
 	src.LastDown.Timeout = time.Minute
-	if err := (&OLT{}).readLastDown(context.Background(), src, []string{"0/0/1"}, 0); err == nil {
+	if err := (&OLT{}).readLastDown(context.Background(), src, []string{"0/0/1"}, nil, 0); err == nil {
 		t.Fatal("a real open failure must be reported")
 	}
 }

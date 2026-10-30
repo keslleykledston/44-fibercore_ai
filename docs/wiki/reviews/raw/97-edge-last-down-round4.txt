@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18bb2-bccb-76b2-a346-17c97c541a4c).
+[codex] Turn started (01a18bb2-bd06-7871-9570-3ca1c5fde580).
+[codex] Assistant message captured: I’ll inspect the full `main...HEAD` diff and trace the Edge read/timeout path, especially whe...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=80 main...HEA...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=80 main...HEA... (exit 0)
+[codex] Running command: /bin/bash -lc "cat agents/edge/internal/collector/olt_lastdown.go && git diff main...HEAD --u...
+[codex] Command completed: /bin/bash -lc "cat agents/edge/internal/collector/olt_lastdown.go && git diff main...HEAD --u... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,245p' agents/edge/internal/olt/huawei_snmp.go && sed -n '210,365p' a...
+[codex] Command completed: /bin/bash -lc "sed -n '1,245p' agents/edge/internal/olt/huawei_snmp.go && sed -n '210,365p' a... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff main...HEAD -- agents/edge/internal/collector/olt_lastdown.go agents/...
+[codex] Command completed: /bin/bash -lc "git diff main...HEAD -- agents/edge/internal/collector/olt_lastdown.go agents/... (exit 0)
+[codex] Running command: /bin/bash -lc "cat agents/edge/go.mod; nl -ba agents/edge/cmd/fibercore-edge/main.go | sed -n...
+[codex] Command completed: /bin/bash -lc "cat agents/edge/go.mod; nl -ba agents/edge/cmd/fibercore-edge/main.go | sed -n... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Hold: the side channel invokes the full SNMP snapshot...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Hold: the side channel invokes the full SNMP snapshot per PON chunk, adding substantial redundant traffic to a rate-limited OLT agent.
+
+Findings:
+- [medium] Last-down reads repeat the full SNMP collection (agents/edge/internal/collector/olt_lastdown.go:145)
+  `readLastDown` calls `HuaweiSNMP.Snapshot` for each chunk, but that driver also identifies the interface, walks ONU state and serial tables, and fetches Rx and down-cause data; this path only consumes `LastDownAt`. Thus every side-channel run re-reads much of the ONU inventory already collected over CLI, potentially consuming the OLT's tight SNMP request budget and triggering its mute/rate-limit behavior. Add a focused last-down reader that fetches only the last-down column for offline ONUs, or otherwise avoid repeating the full snapshot work.
+  Recommendation: Use a dedicated SNMP operation for last-down values, keyed by offline ONU IDs, instead of calling the full `Snapshot` implementation.

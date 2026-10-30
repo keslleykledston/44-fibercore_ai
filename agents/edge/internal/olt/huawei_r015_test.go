@@ -352,3 +352,12 @@ func TestSimulatedPagerOnlyAdvancesOnSpaceAndQBreaksTheListing(t *testing.T) {
 		t.Fatal("Space must advance to the next page")
 	}
 }
+
+func TestR015ListingCarriesTheOntIDForTheLastDownSideChannel(t *testing.T) {
+	onus, _ := parseR015Port(pon14, r015Text(t, "ont_info_14_all_paged.txt"), r015Text(t, "ont_optical_info_14_all.txt"))
+	for i, u := range onus {
+		if !u.HasOntID || u.OntID != i {
+			t.Fatalf("ONU %d: ONT-ID %d (known=%v)", i, u.OntID, u.HasOntID)
+		}
+	}
+}

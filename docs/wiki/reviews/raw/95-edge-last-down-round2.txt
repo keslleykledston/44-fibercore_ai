@@ -1,0 +1,29 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18bb1-31ea-7092-bb05-6cecb0602eb9).
+[codex] Turn started (01a18bb1-3222-7bd2-ab01-b0cd0d640030).
+[codex] Assistant message captured: I’ll inspect the full branch diff and the surrounding collector lifecycle/configuration code,...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,260p' agents/edge/internal/collector/olt_lastdown.go && rg -n \"last...
+[codex] Command completed: /bin/bash -lc "sed -n '1,260p' agents/edge/internal/collector/olt_lastdown.go && rg -n \"last... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,250p' agents/edge/internal/olt/huawei_snmp.go && sed -n '1,220p' age...
+[codex] Command completed: /bin/bash -lc "sed -n '1,250p' agents/edge/internal/olt/huawei_snmp.go && sed -n '1,220p' age... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"Shutdown|signal.Notify|Run\\(|Collect\\(\" agents/edge/cmd/fibercore-e...
+[codex] Command completed: /bin/bash -lc "rg -n \"Shutdown|signal.Notify|Run\\(|Collect\\(\" agents/edge/cmd/fibercore-e... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '200,285p' agents/edge/internal/agent/agent.go"
+[codex] Command completed: /bin/bash -lc "sed -n '200,285p' agents/edge/internal/agent/agent.go" (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: the eight-minute run budget can perm...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: the eight-minute run budget can permanently starve later PONs on large configured OLTs.
+
+Findings:
+- [medium] Large OLTs can starve last-down reads on later PONs (agents/edge/internal/collector/olt_lastdown.go:106-119)
+  `readLastDown` always sorts PONs and starts at the beginning, then stops when its eight-minute context expires. The Huawei SNMP driver walks tables for each PON at a minimum one-second request pace, so a 256-PON configuration can exceed that budget well before reaching the end. Each new CLI generation starts the same prefix again, leaving later PONs without last-down data indefinitely. Rotate the starting PON across runs or persist a cursor so successive generations make progress through the full list.
+  Recommendation: Use a rotating or persisted PON cursor across runs, while retaining the existing generation check so stale results are discarded.

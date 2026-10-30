@@ -13,20 +13,19 @@ import (
 type LastDownSource struct {
 	Key     string // guard key; MUST differ from the CLI entry's so that an SNMP run does not spend the CLI interval/cooldown (or the reverse)
 	Every   time.Duration
-	Driver  olt.SNMPDriver
+	Driver  olt.LastDownReader
 	Open    func(ctx context.Context) (olt.SNMPReader, func(), error)
 	Timeout time.Duration // wall-clock budget of one run (0 = lastDownTimeout)
 }
 
 const (
 	lastDownTimeout = 8 * time.Minute
-	lastDownChunk   = 8 // PONs per driver call: a run cut short by the budget keeps the chunks it finished
 )
 
 // lastDownState is what the Edge remembers between collections of one OLT.
 type lastDownState struct {
-	offlinePons map[string]bool      // PONs that had a non-online ONU in the last CLI snapshot: the only ones worth reading
-	at          map[string]time.Time // serial -> the OLT's "last down time" (only for ONUs still offline)
+	targets map[string][]olt.DownTarget // PON -> the ONUs the last CLI snapshot showed not online (with their ONT-ID): the only ones worth reading
+	at      map[string]time.Time        // serial -> the OLT's "last down time" (only for ONUs still offline)
 	// gen counts the CLI snapshots applied. A run starts from one generation and its answers are kept only if no newer CLI snapshot was
 	// applied meanwhile: a late answer must never put back a time that a newer snapshot (ONU seen online) has just cleared.
 	gen uint64
@@ -44,7 +43,7 @@ func (o *OLT) ldState(name string) *lastDownState {
 	}
 	st := o.ld[name]
 	if st == nil {
-		st = &lastDownState{offlinePons: map[string]bool{}, at: map[string]time.Time{}}
+		st = &lastDownState{targets: map[string][]olt.DownTarget{}, at: map[string]time.Time{}}
 		o.ld[name] = st
 	}
 	return st
@@ -59,20 +58,22 @@ func (o *OLT) applyLastDown(src OLTSource, snap *olt.Snapshot) {
 	o.ldMu.Lock()
 	defer o.ldMu.Unlock()
 	st := o.ldState(src.Name)
-	pons, at := map[string]bool{}, map[string]time.Time{}
+	targets, at := map[string][]olt.DownTarget{}, map[string]time.Time{}
 	for i := range snap.ONUs {
 		u := &snap.ONUs[i]
 		if u.Status == "online" || u.Status == "unknown" {
 			continue
 		}
-		pons[u.PonPath] = true
+		if u.HasOntID {
+			targets[u.PonPath] = append(targets[u.PonPath], olt.DownTarget{PonPath: u.PonPath, OntID: u.OntID, Serial: u.Serial})
+		}
 		if t, ok := st.at[u.Serial]; ok {
 			at[u.Serial] = t
 			tt := t
 			u.LastDownAt = &tt
 		}
 	}
-	st.offlinePons, st.at = pons, at
+	st.targets, st.at = targets, at
 	st.gen++
 }
 
@@ -86,7 +87,7 @@ func (o *OLT) refreshLastDown(ctx context.Context, src OLTSource) {
 	}
 	o.ldMu.Lock()
 	st := o.ldState(src.Name)
-	if st.gen == 0 || st.gen == st.attemptGen || len(st.offlinePons) == 0 {
+	if st.gen == 0 || st.gen == st.attemptGen || len(st.targets) == 0 {
 		o.ldMu.Unlock()
 		return
 	}
@@ -101,13 +102,14 @@ func (o *OLT) refreshLastDown(ctx context.Context, src OLTSource) {
 			st := o.ldState(src.Name)
 			st.attemptGen = st.gen // this snapshot has its run, whatever its outcome
 			gen := st.gen
-			var ports []string
-			for p := range st.offlinePons {
-				ports = append(ports, p)
+			ports := make([]string, 0, len(st.targets))
+			byPon := make(map[string][]olt.DownTarget, len(st.targets))
+			for p, t := range st.targets {
+				ports, byPon[p] = append(ports, p), append([]olt.DownTarget(nil), t...)
 			}
 			o.ldMu.Unlock()
 			sort.Strings(ports)
-			return nil, o.readLastDown(bg, src, ports, gen)
+			return nil, o.readLastDown(bg, src, ports, byPon, gen)
 		})
 	}()
 }
@@ -121,7 +123,7 @@ func rotate(ports []string, cursor string) []string {
 	return append(append([]string(nil), ports[i:]...), ports[:i]...)
 }
 
-func (o *OLT) readLastDown(ctx context.Context, src OLTSource, ports []string, gen uint64) error {
+func (o *OLT) readLastDown(ctx context.Context, src OLTSource, ports []string, byPon map[string][]olt.DownTarget, gen uint64) error {
 	ld := src.LastDown
 	o.ldMu.Lock()
 	ports = rotate(ports, o.ldState(src.Name).cursor)
@@ -140,14 +142,10 @@ func (o *OLT) readLastDown(ctx context.Context, src OLTSource, ports []string, g
 		return err
 	}
 	defer closeFn()
-	for len(ports) > 0 {
-		n := min(lastDownChunk, len(ports))
-		snap, err := ld.Driver.Snapshot(ctx, r, ports[:n])
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil // our own budget ran out, not the agent's fault: keep the chunks done, the cursor continues from there next time
-			}
-			return err // a failed chunk keeps what earlier chunks gave; the guard cools the agent down
+	for _, pon := range ports {
+		got, err := ld.Driver.LastDowns(ctx, r, byPon[pon])
+		if err != nil && ctx.Err() != nil {
+			return nil // our own budget ran out, not the agent's fault: the cursor continues from the last finished PON next time
 		}
 		o.ldMu.Lock()
 		st := o.ldState(src.Name)
@@ -155,14 +153,16 @@ func (o *OLT) readLastDown(ctx context.Context, src OLTSource, ports []string, g
 			o.ldMu.Unlock()
 			return nil
 		}
-		for _, u := range snap.ONUs {
-			if u.LastDownAt != nil && u.Status != "online" && u.Status != "unknown" {
-				st.at[u.Serial] = *u.LastDownAt
-			}
+		for serial, t := range got { // whatever was read before an error is kept
+			st.at[serial] = t
 		}
-		st.cursor = ports[n-1]
+		if err == nil {
+			st.cursor = pon
+		}
 		o.ldMu.Unlock()
-		ports = ports[n:]
+		if err != nil {
+			return err // the guard cools the agent down
+		}
 	}
 	return nil
 }

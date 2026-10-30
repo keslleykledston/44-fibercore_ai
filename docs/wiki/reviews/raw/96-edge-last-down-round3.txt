@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18bb2-36c3-7b23-be14-6e20aaaf9cdf).
+[codex] Turn started (01a18bb2-39b3-7551-9a95-75de8c18ffa9).
+[codex] Assistant message captured: I’ll inspect the full branch diff against `main`, then trace the last-down cursor, budget, an...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=60 main...HEA...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=60 main...HEA... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt_lastdown.go && rg -n \"ldWG|LastDown...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt_lastdown.go && rg -n \"ldWG|LastDown... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/huawei_snmp.go | sed -n '60,230p'; nl -ba agen...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/huawei_snmp.go | sed -n '60,230p'; nl -ba agen... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: exhausting the side-channel budget w...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: exhausting the side-channel budget while opening SNMP is still treated as an agent failure and triggers cooldown.
+
+Findings:
+- [medium] SNMP open timeout is counted as a device failure (agents/edge/internal/collector/olt_lastdown.go:135-136)
+  If `ld.Open(ctx)` runs out of the side-channel’s own timeout, its context deadline error is returned directly. The shared guard then treats it as a failed attempt and applies the SNMP cooldown, so the next run is suppressed even though the Edge’s own budget expired. The later `ctx.Err()` handling only covers errors from `Snapshot`, not from opening the reader. This contradicts the stated behavior that exhausting the Edge’s own budget returns nil and can delay last-down coverage for a full cooldown.
+  Recommendation: When `ld.Open` returns an error and the run context is already done, return nil; keep returning the open error when the context is still live.

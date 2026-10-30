@@ -3,6 +3,7 @@ package olt
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -230,6 +231,71 @@ func (HuaweiSNMP) lastDown(ctx context.Context, r SNMPReader, ifx int, ids []int
 		oids = oids[n:]
 	}
 	return out
+}
+
+// DownTarget names ONE offline ONU for the focused last-down read: where it is (port + ONT-ID, from the CLI listing) and the serial it must have.
+type DownTarget struct {
+	PonPath string
+	OntID   int
+	Serial  string
+}
+
+// LastDownReader is the focused, read-only SNMP operation behind the CLI entries' last_down side channel.
+type LastDownReader interface {
+	// LastDowns returns serial -> the OLT's "last down time" for the targets of ONE port. Nothing else is read.
+	LastDowns(ctx context.Context, r SNMPReader, targets []DownTarget) (map[string]time.Time, error)
+}
+
+// downPairs is how many ONUs one GET carries (two OIDs each: the time and the serial that proves the ONT-ID still names that ONU).
+const downPairs = 10
+
+// LastDowns reads, for the offline ONUs of ONE port, hwGponDeviceOntControlLastDownTime (col 23) together with the ONT's serial (col 3 of the
+// serial table). A time is accepted only when the serial the OLT reports for that ONT-ID is the target's: if the table moved since the CLI
+// listing the ONU is simply not reported. About one request per ten ONUs plus one for the port check; the agent is paced by the reader.
+func (HuaweiSNMP) LastDowns(ctx context.Context, r SNMPReader, targets []DownTarget) (map[string]time.Time, error) {
+	out := map[string]time.Time{}
+	if len(targets) == 0 {
+		return out, nil
+	}
+	ifx, err := ponIfIndex(targets[0].PonPath)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range targets {
+		if t.PonPath != targets[0].PonPath || t.OntID < 0 || t.OntID >= maxONTs {
+			return nil, errors.New("last-down targets must belong to one port with valid ONT-IDs")
+		}
+	}
+	descOID := fmt.Sprintf("%s.%d", oidIfDesc, ifx)
+	for first := true; len(targets) > 0; first = false {
+		n := min(downPairs, len(targets))
+		var oids []string
+		if first { // the ifIndex formula must land on a real GPON port, or nothing from this port is trusted
+			oids = append(oids, descOID)
+		}
+		for _, t := range targets[:n] {
+			oids = append(oids, fmt.Sprintf("%s.46.1.23.%d.%d", hwXpon, ifx, t.OntID), fmt.Sprintf("%s.43.1.3.%d.%d", hwXpon, ifx, t.OntID))
+		}
+		got, err := r.Get(ctx, oids)
+		if err != nil {
+			return out, err
+		}
+		if first && !hwIfDesc.MatchString(string(got[descOID].Bytes)) {
+			return out, fmt.Errorf("ifIndex %d is not a GPON port", ifx)
+		}
+		for _, t := range targets[:n] {
+			tm := got[fmt.Sprintf("%s.46.1.23.%d.%d", hwXpon, ifx, t.OntID)]
+			sn := got[fmt.Sprintf("%s.43.1.3.%d.%d", hwXpon, ifx, t.OntID)]
+			if !tm.IsBytes || tm.Missing || !sn.IsBytes || sn.Missing || len(sn.Bytes) != 8 || !strings.EqualFold(hex.EncodeToString(sn.Bytes), t.Serial) {
+				continue
+			}
+			if at, ok := parseDateAndTime(tm.Bytes); ok {
+				out[strings.ToUpper(t.Serial)] = at
+			}
+		}
+		targets = targets[n:]
+	}
+	return out, nil
 }
 
 // parseDateAndTime decodes an SNMPv2 DateAndTime (RFC 2579) WITH a time zone (11 bytes). An 8-byte value has no zone and is refused rather than
