@@ -11,7 +11,7 @@ import { EmptyState, ErrorState, PageHeader } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
 import { RISK } from "@/lib/roles";
 import { ACTIVITY_FILTERS, ago, sentence, when } from "@/lib/team";
-import type { PermissionInfo, PlatformDelegationList, RoleList, Team, TeamActivity } from "@/lib/types";
+import type { MeInfo, PermissionInfo, PlatformDelegationList, RoleList, Team, TeamActivity } from "@/lib/types";
 
 type Search = { aba?: string; q?: string; funcao?: string; tipo?: string };
 const ABAS = new Set(["pessoas", "funcoes", "atividade"]);
@@ -221,8 +221,8 @@ function Activity({ a, tipo }: { a: TeamActivity | null; tipo: string }) {
 export default async function Equipe({ searchParams }: { searchParams: Promise<Search> }) {
   const sp = await searchParams;
   const aba = ABAS.has(sp.aba ?? "") ? (sp.aba as string) : "pessoas";
-  const [team, activity, technical, deleg] = await Promise.all([
-    apiSafe<Team>("/v1/team"),
+  const [team, me, activity, technical, deleg] = await Promise.all([
+    apiSafe<Team>("/v1/team"), apiSafe<MeInfo>("/v1/auth/me"),
     aba === "atividade" ? apiSafe<TeamActivity>("/v1/team/activity?limit=100") : Promise.resolve({ data: null, status: 0 }),
     aba === "funcoes" ? apiSafe<RoleList>("/v1/roles") : Promise.resolve({ data: null, status: 0 }),
     aba === "pessoas" ? apiSafe<PlatformDelegationList>("/v1/platform-delegations?limit=30") : Promise.resolve({ data: null, status: 0 }),
@@ -243,7 +243,7 @@ export default async function Equipe({ searchParams }: { searchParams: Promise<S
     <div data-testid="team-ready">
       {t.members.some((m) => m.is_self && !m.mfa_enabled) && (
         <div role="status" data-testid="my-mfa-banner" className="panel mb-4 flex flex-wrap items-center justify-between gap-3 border-warn p-4 text-sm">
-          <span><strong>Ative a sua verificação em duas etapas.</strong> Ela protege a sua conta: o código é pedido só ao entrar na plataforma.</span>
+          <span><strong>Ative a sua verificação em duas etapas.</strong> Ela protege a sua conta: {me.data?.mfa_recent?.enforced ? "o código é pedido ao entrar e, em algumas ações sensíveis, de novo na hora." : "o código é pedido só ao entrar na plataforma."}</span>
           <Link href="/conta/seguranca" className="inline-flex min-h-touch items-center rounded-btn bg-accent px-4 font-medium text-[color:var(--on-accent)]">Ativar agora</Link>
         </div>
       )}
