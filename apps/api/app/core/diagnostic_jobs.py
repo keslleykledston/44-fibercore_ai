@@ -19,6 +19,10 @@ CAUSE_PT = {
 }
 
 
+def _span(seconds: int) -> str:
+    return f"{seconds // 3600} h" if seconds % 3600 == 0 else (f"{seconds // 60} min" if seconds % 60 == 0 else f"{seconds} s")
+
+
 def _slug(scope: str) -> str:
     return scope.replace("/", "-")
 
@@ -37,7 +41,8 @@ def _evidence(eid: str, source: str, status: str, metric: str, value, captured_a
 def assemble(subjects: list[dict], domains: list[str], truncated: bool = False) -> dict:
     """subjects: one per ONU of the customer:
     {"n": int, "onu": {"status", "rx_dbm", "observed_at", "fresh"}, "pon_finding": dict | None,
-     "pon": None | {"online": int, "recent_drops": int, "reference_at": str | None, "fresh": bool},   (the aggregate R-D001 judged)
+     "pon": None | {"online": int, "recent_drops": int, "window_seconds": int, "reference_at": str | None, "fresh": bool},
+                                                                                       (the aggregate R-D001 judged and its window)
      "cpe": None | {"states": [{"metric", "scope", "value", "captured_at", "received_at", "fresh"}], "finding": dict | None}}"""
     evidences: list[dict] = []
     findings: list[dict] = []
@@ -73,8 +78,13 @@ def assemble(subjects: list[dict], domains: list[str], truncated: bool = False) 
                     pst = "available" if pon["fresh"] else "stale"
                     evidences.append(_evidence(pid[0], "olt", pst, "pon_onus_online", int(pon["online"]), pon["reference_at"]))
                     evidences.append(_evidence(pid[1], "olt", pst, "pon_onus_recent_drops", int(pon["recent_drops"]), pon["reference_at"]))
+                    # the evidence schema has no field for the PON or the window, so the explanation states exactly what the cited evidence
+                    # is: the aggregate of the PON of the customer's ONU (same n) over the rule's window, and which rule/version judged it
                     finding("PON_MASS_OUTAGE", "likely", [status_id, *pid],
-                            "Várias ONUs da mesma PON caíram juntas; hipótese a confirmar com o incidente e eventos de campo.")
+                            f"Na PON da ONU do cliente (ev-onu{n}-status), {int(pon['recent_drops'])} ONUs caíram nos últimos "
+                            f"{_span(int(pon['window_seconds']))} e {int(pon['online'])} seguem online "
+                            f"(regra {pf['rule_id']} v{pf['rule_version']}); "
+                            "hipótese de queda coletiva, a confirmar com o incidente e eventos de campo.")
                 elif pf and pf["status"] == "unknown":
                     finding("INCONCLUSIVE", "insufficient_evidence", [status_id],
                             "Não há observação recente suficiente da PON para avaliar queda coletiva.")

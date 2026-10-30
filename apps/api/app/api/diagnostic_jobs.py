@@ -19,7 +19,7 @@ from sqlalchemy import Connection, text
 
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.diagnostics import STATE_FRESH_FOR, _cpe_inputs, _pon_inputs
-from app.api.noc import EVAL_FRESH_FOR
+from app.api.noc import DROP_WINDOW, EVAL_FRESH_FOR
 from app.api.routes import audit
 from app.core import diagnostic_jobs, diagnostics, features
 
@@ -105,7 +105,9 @@ def _evaluate(conn: Connection, req: dict) -> dict:
             s["pon_finding"] = run_rule("R-D001", str(o.pon_id), inputs[:1]) if inputs else None
             if inputs:
                 row = inputs[0]
-                s["pon"] = {"online": row["online"], "recent_drops": row["recent_drops"], "reference_at": _iso(
+                s["pon"] = {"online": row["online"], "recent_drops": row["recent_drops"],
+                            "window_seconds": int(DROP_WINDOW.total_seconds()),
+                            "reference_at": _iso(
                     datetime.fromisoformat(row["reference_at"]) if row["reference_at"] else None), "fresh": row["fresh_data"]}
         if "wan" in domains and o.linked_cpe is not None:
             s["cpe"] = {"states": _cpe_states(conn, o.linked_cpe, now),

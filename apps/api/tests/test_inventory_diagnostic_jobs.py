@@ -171,6 +171,9 @@ def test_pon_finding_cites_the_aggregate_the_rule_judged(client, seed, inv, migr
     assert f["certainty"] == "likely" and f["evidence_ids"] == ["ev-onu1-status", "ev-pon1-drops", "ev-pon1-online"]
     assert by["ev-pon1-online"]["value"] == 1 and by["ev-pon1-drops"]["value"] == 9 and by["ev-pon1-drops"]["unit"] == "count"
     assert by["ev-pon1-drops"]["metric"] == "pon_onus_recent_drops" and by["ev-pon1-online"]["status"] == "available"
+    # the explanation alone lets a reader check the claim against the cited evidence: whose PON, which counts, which window, which rule
+    assert f["explanation"] == ("Na PON da ONU do cliente (ev-onu1-status), 9 ONUs caíram nos últimos 6 h e 1 seguem online (regra R-D001 v1); "
+                                "hipótese de queda coletiva, a confirmar com o incidente e eventos de campo.")
     assert any(x["category"] == "ONU_OFFLINE" and x["certainty"] == "confirmed" for x in job["findings"])
     assert job["reproducible"] is True and [x["rule_id"] for x in job["rule_runs"]] == ["R-D001"]
 
@@ -274,9 +277,12 @@ def test_assemble_properties_over_random_subjects():
                     ["wan_link_down", "wan_session_down", "wan_connection_down"]) if status == "inferred" else None}}
             subjects.append({"n": n, "onu": {"status": rnd.choice(["online", "offline", "los", "dying_gasp", "weird"]), "rx_dbm": rnd.choice([None, -20.1]),
                                              "observed_at": "2026-10-29T10:00:00Z", "fresh": rnd.random() < 0.6},
-                             "pon_finding": rnd.choice([None, {"status": "inferred"}, {"status": "unknown"}, {"status": "observed"}]),
-                             "pon": rnd.choice([None, {"online": 1, "recent_drops": 9, "reference_at": "2026-10-29T10:00:00Z", "fresh": rnd.random() < 0.5},
-                                                {"online": 0, "recent_drops": 0, "reference_at": None, "fresh": False}]), "cpe": cpe})
+                             "pon_finding": rnd.choice([None, {"status": "inferred", "rule_id": "R-D001", "rule_version": 1}, {"status": "unknown"},
+                                                        {"status": "observed"}]),
+                             "pon": rnd.choice([None, {"online": 1, "recent_drops": 9, "window_seconds": 300, "reference_at": "2026-10-29T10:00:00Z",
+                                                          "fresh": rnd.random() < 0.5},
+                                                {"online": 0, "recent_drops": 0, "window_seconds": 300, "reference_at": None, "fresh": False}]),
+                             "cpe": cpe})
         domains = rnd.choice([["pon", "wan"], ["pon"], ["wan"]])
         cut = rnd.random() < 0.1
         out = diagnostic_jobs.assemble(subjects, domains, truncated=cut)
