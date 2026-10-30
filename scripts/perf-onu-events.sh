@@ -4,11 +4,12 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 N_ONU=${N_ONU:-30000}; EV_PER=${EV_PER:-40}
-NAME="fc-perf-pg-$$"   # unique per run, labelled: only the container THIS run created is ever removed
+TOKEN="$(date -u +%Y%m%dT%H%M%SZ)-$$-$RANDOM$RANDOM"
+NAME="fc-perf-pg-$TOKEN"   # unique per run; cleanup is by the container ID this run was handed, never by a name
 PORT=${PERF_PG_PORT:-55442}
 if ss -ltn 2>/dev/null | grep -q ":$PORT "; then echo "porta $PORT ocupada (PERF_PG_PORT para outra)" >&2; exit 1; fi
-trap 'docker rm -f "$NAME" >/dev/null 2>&1 || true' EXIT
-docker run -d --name "$NAME" --label fibercore.perf=1 -e POSTGRES_USER=fibercore -e POSTGRES_PASSWORD=perf_admin_pw_only -e POSTGRES_DB=fibercore_perf -p 127.0.0.1:$PORT:5432 postgres:17-alpine >/dev/null
+CID="$(docker run -d --name "$NAME" --label "fibercore.perf=$TOKEN" -e POSTGRES_USER=fibercore -e POSTGRES_PASSWORD=perf_admin_pw_only -e POSTGRES_DB=fibercore_perf -p 127.0.0.1:$PORT:5432 postgres:17-alpine)"
+trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT   # armed only AFTER docker run succeeded: a failed run (name clash, no image) removes nothing
 until docker exec "$NAME" pg_isready -U fibercore >/dev/null 2>&1; do sleep 1; done; sleep 2
 cd $ROOT/apps/api
 ADMIN=postgresql://fibercore:perf_admin_pw_only@127.0.0.1:$PORT/fibercore_perf

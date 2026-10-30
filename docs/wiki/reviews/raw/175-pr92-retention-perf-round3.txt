@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18f0d-e79c-7233-8ad2-58d05ab9f798).
+[codex] Turn started (01a18f0d-e7d8-7953-96c9-45379cc46d7e).
+[codex] Assistant message captured: Vou conferir o diff contra `main`, com foco nos limites de propriedade e limpeza do container...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- scripts/perf-onu-events.sh ...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- scripts/perf-onu-events.sh ... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba scripts/perf-onu-events.sh | sed -n '1,18p'; git diff --no-ext-diff --u...
+[codex] Command completed: /bin/bash -lc "nl -ba scripts/perf-onu-events.sh | sed -n '1,18p'; git diff --no-ext-diff --u... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não embarcaria ainda: uma colisão de nome faz o trap ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não embarcaria ainda: uma colisão de nome faz o trap remover um container que esta execução não criou.
+
+Findings:
+- [high] O trap remove um container preexistente se `docker run` falhar por colisão de nome (scripts/perf-onu-events.sh:10-11)
+  O trap é instalado antes de `docker run` e sempre executa `docker rm -f "$NAME"`. Se um container `fc-perf-pg-<PID>` já existir — por exemplo, após reutilização de PID com uma execução anterior ainda ativa — `docker run --name` falha, mas o trap remove esse container preexistente. Isso viola a garantia declarada de remover apenas o container criado por esta execução e pode interromper outro benchmark. Instale o trap somente após confirmar que `docker run` criou o container, ou confira uma identidade de criação exclusiva antes de removê-lo.
+  Recommendation: Só habilite a limpeza após criação bem-sucedida e valide a propriedade do container antes de removê-lo; uma label compartilhada fixa não distingue execuções.
