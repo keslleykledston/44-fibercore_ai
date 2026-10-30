@@ -14,6 +14,7 @@ import (
 // OLTSource is one configured OLT. Open returns a raw CLI session (SSH) plus its closer.
 type OLTSource struct {
 	failCooldown    func(error) time.Duration // internal: see Exclusive
+	busyKey         string                    // internal: the physical device whose in-flight lock this run shares when it paces under another key
 	Name            string
 	Driver          olt.Driver
 	Ports           []string
@@ -247,6 +248,10 @@ func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, er
 	if key == "" {
 		key = src.Name
 	}
+	lock := key // who is "in flight": the physical device, even when pacing and cooldown are kept under another key
+	if src.busyKey != "" {
+		lock = src.busyKey
+	}
 	cooldown := src.Cooldown
 	if cooldown <= 0 {
 		cooldown = cliCooldown
@@ -268,7 +273,7 @@ func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, er
 		}
 		o.loaded = true
 	}
-	if o.busy[key] {
+	if o.busy[lock] {
 		o.mu.Unlock()
 		return nil, errors.New("collection already running for this olt")
 	}
@@ -308,7 +313,7 @@ func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, er
 	if o.busy == nil {
 		o.busy = map[string]bool{}
 	}
-	o.busy[key] = true
+	o.busy[lock] = true
 	o.mu.Unlock()
 
 	started := o.now()
@@ -318,7 +323,7 @@ func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, er
 	}
 
 	o.mu.Lock()
-	delete(o.busy, key)
+	delete(o.busy, lock)
 	if err == nil {
 		o.st[key] = GuardState{Last: o.st[key].Last} // success lifts the pessimistic cooldown; if the save fails the file stays cooled (safe side)
 	} else {

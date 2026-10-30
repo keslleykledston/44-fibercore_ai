@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18bb6-4390-72a2-9712-b9741c64bf86).
+[codex] Turn started (01a18bb6-4684-7060-80c3-e2fb0fb44926).
+[codex] Assistant message captured: I’ll inspect the full branch diff against `main`, then trace the last-down request batching, ...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=60 main...HEA...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=60 main...HEA... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --unified=30 main...HEAD -- agents/edge/internal/collector/olt_lastdo...
+[codex] Command completed: /bin/bash -lc "git diff --unified=30 main...HEAD -- agents/edge/internal/collector/olt_lastdo... (exit 0)
+[codex] Assistant message captured: The batching loop does cap each `LastDowns` call at 10 OIDs, with the first request using fou...
+[codex] Running command: /bin/bash -lc "git diff --unified=20 main...HEAD -- agents/edge/internal/collector/olt_lastdo...
+[codex] Command completed: /bin/bash -lc "git diff --unified=20 main...HEAD -- agents/edge/internal/collector/olt_lastdo... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: the side channel can overlap a CLI s...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: the side channel can overlap a CLI session to the same OLT because it uses a separate guard identity.
+
+Findings:
+- [medium] Last-down reads bypass the CLI device lock (agents/edge/internal/collector/olt_lastdown.go:99-100)
+  The side channel is guarded under `ld.Key` (`last-down|<device>`), while CLI collection uses the device key itself. Those keys do not share the collector’s per-device busy lock. Since a side-channel run can last up to eight minutes and CLI collection intervals can be shorter, a later collection can open SSH while SNMP is still reading the same OLT. Concurrent access can contend with the device’s rate limits and make either read unreliable. Keep a shared per-device in-flight lock across both transports while retaining separate pacing and cooldown state.
+  Recommendation: Use a shared physical-device lock for CLI and last-down I/O, without merging their interval or cooldown state.
+
+Next steps:
+- Add coverage where a last-down run remains in flight as a CLI collection starts.

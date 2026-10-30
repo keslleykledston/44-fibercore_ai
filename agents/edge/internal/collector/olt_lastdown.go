@@ -19,7 +19,7 @@ type LastDownSource struct {
 }
 
 const (
-	lastDownTimeout = 8 * time.Minute
+	lastDownTimeout = 3 * time.Minute // typical run: ~60 requests (about a minute); the device lock is held meanwhile
 )
 
 // lastDownState is what the Edge remembers between collections of one OLT.
@@ -96,7 +96,12 @@ func (o *OLT) refreshLastDown(ctx context.Context, src OLTSource) {
 	o.ldWG.Add(1)
 	go func() {
 		defer o.ldWG.Done()
-		syn := OLTSource{Name: src.Name + "/last-down", SNMPKey: ld.Key, Interval: ld.Every, OpenSNMP: ld.Open}
+		dev := src.SNMPKey
+		if dev == "" {
+			dev = src.Name
+		}
+		// own pacing and cooldown (ld.Key), but the device's in-flight lock is shared with the CLI collection and the maneuvers: never both at once
+		syn := OLTSource{Name: src.Name + "/last-down", SNMPKey: ld.Key, Interval: ld.Every, OpenSNMP: ld.Open, busyKey: dev}
 		_, _ = o.guarded(bg, syn, func() ([]Item, error) {
 			o.ldMu.Lock()
 			st := o.ldState(src.Name)

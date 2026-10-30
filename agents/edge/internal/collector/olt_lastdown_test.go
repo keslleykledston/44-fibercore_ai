@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -197,7 +198,8 @@ func TestLastDownIsNotTouchedWhenNothingIsOffline(t *testing.T) {
 func TestLastDownNeverBlocksTheRoundAndALateAnswerNeverRevivesAClearedTime(t *testing.T) {
 	h := newLD(t, nil)
 	release := make(chan struct{})
-	h.driver.hook = func() { <-release }
+	started := make(chan struct{}, 1)
+	h.driver.hook = func() { started <- struct{}{}; <-release }
 	done := make(chan struct{})
 	go func() { _, _ = h.o.Collect(context.Background()); close(done) }()
 	select {
@@ -205,12 +207,14 @@ func TestLastDownNeverBlocksTheRoundAndALateAnswerNeverRevivesAClearedTime(t *te
 	case <-time.After(5 * time.Second):
 		t.Fatal("Collect must not wait for the last-down read")
 	}
-	// while the read is in flight a newer CLI snapshot sees the ONU online: the answer that arrives afterwards predates that
-	(*h.onus)[0].Status = "online"
-	h.clock.add(16 * time.Minute)
-	if _, err := h.o.Collect(context.Background()); err != nil {
-		t.Fatal(err)
+	<-started // the read is in flight
+	// the device lock keeps a CLI collection from interleaving with the read ...
+	if _, err := h.o.Collect(context.Background()); err == nil {
+		t.Fatal("a CLI collection must not start while the side channel holds the device")
 	}
+	// ... and even so a snapshot applied meanwhile (defence in depth) makes the late answer worthless: the ONU was seen online
+	h.o.applyLastDown(h.o.Sources[0], &olt.Snapshot{ONUs: []olt.ONU{{Serial: "HWTC00000001", PonPath: "0/0/1", Status: "online"}}})
+	h.clock.add(16 * time.Minute)
 	close(release)
 	h.o.ldWG.Wait()
 	(*h.onus)[0].Status = "offline"
@@ -279,4 +283,34 @@ func TestLastDownOpenCutByOurOwnBudgetIsNotAFailure(t *testing.T) {
 	if err := (&OLT{}).readLastDown(context.Background(), src, []string{"0/0/1"}, nil, 0); err == nil {
 		t.Fatal("a real open failure must be reported")
 	}
+}
+
+func TestLastDownShareTheDeviceLockWithTheCLIButNotItsPacing(t *testing.T) {
+	h := newLD(t, nil)
+	h.collect(t) // the CLI snapshot, then the first (background) read
+	h.clock.add(16 * time.Minute)
+	release := make(chan struct{})
+	started := make(chan struct{})
+	h.driver.hook = func() {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-release
+	}
+	// this CLI snapshot is the next generation; its side-channel run would be pacing-blocked (1 h), so open the window by hand
+	h.clock.add(time.Hour)
+	if _, err := h.o.Collect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	<-started // the read is in flight and holds the device lock
+	err := h.o.Exclusive(context.Background(), "OLT-LD", 0, 0, func(func()) error {
+		t.Error("a maneuver must not run while the side channel holds the device")
+		return nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "already running") {
+		t.Fatalf("the CLI/maneuver path must see the device busy: %v", err)
+	}
+	close(release)
+	h.o.ldWG.Wait()
 }
