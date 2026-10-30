@@ -1,0 +1,18 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18b8b-bba4-7750-8048-029271778129).
+[codex] Turn started (01a18b8b-bbdc-7c81-baf2-d36707604e1f).
+[codex] Assistant message captured: I’ll inspect the branch diff against `main` and trace the cooldown state through reservation,...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '95,140p;232,342p'; git ...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '95,140p;232,342p'; git ... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"No material blocker found. Exclusive overrides the configured...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+No material blocker found. Exclusive overrides the configured one-minute collection cooldown with the 15-minute CLI default for its reservation and pre-login failures, then applies the bench cooldown only after opened().
+
+No material findings.
