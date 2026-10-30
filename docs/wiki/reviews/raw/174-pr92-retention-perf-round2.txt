@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18f0d-4e7c-78f2-88c9-13c01e69f4f1).
+[codex] Turn started (01a18f0d-50fb-75a2-9c34-6db2964eaf32).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de retenção e benchmark até os coma...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- scripts/retention-scheduled...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- scripts/retention-scheduled... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=10 main...HEAD -- scripts/retention-scheduled...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=10 main...HEAD -- scripts/retention-scheduled... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=4 main...HEAD -- apps/api/app/core/bench.py a...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=4 main...HEAD -- apps/api/app/core/bench.py a... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviaria ainda: o script de medição pode apagar à...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviaria ainda: o script de medição pode apagar à força um container preexistente com nome fixo.
+
+Findings:
+- [medium] A medição remove qualquer container chamado `fc-perf-pg` (scripts/perf-onu-events.sh:8)
+  A primeira ação útil do script é `docker rm -f fc-perf-pg`; Docker não verifica se esse container foi criado por esta execução. Se outro serviço ou uma medição anterior estiver usando esse nome, a nova execução o encerra e remove, podendo descartar dados. Isso torna uma ferramenta de medição capaz de causar perda fora do banco descartável descrito no comentário.
+  Recommendation: Use um nome único por execução e remova apenas o container que a própria execução criou; se precisar reutilizar um nome fixo, confira e recuse quando o container preexistente não tiver uma marca de propriedade esperada.

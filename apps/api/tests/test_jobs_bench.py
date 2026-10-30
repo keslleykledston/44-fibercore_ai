@@ -596,7 +596,7 @@ def test_capability_promotion_and_gate_evaluation_exclude_each_other(client, see
                 try:
                     c.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": key})
                     got.set()
-                except Exception:
+                except Exception:  # noqa: S110  (the holder thread only needs to try; the main thread asserts what it needs)
                     pass
         t = threading.Thread(target=promote)
         t.start()

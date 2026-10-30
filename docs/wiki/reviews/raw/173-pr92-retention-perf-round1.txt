@@ -1,0 +1,39 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18f0c-6176-7041-b142-2e9af1170d9d).
+[codex] Turn started (01a18f0c-61ba-7942-92b0-a59601997da8).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir o caminho real da retenção, do backup e dos testes...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- scripts/retention-scheduled...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- scripts/retention-scheduled... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=12 main...HEAD -- apps/api/app/core/olt_query...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=12 main...HEAD -- apps/api/app/core/olt_query... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "onu_state_events_prune|CREATE TABLE.*onu_state_events|onu_state_events"...
+[codex] Command completed: /bin/bash -lc 'rg -n "onu_state_events_prune|CREATE TABLE.*onu_state_events|onu_state_events"... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '20,95p' apps/api/alembic/versions/0028_onu_state_events.py; rg -n \"cr...
+[codex] Command completed: /bin/bash -lc "sed -n '20,95p' apps/api/alembic/versions/0028_onu_state_events.py; rg -n \"cr... (exit 0)
+[codex] Assistant message captured: A função SQL preserva um evento-âncora por ONU, e o `flock` da retenção tem namespace separad...
+[codex] Running command: /bin/bash -lc 'nl -ba scripts/retention-scheduled.sh; nl -ba scripts/backup-scheduled.sh; git...
+[codex] Command completed: /bin/bash -lc 'nl -ba scripts/retention-scheduled.sh; nl -ba scripts/backup-scheduled.sh; git... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"retention\\.log|retention-scheduled|stable|median|369 ms|1,5 s|30 000|...
+[codex] Command completed: /bin/bash -lc "rg -n \"retention\\.log|retention-scheduled|stable|median|369 ms|1,5 s|30 000|... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"retention\" docs/wiki/reviews/raw/14[4-7]-*; nl -ba apps/api/app/api/i...
+[codex] Command completed: /bin/bash -lc "rg -n \"retention\" docs/wiki/reviews/raw/14[4-7]-*; nl -ba apps/api/app/api/i... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"30 000|1 230 000|369|2,6|retention-scheduled|retention.log\" . --glob ...
+[codex] Command completed: /bin/bash -lc "rg -n \"30 000|1 230 000|369|2,6|retention-scheduled|retention.log\" . --glob ... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "cron|03:15|03:45|retention" docs/wiki/reviews/raw/1*'
+[codex] Command completed: /bin/bash -lc 'rg -n "cron|03:15|03:45|retention" docs/wiki/reviews/raw/1*' (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: o script de retenção não prova a cone...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: o script de retenção não prova a conexão privilegiada que a poda exige, e o documento afirma agendamento e medições sem evidência reproduzível no diff.
+
+Findings:
+- [high] A poda pode falhar por usar uma role sem bypass de RLS (scripts/retention-scheduled.sh:16-17)
+  O script chama `psql -U fibercore`, enquanto a migração exige que `current_user` seja superuser ou tenha `BYPASSRLS`; caso contrário, a função lança exceção. O diff não demonstra que `fibercore` tem esse atributo. Como `set -e` encerra o script, a retenção deixa de rodar; o `trap` tenta registrar a falha, mas não alerta ninguém. Verifique explicitamente a role usada no LAB e falhe com diagnóstico claro se ela não satisfizer a pré-condição.
+  Recommendation: Use uma identidade de banco comprovadamente proprietária ou com `BYPASSRLS`, e valide seu atributo antes de instalar o cron; registre e monitore falhas de execução.
+- [medium] O agendamento e os números de desempenho não são reproduzíveis pelo diff (docs/wiki/TEST_EVIDENCE.md:392-393)
+  `TEST_EVIDENCE.md` afirma que o cron de 03:45 foi instalado e relata medianas, piores tempos e tamanho do conjunto, mas o diff só adiciona o script e o texto: não inclui a entrada de cron nem comandos, número de amostras ou artefatos que sustentem essas medições. A execução manual citada só confirma uma poda que removeu zero linhas em 781 eventos; não valida o cron ou o comportamento de desempenho no volume alegado.
+  Recommendation: Inclua o procedimento e as amostras da medição, mais evidência verificável da instalação do cron; se isso não for publicável, restrinja as afirmações ao que está demonstrado no repositório.

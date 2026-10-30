@@ -2,7 +2,6 @@
 stays behind the write gate, another person's approval, the signed envelope and the Edge. What is tested here is the screen's contract."""
 from uuid import uuid4
 
-import pytest
 from sqlalchemy import text
 
 from app.api import jobs as jobs_mod
@@ -201,11 +200,8 @@ def test_simultaneous_requests_with_the_same_key_make_one_job_and_no_error(clien
 
 
 def test_the_job_screen_and_the_cpe_screen_racing_on_one_key_do_not_collide(client, seed, inv, migrated):
-    import threading
 
-    from fastapi.testclient import TestClient
 
-    from app.main import app
     _flag(migrated, seed["A"])
     cpe = _cpe(client, inv, seed)
     _bench(migrated, seed, inv, cpe)

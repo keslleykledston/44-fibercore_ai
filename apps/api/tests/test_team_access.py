@@ -338,7 +338,7 @@ def test_two_password_changes_racing_on_the_same_current_password_cannot_both_wi
         out: list = []
         gate = threading.Barrier(2)
 
-        def go(i):
+        def go(i, gate=gate, out=out, toks=toks):   # bound as defaults: each round has its own barrier, results and tokens
             c = TestClient(app, raise_server_exceptions=False)
             gate.wait()
             out.append(c.post("/v1/auth/password", headers={"Authorization": f"Bearer {toks[i]}"},
