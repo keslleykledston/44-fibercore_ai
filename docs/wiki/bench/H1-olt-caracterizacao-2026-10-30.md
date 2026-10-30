@@ -1,6 +1,6 @@
 # H1 (lado OLT) — caracterização somente leitura da ONU de bancada (ADR-0030) — 2026-10-30
 
-UMA sessão CLI supervisionada na OLT Huawei MA5608T (firmware MA5600V800R015), SOMENTE leitura e ajuda (`?`), com allowlist exata de comandos, chave de host pinada, reserva do guard da OLT renovada antes (o Edge esperou) e nenhuma escrita. Sem credencial, IP ou saída crua neste arquivo.
+UMA sessão CLI supervisionada na OLT Huawei MA5608T (firmware MA5600V800R015C00), SOMENTE leitura e ajuda (`?`), com allowlist exata de comandos, chave de host pinada, reserva do guard da OLT renovada antes (o Edge esperou) e nenhuma escrita. Sem credencial, IP ou saída crua neste arquivo.
 
 ## Identidade confirmada na OLT
 - Consulta `display ont info by-sn <serial GPON de 16 hex>` devolveu **uma** ONU: posição `0/0/14`, **ONT-ID 10**, `Run state: online`, `Config state: normal`, `Match state: match`, `Control flag: active`, `Authentic type: SN-auth`, SN = `HWTC-E2247AA5` (os 16 hex são `48575443` = "HWTC" + `E2247AA5`).
