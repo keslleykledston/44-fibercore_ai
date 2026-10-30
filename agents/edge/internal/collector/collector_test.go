@@ -67,7 +67,7 @@ func TestRealNBIShapeSkipsPlaceholdersAndReportsOnlyCounts(t *testing.T) {
 		t.Fatal(err)
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/devices" || r.URL.Query().Get("projection") != "_id,_lastInform,_deviceId" {
+		if r.Method != http.MethodGet || r.URL.Path != "/devices" || r.URL.Query().Get("projection") != "_id,_lastInform,_deviceId,InternetGatewayDevice.DeviceInfo.SoftwareVersion,Device.DeviceInfo.SoftwareVersion" {
 			t.Errorf("unexpected request %s %s", r.Method, r.URL.String())
 		}
 		_, _ = w.Write(raw)
@@ -368,5 +368,35 @@ func TestStateReadsAreBatchedAndOneFailureOnlyCostsItsOwnBatch(t *testing.T) {
 	var s cpeStateSnapshot
 	if err := json.Unmarshal(items[1].Payload, &s); err != nil || len(s.States) != 35 { // 60 devices minus the failed batch of 25 (devices 26..50)
 		t.Fatalf("%v states=%d", err, len(s.States))
+	}
+}
+
+func TestSnapshotCarriesTheFirmwareTheAcsHoldsAndOmitsAnythingElse(t *testing.T) {
+	devs := []nbi.Device{
+		{ID: "00259E-EG8145V5-SYN0000001", DeviceID: nbi.DeviceID{Manufacturer: "Huawei Technologies Co., Ltd", OUI: "00259E", ProductClass: "EG8145V5", SerialNumber: "SYN0000001"}},
+		{ID: "00259E-EG8145V5-SYN0000002", DeviceID: nbi.DeviceID{Manufacturer: "Huawei Technologies Co., Ltd", OUI: "00259E", ProductClass: "EG8145V5", SerialNumber: "SYN0000002"}},
+	}
+	if err := json.Unmarshal([]byte(`{"InternetGatewayDevice":{"DeviceInfo":{"SoftwareVersion":{"_value":"V5R019C10S350"}}}}`), &devs[0]); err != nil {
+		t.Fatal(err)
+	}
+	items, err := (&GenieACS{EdgeID: "e", ConnectorID: "c", Client: fakeLister{devs}}).Collect(context.Background())
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items=%d err=%v", len(items), err)
+	}
+	var snap struct {
+		CPEs []struct {
+			CanonicalSerial string `json:"canonical_serial"`
+			Firmware        string `json:"firmware"`
+		} `json:"cpes"`
+	}
+	if err := json.Unmarshal(items[0].Payload, &snap); err != nil {
+		t.Fatal(err)
+	}
+	fw := map[string]string{}
+	for _, c := range snap.CPEs {
+		fw[c.CanonicalSerial] = c.Firmware
+	}
+	if fw["SYN0000001"] != "V5R019C10S350" || fw["SYN0000002"] != "" {
+		t.Fatalf("firmware %v", fw)
 	}
 }

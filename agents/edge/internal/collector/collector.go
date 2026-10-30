@@ -57,6 +57,7 @@ type cpeIn struct {
 	CanonicalSerial string     `json:"canonical_serial"`
 	Vendor          string     `json:"vendor,omitempty"`
 	Model           string     `json:"model,omitempty"`
+	Firmware        string     `json:"firmware,omitempty"`
 	Binding         cpeBinding `json:"binding"`
 }
 type cpeStateIn struct {
@@ -163,7 +164,7 @@ func (g *GenieACS) Collect(ctx context.Context) ([]Item, error) {
 			continue
 		}
 		batch = append(batch, cpeIn{
-			CanonicalSerial: serial, Vendor: d.DeviceID.Manufacturer, Model: d.DeviceID.ProductClass,
+			CanonicalSerial: serial, Vendor: d.DeviceID.Manufacturer, Model: d.DeviceID.ProductClass, Firmware: d.Firmware(),
 			Binding: cpeBinding{Protocol: "tr069", ExternalID: d.ID, ConnectorID: g.ConnectorID},
 		})
 		kept = append(kept, d)

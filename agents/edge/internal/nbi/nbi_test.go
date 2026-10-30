@@ -2,6 +2,7 @@ package nbi
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,7 +22,7 @@ func TestDevicesIsGETWithMinimalProjectionAndAuth(t *testing.T) {
 	if err != nil || len(devs) != 1 || devs[0].DeviceID.SerialNumber != "S1" {
 		t.Fatalf("devs=%v err=%v", devs, err)
 	}
-	if gotMethod != "GET" || gotProj != "_id,_lastInform,_deviceId" || gotUser != "svc" {
+	if gotMethod != "GET" || gotProj != "_id,_lastInform,_deviceId,InternetGatewayDevice.DeviceInfo.SoftwareVersion,Device.DeviceInfo.SoftwareVersion" || gotUser != "svc" {
 		t.Fatalf("method=%s projection=%s user=%s", gotMethod, gotProj, gotUser)
 	}
 }
@@ -47,5 +48,24 @@ func TestDevicesErrors(t *testing.T) {
 func TestBadCredentialsFormat(t *testing.T) {
 	if _, err := New("http://x", http.DefaultClient, "nocolon"); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestDeviceFirmwareComesFromTheCachedSoftwareVersionAndIsSanitised(t *testing.T) {
+	cases := map[string]string{
+		`{"InternetGatewayDevice":{"DeviceInfo":{"SoftwareVersion":{"_value":"V5R019C10S350"}}}}`: "V5R019C10S350",
+		`{"Device":{"DeviceInfo":{"SoftwareVersion":{"_value":"1.2.3(ab)"}}}}`:                    "1.2.3(ab)",
+		`{"InternetGatewayDevice":{"DeviceInfo":{"SoftwareVersion":{"_value":"x; DROP TABLE"}}}}`: "",
+		`{"InternetGatewayDevice":{"DeviceInfo":{"SoftwareVersion":{"_value":7}}}}`:               "",
+		`{}`: "",
+	}
+	for body, want := range cases {
+		var d Device
+		if err := json.Unmarshal([]byte(body), &d); err != nil {
+			t.Fatal(err)
+		}
+		if got := d.Firmware(); got != want {
+			t.Errorf("%s: got %q want %q", body, got, want)
+		}
 	}
 }

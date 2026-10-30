@@ -163,3 +163,6 @@
 ## Unreleased — PR 58 (ADR-0030, primeira execução)
 - Migração 0022: `bench_authorizations.first_run`. `bench-authorize --first-run`. O gate aceita, SÓ enquanto não há `observed`/`certified` completo, uma autorização `first_run` + entrada `supported`/`identified` completa do perfil exato; rechecado no despacho.
 
+## Unreleased — PR 59 (Edge: firmware do CPE no snapshot)
+- O coletor do GenieACS passa a ler `DeviceInfo.SoftwareVersion` do cache do ACS (GET, sem tarefa) e a enviá-lo como `firmware` no snapshot do CPE (identificador simples ou vazio). Necessário para o registro de capacidades casar firmware exato (ADR-0030).
+
