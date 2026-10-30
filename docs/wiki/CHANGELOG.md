@@ -244,3 +244,7 @@
 
 ## Unreleased — retenção agendada do histórico de ONUs
 - `scripts/retention-scheduled.sh` + entrada no cron do LAB (03:45): poda diária do `onu_state_events` (mantém 400 dias e o estado de partida da janela). Medição de desempenho do `/v1/onus/unstable` com 30 mil ONUs e 1,23 milhão de eventos em `TEST_EVIDENCE`.
+
+## Unreleased — PR 94 (tela de consultas da OLT)
+- Web: cartão da OLT em **Rede** ganha **Consultar a OLT…** (gaveta): lista as consultas oferecidas ao papel (com o motivo das indisponíveis), pede UMA consulta somente leitura e acompanha o job a cada 10 s (a consulta roda na próxima janela da coleta, até ~18 min); mostra só o resultado TIPADO (versão/uptime; placas e slots vazios) e categorias de falha explicadas; resultado fora do formato é descartado, texto livre do equipamento nunca é renderizado. BFF: `GET /bff/olts/{id}/queries`, `POST /bff/olts/{id}/queries/{q}`, `GET /bff/jobs/{id}` (só olt_query; só estado, categoria e resultado).
+- Teste: `e2e/olt-queries.spec.ts` (projeto `consultas`: flag desligada, fluxo com resultado, falha e resultado inválido, erro de cota; axe) e verificação sem mocks na stack efêmera (o job nasce com a intenção fechada). Ajuda: `rede/consultar-olt` (rascunho).
