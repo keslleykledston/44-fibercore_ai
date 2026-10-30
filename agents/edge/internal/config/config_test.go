@@ -398,7 +398,12 @@ func TestOLTLastDownConfig(t *testing.T) {
 	if cfg, _ = Load(write(t, 0o600, good(cli(ld(ok+`,"snmp_pace_ms":3000`)))), "v"); cfg.OLTs[0].LastDown.Pace() != 3*time.Second {
 		t.Fatal("an explicit pace must be honoured")
 	}
+	if cfg, _ = Load(write(t, 0o600, good(cli(ld(ok)))), "v"); cfg.OLTs[0].LastDown.Settle() != 4*time.Minute {
+		t.Fatal("default settle must be 4 minutes")
+	}
 	for name, extra := range map[string]string{
+		"settle too short": ld(ok + `,"settle_seconds":10`),
+		"settle too long":  ld(ok + `,"settle_seconds":3600`),
 		"other device":     ld(`"snmp_address":"10.0.0.8:161","snmp_community_file":"/c"`),
 		"not in allowlist": ld(`"snmp_address":"10.0.0.9:162","snmp_community_file":"/c"`),
 		"no community":     ld(`"snmp_address":"10.0.0.9:161"`),

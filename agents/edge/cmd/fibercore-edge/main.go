@@ -174,7 +174,7 @@ func main() {
 			if l := o.LastDown; l != nil { // read-only SNMP side channel: the OLT's own "last down time" of the offline ONUs
 				l := l
 				src.LastDown = &collector.LastDownSource{
-					Key: "last-down|" + config.DeviceKey(l.SNMPAddress), Every: l.Every(), Driver: olt.HuaweiSNMP{},
+					Key: "last-down|" + config.DeviceKey(l.SNMPAddress), Every: l.Every(), Settle: l.Settle(), Driver: olt.HuaweiSNMP{},
 					Open: func(ctx context.Context) (olt.SNMPReader, func(), error) {
 						community, err := config.ReadSecret(l.SNMPCommunityFile)
 						if err != nil {
@@ -281,6 +281,9 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	if oltCol != nil {
+		oltCol.Lifecycle = ctx // background OLT reads stop with the service
+	}
 	ag := &agent.Agent{
 		EdgeID: cfg.EdgeID, TenantID: cfg.TenantID, Version: cfg.Version, GW: gw, Q: q, Collectors: collectors,
 		Jobs: verifier, Refresher: refresher, Bench: benchRunner, JobPollEvery: 15 * time.Second, HeartbeatEvery: cfg.HeartbeatEvery(), CollectEvery: cfg.CollectEvery(), Log: log,
