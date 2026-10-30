@@ -239,7 +239,7 @@ func parseDateAndTime(b []byte) (time.Time, bool) {
 		return time.Time{}, false
 	}
 	year := int(b[0])<<8 | int(b[1])
-	if year < 2010 || year > 2100 || b[2] < 1 || b[2] > 12 || b[3] < 1 || b[3] > 31 || b[4] > 23 || b[5] > 59 || b[6] > 60 || (b[8] != '+' && b[8] != '-') || b[9] > 14 || b[10] > 59 {
+	if year < 2010 || year > 2100 || b[2] < 1 || b[2] > 12 || b[3] < 1 || b[3] > 31 || b[4] > 23 || b[5] > 59 || b[6] > 59 || b[7] > 9 || (b[8] != '+' && b[8] != '-') || b[9] > 14 || b[10] > 59 || (b[9] == 14 && b[10] != 0) {
 		return time.Time{}, false
 	}
 	off := int(b[9])*3600 + int(b[10])*60

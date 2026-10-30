@@ -473,12 +473,19 @@ func TestParseDateAndTimeIsStrict(t *testing.T) {
 		"short": ok[:8], "empty": nil, "year 0": dateAndTime(0, 1, 1, 0, 0, 0, '+', 0, 0).Bytes, "year 2009": dateAndTime(2009, 1, 1, 0, 0, 0, '+', 0, 0).Bytes,
 		"month 13": dateAndTime(2026, 13, 1, 0, 0, 0, '+', 0, 0).Bytes, "feb 30": dateAndTime(2026, 2, 30, 0, 0, 0, '+', 0, 0).Bytes,
 		"hour 24": dateAndTime(2026, 1, 1, 24, 0, 0, '+', 0, 0).Bytes, "bad sign": dateAndTime(2026, 1, 1, 0, 0, 0, '*', 0, 0).Bytes,
-		"zone 15h": dateAndTime(2026, 1, 1, 0, 0, 0, '+', 15, 0).Bytes,
+		"zone 15h": dateAndTime(2026, 1, 1, 0, 0, 0, '+', 15, 0).Bytes, "zone 14h30": dateAndTime(2026, 1, 1, 0, 0, 0, '+', 14, 30).Bytes,
+		"second 60": dateAndTime(2026, 1, 1, 0, 0, 60, '+', 0, 0).Bytes, "decisecond 255": withDeci(ok, 255), "decisecond 10": withDeci(ok, 10),
 	} {
 		if _, good := parseDateAndTime(b); good {
 			t.Errorf("%s must be refused", name)
 		}
 	}
+}
+
+func withDeci(b []byte, d byte) []byte {
+	c := append([]byte(nil), b...)
+	c[7] = d
+	return c
 }
 
 func TestSNMPLastDownFailureNeverFailsTheSnapshot(t *testing.T) {
