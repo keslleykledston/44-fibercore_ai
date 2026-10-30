@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18d40-d8c0-7ba3-b2f5-8c49225bb40d).
+[codex] Turn started (01a18d40-d8fe-71a3-b389-f6691387f7b5).
+[codex] Assistant message captured: Vou comparar o branch com `main` e rastrear especificamente se a via `owner_cli` ficou realme...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- docs/wiki/adr/ADR-0030-homo...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- docs/wiki/adr/ADR-0030-homo... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- docs/wiki/reviews/raw/114-a...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- docs/wiki/reviews/raw/114-a... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar sem aceitar explicitamente a dispensa de ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar sem aceitar explicitamente a dispensa de SoD na bancada: o solicitante ainda pode aprovar o próprio job. A via `owner_cli` está documentada como transitória e desligada por padrão quando a via API entrar em produção de LAB; não encontrei outro risco HIGH/CRITICAL remanescente no diff.
+
+Findings:
+- [high] A dispensa permite que o solicitante aprove o próprio job de bancada (docs/wiki/adr/ADR-0031-rbac-papeis-permissoes-e-escopo.md:31)
+  A exceção da bancada permite autoaprovação quando as demais condições são satisfeitas. A emenda ao ADR-0030 registra que o responsável dispensou explicitamente a aprovação por pessoa distinta; assim, a autorização prévia não impede que o solicitante também aprove o job. Esse é o risco residual de política, reconhecido e aceito pelo responsável, não uma lacuna escondida na via `owner_cli`.
+  Recommendation: Manter a dispensa apenas se essa exceção de SoD estiver formalmente aceita para a bancada; caso contrário, exigir aprovador distinto também nessa via.

@@ -61,6 +61,7 @@ Escopo opcional por atribuição: `provedor` (padrão) → `site` → `OLT` → 
 3. Quem pode conceder papéis de risco: só `isp_admin`, ou também um papel "gestor de acessos" sem poder operacional?
 4. Janela de "MFA recente" aceitável (sugestão: 10 minutos)?
 5. Visão de `platform_support`: prazo máximo da delegação (sugestão: 8 h, renovável com novo motivo)?
+6. **Confirmar a dispensa de SoD na bancada:** hoje o solicitante pode aprovar o próprio job de bancada (decisão sua de 2026-10-30, ADR-0030) porque a autorização prévia de uso único é a decisão real. Mantém? Se não, a bancada passa a exigir aprovador distinto também.
 
 ## Consequências
 
@@ -71,6 +72,7 @@ Escopo opcional por atribuição: `provedor` (padrão) → `site` → `OLT` → 
 - **Entregas:** (1) catálogo + teste de inventário + matriz gerada; (2) papéis no banco + API de atribuição com travas + auditoria; (3) tela Administração → Papéis e permissões; (4) escopo por OLT/site; (5) delegação da plataforma e MFA recente por risco. A entrega 4 da fase Dispositivos (ações na tela do CPE) usa as permissões `devices:act:*` da entrega 1.
 
 ## Registro da revisão adversarial (Codex)
+- Rodada 5 (`raw/118-*`): 1 HIGH remanescente, e só ele — a dispensa de SoD na bancada (solicitante aprova o próprio job de bancada), que é decisão registrada do responsável (ADR-0030) e fica como RISCO RESIDUAL a confirmar na pergunta 6; nenhum outro HIGH/CRITICAL. Não se declara "zero HIGH": o ADR continua Proposed até o responsável aceitar ou revogar a dispensa.
 - Rodada 4 (`raw/117-*`): 1 HIGH — a via `owner_cli` não prova o autorizador distinto; passou a ser transitória, atrás de chave de configuração, desligada por padrão quando a via `api` existir, com emenda ao ADR-0030.
 - Rodada 3 (`raw/116-*`): 1 HIGH — `authorized_by` é texto livre; agora a exceção exige origem autenticada (`authorized_via`, `bench:authorize` sem papel por padrão, autorizador ≠ solicitante/aprovador na via API) e declara o limite conhecido da via do CLI do dono.
 - Rodada 2 (`raw/115-*`): 1 HIGH — a exceção de SoD da bancada estava ampla; agora é a lista fechada `BENCH_OPS` + alvo de `bench_targets` + autorização de uso único que vincula operação, alvo e hash dos parâmetros, tudo no servidor, com testes negativos obrigatórios.
