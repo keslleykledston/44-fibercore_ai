@@ -331,7 +331,7 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - Decisões do responsável (2026-10-30): só papéis de sistema por ora; Gestor de Acesso (`access_manager`) ou `isp_admin` concedem; MFA recente 10 min e delegação de 8 h (entrega 5); escopo por OLT/site depois; dispensa de SoD da bancada mantida.
 
 ## 2026-10-30 — RBAC, entrega 3: tela Papéis e permissões (PR 80, ADR-0031)
-- `make test-api` 442 passed; `make validate` PASS; `tsc` e `next build` OK; matriz gerada em dia.
+- `make test-api` 441 passed; `make validate` PASS; `tsc` e `next build` OK; matriz gerada em dia.
 - Executado de ponta a ponta numa stack EFÊMERA (Postgres descartável + API + Next locais; nada do LAB): o administrador abre a tela, vê a matriz, troca o papel de outra pessoa pela interface com motivo, o papel muda na tabela, o histórico mostra a mudança e o banco tem a auditoria (`engineer → noc_n1`, motivo gravado); a própria linha não tem botão; um papel sem permissão (Atendimento) vê cada seção degradar sem erro e sem botão de troca.
 - axe (WCAG 2.2 AA) sem violação séria/crítica em TODAS as rotas, tema claro e escuro, incluindo as telas novas. Isso achou um defeito real: botões de ação com texto branco fixo no tema escuro (contraste baixo) em `/rede/offline`, `/dispositivos`, `OnuTable` e na tela nova, corrigidos para o token `--on-accent`. A execução também achou um filtro do BFF que recusava `noc_n1`.
 - Os testes E2E novos estão em `apps/web/e2e/app.spec.ts`; o conjunto completo do `scripts/e2e.sh` (stack de seed do compose) NÃO foi rodado aqui. Os dois testes que dependem de dado de seed (ONUs offline e Dispositivos) não rodaram na stack efêmera, que não tem OLT/CPE.
