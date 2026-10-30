@@ -1,0 +1,2 @@
+# Fixed test passwords of a throwaway local container (never reachable, removed after each run) that scripts/perf-onu-events.sh carried for a few minutes in c0002b3; the script now generates them per run.
+c0002b3ddc5be6bb1ab6ca58d46d069381b3cb26:scripts/perf-onu-events.sh:generic-api-key:13
