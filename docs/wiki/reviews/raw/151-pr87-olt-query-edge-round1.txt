@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18e97-68e1-7c83-927c-a8904c019ce6).
+[codex] Turn started (01a18e97-691b-73c3-bea3-633dea73f75d).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de validação, hash, orçamento e per...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/qu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/qu... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"intent_hash|catalog_version|target_type|json.dumps|json\\.loads|QueryC...
+[codex] Command completed: /bin/bash -lc "rg -n \"intent_hash|catalog_version|target_type|json.dumps|json\\.loads|QueryC... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não deveria embarcar ainda: a fila não garante exclus...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não deveria embarcar ainda: a fila não garante exclusão mútua entre instâncias que compartilham o mesmo arquivo, então duas podem reivindicar e executar o mesmo job.
+
+Findings:
+- [high] Duas instâncias podem reivindicar o mesmo job (agents/edge/internal/oltquery/store.go:76-80)
+  `mu` protege somente uma instância de `Store`. Se duas instâncias usam o mesmo `Path`, ambas podem carregar o estado `QUEUED`, reivindicar o mesmo item e gravar `CLAIMED`; ambas recebem o item e podem executar a consulta. Isso quebra a garantia at-most-once e pode exceder o orçamento. O pacote não impõe singleton nem bloqueio de arquivo, e `update` faz leitura, alteração e gravação sem coordenação entre instâncias.
+  Recommendation: Serializar updates entre todas as instâncias que compartilham o arquivo, por exemplo com lock de arquivo mantido durante load-modify-save, ou garantir e impor um único Store por processo/caminho antes de permitir execução.
+- [medium] O rename não torna a reivindicação durável contra queda de energia (agents/edge/internal/oltquery/store.go:127-134)
+  O arquivo temporário é sincronizado antes do `os.Rename`, mas o diretório pai não é sincronizado depois. Em sistemas de arquivos que exigem fsync do diretório para tornar o rename durável, uma queda de energia pode perder a atualização `CLAIMED` mesmo após `Claim` retornar sucesso. Após reinício, o job pode reaparecer como `QUEUED` e ser executado novamente, contrariando a garantia de não repetição.
+  Recommendation: Depois do rename, abrir e sincronizar o diretório pai antes de retornar sucesso; tratar falha de sync como falha do update e documentar as garantias de durabilidade suportadas.
+
+Next steps:
+- Adicionar coordenação entre instâncias e persistência do rename antes de ligar a fila ao executor na fatia 3.

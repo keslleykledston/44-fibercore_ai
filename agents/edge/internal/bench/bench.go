@@ -140,7 +140,7 @@ func (r *Runner) Run(ctx context.Context, env *jobs.Envelope) Result {
 
 // setSSID is H3: the value was validated at the envelope; the ACS layer validates it again and restores the original before it reports.
 func (r *Runner) setSSID(ctx context.Context, env *jobs.Envelope, dev nbi.BenchDevice, notAfter time.Time) Result {
-	out, err := r.ACS.SetBenchSSID(ctx, dev, env.Params["ssid"], jobs.BenchSSIDRe.MatchString, notAfter, r.RestoreFile, r.now)
+	out, err := r.ACS.SetBenchSSID(ctx, dev, env.Params.String("ssid"), jobs.BenchSSIDRe.MatchString, notAfter, r.RestoreFile, r.now)
 	r.logOutcome(env, out.Detail, err)
 	switch {
 	case err == nil && out.Applied && out.Verified && out.Restored:

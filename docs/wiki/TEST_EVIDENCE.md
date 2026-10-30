@@ -368,3 +368,7 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 ## olt_query — metade da nuvem (PR 86)
 - `make test-api` 526 passed (13 novos em `tests/test_olt_query.py`: catálogo nuvem = Edge, escopo fechado, nada oferecido nem criado sem canal, flag sozinha não basta e a CLI recusa, intenção assinada e válida no schema do envelope, portões antes do job, idempotência e auditoria, cota por usuário, provedor e OLT, falha no submit não deixa job, portões refeitos no submit e no despacho, nada despachado sem canal); `go test ./...` do Edge PASS; `make validate` PASS.
 - Nenhum equipamento tocado; a OLT real não foi consultada.
+
+## olt_query — Edge: envelope e fila durável (PR 87)
+- `go test ./...` do Edge PASS (inclui `go test -race ./internal/oltquery`, lock entre instâncias com mutação confirmada, arquivo corrompido em 8 formas); testes novos: intenção fechada por escopo (15 recusas), catálogo e hash pinados contra a nuvem, envelope `olt_query` (chave local, verificador, allowed_operations, hash trocado, campos de bancada, TTL), fila (ciclo e reinício, idempotência e limite, CLAIMED→UNKNOWN sem reexecução, orçamento por sessão e por hora, expiração e aborto, arquivo corrompido, resultado limitado, claims concorrentes, retenção de 24 h). Python: 14 passed em `tests/test_olt_query.py` (vetores pinados do lado da nuvem).
+- Nada toca a OLT: a fila ainda não está ligada ao executor.

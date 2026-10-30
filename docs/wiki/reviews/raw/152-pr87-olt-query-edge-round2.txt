@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18e98-26be-7ac1-90fe-17758121acf8).
+[codex] Turn started (01a18e98-26f7-7f42-88ce-89f045d1f292).
+[codex] Assistant message captured: Vou inspecionar o diff real contra `main`, com foco no ciclo de lock, persistência atômica e ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/oltque...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/oltque... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=50 main...HEAD -- agents/edge/internal/olt/qu...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=50 main...HEAD -- agents/edge/internal/olt/qu... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: um arquivo de fila com JSON válido, m...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: um arquivo de fila com JSON válido, mas uma entrada nula, derruba operações da Store em vez de falhar fechado como a fila corrompida deveria.
+
+Findings:
+- [high] Entrada nula válida em JSON causa panic na Store (agents/edge/internal/oltquery/store.go:167-169)
+  `load` só valida que `Entries` não é nulo. Um arquivo como `{"entries":{"job":null}}` passa pela leitura e, em `Enqueue`, o loop desreferencia `e.State`; `Claim` também desreferencia entradas. Corrupção parcial ou edição acidental do arquivo pode, portanto, causar panic no processo que usa a fila, em vez de retornar `ErrCorrupt` e preservar a operação segura. Valide cada entrada e seus campos/estado durante `load`, rejeitando o arquivo inteiro como corrompido antes de qualquer mutação.
+  Recommendation: Ao carregar, rejeite valores de entrada nulos e estados/campos inválidos com `ErrCorrupt`; inclua um caso de teste com `{"entries":{"job":null}}`.
