@@ -15,7 +15,9 @@ ROOT = Path(__file__).resolve().parents[3]
 # What each role may do TODAY (frozen from the behaviour before the catalog existed; the catalog must not change it).
 EXPECTED = {
     "isp_admin": {"customers:read", "customers:import", "associations:review", "incidents:read", "incidents:ack", "jobs:read", "jobs:request",
-                  "jobs:approve", "inventory:read", "tenant:read", "audit:read", "members:read", "edge:read", "members:mfa_reset", "diagnostics:run"},
+                  "jobs:approve", "inventory:read", "tenant:read", "audit:read", "members:read", "edge:read", "members:mfa_reset", "diagnostics:run",
+                  "members:manage", "roles:read"},
+    "access_manager": {"tenant:read", "members:read", "members:manage", "roles:read", "audit:read"},
     "engineer": {"customers:read", "associations:review", "incidents:read", "incidents:ack", "jobs:read", "jobs:request", "inventory:read",
                  "tenant:read", "edge:read", "diagnostics:run"},
     "noc_n2": {"customers:read", "incidents:read", "incidents:ack", "jobs:read", "jobs:request", "inventory:read", "tenant:read", "edge:read",
