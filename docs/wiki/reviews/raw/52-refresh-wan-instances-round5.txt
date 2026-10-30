@@ -1,0 +1,5 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), PR 52, round 5
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: approve
+Aprovar. Sem risco material novo que bloqueie o diff. Risco residual aceito permanece: Edges com estados distintos não se coordenam no mesmo ACS; regra operacional um Edge por ACS, agora documentada explicitamente. No material findings.

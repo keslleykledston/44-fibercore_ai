@@ -125,3 +125,8 @@
 
 ## Unreleased — PR 51 (reconciliação de tarefas do refresh ativo)
 - Edge: depois de um POST ambíguo, de uma tarefa em fila/falha ou de id inválido, `RefreshParams` lista as tarefas do dispositivo, apaga só as que a própria chamada criou (mesmo nome e mesmos parâmetros, carimbo recente) e confirma por nova listagem. Motivo: no ensaio real o ACS criou a tarefa e fechou a conexão (EOF).
+
+## Unreleased — PR 52 (conexões WAN de instâncias 1..4 no refresh ativo)
+- Edge: o refresh lê PPP e IP (instância 1) de `WANConnectionDevice` 1..4 (a EG8145V5 real tinha a conexão PPP na instância 3); 11 tarefas por refresh em TR-098, `maxGroups` 12, conjunto exato fixado por teste. Freio: `nbi.RefreshHold` segura o dispositivo 24 h após qualquer refresh com fault.
+- Medição real na LAB (ONT de bancada): `completed=11 faulted=0 readable_metrics=7`, 0 faults novos e 0 tarefas residuais no ACS. ADR-SD-002 atualizado (validade da faixa, carga, freio).
+
