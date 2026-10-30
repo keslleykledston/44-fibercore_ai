@@ -161,3 +161,78 @@ func TestWithoutAQueueTheQueryFailsClosedAndAForeignOLTIsDropped(t *testing.T) {
 		t.Fatal("nothing may be queued")
 	}
 }
+
+func TestAResultIsReportedOnlyWhenTheCloudAnswersAndIsResentIfItDoesNot(t *testing.T) {
+	pub, _, _ := ed25519.GenerateKey(rand.Reader)
+	var mu sync.Mutex
+	down := true
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/auth/service-token":
+			_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "t"})
+		case r.URL.Path == "/v1/edge/jobs/next":
+			w.WriteHeader(204)
+		case strings.HasSuffix(r.URL.Path, "/result"):
+			b, _ := io.ReadAll(r.Body)
+			mu.Lock()
+			defer mu.Unlock()
+			if down {
+				w.WriteHeader(503)
+				return
+			}
+			got = append(got, string(b))
+			w.WriteHeader(204)
+		default:
+			w.WriteHeader(202)
+		}
+	}))
+	defer srv.Close()
+	q, _ := queue.Open(filepath.Join(t.TempDir(), "q.db"))
+	defer q.Close()
+	q.Now = func() time.Time { return bNow }
+	store := &oltquery.Store{Path: filepath.Join(t.TempDir(), "oq.json")}
+	a := &Agent{EdgeID: bEdge, TenantID: bTenant, GW: gateway.New(srv.URL, "c", "s", srv.Client()), Q: q, Queries: store,
+		Jobs: &jobs.Verifier{Pub: pub, EdgeID: bEdge, TenantID: bTenant, Allowed: map[string]bool{}, Nonces: q, Now: func() time.Time { return bNow }},
+		Log:  slog.New(slog.NewTextHandler(io.Discard, nil))}
+	id := "11111111-1111-4111-8111-111111111111"
+	if err := store.Enqueue(id, oltquery.Intent{QueryID: "olt.version", OLTRef: qOLTID}, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Claim(qOLTID, "s"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Complete(id, json.RawMessage(`{"product":"MA5608T"}`)); err != nil {
+		t.Fatal(err)
+	}
+	a.PollJob(context.Background()) // the Cloud is down: handed to the delivery queue, NOT reported
+	if e, _, _ := store.Get(id); e.State != oltquery.Executed {
+		t.Fatalf("not acknowledged yet: %+v", e)
+	}
+	a.PollJob(context.Background()) // still down and still in flight: not handed over twice
+	mu.Lock()
+	down = false
+	mu.Unlock()
+	a.Flush(context.Background())
+	mu.Lock()
+	n := len(got)
+	mu.Unlock()
+	if n != 1 {
+		t.Fatalf("delivered %d times", n)
+	}
+	if e, _, _ := store.Get(id); e.State != oltquery.Reported {
+		t.Fatalf("the Cloud answered: %+v", e)
+	}
+	// a result whose delivery-queue copy was lost is handed over again after queryResendAfter
+	id2 := "22222222-2222-4222-8222-222222222222"
+	_ = store.Enqueue(id2, oltquery.Intent{QueryID: "olt.version", OLTRef: qOLTID}, time.Now().Add(time.Hour))
+	_, _ = store.Claim(qOLTID, "s2")
+	_ = store.Complete(id2, json.RawMessage(`{"product":"MA5608T"}`))
+	a.qmu.Lock()
+	a.qInflight = map[string]time.Time{id2: time.Now().Add(-queryResendAfter - time.Minute)}
+	a.qmu.Unlock()
+	a.PollJob(context.Background())
+	if e, _, _ := store.Get(id2); e.State != oltquery.Reported {
+		t.Fatalf("resent and acknowledged: %+v", e)
+	}
+}

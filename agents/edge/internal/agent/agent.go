@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -35,7 +36,14 @@ type Agent struct {
 	HeartbeatEvery            time.Duration
 	CollectEvery              time.Duration
 	Log                       *slog.Logger
+
+	qmu       sync.Mutex
+	qInflight map[string]time.Time // olt_query job id -> when its result was handed to the delivery queue and is waiting for the Cloud's answer
 }
+
+// queryResendAfter: a result handed to the delivery queue that is still not acknowledged after this long is handed over again (the delivery queue may have
+// dropped it under backpressure); repeats are harmless, the Cloud treats the same outcome as a no-op.
+const queryResendAfter = 10 * time.Minute
 
 // CollectOnce runs every collector and persists results BEFORE any network delivery (store-and-forward).
 // A failing collector is logged and never blocks the others. Returns an error when the round was incomplete
@@ -95,12 +103,14 @@ func (a *Agent) Flush(ctx context.Context) {
 					a.Log.Error("ack failed; item will be redelivered (idempotent)", "id", it.ID, "err", err)
 					return
 				}
+				a.resultSettled(it.Kind, it.Payload)
 			case gateway.Rejected:
 				a.Log.Error("payload rejected by cloud; dead-lettering", "id", it.ID, "err", derr)
 				if err := a.Q.Dead(ctx, it, derr.Error()); err != nil {
 					a.Log.Error("dead-letter failed; stopping flush to retry later", "id", it.ID, "err", err)
 					return
 				}
+				a.resultSettled(it.Kind, it.Payload) // the Cloud answered for good (and the copy is in the dead-letter table): resending would only loop
 			default:
 				dead, _ := a.Q.Retry(ctx, it, errString(derr))
 				a.Log.Warn("delivery deferred", "id", it.ID, "err", derr, "dead_lettered", dead)
@@ -319,8 +329,9 @@ func (a *Agent) queueQuery(ctx context.Context, env *jobs.Envelope) {
 	a.Flush(ctx) // delivers the acceptance (or the refusal) now
 }
 
-// reportQueries hands the finished queries to the durable delivery queue and marks them reported only after that write succeeded. Re-sending is safe (the
-// Cloud treats a repeated outcome as a no-op) and never executes anything.
+// reportQueries hands the finished queries to the durable delivery queue. They are marked REPORTED only when the Cloud has answered for that job
+// (resultSettled), and are handed over again if no answer came within queryResendAfter. Re-sending is safe (the Cloud treats a repeated outcome as a
+// no-op) and never executes anything.
 func (a *Agent) reportQueries(ctx context.Context) {
 	if a.Queries == nil {
 		return
@@ -331,13 +342,21 @@ func (a *Agent) reportQueries(ctx context.Context) {
 		a.Log.Warn("olt query queue unreadable; nothing reported", "err", err)
 		return
 	}
+	now := time.Now()
+	sent := 0
 	for _, e := range pending {
+		a.qmu.Lock()
+		at, inflight := a.qInflight[e.JobID]
+		a.qmu.Unlock()
+		if inflight && now.Sub(at) < queryResendAfter {
+			continue // already handed over; REPORTED only when the Cloud answers (resultSettled)
+		}
 		m := map[string]any{"job_id": e.JobID}
 		switch e.State {
 		case oltquery.Executed:
 			m["state"], m["postcheck_ok"], m["detail"], m["data"] = "succeeded", true, "typed result", json.RawMessage(e.Result)
 		case oltquery.Unknown: // it may have reached the OLT: not a failure, not a success, never repeated
-			m["state"], m["postcheck_ok"], m["detail"] = "succeeded", false, "outcome unknown after a restart"
+			m["state"], m["postcheck_ok"], m["detail"] = "succeeded", false, "outcome unknown"
 		default:
 			m["state"], m["postcheck_ok"], m["detail"] = "failed", false, e.Reason
 		}
@@ -346,12 +365,36 @@ func (a *Agent) reportQueries(ctx context.Context) {
 			a.Log.Error("could not persist olt query result", "job_id", e.JobID, "err", err)
 			return
 		}
-		if err := a.Queries.MarkReported(e.JobID); err != nil {
-			a.Log.Error("could not mark olt query reported", "job_id", e.JobID, "err", err)
-			return
+		a.qmu.Lock()
+		if a.qInflight == nil {
+			a.qInflight = map[string]time.Time{}
 		}
+		a.qInflight[e.JobID] = now
+		a.qmu.Unlock()
+		sent++
 	}
-	if len(pending) > 0 {
+	if sent > 0 {
 		a.Flush(ctx)
+	}
+}
+
+// resultSettled is told whenever a delivered (or finally rejected) job_result leaves the delivery queue: an olt_query result becomes REPORTED only now,
+// bound to its job id, so a result dropped or dead-lettered before the Cloud heard it is never forgotten.
+func (a *Agent) resultSettled(kind string, payload []byte) {
+	if kind != "job_result" || a.Queries == nil {
+		return
+	}
+	var m struct {
+		JobID string `json:"job_id"`
+		State string `json:"state"`
+	}
+	if json.Unmarshal(payload, &m) != nil || m.JobID == "" || m.State == "accepted" { // the acceptance is not the outcome
+		return
+	}
+	a.qmu.Lock()
+	delete(a.qInflight, m.JobID)
+	a.qmu.Unlock()
+	if err := a.Queries.MarkReported(m.JobID); err != nil && !errors.Is(err, oltquery.ErrBadState) { // ErrBadState = not an olt_query (a collect/bench result)
+		a.Log.Error("could not mark olt query reported", "job_id", m.JobID, "err", err)
 	}
 }
