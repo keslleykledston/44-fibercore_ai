@@ -22,7 +22,6 @@ from sqlalchemy import Connection, text
 
 from app.core import features
 
-
 TARGET_REF_RE = re.compile(r"[A-Za-z0-9._%-]{3,200}")
 
 

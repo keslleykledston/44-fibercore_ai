@@ -237,8 +237,9 @@ def test_the_path_decides_the_query_and_a_changed_intent_cannot_be_submitted(cli
 
 def test_the_vectors_the_edge_pins_are_the_ones_the_cloud_computes():
     """agents/edge pins the same two values (olt.pinnedCatalogVersion, jobs.qHash): if either side changes, one of the two test suites fails."""
-    from app.api.jobs import _intent_hash
     from uuid import UUID
+
+    from app.api.jobs import _intent_hash
     oid = UUID("8f14e45f-ceea-467a-9a36-4a1b5c3d2e10")
     assert olt_query.catalog_version() == "1e1e5b3010c3788d6d86ae858c3d7bc976fc40a56916342d131b42acd5723b84"
     params = olt_query.build_intent(oid, {"query_id": "pon.ont.info", "slot": 1, "port": 0})

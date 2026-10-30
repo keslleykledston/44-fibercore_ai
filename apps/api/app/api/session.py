@@ -416,7 +416,7 @@ class PasswordChangeIn(BaseModel):
 @router.post("/v1/auth/password")
 def change_password(body: PasswordChangeIn, request: Request, authorization: str | None = Header(default=None), settings: Settings = Depends(get_settings)) -> dict:
     """Needs the current password (throttled like a login). Ends every session of the account, this one included: the person signs in again."""
-    from app.api.team import _call, check_password   # local: team imports the same helpers as this module
+    from app.api.team import _call, check_password  # local: team imports the same helpers as this module
     uid = _user_id(authorization, settings)
     with scoped_connection(get_engine()) as conn:
         conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{uid}"})

@@ -8,7 +8,6 @@ from __future__ import annotations
 import hashlib
 import re
 import secrets
-from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -17,7 +16,7 @@ from sqlalchemy import Connection, text
 from sqlalchemy.exc import DBAPIError
 
 from app.api.deps import TENANT_CONN, Principal, require
-from app.api.routes import _client_ip, _gate, _record, _throttled, audit
+from app.api.routes import _client_ip, _gate, _record, _throttled
 from app.core import role_policy, team_info
 from app.core.db import get_engine, get_rbac_engine, scoped_connection
 from app.core.security import ROLE_PERMISSIONS, hash_secret, verify_secret

@@ -1,6 +1,6 @@
 """Authorizing a bench maneuver through the API (ADR-0031 2(e); owner decision 2026-10-30). The maneuver's other conditions (ADR-0030) are exercised in
 test_jobs_bench; here: who may authorize what, the limits of the record, the independence of the authorizer, and that the writer is the SQL function."""
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
@@ -10,8 +10,7 @@ from sqlalchemy.exc import DBAPIError
 from app.core import bench, settings
 from app.core.security import ROLE_PERMISSIONS, hash_secret
 from tests.conftest import hdr
-from tests.test_jobs_bench import _bench, _cleanup, _cpe, _flag  # noqa: F401  (the autouse cleanup fixture comes along)
-from tests.test_jobs_bench import _preview
+from tests.test_jobs_bench import _bench, _cleanup, _cpe, _flag, _preview  # noqa: F401  (the autouse cleanup fixture comes along)
 
 PW = "correct horse battery"
 

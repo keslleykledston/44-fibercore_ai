@@ -7,22 +7,22 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from app import __version__
+from app.api.bench_authorizations import router as bench_auth_router
 from app.api.context import router as context_router
 from app.api.cpe_state import router as cpe_state_router
+from app.api.delegations import router as delegations_router
+from app.api.device_actions import router as device_actions_router
 from app.api.diagnostic_jobs import router as diagnostic_jobs_router
 from app.api.diagnostics import router as diagnostics_router
 from app.api.erp import router as erp_router
 from app.api.inventory import router as inventory_router
 from app.api.jobs import router as jobs_router
-from app.api.bench_authorizations import router as bench_auth_router
-from app.api.delegations import router as delegations_router
-from app.api.device_actions import router as device_actions_router
-from app.api.olt_queries import router as olt_queries_router
 from app.api.members import router as members_router
-from app.api.team import router as team_router
 from app.api.noc import router as noc_router
+from app.api.olt_queries import router as olt_queries_router
 from app.api.routes import router
 from app.api.session import router as session_router
+from app.api.team import router as team_router
 from app.core.settings import get_settings, required_mfa_roles
 
 logging.basicConfig(level=logging.INFO, format='{"ts":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","msg":"%(message)s"}')

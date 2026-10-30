@@ -456,7 +456,7 @@ def list_offline_onus(
     # fresh = the ONU AND its OLT's snapshot were both observed recently; decided in SQL so that the limit and the counts see the same candidates
     # two-valued: a missing observation time (both columns are nullable) is stale, never "unknown", so the page and the count agree
     fresh = "COALESCE(u.observed_at >= now() - make_interval(secs => :fs) AND o.observed_at >= now() - make_interval(secs => :fs), false)"
-    base = (f"FROM onus u JOIN olts o ON o.id = u.olt_id AND o.tenant_id = u.tenant_id "  # noqa: S608
+    base = ("FROM onus u JOIN olts o ON o.id = u.olt_id AND o.tenant_id = u.tenant_id "  # noqa: S608
             "LEFT JOIN pon_ports pp ON pp.id = u.pon_id AND pp.tenant_id = u.tenant_id "
             "WHERE u.status IN ('offline','los','dying_gasp') AND (CAST(:o AS uuid) IS NULL OR u.olt_id = :o) "
             "AND (CAST(:pp AS text) IS NULL OR pp.pon_path = :pp)")
