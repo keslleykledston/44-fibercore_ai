@@ -230,7 +230,7 @@ def submit(job_id: UUID, p: Principal = Depends(require("jobs:request")), conn: 
         raise HTTPException(409, reason)  # write gate: never leaves PREVIEWED
     to = "PENDING_APPROVAL" if row.required_approvals > 0 else "APPROVED"
     if not cas(conn, job_id, to, extra=", expires_at = :exp, nonce = :nonce",
-               params={"exp": datetime.now(UTC) + JOB_TTL, "nonce": secrets.token_hex(16)}):
+               params={"exp": datetime.now(UTC) + (olt_query.JOB_TTL if row.operation == "olt_query" else JOB_TTL), "nonce": secrets.token_hex(16)}):
         raise HTTPException(409, "illegal transition")
     audit(conn, p, "job.submit", "job", str(job_id), {"to": to})
     return _view(_load(conn, job_id, lock=False))
