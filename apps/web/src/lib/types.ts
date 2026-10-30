@@ -78,3 +78,9 @@ export type PlatformDelegation = {
   created_at: string; expires_at: string; revoked_at: string | null; status: "active" | "expired" | "revoked";
 };
 export type PlatformDelegationList = { can_delegate: boolean; max_hours: number; items: PlatformDelegation[] };
+
+export type CpeAction = {
+  operation: string; label: string; risk: string; needs_params: boolean; offered: boolean; reason: string | null;
+  certification: string; status: string; homologated: boolean; bench_target: boolean;
+};
+export type CpeActions = { cpe_id: string; items: CpeAction[] };

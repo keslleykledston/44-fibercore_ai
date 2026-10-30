@@ -141,6 +141,9 @@ def preview(
     if tgt is None:
         raise HTTPException(404, "target not found")
     ih = _intent_hash(body.operation, op.target, body.target_id, body.params)
+    # the same key twice at once (retry racing the first answer, double click, the job screen and the CPE screen): the second waits for the first to COMMIT
+    # and then finds its job, instead of both missing it and the loser hitting the unique index
+    conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"job-idempotency|{p.tenant_id}|{idempotency_key}"})
     existing = conn.execute(text(f"SELECT {COLS} FROM jobs WHERE idempotency_key = :k"), {"k": idempotency_key}).first()  # noqa: S608
     if existing:
         if existing.intent_hash.strip() != ih:

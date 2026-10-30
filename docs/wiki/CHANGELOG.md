@@ -195,3 +195,7 @@
 ## Unreleased — PR 81
 - API: migração 0025. MFA recente (10 min): `POST /v1/auth/mfa/step-up`, `mfa_at` na sessão, `403 mfa_recent_required` nas permissões `mfa_recent` (ligada por padrão; `MFA_RECENT_ENFORCE`/`MFA_RECENT_SECONDS`). Delegação da plataforma (até 8 h, com motivo): `GET/POST /v1/platform-delegations`, `DELETE /v1/platform-delegations/{id}`, permissão `platform:delegate` (só `isp_admin`); `platform_support` deixa de ser membership e só existe por delegação viva conferida a cada requisição; CLI `platform-operator`.
 - Web: seção de acesso temporário em Administração → Papéis e permissões e confirmação do segundo fator dentro da ação.
+
+## Unreleased — PR 82
+- API: `GET /v1/cpes/{id}/actions` e `POST /v1/cpes/{id}/actions/{reboot_cpe|set_wifi_ssid}`; permissões `devices:act:reboot_cpe` (isp_admin, engineer, noc_n2) e `devices:act:set_wifi_ssid` (isp_admin, engineer). O pedido reaproveita preview+submit do motor de jobs (nenhum caminho novo de escrita; `HOMOLOGATED_WRITES` continua vazio) e é recusado antes de criar job se o registro não tem entrada observada para o perfil.
+- Web: card **Ações** no detalhe do CPE.

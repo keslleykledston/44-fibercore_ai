@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18df5-3b09-7453-be2f-9c6aa4c94c6b).
+[codex] Turn started (01a18df5-3dcf-7812-8ca8-38d221987231).
+[codex] Assistant message captured: Vou conferir o diff completo contra `main` e seguir especialmente o caminho de idempotência b...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD'
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD' (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/device_act...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/device_act... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"def preview|def submit|HOMOLOGATED_WRITES|BENCH_OPS|def cas|def _view|...
+[codex] Command completed: /bin/bash -lc "rg -n \"def preview|def submit|HOMOLOGATED_WRITES|BENCH_OPS|def cas|def _view|... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '120,202p'; nl -ba apps/api/app/core/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '120,202p'; nl -ba apps/api/app/core/... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "idempotency_key" apps/api'
+[codex] Command completed: /bin/bash -lc 'rg -n "idempotency_key" apps/api' (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: retries simultâneos com a mesma ch...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: retries simultâneos com a mesma chave podem virar erro 500, apesar da garantia de idempotência anunciada.
+
+Findings:
+- [medium] Chave idempotente concorrente pode gerar erro 500 (apps/api/app/api/device_actions.py:93)
+  Este handler delega a criação e a deduplicação a `jobs.preview`. Nesse fluxo, a consulta pela chave e o `INSERT` são separados; a unicidade no banco impede a duplicação, mas duas requisições simultâneas podem ambas não encontrar o job e a segunda falhar com violação de unicidade, sem tratamento para recuperar o registro existente. Um retry após perda de resposta ou pedidos concorrentes podem, portanto, receber erro 500 em vez de `submitted`, `blocked` ou `existing`.
+  Recommendation: Torne a deduplicação atômica no fluxo de `jobs.preview` — por exemplo, sincronizando por chave antes de consultar/inserir e relendo o job após conflito de unicidade — e cubra duas submissões simultâneas com a mesma chave.

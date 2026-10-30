@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18df8-372a-7bf3-bd68-22b31aac785c).
+[codex] Turn started (01a18df8-39aa-7bb0-bc62-6db0f27b85c6).
+[codex] Assistant message captured: Vou conferir o diff completo contra `main` e seguir com atenção a trava de idempotência, limi...
+[codex] Running command: /bin/bash -lc "git diff --stat main...HEAD && git diff --find-renames --unified=70 main...HEA...
+[codex] Command completed: /bin/bash -lc "git diff --stat main...HEAD && git diff --find-renames --unified=70 main...HEA... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,280p' apps/api/app/api/jobs.py && sed -n '1,240p' apps/api/app/api/d...
+[codex] Command completed: /bin/bash -lc "sed -n '1,280p' apps/api/app/api/jobs.py && sed -n '1,240p' apps/api/app/api/d... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --unified=50 main...HEAD -- apps/api/tests/test_inventory_device_acti...
+[codex] Command completed: /bin/bash -lc "git diff --unified=50 main...HEAD -- apps/api/tests/test_inventory_device_acti... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: a trava corrige concorrência entre ch...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: a trava corrige concorrência entre chamadas deste endpoint, mas não coordena com o preview de jobs que usa a mesma chave e a mesma restrição de unicidade.
+
+Findings:
+- [medium] A idempotência ainda pode gerar 500 quando concorre com /jobs/preview (apps/api/app/api/device_actions.py:95-96)
+  A trava consultiva só é adquirida por este handler. O endpoint existente `POST /v1/jobs/preview` não usa essa trava: ambas as rotas podem consultar a chave como inexistente e tentar inserir o mesmo job ao mesmo tempo. A restrição `UNIQUE (tenant_id, idempotency_key)` então rejeita uma inserção, propagando violação de unicidade como 500. O teste concorrente cobre apenas chamadas a `/actions/{op}`, portanto não detecta essa corrida entre rotas.
+  Recommendation: Unifique a sincronização e a resolução da chave no fluxo compartilhado de preview (incluindo `/v1/jobs/preview`), ou trate a violação de unicidade relendo o job e validando seu intent hash. Acrescente um caso concorrente entre as duas rotas.
