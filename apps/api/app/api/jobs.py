@@ -190,7 +190,8 @@ def approve(job_id: UUID, p: Principal = Depends(require("jobs:approve")), conn:
     _expire_if_needed(conn, row)
     if row.status != "PENDING_APPROVAL":
         raise HTTPException(409, f"job is {row.status}")
-    if row.requested_by == p.id:
+    # A bench write (ADR-0030) is decided by the owner's prior single-use authorization; its one approval may come from the requester.
+    if row.requested_by == p.id and row.operation not in bench.BENCH_OPS:
         raise HTTPException(403, "requester cannot approve their own job")
     reason = _write_gate(conn, p.tenant_id, row, "approve")
     if reason:

@@ -153,11 +153,9 @@ def test_bench_reboot_full_path_authorization_is_consumed_with_the_approval_and_
     assert pv["required_approvals"] == 1 and pv["risk"] == "R1"          # a bench write always needs one approval
     jid = pv["id"]
     assert client.post(f"/v1/jobs/{jid}/submit", headers=h).json()["status"] == "PENDING_APPROVAL"
-    assert client.post(f"/v1/jobs/{jid}/approve", headers=h).status_code == 403  # the requester cannot approve
     with migrated.begin() as c:
         assert c.execute(text("SELECT state FROM bench_authorizations")).scalar() == "open"  # not consumed by a mere submit
-    ap = _approver(client, seed, migrated)
-    done = client.post(f"/v1/jobs/{jid}/approve", headers=ap)
+    done = client.post(f"/v1/jobs/{jid}/approve", headers=h)  # the requester may approve a bench job: the owner's authorization decides
     assert done.status_code == 200 and done.json()["status"] == "APPROVED", done.text
     with migrated.begin() as c:
         a = c.execute(text("SELECT id, state, job_id, window_end FROM bench_authorizations")).one()
@@ -604,3 +602,4 @@ def test_capability_promotion_and_gate_evaluation_exclude_each_other(client, see
         tx.rollback()
         t.join(5)
     assert got.is_set()                    # and proceeds once it ends
+
