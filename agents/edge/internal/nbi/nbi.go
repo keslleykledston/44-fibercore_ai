@@ -64,15 +64,27 @@ type deviceInfoRoot struct {
 	} `json:"DeviceInfo"`
 }
 
-var firmwareRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._()+-]{0,63}$`)
+// Only two shapes of firmware identifier are forwarded (this field is written by the device itself, like its serial and model, and nothing
+// else makes it trustworthy): a vendor build token in capitals with letters AND digits ("V5R019C10S350"), or a dotted numeric version
+// ("1.2.3", "V2.0.1-b12"). Free text, lower-case words and anything with spaces or punctuation beyond that are dropped, so the field cannot
+// carry a password-like string; the registry still matches the exact value, so an odd one only fails to match.
+var (
+	firmwareToken   = regexp.MustCompile(`^[A-Z][A-Z0-9]{3,31}$`)
+	firmwareVersion = regexp.MustCompile(`^[Vv]?[0-9]{1,4}(\.[0-9]{1,4}){1,5}([-_][A-Za-z0-9]{1,12})?$`)
+	hasDigit        = regexp.MustCompile(`[0-9]`)
+	hasLetter       = regexp.MustCompile(`[A-Z]`)
+)
 
-// Firmware is the CPE's SoftwareVersion when it is a plain identifier, else "" (a claim made by the device itself: never trusted blindly).
+// Firmware is the CPE's SoftwareVersion when it has one of the accepted shapes, else "".
 func (d Device) Firmware() string {
 	for _, v := range []any{d.IGD.DeviceInfo.SoftwareVersion.Value, d.Root.DeviceInfo.SoftwareVersion.Value} {
-		if s, ok := v.(string); ok {
-			if s = strings.TrimSpace(s); firmwareRe.MatchString(s) {
-				return s
-			}
+		s, ok := v.(string)
+		if !ok {
+			continue
+		}
+		s = strings.TrimSpace(s)
+		if firmwareVersion.MatchString(s) || (firmwareToken.MatchString(s) && hasDigit.MatchString(s) && hasLetter.MatchString(s)) {
+			return s
 		}
 	}
 	return ""
