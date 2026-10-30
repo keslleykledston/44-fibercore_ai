@@ -92,12 +92,18 @@ var ErrOLTNotDue = errors.New("olt session not due yet (guard interval)")
 // Exclusive runs `run` as the ONE session on the named OLT, under the SAME guard as the collections: one at a time, reserved on disk before any
 // I/O, not before `minGap` has passed since the last session of any kind, and the usual cooldown after a failure. The bench maneuvers use it so
 // a maneuver and a collection can never talk to the device together.
-func (o *OLT) Exclusive(ctx context.Context, name string, minGap time.Duration, run func() error) error {
+//
+// cooldown is how long the device is left alone after a FAILED session (0 = the CLI default of 15 min): a maneuver that stopped on a question or on
+// a check is not a rejected login, so the homologation may shorten it; it still lives in the guard (memory and file), shared with the collections.
+func (o *OLT) Exclusive(ctx context.Context, name string, minGap, cooldown time.Duration, run func() error) error {
 	for _, src := range o.Sources {
 		if src.Name != name {
 			continue
 		}
 		src.Interval = minGap
+		if cooldown > 0 {
+			src.Cooldown = cooldown
+		}
 		ran := false
 		_, err := o.guarded(ctx, src, func() ([]Item, error) {
 			ran = true

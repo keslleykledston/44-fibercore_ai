@@ -810,3 +810,38 @@ func TestTheTimeoutCoversOpeningTheSessionNotOnlyTheReads(t *testing.T) {
 		}
 	}
 }
+
+func TestExclusiveSharesTheGuardAndHonoursAShorterCooldownAfterAFailure(t *testing.T) {
+	var opens, runs int
+	clock := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	o := &OLT{EdgeID: "e", Sources: []OLTSource{cliSrc(&opens, &runs, nil)}, Now: func() time.Time { return clock }}
+	name := o.Sources[0].Name
+	fail := func() error { return errors.New("maneuver stopped") }
+	ok := func() error { return nil }
+	if err := o.Exclusive(context.Background(), name, time.Minute, 2*time.Minute, fail); err == nil {
+		t.Fatal("the failure is returned")
+	}
+	clock = clock.Add(90 * time.Second) // inside the (shorter) cooldown
+	if err := o.Exclusive(context.Background(), name, time.Minute, 2*time.Minute, ok); err == nil || !strings.Contains(err.Error(), "cooling down") {
+		t.Fatalf("still cooling: %v", err)
+	}
+	clock = clock.Add(time.Minute) // 2m30s after the failure: the 15 min default would still block, the configured 2 min does not
+	if err := o.Exclusive(context.Background(), name, time.Minute, 2*time.Minute, ok); err != nil {
+		t.Fatalf("after the configured cooldown it runs: %v", err)
+	}
+	// the default stays 15 min when nothing is configured
+	clock = clock.Add(2 * time.Minute)
+	ran := false
+	if err := o.Exclusive(context.Background(), name, time.Minute, 0, func() error { ran = true; return errors.New("stopped") }); err == nil || !ran {
+		t.Fatalf("the maneuver must run and fail: ran=%v err=%v", ran, err)
+	}
+	clock = clock.Add(10 * time.Minute)
+	if err := o.Exclusive(context.Background(), name, time.Minute, 0, ok); err == nil || !strings.Contains(err.Error(), "cooling down") {
+		t.Fatalf("the default cooldown is 15 min: %v", err)
+	}
+	// and a session that is not due (too soon after the last one) is reported, never run
+	clock = clock.Add(10 * time.Minute)
+	if err := o.Exclusive(context.Background(), name, time.Hour, 0, ok); !errors.Is(err, ErrOLTNotDue) {
+		t.Fatalf("not due: %v", err)
+	}
+}

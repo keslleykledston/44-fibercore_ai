@@ -53,14 +53,15 @@ type BenchConfig struct {
 
 // BenchOLTConfig names the OLT (one of `olts`, CLI transport) and the position of the bench ONU on it.
 type BenchOLTConfig struct {
-	Name          string `json:"name"`
-	Frame         int    `json:"frame"`
-	Slot          int    `json:"slot"`
-	Port          int    `json:"port"`
-	OntID         int    `json:"ont_id"`
-	GPONSerial    string `json:"gpon_serial"`     // 16 hex, must equal the serial of one bench device
-	MinGapSeconds int    `json:"min_gap_seconds"` // between two OLT sessions (any kind); 0 = 900 (15 min); floor 60
-	WaitSeconds   int    `json:"wait_seconds"`    // how long to watch the ONU come back; 0 = 240; 30..600
+	Name            string `json:"name"`
+	Frame           int    `json:"frame"`
+	Slot            int    `json:"slot"`
+	Port            int    `json:"port"`
+	OntID           int    `json:"ont_id"`
+	GPONSerial      string `json:"gpon_serial"`      // 16 hex, must equal the serial of one bench device
+	MinGapSeconds   int    `json:"min_gap_seconds"`  // between two OLT sessions (any kind); 0 = 900 (15 min); floor 60
+	WaitSeconds     int    `json:"wait_seconds"`     // how long to watch the ONU come back; 0 = 240; 30..600
+	CooldownSeconds int    `json:"cooldown_seconds"` // after a FAILED maneuver session; 0 = 900 (15 min); 60..900
 }
 
 // BenchDeviceConfig: the ACS identity (the three parts of the GenieACS _id) of one bench device, in clear: it is checked against the ACS.
@@ -188,6 +189,8 @@ func (c *Config) Validate() error {
 				errs = append(errs, errors.New("bench.olt.gpon_serial must be 16 upper-case hex and equal to the serial of a bench device"))
 			case o.MinGapSeconds != 0 && (o.MinGapSeconds < BenchMinIntervalFloor || o.MinGapSeconds > 3600):
 				errs = append(errs, fmt.Errorf("bench.olt.min_gap_seconds must be 0 (15 min) or between %d and 3600", BenchMinIntervalFloor))
+			case o.CooldownSeconds != 0 && (o.CooldownSeconds < BenchMinIntervalFloor || o.CooldownSeconds > 900):
+				errs = append(errs, fmt.Errorf("bench.olt.cooldown_seconds must be 0 (15 min) or between %d and 900", BenchMinIntervalFloor))
 			case o.WaitSeconds != 0 && (o.WaitSeconds < 30 || o.WaitSeconds > 600):
 				errs = append(errs, errors.New("bench.olt.wait_seconds must be 0 (240) or between 30 and 600"))
 			}
