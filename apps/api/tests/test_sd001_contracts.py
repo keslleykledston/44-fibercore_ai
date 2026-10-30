@@ -207,9 +207,11 @@ def _norm(path):
     return re.sub(r"\{[^}]+\}", "{}", path)
 
 
-def test_overlay_is_not_implemented_by_the_api_yet():
-    routes = {(_norm(r.path), m.lower()) for r in app.routes for m in getattr(r, "methods", None) or []}
-    assert routes, "app sem rotas: o teste estaria vazio"
+def test_overlay_is_not_implemented_by_the_api_yet():  # o que o overlay ainda lista não existe; o implementado já foi para o canônico
+    # `app.routes` só mostra roteadores incluídos como objetos opacos (neste FastAPI), então o teste usaria só /openapi.json e seria vazio:
+    # as rotas reais vêm do esquema OpenAPI gerado pela própria aplicação
+    routes = {(_norm(path), m) for path, item in app.openapi()["paths"].items() for m in item if m in METHODS}
+    assert ("/v1/cpes", "get") in routes and ("/v1/diagnostics/runs", "post") in routes, "o teste estaria vazio"
     for path, method in _ops(OVERLAY):
         assert (_norm("/v1" + path), method) not in routes, f"rota do SD-001 já existe: {method} {path}"
 

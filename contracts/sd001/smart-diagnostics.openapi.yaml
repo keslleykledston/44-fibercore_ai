@@ -8,6 +8,8 @@ info:
     colide com o contrato canônico). Cada caminho só é mesclado ao canônico no PR que o implementa, com as flags `smart_diagnostics_*`.
     Diferenças deliberadas em relação ao pacote: o recurso assíncrono é `diagnostic_jobs` (o `diagnostic_runs` existente é a execução
     síncrona e imutável de uma regra, ADR-0024); `/devices/{id}/capabilities` NÃO é criado porque `/cpes/{id}/capabilities` já existe.
+    SD-PR-03 (ADR-0028) implementou `POST /diagnostics/jobs` e `GET /diagnostics/jobs/{job_id}`: seus caminhos foram para o contrato
+    canônico (os esquemas compartilhados continuam aqui por serem usados pelos caminhos ainda não implementados; um teste impede divergência).
 servers:
   - url: /api/v1
 security:
@@ -16,47 +18,6 @@ tags:
   - name: Diagnostics
   - name: Remediation
 paths:
-  /diagnostics/jobs:
-    post:
-      operationId: createDiagnosticJob
-      tags: [Diagnostics]
-      summary: Pede um diagnóstico assíncrono (passivo/guiado). Aceito ≠ resultado. diagnostics:run + flag smart_diagnostics_jobs
-      parameters:
-        - {$ref: '#/components/parameters/TenantId'}
-        - {$ref: '#/components/parameters/IdempotencyKey'}
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/CreateDiagnosticJob'}
-      responses:
-        '202':
-          description: Aceito; nenhum resultado implícito
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/DiagnosticJobReceipt'}
-        '400': {description: Corpo inválido}
-        '401': {description: Não autenticado}
-        '403': {description: Sem permissão ou flag desligada}
-        '409': {description: Mesma Idempotency-Key com intenção diferente}
-        '429': {description: Orçamento/quota excedido}
-  /diagnostics/jobs/{job_id}:
-    get:
-      operationId: getDiagnosticJob
-      tags: [Diagnostics]
-      summary: Estado do job e referências de evidência. incidents:read + flag smart_diagnostics_jobs
-      parameters:
-        - {$ref: '#/components/parameters/TenantId'}
-        - {$ref: '#/components/parameters/JobId'}
-      responses:
-        '200':
-          description: Retrato do job (tenant vem do servidor, nunca do corpo)
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/DiagnosticJob'}
-        '401': {description: Não autenticado}
-        '403': {description: Sem permissão ou flag desligada}
-        '404': {description: Job inexistente ou de outro tenant}
   /diagnostics/jobs/{job_id}/active-tests:
     post:
       operationId: requestActiveDiagnostic
@@ -176,7 +137,7 @@ components:
         customer_id: {type: string, format: uuid}
         service_id: {type: string, format: uuid}
         cpe_id: {type: string, format: uuid}
-        mode: {type: string, enum: [passive, guided]}
+        mode: {type: string, enum: [passive, guided], description: 'ADR-0028: a implementação aceita só passive; guided fica para o PR que o implementa'}
         requested_domains:
           type: array
           uniqueItems: true
@@ -187,7 +148,7 @@ components:
       required: [job_id, status, created_at]
       properties:
         job_id: {type: string, format: uuid}
-        status: {type: string, enum: [queued, running, waiting_for_device]}
+        status: {type: string, enum: [queued, running, waiting_for_device, complete, partial, inconclusive, failed], description: 'queued/running/waiting_for_device: execução assíncrona (ativa, futura). complete/partial/inconclusive/failed: o job passivo, que só lê dado já retido, termina dentro do pedido (ADR-0028)'}
         created_at: {type: string, format: date-time}
     Evidence:
       type: object
@@ -266,6 +227,19 @@ components:
           items: {$ref: '#/components/schemas/Finding'}
         created_at: {type: string, format: date-time}
         completed_at: {type: string, format: date-time}
+        reproducible:
+          type: [boolean, 'null']
+          description: Reavaliar as entradas GRAVADAS de cada regra, na mesma versão, dá os mesmos achados (nulo se uma versão deixou de existir, o que não deve ocorrer)
+        rule_runs:
+          type: array
+          description: Regras avaliadas pelo job (id e versão); as entradas ficam gravadas no servidor para o replay
+          items:
+            type: object
+            additionalProperties: false
+            required: [rule_id, rule_version]
+            properties:
+              rule_id: {type: string, pattern: '^R-D[0-9]{3}$'}
+              rule_version: {type: integer, minimum: 1}
     ActiveTestRequest:
       type: object
       additionalProperties: false

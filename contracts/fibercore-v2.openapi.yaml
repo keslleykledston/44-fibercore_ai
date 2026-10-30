@@ -699,6 +699,77 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '422': {description: "Validação (métrica fora da lista, valor/escopo inválido, campo extra, relógio do dispositivo no futuro)"}
+  /diagnostics/jobs:
+    post:
+      operationId: createDiagnosticJob
+      tags:
+      - Diagnostics
+      summary: 'Job de diagnóstico PASSIVO (ADR-0028): lê só o dado já retido, avalia R-D001/R-D002, grava evidências, entradas das regras e achados. diagnostics:run + flags smart_diagnostics_jobs e diagnostic_engine (desligadas por padrão)'
+      parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - name: Idempotency-Key
+        in: header
+        required: true
+        description: Valor opaco, por exemplo um UUID; sem dois-pontos para não aceitar MAC. A mesma chave com o mesmo pedido devolve o mesmo job.
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+          pattern: ^[A-Za-z0-9_.-]+$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDiagnosticJob'
+      responses:
+        '202':
+          description: Aceito e concluído dentro do pedido (o job passivo só lê dado retido); `status` é o real (complete/partial/inconclusive)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosticJobReceipt'
+        '400':
+          description: Corpo inválido
+        '401':
+          description: Não autenticado
+        '403':
+          description: Sem permissão ou flag desligada
+        '409':
+          description: Mesma Idempotency-Key com intenção diferente
+        '429':
+          description: Orçamento/quota excedido
+        '422':
+          description: Corpo inválido (mode diferente de passive, domínio sem fonte de dado, campo extra, cpe_id não ligado a uma ONU aprovada do cliente)
+        '404':
+          description: Cliente inexistente ou de outro provedor
+  /diagnostics/jobs/{job_id}:
+    get:
+      operationId: getDiagnosticJob
+      tags:
+      - Diagnostics
+      summary: Estado do job e referências de evidência. incidents:read + flag smart_diagnostics_jobs
+      parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Retrato do job (tenant vem do servidor, nunca do corpo)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosticJob'
+        '401':
+          description: Não autenticado
+        '403':
+          description: Sem permissão ou flag desligada
+        '404':
+          description: Job inexistente ou de outro tenant
   /edges:
     get:
       tags: [Edge]
@@ -803,6 +874,321 @@ components:
               received_at: {type: string, format: date-time}
               age_seconds: {type: integer, minimum: 0}
               fresh: {type: boolean}
+    CreateDiagnosticJob:
+      type: object
+      additionalProperties: false
+      required:
+      - customer_id
+      - mode
+      properties:
+        customer_id:
+          type: string
+          format: uuid
+        service_id:
+          type: string
+          format: uuid
+        cpe_id:
+          type: string
+          format: uuid
+        mode:
+          type: string
+          enum:
+          - passive
+          - guided
+          description: 'ADR-0028: a implementação aceita só passive; guided fica para o PR que o implementa'
+        requested_domains:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+            - pon
+            - wan
+            - wifi
+            - lan
+            - internet
+            - erp
+            - bng
+        ticket_id:
+          $ref: '#/components/schemas/OpaqueRef'
+    DiagnosticJobReceipt:
+      type: object
+      required:
+      - job_id
+      - status
+      - created_at
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - waiting_for_device
+          - complete
+          - partial
+          - inconclusive
+          - failed
+          description: 'queued/running/waiting_for_device: execução assíncrona (ativa, futura). complete/partial/inconclusive/failed: o job passivo, que só lê dado já retido, termina dentro do pedido (ADR-0028)'
+        created_at:
+          type: string
+          format: date-time
+    DiagnosticJob:
+      type: object
+      required:
+      - job_id
+      - status
+      - data_quality
+      - evidences
+      - findings
+      - created_at
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        run_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: diagnostic_runs gerado ao concluir (ADR-0024); nulo enquanto não houver execução de regra
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - partial
+          - complete
+          - failed
+          - cancelled
+          - inconclusive
+        data_quality:
+          type: string
+          enum:
+          - fresh
+          - partial
+          - stale
+          - unsupported
+        evidences:
+          type: array
+          items:
+            $ref: '#/components/schemas/Evidence'
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Finding'
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        reproducible:
+          type:
+          - boolean
+          - 'null'
+          description: Reavaliar as entradas GRAVADAS de cada regra, na mesma versão, dá os mesmos achados (nulo se uma versão deixou de existir, o que não deve ocorrer)
+        rule_runs:
+          type: array
+          description: Regras avaliadas pelo job (id e versão); as entradas ficam gravadas no servidor para o replay
+          items:
+            type: object
+            additionalProperties: false
+            required:
+            - rule_id
+            - rule_version
+            properties:
+              rule_id:
+                type: string
+                pattern: ^R-D[0-9]{3}$
+              rule_version:
+                type: integer
+                minimum: 1
+    Evidence:
+      type: object
+      additionalProperties: false
+      required:
+      - evidence_id
+      - source_type
+      - status
+      - captured_at
+      properties:
+        evidence_id:
+          $ref: '#/components/schemas/OpaqueRef'
+        source_type:
+          type: string
+          enum:
+          - olt
+          - cpe_cwmp
+          - cpe_usp
+          - edge
+          - endpoint
+          - erp
+          - bng
+        status:
+          type: string
+          enum:
+          - available
+          - stale
+          - unsupported
+          - failed
+          - inconclusive
+        metric:
+          $ref: '#/components/schemas/MetricName'
+        value:
+          description: Número ou estado da lista permitida; nunca texto livre (PSK, usuário PPPoE e MAC não passam por aqui)
+          oneOf:
+          - type: number
+          - $ref: '#/components/schemas/StateValue'
+          - type: 'null'
+        unit:
+          type: string
+          enum:
+          - ''
+          - dBm
+          - dB
+          - Mbps
+          - ms
+          - percent
+          - seconds
+          - count
+        capture_side:
+          type: string
+          enum:
+          - onu_rx
+          - olt_rx
+          - cpe
+          - wan
+          - lan
+          - wifi_2g
+          - wifi_5g
+        captured_at:
+          type: string
+          format: date-time
+        received_at:
+          type: string
+          format: date-time
+        method:
+          type: string
+          enum:
+          - snmp
+          - cli
+          - genieacs_nbi
+          - usp
+          - vendor_driver
+          - vendor_driver_mock
+          - mock_genieacs
+          - unsupported
+        confidence:
+          type: string
+          enum:
+          - verified
+          - observed
+          - unverified
+    Finding:
+      type: object
+      additionalProperties: false
+      required:
+      - category
+      - certainty
+      - evidence_ids
+      - explanation
+      properties:
+        category:
+          $ref: '#/components/schemas/FindingCategory'
+        certainty:
+          type: string
+          enum:
+          - confirmed
+          - likely
+          - possible
+          - insufficient_evidence
+        evidence_ids:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/OpaqueRef'
+        explanation:
+          $ref: '#/components/schemas/SafeText'
+      allOf:
+      - if:
+          properties:
+            certainty:
+              enum:
+              - confirmed
+              - likely
+              - possible
+        then:
+          properties:
+            evidence_ids:
+              minItems: 1
+    FindingCategory:
+      type: string
+      enum:
+      - PON_OPTICAL
+      - PON_MASS_OUTAGE
+      - ONU_OFFLINE
+      - WAN_LINK
+      - WAN_AUTH
+      - WIFI_SIGNAL
+      - WIFI_INTERFERENCE
+      - LAN_PORT
+      - CPE_STALE_DATA
+      - ERP_STATUS
+      - INCONCLUSIVE
+    MetricName:
+      type: string
+      enum:
+      - rx_optical_power
+      - tx_optical_power
+      - onu_status
+      - wan_link_status
+      - wan_connection_status
+      - wan_download
+      - wan_upload
+      - associated_client_rssi
+      - wifi_channel
+      - wifi_band
+      - wifi_radio_enabled
+      - lan_port_status
+      - latency_rtt
+      - packet_loss
+      - uptime_seconds
+    StateValue:
+      type: string
+      enum:
+      - Up
+      - Down
+      - Connected
+      - Connecting
+      - Disconnected
+      - Unconfigured
+      - Enabled
+      - Disabled
+      - Error
+      - Unknown
+      - online
+      - offline
+      - los
+      - dying_gasp
+      - PendingDisconnect
+      - Disconnecting
+      - Initializing
+      - Unavailable
+      - Dormant
+      - NotPresent
+      - LowerLayerDown
+    OpaqueRef:
+      type: string
+      pattern: ^(?![0-9A-Fa-f]{2}([-:.]?[0-9A-Fa-f]{2}){5}$)[A-Za-z0-9_-]{1,64}$
+      description: Identificador opaco; rejeita o formato de MAC
+    SafeText:
+      type: string
+      maxLength: 1000
+      pattern: ^(?!.*(([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}|([Ss]enha|[Pp]assword|[Pp]asswd|PSK|psk|[Pp]assphrase|[Ss]ecret|[Tt]oken|[Cc]have|[Pp]ppoe|[Uu]su[aá]rio|[Uu]ser(name)?)\s*[:=]))[\s\S]*$
+      description: 'Texto narrativo. Rejeita MAC e chave=valor de credencial, mas NÃO prova ausência de segredo: o controle real é a redação na origem e antes de persistir/exibir (ADR-SD-002/ADR-SD-006). Exibir como texto puro.'
     LoginRequest:
       type: object
       required: [email, password]
