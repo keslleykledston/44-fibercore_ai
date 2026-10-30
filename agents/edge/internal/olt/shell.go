@@ -241,7 +241,8 @@ func (s *shell) run(ctx context.Context, cmd string, expect *regexp.Regexp, answ
 		return "", err
 	}
 	crSent, crAt := false, 0
-	answered, ansAt := false, 0
+	answered := false
+	askedLine := "" // the question as shown when the answer was typed
 	pages, spaceAt := 0, 0
 	var final string
 	text, err := s.wait(ctx, func(t string) (bool, error) {
@@ -273,18 +274,17 @@ func (s *shell) run(ctx context.Context, cmd string, expect *regexp.Regexp, answ
 			return false, nil // still the stale prompt: the device has not answered the Enter yet
 		}
 		if questionRe.MatchString(lastLine(c)) {
-			if expect != nil && expect.MatchString(lastLine(c)) {
-				if !answered {
-					answered, ansAt = true, len(tail)
-					_, err := io.WriteString(s.in, answer+"\r") // the one expected confirmation, once
-					return false, err
-				}
-				if len(tail) == ansAt {
-					return false, nil // still the stale question: the device has not reacted to the answer yet
-				}
+			ll := strings.TrimSpace(lastLine(c))
+			if answered && strings.HasPrefix(ll, askedLine) {
+				return false, nil // still the question we answered, now with the echo of our own answer on the line: wait for the device
+			}
+			if !answered && expect != nil && expect.MatchString(lastLine(c)) {
+				answered, askedLine = true, ll
+				_, err := io.WriteString(s.in, answer+"\r") // the one expected confirmation, once
+				return false, err
 			}
 			if answered {
-				return false, errors.Join(questionError(lastLine(c)), ErrAfterAnswer)
+				return false, errors.Join(questionError(lastLine(c)), ErrAfterAnswer) // a DIFFERENT question after the answer
 			}
 			return false, questionError(lastLine(c))
 		}

@@ -247,6 +247,8 @@ func (srv *shellServer) cli(ch ssh.Channel) {
 			srv.mu.Lock()
 			srv.answers = append(srv.answers, ans)
 			srv.mu.Unlock()
+			ch.Write([]byte(ans)) // the device echoes what was typed, on the same line as the question
+			time.Sleep(300 * time.Millisecond)
 			if ans == "y" {
 				ch.Write([]byte("\r\n  ONT reset done\r\n\r\n" + pr()))
 			} else {
