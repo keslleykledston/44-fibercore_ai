@@ -99,14 +99,14 @@ func (a *Agent) Flush(ctx context.Context) {
 					a.Log.Error("ack failed; item will be redelivered (idempotent)", "id", it.ID, "err", err)
 					return
 				}
-				a.resultSettled(it.Kind, it.Payload)
+				a.resultSettled(it.Kind, it.Payload, false)
 			case gateway.Rejected:
 				a.Log.Error("payload rejected by cloud; dead-lettering", "id", it.ID, "err", derr)
 				if err := a.Q.Dead(ctx, it, derr.Error()); err != nil {
 					a.Log.Error("dead-letter failed; stopping flush to retry later", "id", it.ID, "err", err)
 					return
 				}
-				a.resultSettled(it.Kind, it.Payload) // the Cloud answered for good (and the copy is in the dead-letter table): resending would only loop
+				a.resultSettled(it.Kind, it.Payload, true) // the Cloud refused it for good (the sent copy is in the dead-letter table): resending would only loop; marked as refused, not as acknowledged
 			default:
 				dead, _ := a.Q.Retry(ctx, it, errString(derr))
 				a.Log.Warn("delivery deferred", "id", it.ID, "err", derr, "dead_lettered", dead)
@@ -370,7 +370,7 @@ func (a *Agent) reportQueries(ctx context.Context) {
 
 // resultSettled is told whenever a delivered (or finally rejected) job_result leaves the delivery queue: an olt_query result becomes REPORTED only now,
 // bound to its job id, so a result dropped or dead-lettered before the Cloud heard it is never forgotten.
-func (a *Agent) resultSettled(kind string, payload []byte) {
+func (a *Agent) resultSettled(kind string, payload []byte, rejected bool) {
 	if kind != "job_result" || a.Queries == nil {
 		return
 	}
@@ -381,7 +381,12 @@ func (a *Agent) resultSettled(kind string, payload []byte) {
 	if json.Unmarshal(payload, &m) != nil || m.JobID == "" || m.State == "accepted" { // the acceptance is not the outcome
 		return
 	}
-	if err := a.Queries.MarkReported(m.JobID); err != nil && !errors.Is(err, oltquery.ErrBadState) { // ErrBadState = not an olt_query (a collect/bench result)
+	mark := a.Queries.MarkReported
+	if rejected {
+		a.Log.Warn("the Cloud refused an olt query result for good; kept locally and in the dead-letter table", "job_id", m.JobID)
+		mark = a.Queries.MarkRejected
+	}
+	if err := mark(m.JobID); err != nil && !errors.Is(err, oltquery.ErrBadState) { // ErrBadState = not an olt_query (a collect/bench result)
 		a.Log.Error("could not mark olt query reported", "job_id", m.JobID, "err", err)
 	}
 }

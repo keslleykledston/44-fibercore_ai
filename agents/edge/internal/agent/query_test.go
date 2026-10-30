@@ -256,3 +256,36 @@ func TestAHandOverIsRememberedAcrossARestart(t *testing.T) {
 		t.Fatalf("a result handed over before the restart is not queued again: %d waiting", n)
 	}
 }
+
+func TestAResultTheCloudRefusesForGoodIsMarkedRefusedNotAcknowledged(t *testing.T) {
+	pub, _, _ := ed25519.GenerateKey(rand.Reader)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/auth/service-token":
+			_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "t"})
+		case r.URL.Path == "/v1/edge/jobs/next":
+			w.WriteHeader(204)
+		case strings.HasSuffix(r.URL.Path, "/result"):
+			w.WriteHeader(409) // the job is no longer in a state that can take this outcome
+		default:
+			w.WriteHeader(202)
+		}
+	}))
+	defer srv.Close()
+	q, _ := queue.Open(filepath.Join(t.TempDir(), "q.db"))
+	defer q.Close()
+	q.Now = func() time.Time { return bNow }
+	store := &oltquery.Store{Path: filepath.Join(t.TempDir(), "oq.json")}
+	a := &Agent{EdgeID: bEdge, TenantID: bTenant, GW: gateway.New(srv.URL, "c", "s", srv.Client()), Q: q, Queries: store,
+		Jobs: &jobs.Verifier{Pub: pub, EdgeID: bEdge, TenantID: bTenant, Allowed: map[string]bool{}, Nonces: q, Now: func() time.Time { return bNow }},
+		Log:  slog.New(slog.NewTextHandler(io.Discard, nil))}
+	id := "11111111-1111-4111-8111-111111111111"
+	_ = store.Enqueue(id, oltquery.Intent{QueryID: "olt.version", OLTRef: qOLTID}, time.Now().Add(time.Hour))
+	_, _ = store.Claim(qOLTID, "s")
+	_ = store.Complete(id, json.RawMessage(`{"product":"MA5608T"}`))
+	a.PollJob(context.Background())
+	e, _, _ := store.Get(id)
+	if e.State != oltquery.Reported || e.Reason != "cloud_rejected" || len(e.Result) == 0 {
+		t.Fatalf("kept, with its result, as refused: %+v", e)
+	}
+}

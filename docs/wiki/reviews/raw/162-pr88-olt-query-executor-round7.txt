@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18ea6-9ce6-7641-93c5-cfb5849decfe).
+[codex] Turn started (01a18ea6-9d1d-7393-827a-51d72d65bd52).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir especificamente o ciclo `MarkHanded` → persistênci...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/agent/...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/agent/... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=35 main...HEAD -- agents/edge/internal/agent/...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=35 main...HEAD -- agents/edge/internal/agent/... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'Rejected|Deliver\\(' agents/edge/internal/gateway"
+[codex] Command completed: /bin/bash -lc "rg -n 'Rejected|Deliver\\(' agents/edge/internal/gateway" (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: uma resposta 4xx de conflito pode e...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: uma resposta 4xx de conflito pode encerrar o relatório local sem confirmar que a nuvem armazenou o resultado da consulta.
+
+Findings:
+- [high] Resposta 4xx pode fazer o Edge descartar um resultado não confirmado (agents/edge/internal/agent/agent.go:105-111)
+  Ao receber `gateway.Rejected`, `Flush` move o payload para dead letter e chama `resultSettled`, que marca a consulta como `REPORTED`. Porém, a API retorna 409 quando o job não pode transicionar do estado atual para o estado reportado (`jobs.py`, `job_result`). Esse conflito não confirma que o resultado foi armazenado; ainda assim, o Edge deixa de reenviá-lo e o resultado tipado pode ser perdido. Isso é plausível, por exemplo, se a nuvem já estiver em um estado terminal diferente quando a entrega chegar.
+  Recommendation: Só chame `MarkReported` após uma resposta que confirme a aceitação do resultado. Para conflitos e outras rejeições que não confirmem armazenamento, mantenha o relatório pendente ou encaminhe-o para uma recuperação explícita; diferencie-os de payloads definitivamente inválidos.

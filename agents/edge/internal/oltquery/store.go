@@ -386,6 +386,23 @@ func (s *Store) MarkHanded(jobID string) error {
 	})
 }
 
+// MarkRejected ends the reporting of a finished query whose result the Cloud refused for good (a 4xx such as "illegal transition": the job is no longer in
+// a state that can take it, e.g. it expired there). Resending would only loop. The entry is kept with its result and the reason `cloud_rejected` for
+// KeepReported, and the delivery queue's dead-letter table holds the sent copy: a person can see it, it is not silently the same as an acknowledged report.
+func (s *Store) MarkRejected(jobID string) error {
+	return s.update(func(f *file) error {
+		e, ok := f.Entries[jobID]
+		if !ok {
+			return fmt.Errorf("%w: unknown job", ErrBadState)
+		}
+		if err := transition(e, []State{Executed, Failed, Expired, Unknown}, Reported); err != nil {
+			return err
+		}
+		e.Reason, e.FinishedAt = "cloud_rejected", s.now()
+		return nil
+	})
+}
+
 // MarkReported records the Cloud's acknowledgement and drops reported entries older than KeepReported (the file stays small).
 func (s *Store) MarkReported(jobID string) error {
 	return s.update(func(f *file) error {
