@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18ac2-c386-7372-b783-a42f7d5d98bc).
+[codex] Turn started (01a18ac2-c67c-7d51-bee5-8c5fe790e5bf).
+[codex] Assistant message captured: I’ll inspect the branch diff against `main`, then trace the authorization lifecycle and migra...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/tests/test_jobs_be...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/tests/test_jobs_be... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '250,340p' apps/api/app/api/jobs.py; git diff --no-ext-diff --unified=2...
+[codex] Command completed: /bin/bash -lc "sed -n '250,340p' apps/api/app/api/jobs.py; git diff --no-ext-diff --unified=2... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: the runbook omits migration 0022, so...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: the runbook omits migration 0022, so its documented first-run procedure fails on a database upgraded exactly as instructed.
+
+Findings:
+- [high] Runbook omits the migration that adds `first_run` (docs/wiki/bench/RUNBOOK-H2-REBOOT.md:8)
+  The runbook tells operators to apply migration 0021, then run `bench-authorize --first-run`. That CLI command now inserts into `bench_authorizations.first_run`, which is introduced only by migration 0022. Following the documented procedure on a 0021 database causes authorization creation to fail with a missing-column error, blocking the first bench maneuver. Update the prerequisite to require migration 0022.
+  Recommendation: Change the migration prerequisite from 0021 to 0022 and ensure the deployment instructions apply that migration before the updated CLI is used.
