@@ -53,6 +53,11 @@ def _normalised(body: CreateDiagnosticJob) -> dict:
             "requested_domains": sorted(set(body.requested_domains or SUPPORTED_DOMAINS)), "ticket_id": body.ticket_id}
 
 
+def _ref(tenant, kind: str, ident) -> str:
+    """Opaque, stable per tenant, reveals neither the serial nor the PON path (and is not MAC-shaped: it carries a word prefix)."""
+    return f"{kind}-" + hashlib.sha256(f"{tenant}|{kind}|{ident}".encode()).hexdigest()[:16]
+
+
 def _iso(v: datetime | None) -> str | None:
     return v.astimezone(UTC).isoformat().replace("+00:00", "Z") if v else None
 
@@ -65,7 +70,7 @@ def _cpe_states(conn: Connection, cpe_id: UUID, now: datetime) -> list[dict]:
              "fresh": now - r.captured_at <= STATE_FRESH_FOR} for r in rows]
 
 
-def _evaluate(conn: Connection, req: dict) -> dict:
+def _evaluate(conn: Connection, req: dict, tenant) -> dict:
     now = datetime.now(UTC)
     cust = conn.execute(text("SELECT 1 FROM customers WHERE id = :c"), {"c": req["customer_id"]}).first()  # RLS: another tenant's is absent
     if cust is None:
@@ -98,14 +103,15 @@ def _evaluate(conn: Connection, req: dict) -> dict:
     subjects = []
     for n, o in enumerate(onus, 1):
         fresh = bool(o.observed_at and now - o.observed_at <= EVAL_FRESH_FOR)
-        s: dict = {"n": n, "onu": {"status": o.status, "rx_dbm": float(o.rx_dbm) if o.rx_dbm is not None else None,
+        rx = float(o.rx_dbm) if o.rx_dbm is not None else None
+        s: dict = {"n": n, "onu": {"ref": _ref(tenant, "onu", o.id), "status": o.status, "rx_dbm": rx,
                                    "observed_at": _iso(o.observed_at), "fresh": fresh}, "pon_finding": None, "pon": None, "cpe": None}
         if "pon" in domains and o.pon_id is not None:
             inputs, _ = _pon_inputs(conn, None, o.pon_id)
             s["pon_finding"] = run_rule("R-D001", str(o.pon_id), inputs[:1]) if inputs else None
             if inputs:
                 row = inputs[0]
-                s["pon"] = {"online": row["online"], "recent_drops": row["recent_drops"],
+                s["pon"] = {"ref": _ref(tenant, "pon", o.pon_id), "online": row["online"], "recent_drops": row["recent_drops"],
                             "window_seconds": int(DROP_WINDOW.total_seconds()),
                             "reference_at": _iso(
                     datetime.fromisoformat(row["reference_at"]) if row["reference_at"] else None), "fresh": row["fresh_data"]}
@@ -145,7 +151,7 @@ def create_job(
         if existing.request_hash != h:
             raise HTTPException(409, "idempotency key reused with a different request")
         return {"job_id": str(existing.id), "status": existing.status, "created_at": _iso(existing.created_at)}
-    out = _evaluate(conn, req)
+    out = _evaluate(conn, req, p.tenant_id)
     row = conn.execute(
         text("INSERT INTO diagnostic_jobs (tenant_id, requested_by, idempotency_key, request_hash, request, mode, status, data_quality, "
              "evidences, findings, rule_runs) VALUES (:t,:u,:k,:h,CAST(:rq AS jsonb),'passive',:s,:q,CAST(:e AS jsonb),CAST(:f AS jsonb),"

@@ -28,20 +28,24 @@ def _slug(scope: str) -> str:
 
 
 def _evidence(eid: str, source: str, status: str, metric: str, value, captured_at: str, received_at: str | None = None,
-              method: str | None = None) -> dict:
+              method: str | None = None, scope_ref: str | None = None, parent_ref: str | None = None,
+              window_seconds: int | None = None) -> dict:
     e = {"evidence_id": eid, "source_type": source, "status": status, "metric": metric, "value": value,
          "unit": UNITS.get(metric, "dBm" if metric == "rx_optical_power" else ""), "captured_at": captured_at, "confidence": "observed"}
     if received_at:
         e["received_at"] = received_at
     if method:
         e["method"] = method
+    for key, v in (("scope_ref", scope_ref), ("parent_ref", parent_ref), ("window_seconds", window_seconds)):
+        if v is not None:
+            e[key] = v
     return e
 
 
 def assemble(subjects: list[dict], domains: list[str], truncated: bool = False) -> dict:
     """subjects: one per ONU of the customer:
-    {"n": int, "onu": {"status", "rx_dbm", "observed_at", "fresh"}, "pon_finding": dict | None,
-     "pon": None | {"online": int, "recent_drops": int, "window_seconds": int, "reference_at": str | None, "fresh": bool},
+    {"n": int, "onu": {"ref", "status", "rx_dbm", "observed_at", "fresh"}, "pon_finding": dict | None,
+     "pon": None | {"ref": str, "online": int, "recent_drops": int, "window_seconds": int, "reference_at": str | None, "fresh": bool},
                                                                                        (the aggregate R-D001 judged and its window)
      "cpe": None | {"states": [{"metric", "scope", "value", "captured_at", "received_at", "fresh"}], "finding": dict | None}}"""
     evidences: list[dict] = []
@@ -59,11 +63,13 @@ def assemble(subjects: list[dict], domains: list[str], truncated: bool = False) 
         status_id = f"ev-onu{n}-status"
         if "pon" in domains:
             known = onu["status"] in ONU_STATES
+            parent = (s.get("pon") or {}).get("ref")
             evidences.append(_evidence(status_id, "olt", "available" if onu["fresh"] and known else ("stale" if known else "inconclusive"),
-                                       "onu_status", onu["status"] if known else None, onu["observed_at"]))
+                                       "onu_status", onu["status"] if known else None, onu["observed_at"],
+                                       scope_ref=onu["ref"], parent_ref=parent))
             if onu["rx_dbm"] is not None:
                 evidences.append(_evidence(f"ev-onu{n}-rx", "olt", "available" if onu["fresh"] else "stale", "rx_optical_power",
-                                           float(onu["rx_dbm"]), onu["observed_at"]))
+                                           float(onu["rx_dbm"]), onu["observed_at"], scope_ref=onu["ref"], parent_ref=parent))
             if not onu["fresh"] or not known:
                 finding("INCONCLUSIVE", "insufficient_evidence", [status_id],
                         "A última observação da ONU na OLT é antiga ou inconclusiva; nada é afirmado sobre a PON.")
@@ -76,12 +82,14 @@ def assemble(subjects: list[dict], domains: list[str], truncated: bool = False) 
                     # the finding rests on the AGGREGATE the rule judged (ONUs online / recently dropped on the PON), so that is cited too
                     pid = [f"ev-pon{n}-online", f"ev-pon{n}-drops"]
                     pst = "available" if pon["fresh"] else "stale"
-                    evidences.append(_evidence(pid[0], "olt", pst, "pon_onus_online", int(pon["online"]), pon["reference_at"]))
-                    evidences.append(_evidence(pid[1], "olt", pst, "pon_onus_recent_drops", int(pon["recent_drops"]), pon["reference_at"]))
-                    # the evidence schema has no field for the PON or the window, so the explanation states exactly what the cited evidence
-                    # is: the aggregate of the PON of the customer's ONU (same n) over the rule's window, and which rule/version judged it
+                    w = int(pon["window_seconds"])
+                    evidences.append(_evidence(pid[0], "olt", pst, "pon_onus_online", int(pon["online"]), pon["reference_at"],
+                                               scope_ref=pon["ref"], window_seconds=w))
+                    evidences.append(_evidence(pid[1], "olt", pst, "pon_onus_recent_drops", int(pon["recent_drops"]), pon["reference_at"],
+                                               scope_ref=pon["ref"], window_seconds=w))
+                    # the evidence itself says which PON (scope_ref, and the ONU's parent_ref) and which window; the text repeats it plainly
                     finding("PON_MASS_OUTAGE", "likely", [status_id, *pid],
-                            f"Na PON da ONU do cliente (ev-onu{n}-status), {int(pon['recent_drops'])} ONUs caíram nos últimos "
+                            f"Na PON {pon['ref']} (a da ONU do cliente), {int(pon['recent_drops'])} ONUs caíram nos últimos "
                             f"{_span(int(pon['window_seconds']))} e {int(pon['online'])} seguem online "
                             f"(regra {pf['rule_id']} v{pf['rule_version']}); "
                             "hipótese de queda coletiva, a confirmar com o incidente e eventos de campo.")

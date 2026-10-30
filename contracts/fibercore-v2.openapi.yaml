@@ -1081,6 +1081,16 @@ components:
           - vendor_driver_mock
           - mock_genieacs
           - unsupported
+        scope_ref:
+          $ref: '#/components/schemas/OpaqueRef'
+          description: Referência opaca do objeto medido (ONU ou PON), estável por tenant; sem serial nem caminho
+        parent_ref:
+          $ref: '#/components/schemas/OpaqueRef'
+          description: Referência opaca do objeto que contém o medido (a PON de uma ONU)
+        window_seconds:
+          type: integer
+          minimum: 1
+          description: Janela de agregação usada na medida (contagens por PON)
         confidence:
           type: string
           enum:
