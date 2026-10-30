@@ -304,8 +304,9 @@ def test_r_d002_several_links_never_pick_one_and_disagreement_is_indeterminate()
     assert two(_c("Up"), _c("Up"))["suspected_cause"] == "wan_session_down"        # every recent link says Up
     assert two(_c("Down"), _c("Down"))["suspected_cause"] == "wan_link_down"       # every recent link says Down
     assert two(_c("Up"), _c("Down"))["suspected_cause"] == "wan_connection_down"   # they disagree: no link is picked
-    assert two(_c("Down"), _c("Up", False))["suspected_cause"] == "wan_link_down"  # an old reading does not take part
-    assert two(_c("Up", False), _c("Down", False))["suspected_cause"] == "wan_connection_down"
+    for a, b in ((_c("Down"), _c("Up", False)), (_c("Up", False), _c("Down")), (_c("Up"), _c("Up", False)), (_c("Down", False), _c("Up")),
+                 (_c("Up", False), _c("Down", False))):  # ANY old reading makes the link indeterminate, whatever the order
+        assert two(a, b)["suspected_cause"] == "wan_connection_down", (a, b)
     # the order of the readings (text order of the scope, link/10 before link/2) cannot change the verdict
     assert two(_c("Down"), _c("Up"))["suspected_cause"] == two(_c("Up"), _c("Down"))["suspected_cause"] == "wan_connection_down"
 

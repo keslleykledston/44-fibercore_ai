@@ -67,7 +67,7 @@ def r_d002_v1(i: dict) -> RuleResult:
 
     Inputs: links and connections (lists of {"state", "fresh"}, one per reading, sorted); newest_age_seconds and oldest_age_seconds of the
     WAN readings (int|None); onu_link ("confirmed"|"none"), onu_status (str|None), onu_fresh (bool). The link is "Up" or "Down" only when
-    EVERY recent link reading says so (several links that disagree, old readings and other states are indeterminate: no link is picked).
+    EVERY link reading is recent and says so (links that disagree, any old reading and other states are indeterminate: no link is picked).
     Freshness is per reading, not per CPE: the cache keeps the last row of every connection, so a recent reading of one connection must
     never vouch for an old reading of another. An established connection that is fresh wins; any connection last read too long ago could
     still be established, so the rule says nothing then. A connection counts as down only when EVERY reported connection is fresh and in
@@ -76,7 +76,8 @@ def r_d002_v1(i: dict) -> RuleResult:
     conns = [{"state": str(c["state"]), "fresh": bool(c["fresh"])} for c in i["connections"]]
     links = [{"state": str(c["state"]), "fresh": bool(c["fresh"])} for c in i["links"]]
     recent_links = {c["state"] for c in links if c["fresh"]}
-    link = next(iter(recent_links)) if len(recent_links) == 1 else None  # one recent state, or indeterminate
+    # the link is known only if EVERY link reading is recent and they agree; an old reading may be a link that is still up (or down)
+    link = next(iter(recent_links)) if len(recent_links) == 1 and all(c["fresh"] for c in links) else None
     onu = {"link": i["onu_link"], "status": i["onu_status"], "fresh": bool(i["onu_fresh"])}
     evidence = {"links": links, "connections": conns,
                 "newest_age_seconds": i["newest_age_seconds"], "oldest_age_seconds": i["oldest_age_seconds"], "onu": onu}
