@@ -500,10 +500,28 @@ def test_first_run_is_rechecked_at_dispatch_when_the_registry_changes(client, se
     assert client.get(f"/v1/jobs/{jid}", headers=h).json()["status"] == "CANCELLED"
 
 
-def test_a_normal_authorization_works_once_observed_exists_and_first_run_is_then_moot(client, seed, inv, migrated):
-    cpe, h = _full(client, seed, inv, migrated, first_run=True)  # `observed` entry present
+def test_once_observed_exists_only_a_normal_authorization_opens_and_a_first_run_one_no_longer_does(client, seed, inv, migrated):
+    cpe, h = _full(client, seed, inv, migrated, first_run=True)  # `observed` entry present, authorization marked first_run
+    jid = _preview(client, h, cpe).json()["id"]
+    r = client.post(f"/v1/jobs/{jid}/submit", headers=h)
+    assert r.status_code == 409 and r.json()["detail"] == "authorization_missing", r.text
+    # a normal authorization with the observed entry works
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE bench_authorizations SET first_run = false"))
+    jid2, r2 = _run_to_dispatch(client, seed, inv, migrated, h, cpe)
+    assert r2.status_code == 200 and r2.json()["status"] == "APPROVED", r2.text
+
+
+def test_a_first_run_authorization_consumed_before_observed_appears_is_cancelled_at_dispatch(client, seed, inv, migrated):
+    cpe, h = _full(client, seed, inv, migrated, cert="identified", first_run=True)
     jid, r = _run_to_dispatch(client, seed, inv, migrated, h, cpe)
-    assert r.status_code == 200 and r.json()["status"] == "APPROVED", r.text
+    assert r.json()["status"] == "APPROVED"
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE device_capabilities SET certification = 'observed'"))   # the evidence-backed entry appears meanwhile
+    assert client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1")).status_code == 204
+    assert client.get(f"/v1/jobs/{jid}", headers=h).json()["status"] == "CANCELLED"
 
 
 def test_owner_cli_records_the_first_run_flag(client, seed, inv, migrated, admin_url, monkeypatch):

@@ -100,7 +100,7 @@ def gate(conn: Connection, tenant_id: UUID, job, *, mode: str) -> str | None:
     complete = {k for k, r in certs.items() if r.evidence_ref is not None and r.verified_at is not None}
     observed = bool(complete & {"observed", "certified"})
     # First run (ADR-0030 amendment): without an `observed` entry, only an authorization the owner marked `first_run`, together with a complete
-    # `identified` + `supported` entry of the exact profile, stands in for it. Once `observed` exists the flag on an authorization is moot.
+    # `identified` + `supported` entry of the exact profile, stands in for it. Once `observed` exists a first-run authorization no longer opens anything (a normal one is needed), and vice versa.
     first_run_possible = not observed and "identified" in complete
     if not observed and not first_run_possible:
         return "capability_not_observed"
@@ -112,12 +112,12 @@ def gate(conn: Connection, tenant_id: UUID, job, *, mode: str) -> str | None:
             {"t": tenant_id, "j": job.id, "o": job.operation, "c": job.target_id, "h": ph}).first()
         if a is None or a.state != "consumed" or a.job_id != job.id:
             return "authorization_missing"
-        if not observed and not a.first_run:
-            return "capability_not_observed"
+        if a.first_run == observed:  # a first-run authorization only ever serves the no-`observed` state, a normal one only the other
+            return "capability_not_observed" if a.first_run is False else "authorization_missing"
         return None if a.window_end > conn.execute(text("SELECT now()")).scalar_one() else "authorization_expired"
     a = conn.execute(
         text("SELECT id FROM bench_authorizations WHERE tenant_id = :t AND operation = :o AND cpe_id = :c AND params_hash = :h AND state = 'open' "
-             "AND (first_run OR :obs) AND now() >= window_start AND now() < window_end ORDER BY window_end LIMIT 1 FOR UPDATE"),
+             "AND first_run = NOT :obs AND now() >= window_start AND now() < window_end ORDER BY window_end LIMIT 1 FOR UPDATE"),
         {"t": tenant_id, "o": job.operation, "c": job.target_id, "h": ph, "obs": observed}).first()
     if a is None:  # without an `observed` entry only a first_run authorization counts; its absence is a registry problem, not a missing one
         return "authorization_missing" if observed else "capability_not_observed"
