@@ -390,7 +390,35 @@ def _csv_cell(v):
     return ("'" + v) if isinstance(v, str) and v and (v[0] in "\t\r" or _FORMULA_LEAD.match(v)) else v
 
 
-OFFLINE_CSV_COLUMNS = ("serial", "olt", "pon_path", "status", "offline_since", "offline_hours", "basis", "last_online_at", "observed_at", "olt_observed_at", "freshness")
+OFFLINE_CSV_COLUMNS = ("serial", "olt", "pon_path", "status", "offline_since", "offline_hours", "basis", "last_online_at", "observed_at", "olt_observed_at", "freshness",
+                       "drops_30d", "offline_hours_30d")
+
+_DOWN = "('offline','los','dying_gasp')"
+
+
+def _availability(conn: Connection, onu_ids: list | None, days: int) -> dict:
+    """Per ONU, over the last `days`, from the state-change history (`onu_state_events`): seconds seen DOWN, seconds of KNOWN state (online or down: an
+    `unknown` stretch counts as neither), and how many times it dropped (a change online -> down; a baseline or an unknown start is not a drop).
+    The last state holds until now, so an ONU nobody has seen lately keeps its last known state: the caller shows freshness next to it."""
+    now = datetime.now(UTC)
+    start = now - timedelta(days=days)
+    rows = conn.execute(
+        text(f"WITH ev AS (SELECT onu_id, at, from_status, to_status, lead(at) OVER (PARTITION BY onu_id ORDER BY at, created_at) AS next_at "  # noqa: S608
+             "FROM onu_state_events WHERE (CAST(:ids AS uuid[]) IS NULL OR onu_id = ANY(CAST(:ids AS uuid[])))), "
+             "seg AS (SELECT onu_id, at, from_status, to_status, GREATEST(at, :s) AS s0, LEAST(COALESCE(next_at, :n), :n) AS e0 FROM ev "
+             "WHERE at < :n AND COALESCE(next_at, :n) > :s) "
+             f"SELECT onu_id, COALESCE(sum(EXTRACT(epoch FROM e0 - s0)) FILTER (WHERE to_status IN {_DOWN}), 0) AS down_s, "
+             "COALESCE(sum(EXTRACT(epoch FROM e0 - s0)) FILTER (WHERE to_status <> 'unknown'), 0) AS known_s, "
+             f"count(*) FILTER (WHERE to_status IN {_DOWN} AND from_status = 'online' AND at >= :s) AS drops FROM seg GROUP BY onu_id"),
+        {"ids": onu_ids, "s": start, "n": now}).all()
+    return {r.onu_id: {"down_seconds": float(r.down_s), "known_seconds": float(r.known_s), "drops": int(r.drops)} for r in rows}
+
+
+def _avail_view(a: dict | None, days: int) -> dict:
+    a = a or {"down_seconds": 0.0, "known_seconds": 0.0, "drops": 0}
+    return {"window_days": days, "offline_hours": round(a["down_seconds"] / 3600, 1), "drops": a["drops"],
+            "known_hours": round(a["known_seconds"] / 3600, 1),
+            "availability_pct": round(100 * (1 - a["down_seconds"] / a["known_seconds"]), 2) if a["known_seconds"] > 0 else None}
 
 
 @router.get("/v1/onus/offline")
@@ -430,6 +458,7 @@ def list_offline_onus(
         {**args, "s": int(min_hours * 3600), "l": limit + 1}).all()
     truncated = len(rows) > limit
     now = datetime.now(UTC)
+    avail = _availability(conn, [r.id for r in rows[:limit]], 30) if rows else {}
     items = []
     for r in rows[:limit]:
         oldest = min(r.observed_at, r.olt_observed_at) if (r.observed_at and r.olt_observed_at) else None  # a missing time => "unknown"
@@ -441,6 +470,7 @@ def list_offline_onus(
             "last_online_at": r.last_online_at.isoformat() if r.last_online_at else None,
             "observed_at": r.observed_at.isoformat() if r.observed_at else None,
             "olt_observed_at": r.olt_observed_at.isoformat() if r.olt_observed_at else None, "freshness": _fresh(oldest),
+            "drops_30d": avail.get(r.id, {}).get("drops", 0), "offline_hours_30d": round(avail.get(r.id, {}).get("down_seconds", 0.0) / 3600, 1),
         })
     if format == "csv":
         import csv
@@ -458,6 +488,49 @@ def list_offline_onus(
     return {"generated_at": now.isoformat(), "criteria": {"min_hours": min_hours, "olt_id": str(olt_id) if olt_id else None, "pon_path": pon_path,
                                                           "include_stale": include_stale},
             "excluded": {"stale": stale, "unknown_start": unknown}, "truncated": truncated, "count": len(items), "items": items}
+
+
+@router.get("/v1/onus/unstable")
+def list_unstable_onus(
+    days: int = Query(30, ge=1, le=365),
+    min_drops: int = Query(3, ge=1, le=1000),
+    olt_id: UUID | None = None,
+    limit: int = Query(100, ge=1, le=1000),
+    p: Principal = Depends(require("inventory:read")),
+    conn: Connection = TENANT_CONN,
+) -> dict:
+    """The chronic offenders: ONUs that dropped at least `min_drops` times in the last `days` (from the state-change history), worst first, with the hours they
+    spent down in that window. It counts what the Edge OBSERVED: a drop and recovery between two collections is invisible."""
+    av = _availability(conn, None, days)
+    worst = sorted((i for i, a in av.items() if a["drops"] >= min_drops), key=lambda i: (-av[i]["drops"], -av[i]["down_seconds"]))[: limit + 1]
+    truncated = len(worst) > limit
+    worst = worst[:limit]
+    meta = {r.id: r for r in conn.execute(
+        text("SELECT u.id, u.serial, u.status, o.name AS olt, pp.pon_path, o.id AS olt_id FROM onus u JOIN olts o ON o.id = u.olt_id AND o.tenant_id = u.tenant_id "
+             "LEFT JOIN pon_ports pp ON pp.id = u.pon_id AND pp.tenant_id = u.tenant_id WHERE u.id = ANY(:ids) AND (CAST(:o AS uuid) IS NULL OR u.olt_id = :o)"),
+        {"ids": worst, "o": olt_id})} if worst else {}
+    items = [{"onu_id": str(i), "serial": meta[i].serial, "olt": meta[i].olt, "pon_path": meta[i].pon_path, "status": meta[i].status, **_avail_view(av[i], days)}
+             for i in worst if i in meta]
+    return {"criteria": {"days": days, "min_drops": min_drops, "olt_id": str(olt_id) if olt_id else None}, "truncated": truncated, "count": len(items), "items": items}
+
+
+@router.get("/v1/onus/{onu_id}/history")
+def onu_history(
+    onu_id: UUID,
+    days: int = Query(30, ge=1, le=365),
+    limit: int = Query(50, ge=1, le=500),
+    p: Principal = Depends(require("inventory:read")),
+    conn: Connection = TENANT_CONN,
+) -> dict:
+    """State changes of ONE ONU, newest first, with the time spent down and the drops in the window. The first row of an ONU is its BASELINE (its first
+    sighting, or its state when the history began): it says what was known, not that something happened."""
+    if conn.execute(text("SELECT 1 FROM onus WHERE id = :i"), {"i": onu_id}).first() is None:
+        raise HTTPException(404, "onu not found")
+    rows = conn.execute(
+        text("SELECT id, from_status, to_status, at FROM onu_state_events WHERE onu_id = :i ORDER BY at DESC, created_at DESC LIMIT :l"),
+        {"i": onu_id, "l": limit + 1}).all()
+    return {"onu_id": str(onu_id), "summary": _avail_view(_availability(conn, [onu_id], days).get(onu_id), days), "truncated": len(rows) > limit,
+            "events": [{"id": str(r.id), "from": r.from_status, "to": r.to_status, "at": r.at.isoformat(), "baseline": r.from_status is None} for r in rows[:limit]]}
 
 
 @router.get("/v1/onus/{onu_id}")
