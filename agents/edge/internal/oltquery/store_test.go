@@ -273,3 +273,38 @@ func TestReportedEntriesAreDroppedAfterADay(t *testing.T) {
 		t.Fatalf("j2 just reported stays: %+v %v", e, ok)
 	}
 }
+
+func TestTwoStoresOnTheSameFileNeverGiveTheSameQueryTwice(t *testing.T) {
+	a, c := newStore(t)
+	b := &Store{Path: a.Path, Now: c.now} // another instance (another process would be the same to the file lock)
+	for i := 0; i < PerSession; i++ {
+		enq(t, a, c, fmt.Sprintf("j%d", i), olt1)
+	}
+	var mu sync.Mutex
+	got := map[string]int{}
+	var wg sync.WaitGroup
+	for _, s := range []*Store{a, b, a, b, a, b} {
+		wg.Add(1)
+		go func(s *Store) {
+			defer wg.Done()
+			for {
+				e, err := s.Claim(olt1, "s")
+				if err != nil {
+					return
+				}
+				mu.Lock()
+				got[e.JobID]++
+				mu.Unlock()
+			}
+		}(s)
+	}
+	wg.Wait()
+	if len(got) != PerSession {
+		t.Fatalf("claimed %v", got)
+	}
+	for id, n := range got {
+		if n != 1 {
+			t.Fatalf("%s handed out %d times", id, n)
+		}
+	}
+}

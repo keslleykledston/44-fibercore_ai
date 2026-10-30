@@ -131,13 +131,22 @@ func (s *Store) save(f *file) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(name, s.Path)
+	if err := os.Rename(name, s.Path); err != nil {
+		return err
+	}
+	// the rename itself must survive a power cut, or a CLAIMED already acted upon could come back as QUEUED and run twice
+	return syncDir(filepath.Dir(s.Path))
 }
 
 // update runs fn on the loaded file and persists the result. Nothing observable happens before the write succeeds.
 func (s *Store) update(fn func(f *file) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	unlock, err := lockFile(s.Path) // across every Store (and process) sharing the file, not just this value
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	f, err := s.load()
 	if err != nil {
 		return err
@@ -312,6 +321,11 @@ func (s *Store) ExpireDue() (int, error) {
 func (s *Store) PendingReports() ([]Entry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	unlock, err := lockFile(s.Path)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	f, err := s.load()
 	if err != nil {
 		return nil, err
@@ -355,6 +369,11 @@ func (s *Store) MarkReported(jobID string) error {
 func (s *Store) Get(jobID string) (Entry, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	unlock, err := lockFile(s.Path)
+	if err != nil {
+		return Entry{}, false, err
+	}
+	defer unlock()
 	f, err := s.load()
 	if err != nil {
 		return Entry{}, false, err
