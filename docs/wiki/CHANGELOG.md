@@ -212,5 +212,5 @@
 - `MFA_RECENT_ENFORCE` passa a vir desligada (decisão do responsável): o código do segundo fator é pedido ao entrar, não a cada ação. O mecanismo de step-up continua disponível por chave. Equipe e acessos: atalho "Minha segurança" e aviso para ativar o MFA.
 
 ## Unreleased — PR 85 (onu_state_events)
-- API: migração 0028 `onu_state_events` (histórico de mudanças de estado das ONUs, escrito só por gatilho em `onus`; a role da aplicação só lê; baseline por ONU). `GET /v1/onus/{id}/history`, `GET /v1/onus/unstable`; o relatório `GET /v1/onus/offline` (JSON e CSV) ganha `drops_30d` e `offline_hours_30d`.
+- API: migração 0028 `onu_state_events` (histórico de mudanças de estado das ONUs, escrito só por gatilho em `onus`; a role da aplicação só lê; baseline por ONU no instante da migração; ordem por `seq`, `at` nunca recua; retenção `onu_state_events_prune(>=370 dias)` só pelo dono do banco). `GET /v1/onus/{id}/history`, `GET /v1/onus/unstable`; o relatório `GET /v1/onus/offline` (JSON e CSV) ganha `drops_30d` e `offline_hours_30d`.
 - Web: coluna "Últimos 30 dias" no relatório de ONUs offline e cartão "Histórico (30 dias)" na ONU 360.

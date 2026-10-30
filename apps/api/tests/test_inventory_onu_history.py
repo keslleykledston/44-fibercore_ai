@@ -113,3 +113,58 @@ def test_history_cannot_be_written_through_the_application_role(client, seed, in
             c.execute(text(stmt))
     with migrated.connect() as c:   # and the trigger (SECURITY DEFINER) still wrote on behalf of the ingest
         assert c.execute(text("SELECT count(*) FROM onu_state_events WHERE serial = :s"), {"s": s}).scalar_one() == 1
+
+
+def test_equal_times_keep_the_applied_order_and_time_never_goes_back(client, seed, inv, olt, migrated):
+    s = f"TIE{uuid4().hex[:8].upper()}"
+    _timeline(client, inv, olt, s, [("online", 3 * DAY), ("offline", 2 * DAY), ("online", 2 * DAY), ("offline", 2 * DAY)])   # three changes at the same instant
+    oid = _onu(client, seed, s)
+    ev = client.get(f"/v1/onus/{oid}/history", headers=hdr(client, "alice", seed, "A")).json()["events"]
+    chain = [(e["from"], e["to"]) for e in reversed(ev)]
+    assert chain == [(None, "online"), ("online", "offline"), ("offline", "online"), ("online", "offline")]   # the applied order, not a guess among equals
+    ats = [e["at"] for e in reversed(ev)]
+    assert ats == sorted(ats)
+    with migrated.begin() as c:   # a later change can never be stamped before the previous one, whatever the snapshot's clock says
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE onus SET status = 'online', observed_at = observed_at - interval '1 day' WHERE id = :i"), {"i": oid})
+        last = c.execute(text("SELECT at, (SELECT max(at) FROM onu_state_events WHERE onu_id = :i AND seq < e.seq) AS before FROM onu_state_events e "
+                              "WHERE onu_id = :i ORDER BY seq DESC LIMIT 1"), {"i": oid}).one()
+    assert last.at >= last.before
+
+
+def test_unstable_is_ranked_and_filtered_in_sql(client, seed, inv, olt, migrated):
+    many, few = f"MANY{uuid4().hex[:6].upper()}", f"FEW{uuid4().hex[:6].upper()}"
+    steps = [("online", 9 * DAY), ("offline", 8 * DAY), ("online", 7 * DAY), ("offline", 6 * DAY), ("online", 5 * DAY), ("offline", 4 * DAY)]
+    for status, ago in steps:
+        body = snap(inv, name=olt, observed=_now(-ago), onus=[{"serial": many, "pon_path": "0/1/0", "status": status},
+                                                              {"serial": few, "pon_path": "0/1/0", "status": status if ago > 6 * DAY else "online"}])
+        assert client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a1"), json=body).status_code == 202
+    h = hdr(client, "alice", seed, "A")
+    with migrated.connect() as c:
+        olt_id = c.execute(text("SELECT id FROM olts WHERE name = :n"), {"n": olt}).scalar_one()
+    items = client.get("/v1/onus/unstable?min_drops=1&limit=1000", headers=h).json()["items"]
+    mine = [i["serial"] for i in items if i["serial"] in (many, few)]
+    assert mine == [many, few]          # more drops first
+    one = client.get("/v1/onus/unstable?min_drops=1&limit=1", headers=h).json()
+    assert one["count"] == 1 and one["truncated"] is True
+    assert [i["serial"] for i in client.get(f"/v1/onus/unstable?min_drops=1&olt_id={olt_id}", headers=h).json()["items"]] == [many, few]
+    assert client.get(f"/v1/onus/unstable?min_drops=1&olt_id={uuid4()}", headers=h).json()["items"] == []
+
+
+def test_retention_keeps_the_state_each_window_starts_in(client, seed, inv, olt, migrated):
+    s = f"RET{uuid4().hex[:8].upper()}"
+    _timeline(client, inv, olt, s, [("online", 5 * DAY), ("offline", 4 * DAY)])
+    oid = _onu(client, seed, s)
+    with migrated.begin() as c:
+        c.execute(text("UPDATE onu_state_events SET at = now() - interval '600 days' WHERE onu_id = :i AND from_status IS NULL"), {"i": oid})
+        c.execute(text("INSERT INTO onu_state_events (tenant_id, onu_id, olt_id, serial, from_status, to_status, at) "
+                       "SELECT tenant_id, id, olt_id, serial, 'online', 'offline', now() - interval '500 days' FROM onus WHERE id = :i"), {"i": oid})
+    with pytest.raises(DBAPIError), migrated.begin() as c:   # a retention shorter than the longest query window is refused
+        c.execute(text("SELECT onu_state_events_prune(30)"))
+    with pytest.raises(DBAPIError), migrated.begin() as c:   # and the application role cannot run it at all
+        c.execute(text("SET LOCAL ROLE fibercore_app"))
+        c.execute(text("SELECT onu_state_events_prune(400)"))
+    with migrated.begin() as c:
+        c.execute(text("SELECT onu_state_events_prune(370)"))
+        left = c.execute(text("SELECT count(*) FROM onu_state_events WHERE onu_id = :i"), {"i": oid}).scalar_one()
+    assert left == 2   # the recent event plus the one just before the cut-off (the state the window starts in); the 600-day one is gone

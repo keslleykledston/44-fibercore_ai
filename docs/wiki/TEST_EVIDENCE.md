@@ -360,7 +360,7 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - Lovable: um projeto de protótipo (dados fictícios, nenhum segredo); adotadas a lista única com convites na mesma tabela, os selos de situação e os cartões no celular.
 
 ## onu_state_events — histórico de estado das ONUs (PR 85)
-- `make test-api` 510 passed (7 novos em `tests/test_inventory_onu_history.py`); `make validate` PASS (86 caminhos); `tsc` e `next build` OK.
+- `make test-api` 513 passed (10 novos em `tests/test_inventory_onu_history.py`; rodada 2 do Codex: ordem por `seq` com tempos empatados, `/unstable` ranqueado e filtrado no SQL, retenção `onu_state_events_prune`); `make validate` PASS (86 caminhos); `tsc` e `next build` OK.
 - Cobertura: o gatilho registra só mudanças reais (mesmo estado de novo, snapshot mais antigo e repetição da mesma observação não registram nada); linha do tempo conhecida dá exatamente 2 quedas, 72 h fora e 240 h conhecidas (70%), e a janela menor recorta os trechos; `unknown` não conta como online nem como fora nem como queda; lista de instáveis (4 quedas aparece com `min_drops=3` e some com 5) e o relatório de offline traz `drops_30d`/`offline_hours_30d` (JSON e CSV); isolamento entre provedores, permissões (noc_n1 lê, auditor não), 404 e validação; a role da aplicação não escreve no histórico (INSERT/UPDATE/DELETE negados) e o gatilho SECURITY DEFINER continua gravando pelo ingest.
 - Stack EFÊMERA com uma ONU fictícia que cai e volta: o cartão "Histórico (30 dias)" mostra 2 quedas, 2 d 6 h fora e 77,5% (confere com a conta: 54 h de 240 h conhecidas); a coluna "Últimos 30 dias" no relatório mostra "2 quedas · 2 d 6 h fora do ar"; axe claro e escuro sem violação séria.
-- No LAB, a baseline da migração deve ter 1 linha por ONU (conferido no deploy).
+- No LAB, a baseline da migração deve ter 1 linha por ONU, com `at` = instante da migração (conferido no deploy).
