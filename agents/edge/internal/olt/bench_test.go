@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -309,5 +310,65 @@ func TestTheStartingCommandChecksTheWindowAtTheMomentOfSending(t *testing.T) {
 	}
 	if _, err := s.Run(context.Background(), "ont activate 14 10"); err != nil { // the way back is never blocked by the window
 		t.Fatalf("activate is the recovery and stays allowed: %v", err)
+	}
+}
+
+// confirmFake is a session that asks one confirmation for the starter commands.
+type confirmFake struct {
+	*fakeOLT
+	confirmCalls []string
+	askErr       error
+}
+
+func (c *confirmFake) Run(ctx context.Context, cmd string) (string, error) {
+	if strings.HasPrefix(cmd, "ont ") && c.askErr != nil {
+		return "", c.askErr
+	}
+	return c.fakeOLT.Run(ctx, cmd)
+}
+
+func (c *confirmFake) RunConfirm(ctx context.Context, cmd string, expect *regexp.Regexp, answer string) (string, error) {
+	c.confirmCalls = append(c.confirmCalls, cmd+"|"+expect.String()+"|"+answer)
+	return c.fakeOLT.Run(ctx, cmd)
+}
+
+func TestTheConfirmationIsAnsweredOnlyWhenItWasObservedAndConfigured(t *testing.T) {
+	old := BenchConfirm
+	defer func() { BenchConfirm = old }()
+	// configured: the maneuver commands go through RunConfirm with "y"; the read commands never do
+	BenchConfirm = map[string]*regexp.Regexp{"reset": regexp.MustCompile(`reset the ONT`)}
+	c := &confirmFake{fakeOLT: newFake()}
+	out, err := RunBenchManeuver(context.Background(), c, onu14, "onu_reset", far(), func() error { return nil }, 500*time.Millisecond, time.Millisecond, time.Now)
+	if err != nil || !out.Done || len(c.confirmCalls) != 1 || c.confirmCalls[0] != "ont reset 14 10|reset the ONT|y" {
+		t.Fatalf("out=%+v err=%v calls=%v", out, err, c.confirmCalls)
+	}
+	// not configured (nothing observed): a question fails closed, the command did NOT run, and it is not counted as sent
+	BenchConfirm = map[string]*regexp.Regexp{}
+	c = &confirmFake{fakeOLT: newFake(), askErr: fmt.Errorf("%w: %q", ErrInteractive, "Are you sure? (y/n)[n]:")}
+	out, err = RunBenchManeuver(context.Background(), c, onu14, "onu_reset", far(), func() error { return nil }, 500*time.Millisecond, time.Millisecond, time.Now)
+	if !errors.Is(err, ErrInteractive) || out.Sent || len(c.confirmCalls) != 0 {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+	// a question that came AFTER the answer: the command may have run
+	c = &confirmFake{fakeOLT: newFake(), askErr: errors.Join(fmt.Errorf("%w: x", ErrInteractive), ErrAfterAnswer)}
+	out, err = RunBenchManeuver(context.Background(), c, onu14, "onu_reset", far(), func() error { return nil }, 500*time.Millisecond, time.Millisecond, time.Now)
+	if !errors.Is(err, ErrAfterAnswer) || !out.Sent {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+}
+
+func TestTheObservedResetQuestionIsTheOnlyOneConfigured(t *testing.T) {
+	re := BenchConfirm["reset"]
+	if re == nil || len(BenchConfirm) != 1 {
+		t.Fatalf("only the reset confirmation is configured: %v", BenchConfirm)
+	}
+	if !re.MatchString("  Are you sure to reset the ONT(s)? (y/n)[n]:") {
+		t.Fatal("the observed question must match")
+	}
+	for _, other := range []string{"Are you sure to reset all ONTs? (y/n)[n]:", "Are you sure to delete the ONT(s)? (y/n)[n]:",
+		"Are you sure to reset the ONT(s)? (y/n)[n]: and then Password:", "Are you sure to deactivate the ONT(s)? (y/n)[n]:", "Password:"} {
+		if re.MatchString(other) {
+			t.Errorf("must not match %q", other)
+		}
 	}
 }

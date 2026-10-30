@@ -14,3 +14,9 @@ UMA sessão CLI supervisionada na OLT Huawei MA5608T (firmware MA5600V800R015C00
 
 ## Estado de partida para a H4
 `0/0/14`, ONT-ID `10`, online, `Config state: normal`.
+
+## Confirmações observadas (sonda supervisionada das 06:06 UTC)
+- `ont reset <porta> <ontid>` pergunta exatamente `Are you sure to reset the ONT(s)? (y/n)[n]:` (o padrão é "n"). A sonda respondeu "n"; nada foi reiniciado.
+- `ont deactivate <porta> <ontid>` e `ont activate <porta> <ontid>` **não perguntam nada**: executam ao dar Enter. Na sonda, o `deactivate` rodou sem pergunta e foi desfeito na sequência pelo `activate`: a ONU de bancada ficou ~8 s fora (OLT: `Last down cause: deactive`, `Last up time` 8 s depois), sem reiniciar a ONT (o `_lastBoot` no ACS não mudou) e voltou `Control flag: active`, `Run state: online`.
+- **Registro de conduta:** isso foi uma manobra real da ONU de bancada executada por uma sonda de caracterização, fora do fluxo de job e de autorização prévia do ADR-0030 (a sonda previa a recuperação, mas assumiu que o `deactivate` também pediria confirmação). Só a ONU de bancada foi afetada. Daqui em diante, qualquer comando que muda estado na OLT só roda por job autorizado.
+

@@ -34,6 +34,15 @@ func (b BenchONU) valid() bool {
 		gponSerialRe.MatchString(b.GPONSerial)
 }
 
+// BenchConfirm holds, per command, the exact question the OLT asks before running it (captured on this OLT, see the H4 evidence). A nil entry means
+// no confirmation is expected: any question then fails closed.
+//
+// Observed on the bench OLT on 2026-10-30 (docs/wiki/bench/H1-olt-caracterizacao-2026-10-30.md): `ont reset` asks exactly the question below;
+// `ont deactivate` and `ont activate` ask NOTHING (a question there still fails closed).
+var BenchConfirm = map[string]*regexp.Regexp{
+	"reset": regexp.MustCompile(`^\s*Are you sure to reset the ONT\(s\)\? \(y/n\)\[n\]:\s*$`),
+}
+
 var gponSerialRe = regexp.MustCompile(`^[0-9A-F]{16}$`)
 
 func (b BenchONU) fsp() string { return fmt.Sprintf("%d/%d/%d", b.Frame, b.Slot, b.Port) }
@@ -62,6 +71,7 @@ type benchSession struct {
 	sent    []string
 	// the two commands that start a maneuver are refused once the window is over, checked at the very moment of sending
 	starters map[string]bool
+	confirm  map[string]*regexp.Regexp
 	notAfter time.Time
 	now      func() time.Time
 }
@@ -71,7 +81,13 @@ func newBenchSession(inner Session, c BenchCommands, notAfter time.Time, now fun
 	for _, s := range []string{c.Enable, c.Config, c.Iface, c.BySN, c.Info, c.Reset, c.Deactivate, c.Activate, c.Quit} {
 		a[s] = true
 	}
-	return &benchSession{inner: inner, allowed: a, starters: map[string]bool{c.Reset: true, c.Deactivate: true}, notAfter: notAfter, now: now}
+	conf := map[string]*regexp.Regexp{c.Reset: BenchConfirm["reset"], c.Deactivate: BenchConfirm["deactivate"], c.Activate: BenchConfirm["activate"]}
+	return &benchSession{inner: inner, allowed: a, starters: map[string]bool{c.Reset: true, c.Deactivate: true}, confirm: conf, notAfter: notAfter, now: now}
+}
+
+// ConfirmRunner is implemented by a session that can answer ONE expected confirmation (see shell.RunConfirm).
+type ConfirmRunner interface {
+	RunConfirm(ctx context.Context, cmd string, expect *regexp.Regexp, answer string) (string, error)
 }
 
 func (s *benchSession) Run(ctx context.Context, cmd string) (string, error) {
@@ -82,6 +98,12 @@ func (s *benchSession) Run(ctx context.Context, cmd string) (string, error) {
 		return "", fmt.Errorf("%w: window over, command not sent", ErrBenchOLTBefore)
 	}
 	s.sent = append(s.sent, cmd)
+	// the maneuver commands (and only they) may ask the ONE confirmation that was observed on this OLT; its text is fixed in BenchConfirm
+	if q, ok := s.confirm[cmd]; ok && q != nil {
+		if cr, ok := s.inner.(ConfirmRunner); ok {
+			return cr.RunConfirm(ctx, cmd, q, "y")
+		}
+	}
 	return s.inner.Run(ctx, cmd)
 }
 
@@ -225,7 +247,7 @@ func RunBenchManeuver(ctx context.Context, raw Session, onu BenchONU, op string,
 	switch op {
 	case "onu_reset":
 		if _, err := step(c.Reset); err != nil {
-			if errors.Is(err, ErrBenchOLTRefused) || errors.Is(err, ErrBenchOLTBefore) {
+			if errors.Is(err, ErrBenchOLTRefused) || errors.Is(err, ErrBenchOLTBefore) || (errors.Is(err, ErrInteractive) && !errors.Is(err, ErrAfterAnswer)) {
 				res.Sent = false // the OLT said no: the command did not run
 			}
 			return res, err
@@ -237,7 +259,7 @@ func RunBenchManeuver(ctx context.Context, raw Session, onu BenchONU, op string,
 		res.Done, res.Detail = true, "reset sent and the ONU came back online"
 	case "onu_deactivate":
 		if _, err := step(c.Deactivate); err != nil {
-			if errors.Is(err, ErrBenchOLTRefused) || errors.Is(err, ErrBenchOLTBefore) {
+			if errors.Is(err, ErrBenchOLTRefused) || errors.Is(err, ErrBenchOLTBefore) || (errors.Is(err, ErrInteractive) && !errors.Is(err, ErrAfterAnswer)) {
 				res.Sent = false
 			}
 			return res, err

@@ -20,6 +20,9 @@ var ErrAmbiguousOutput = errors.New("cli output contains a line identical to the
 // ErrInteractive: the CLI asked a question the Edge never answers (confirmation, password, ...). Fail closed.
 var ErrInteractive = errors.New("cli asked an interactive question (fail closed)")
 
+// ErrAfterAnswer marks a question that came AFTER an expected confirmation was answered: the command may have run.
+var ErrAfterAnswer = errors.New("cli asked again after the expected confirmation was answered")
+
 // defaultQuietAfterPrompt: how long the line must stay quiet after a candidate prompt. A heuristic, NOT proof of completion
 // (see EndProver); it only narrows the window in which a mid-output prompt lookalike can be mistaken for the end.
 const defaultQuietAfterPrompt = time.Second
@@ -210,7 +213,24 @@ func (s *shell) close() {
 	s.sess.Close()
 }
 
-func (s *shell) Run(ctx context.Context, cmd string) (string, error) {
+func (s *shell) Run(ctx context.Context, cmd string) (string, error) { return s.run(ctx, cmd, nil, "") }
+
+// RunConfirm is Run for ONE command that is known to ask ONE confirmation. If, and only if, the question the CLI shows matches `expect`, `answer` is
+// typed (once). Any other question, or a second one, still fails closed.
+func (s *shell) RunConfirm(ctx context.Context, cmd string, expect *regexp.Regexp, answer string) (string, error) {
+	return s.run(ctx, cmd, expect, answer)
+}
+
+// questionError keeps the text the CLI asked (a prompt, no secrets) so the operator can see what it wanted.
+func questionError(line string) error {
+	line = strings.TrimSpace(line)
+	if len(line) > 160 {
+		line = line[:160]
+	}
+	return fmt.Errorf("%w: %q", ErrInteractive, line)
+}
+
+func (s *shell) run(ctx context.Context, cmd string, expect *regexp.Regexp, answer string) (string, error) {
 	if s.broken {
 		return "", errors.New("ssh: shell closed after a previous failure")
 	}
@@ -221,6 +241,7 @@ func (s *shell) Run(ctx context.Context, cmd string) (string, error) {
 		return "", err
 	}
 	crSent, crAt := false, 0
+	answered, ansAt := false, 0
 	pages, spaceAt := 0, 0
 	var final string
 	text, err := s.wait(ctx, func(t string) (bool, error) {
@@ -247,12 +268,25 @@ func (s *shell) Run(ctx context.Context, cmd string) (string, error) {
 				return false, err
 			}
 			if len(tail) > crAt { // new output ended in another parameter prompt: one Enter per command, never more
-				return false, ErrInteractive
+				return false, questionError(lastLine(c))
 			}
 			return false, nil // still the stale prompt: the device has not answered the Enter yet
 		}
 		if questionRe.MatchString(lastLine(c)) {
-			return false, ErrInteractive
+			if expect != nil && expect.MatchString(lastLine(c)) {
+				if !answered {
+					answered, ansAt = true, len(tail)
+					_, err := io.WriteString(s.in, answer+"\r") // the one expected confirmation, once
+					return false, err
+				}
+				if len(tail) == ansAt {
+					return false, nil // still the stale question: the device has not reacted to the answer yet
+				}
+			}
+			if answered {
+				return false, errors.Join(questionError(lastLine(c)), ErrAfterAnswer)
+			}
+			return false, questionError(lastLine(c))
 		}
 		f, done, err := finished(c, cmd, s.pr)
 		final = f

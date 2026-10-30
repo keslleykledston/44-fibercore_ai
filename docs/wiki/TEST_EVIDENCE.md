@@ -269,3 +269,8 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - `make test-api` 392 passed; `go vet ./... && go test -race ./...` PASS. Provas por teste (OLT simulada): lista fechada e exata de comandos (nenhum `all`/`graceful`/outra porta/outro ID passa); identidade (uma só ONU, F/S/P, ONT-ID, serial de 16 hex, online/normal/match/active) lida duas vezes antes de gastar o claim; claim e ritmo só depois da identidade; prazo checado no instante do envio; `onu_deactivate` SEMPRE reativa e verifica; reset sem retorno e reativação recusada são reportados e travam; nada é repetido; o guard da OLT é o mesmo das coletas.
 - NOT_RUN: qualquer manobra real na OLT. Pendentes: deploy na LAB, configuração `bench.olt` no Edge, registro `identified` por operação (perfil da OLT) e a autorização do responsável.
 
+## 2026-10-30 — H4: primeira tentativa de `onu_reset` recusada com segurança; confirmação do CLI da OLT
+- Job `6c5d99e1-…` (05:49): o Edge confirmou a identidade, gastou o claim e enviou `ont reset 14 10`; o CLI perguntou `Are you sure to reset the ONT(s)? (y/n)[n]:`; o Edge NÃO responde a perguntas (fail-closed), fechou a sessão e reportou `FAILED`. A ONU NÃO reiniciou (ACS: `_lastBoot` inalterado 04:02:56). Alvo travado, autorização consumida.
+- Sonda supervisionada (06:06): a pergunta do reset foi lida e respondida "n"; `ont deactivate`/`ont activate` NÃO pedem confirmação — o `deactivate` da sonda executou e foi desfeito (~8 s, sem reboot da ONT). Incidente de conduta registrado em `docs/wiki/bench/H1-olt-caracterizacao-2026-10-30.md`.
+- PR 65: o Edge passa a responder UMA vez a pergunta observada do reset (e só ela). `go test -race ./...` PASS.
+
