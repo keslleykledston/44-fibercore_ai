@@ -259,3 +259,8 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - `make test-api` 385 passed; `go vet ./... && go test -race ./...` PASS. Provas por teste (ACS simulado com a bancada E um CPE de produção do mesmo modelo): troca → leitura de volta → restauração → leitura de volta, só no CPE de bancada e só a folha `WLANConfiguration.1.SSID`; registro de restauração gravado (0600) antes da troca e mantido se a restauração falhar; formato do SSID recusado fora de `^BANCADA-[A-Z0-9]{1,16}$` no preview, no gate, no CLI, no envelope e antes do envio; autorização presa ao SSID exato; `params` cobertos pela assinatura; tarefa enfileirada removida; resultado ambíguo nunca reenviado; restauração enfileirada removida.
 - NOT_RUN: nenhuma manobra H3 real. Pendentes: deploy na LAB, registro `set_wifi_ssid` identified e a autorização do responsável.
 
+## 2026-10-30 — H3 `set_wifi_ssid` REAL na ONT de bancada (ADR-0030)
+- Tentativa 1 (job `121d1ad6-…`, 04:55): recusada ANTES de qualquer escrita; causa ambiental (credencial de Connection Request da ONT desalinhada do ACS); claim `FAILED`, SSID intacto, fila vazia. Responsável realinhou; alvo destravado após conferir.
+- Tentativa 2 (job `7b050c8f-…`, 05:12, autorização `first_run` 6833fa43-…): `SUCCEEDED` em ~10 s; 5 requisições ao NBI, todas à ONT de bancada (ler, trocar para `BANCADA-H3`, ler, restaurar, ler); SSIDs 2,4 GHz e 5 GHz iguais aos de antes (conferido no ACS); arquivo de restauração removido; claim `DONE`.
+- Registro: `set_wifi_ssid`/tr069 do perfil Huawei EG8145V5 V5R019C10S350 promovido a `observed` com a evidência `docs/wiki/bench/H3-set_wifi_ssid-2026-10-30.md` (aceita pelo responsável). `certified` NÃO concedida.
+
