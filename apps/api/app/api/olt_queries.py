@@ -58,6 +58,8 @@ def request_query(
     if not p.can("jobs:request"):
         raise HTTPException(403, "forbidden")
     _olt_or_404(conn, olt_id)
+    if "query_id" in body.params:
+        raise HTTPException(422, "fields_do_not_match_scope")  # the query is the one in the path, for the intent and for the audit alike
     view = jobs.preview(jobs.PreviewIn(operation="olt_query", target_id=olt_id, params={"query_id": query_id, **body.params}), idempotency_key, p, conn)
     if view["status"] != "PREVIEWED":  # the same request again: nothing new is created
         return {"outcome": "existing", "job": view}

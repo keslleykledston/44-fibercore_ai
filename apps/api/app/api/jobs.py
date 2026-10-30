@@ -222,7 +222,10 @@ def submit(job_id: UUID, p: Principal = Depends(require("jobs:request")), conn: 
         raise HTTPException(409, f"job is {row.status}")
     reason = _write_gate(conn, p.tenant_id, row, "submit", p.id)
     if reason is None and row.operation == "olt_query":
-        reason = _query_gate(conn, p.tenant_id, _row_params(row))
+        prm = _row_params(row)
+        reason = _query_gate(conn, p.tenant_id, prm)
+        if reason is None and _intent_hash(row.operation, row.target_type, row.target_id, prm) != row.intent_hash.strip():
+            reason = "intent_changed"  # what is stored is no longer what was previewed and hashed
     if reason:
         raise HTTPException(409, reason)  # write gate: never leaves PREVIEWED
     to = "PENDING_APPROVAL" if row.required_approvals > 0 else "APPROVED"

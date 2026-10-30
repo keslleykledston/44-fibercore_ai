@@ -215,3 +215,19 @@ def test_quota_per_olt(client, seed, inv, olt, on, monkeypatch):
     monkeypatch.setattr(olt_query, "OLT_PER_HOUR", 2)
     assert [_ask(client, h, olt).status_code for _ in range(2)] == [200, 200]
     assert _ask(client, h, olt).status_code == 429
+
+
+def test_the_path_decides_the_query_and_a_changed_intent_cannot_be_submitted(client, seed, inv, olt, on, migrated):
+    h = hdr(client, "alice", seed, "A")
+    r = client.post(f"/v1/olts/{olt}/queries/olt.version", headers={**h, **_key()}, json={"params": {"query_id": "olt.board"}})
+    assert r.status_code == 422
+    # a PREVIEWED job whose stored params were edited after the hash: submit refuses it
+    from app.api import jobs as jobs_mod
+    pv = client.post("/v1/jobs/preview", headers={**h, **_key()},
+                     json={"operation": "olt_query", "target_id": olt, "params": {"query_id": "olt.version"}}).json()
+    with migrated.begin() as c:
+        c.execute(text("UPDATE jobs SET params = jsonb_set(params, '{query_id}', '\"olt.board\"') WHERE id = :j"), {"j": pv["id"]})
+    r = client.post(f"/v1/jobs/{pv['id']}/submit", headers=h)
+    assert (r.status_code, r.json()["detail"]) == (409, "intent_changed")
+    assert jobs_mod.OPERATIONS["olt_query"].writes is False
+    assert client.get(f"/v1/jobs/{pv['id']}", headers=h).json()["status"] == "PREVIEWED"

@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18e90-1610-7293-9198-808a413a88d6).
+[codex] Turn started (01a18e90-1649-7c53-9cc4-a7f1a6c736c3).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de preview, submit e despacho em bu...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/jobs.py ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/jobs.py ap... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/olt_querie...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/olt_querie... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/olt_queries.py | sed -n '46,68p'; nl -ba apps/api/app/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/olt_queries.py | sed -n '46,68p'; nl -ba apps/api/app/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não deve embarcar ainda: o endpoint permite divergênc...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não deve embarcar ainda: o endpoint permite divergência entre a consulta da URL e a consulta efetivamente enfileirada, e o submit não verifica o hash da intenção armazenada.
+
+Findings:
+- [high] Submit não recalcula o hash da intenção armazenada (apps/api/app/api/jobs.py:223-230)
+  No submit, a condição de `olt_query` reavalia rollout, flag e suporte, mas não compara o hash dos parâmetros persistidos com `row.intent_hash`. Se os parâmetros forem alterados após o preview e antes do submit, o job ainda pode avançar para `APPROVED`; o despacho cancelará uma divergência de hash, mas o job já terá sido aprovado e poderá ficar pendente até o despacho. Isso deixa incompleta a verificação declarada para o submit e permite que uma intenção alterada atravesse essa transição. Recalcule e compare o hash no submit antes do CAS; em divergência, recuse e cancele ou mantenha o job inelegível para despacho.
+  Recommendation: Antes da transição no submit, compare `_intent_hash(row.operation, row.target_type, row.target_id, _row_params(row))` com `row.intent_hash.strip()` e recuse a divergência.
+- [medium] O corpo pode substituir o query_id da URL (apps/api/app/api/olt_queries.py:61-65)
+  A composição do intent usa `{"query_id": query_id, **body.params}`, então um `query_id` enviado em `params` sobrescreve o identificador do caminho. Uma chamada para `/queries/olt.version` pode enfileirar `olt.board`, enquanto o evento `olt_query.requested` audita `olt.version`. Isso cria divergência entre a ação solicitada, a intenção executada e a trilha de auditoria. Rejeite `query_id` em `body.params` ou construa o intent sem permitir essa sobrescrita.
+  Recommendation: Impeça `query_id` em `body.params` e valide que o query_id do caminho é o único usado no intent e na auditoria.
