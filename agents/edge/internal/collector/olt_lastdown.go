@@ -134,6 +134,9 @@ func (o *OLT) readLastDown(ctx context.Context, src OLTSource, ports []string, g
 	defer cancel()
 	r, closeFn, err := ld.Open(ctx)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil // our own budget ended while opening: not the agent's fault
+		}
 		return err
 	}
 	defer closeFn()

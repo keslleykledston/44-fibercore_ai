@@ -264,3 +264,16 @@ func TestLastDownContinuesWhereTheBudgetRanOutInsteadOfRereadingTheSamePons(t *t
 		t.Fatalf("a cursor past the end wraps to the start: %v", got)
 	}
 }
+
+func TestLastDownOpenCutByOurOwnBudgetIsNotAFailure(t *testing.T) {
+	src := OLTSource{Name: "OLT-OPEN", LastDown: &LastDownSource{Key: "k", Every: time.Hour, Timeout: time.Millisecond,
+		Open: func(ctx context.Context) (olt.SNMPReader, func(), error) { <-ctx.Done(); return nil, nil, ctx.Err() }}}
+	if err := (&OLT{}).readLastDown(context.Background(), src, []string{"0/0/1"}, 0); err != nil {
+		t.Fatalf("our own deadline while opening must not start the agent's cooldown: %v", err)
+	}
+	src.LastDown.Open = func(context.Context) (olt.SNMPReader, func(), error) { return nil, nil, errors.New("community file unreadable") }
+	src.LastDown.Timeout = time.Minute
+	if err := (&OLT{}).readLastDown(context.Background(), src, []string{"0/0/1"}, 0); err == nil {
+		t.Fatal("a real open failure must be reported")
+	}
+}
