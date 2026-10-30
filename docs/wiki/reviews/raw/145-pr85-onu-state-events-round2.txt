@@ -1,0 +1,37 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18e80-5d00-7fd2-9530-655b9494270a).
+[codex] Turn started (01a18e80-5d3b-76a1-9832-84d36bbc666e).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os trechos do gatilho, da consulta de disponibi...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "CREATE TABLE onus|CREATE POLICY tenant_isolation ON onus|GRANT .* onus|...
+[codex] Command completed: /bin/bash -lc 'rg -n "CREATE TABLE onus|CREATE POLICY tenant_isolation ON onus|GRANT .* onus|... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,110p' apps/api/alembic/versions/0005_inventory.py; rg -n \"tenant_id...
+[codex] Command completed: /bin/bash -lc "sed -n '1,110p' apps/api/alembic/versions/0005_inventory.py; rg -n \"tenant_id... (exit 0)
+[codex] Assistant message captured: O ponto de concorrência do gatilho parece apoiado pelo lock da linha em `onus`. Encontrei dua...
+[codex] Running command: /bin/bash -lc "rg -n \"onu_state_events|\\bseq\\b|offline_hours_30d\" apps/api/tests/test_inv...
+[codex] Command completed: /bin/bash -lc "rg -n \"onu_state_events|\\bseq\\b|offline_hours_30d\" apps/api/tests/test_inv... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviaria ainda: a consulta de histórico limitado ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviaria ainda: a consulta de histórico limitado por tempo pode falhar em desempenho e a retenção viola a premissa temporal ao escolher o predecessor por seq, apesar do campo at ser manipulável por quem executa a função SECURITY DEFINER.
+
+Findings:
+- [high] A função de retenção pode ser chamada por qualquer role do banco (apps/api/alembic/versions/0028_onu_state_events.py:68-78)
+  `REVOKE ALL ... FROM PUBLIC` remove acesso público, mas não restringe execução ao dono da rotina; funções PostgreSQL recebem `EXECUTE` para `PUBLIC` por padrão e aqui o revoke remove apenas esse grant. Qualquer role de banco não-PUBLIC com acesso à função pode apagar eventos históricos. Além disso, por ser `SECURITY DEFINER`, o DELETE executa com os privilégios do owner e ignora RLS por esse owner, então pode apagar dados de todos os tenants. A alegação de que só o host/dono executa não é imposta no banco.
+  Recommendation: Revogue explicitamente EXECUTE de roles operacionais nomeadas e conceda a uma role de manutenção dedicada; verifique também a role efetiva do owner e limite a rotina por tenant ou assegure que apenas o job administrativo possa invocá-la.
+- [medium] A retenção escolhe o predecessor por seq, não pelo corte temporal (apps/api/alembic/versions/0028_onu_state_events.py:72-74)
+  O `DISTINCT ON` filtra eventos `at < cutoff` e então mantém o maior `seq`. Com timestamps monotônicos, eventos podem compartilhar `at`; se uma sequência posterior for carimbada exatamente no cutoff (por exemplo, migração/ingest no mesmo timestamp), mas uma sequência anterior tiver `at < cutoff`, a sequência posterior não participa do CTE e os eventos anteriores podem todos ser apagados. O estado na borda da janela deixa de estar representado. O mesmo princípio torna a escolha frágil se eventos futuros forem introduzidos por dados administrativos.
+  Recommendation: Defina explicitamente a semântica da borda e retenha o último evento anterior à cutoff pela ordem temporal consistente (`at`, `seq`), preservando também empates necessários; teste eventos com timestamps iguais ao corte.
+- [medium] A leitura da janela não tem índice que suporte seu filtro principal (apps/api/app/api/inventory.py:412-423)
+  `_availability` filtra primeiro por `at >= :s` e particiona/ordena por `onu_id, seq`; os índices disponíveis são `(tenant_id, onu_id, seq DESC)` e `(tenant_id, at DESC)`. Como as consultas não incluem `tenant_id` explicitamente, o primeiro índice não ajuda nesse caminho, enquanto o índice temporal pode ler eventos de todos os tenants antes da aplicação do RLS e não cobre o predecessor por ONU. Em histórico crescente, `/unstable` pode varrer grande parte da tabela e recomputar ranking sob carga, contradizendo a alegação de custo limitado à janela.
+  Recommendation: Inclua `tenant_id`/escopo explícito nas consultas e adicione índices alinhados aos acessos por tenant e intervalo temporal, além de medir planos com volume representativo; mantenha o predecessor por ONU indexável.
+
+Next steps:
+- Fechar a ACL da função `SECURITY DEFINER` e validar quais roles do cluster podem invocá-la.
+- Ajustar e cobrir a fronteira temporal da retenção.
+- Validar planos de execução de `/unstable` e `/history` com volume representativo.

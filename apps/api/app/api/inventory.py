@@ -406,12 +406,15 @@ def _availability(conn: Connection, onu_ids: list | None, days: int, *, olt_id: 
     (most drops, then most time down) and the limit are applied here, in SQL, so the cost follows the answer and not the whole history."""
     now = datetime.now(UTC)
     start = now - timedelta(days=days)
-    scope = ("(CAST(:ids AS uuid[]) IS NULL OR onu_id = ANY(CAST(:ids AS uuid[]))) "
-             "AND (CAST(:o AS uuid) IS NULL OR onu_id IN (SELECT id FROM onus WHERE olt_id = :o))")
+    tn = "tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid"   # the same condition RLS applies, stated so the planner starts from the tenant's indexes
     rows = conn.execute(
-        text(f"WITH ev0 AS (SELECT onu_id, seq, at, from_status, to_status FROM onu_state_events WHERE at >= :s AND {scope} "  # noqa: S608
-             f"UNION ALL (SELECT DISTINCT ON (onu_id) onu_id, seq, at, from_status, to_status FROM onu_state_events WHERE at < :s AND {scope} "
-             "ORDER BY onu_id, seq DESC)), "
+        text("WITH scope AS (SELECT id FROM onus WHERE (CAST(:ids AS uuid[]) IS NULL OR id = ANY(CAST(:ids AS uuid[]))) "  # noqa: S608
+             "AND (CAST(:o AS uuid) IS NULL OR olt_id = :o)), "
+             f"ev0 AS (SELECT onu_id, seq, at, from_status, to_status FROM onu_state_events WHERE {tn} AND at >= :s AND onu_id IN (SELECT id FROM scope) "
+             # the state each ONU is in when the window opens: its last event before it, one indexed lookup per ONU (tenant, onu, seq)
+             "UNION ALL SELECT p.onu_id, p.seq, p.at, p.from_status, p.to_status FROM scope sc CROSS JOIN LATERAL "
+             f"(SELECT e.onu_id, e.seq, e.at, e.from_status, e.to_status FROM onu_state_events e WHERE e.{tn} AND e.onu_id = sc.id AND e.at < :s "
+             "ORDER BY e.seq DESC LIMIT 1) p), "
              "ev AS (SELECT onu_id, at, from_status, to_status, lead(at) OVER (PARTITION BY onu_id ORDER BY seq) AS next_at FROM ev0), "
              "seg AS (SELECT onu_id, at, from_status, to_status, GREATEST(at, :s) AS s0, LEAST(COALESCE(next_at, :n), :n) AS e0 FROM ev "
              "WHERE at < :n AND COALESCE(next_at, :n) > :s) "

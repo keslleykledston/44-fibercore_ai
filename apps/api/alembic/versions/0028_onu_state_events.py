@@ -64,8 +64,10 @@ def upgrade() -> None:
         CREATE TRIGGER onu_state_events_log AFTER INSERT OR UPDATE OF status ON onus FOR EACH ROW EXECUTE FUNCTION onu_state_events_log();
 
         -- retention: events older than `keep_days` go, except the last one before the cut-off of each ONU (it carries the state the window starts in).
-        -- Not executable by the application role: it runs from the host (see docs/ops), like the backups.
-        CREATE FUNCTION onu_state_events_prune(keep_days int) RETURNS bigint LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+        -- SECURITY INVOKER on purpose: it grants nothing. Whoever calls it needs the DELETE privilege on the table themselves (the application role has none,
+        -- the owner has), so it runs from the host with the owner's connection (see docs/ops), like the backups. In a window the events of one ONU are a
+        -- prefix by `seq` and `at` never goes back, so "the last one before the cut-off" by `seq` is also the last one by time.
+        CREATE FUNCTION onu_state_events_prune(keep_days int) RETURNS bigint LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
         DECLARE n bigint;
         BEGIN
           IF keep_days IS NULL OR keep_days < 370 THEN RAISE EXCEPTION 'keep_days must cover the longest query window (365 days)'; END IF;
