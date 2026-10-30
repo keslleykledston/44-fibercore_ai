@@ -17,9 +17,10 @@ import (
 // that back too. Exactly one leaf is ever written (below). The original value stays on this host (restore file); only booleans leave it.
 
 const (
-	ssidLeaf     = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID" // TR-098, WLANConfiguration.1 = 2.4 GHz on the bench model (checked at H3)
-	ssidMaxBytes = 32
-	restoreTries = 3
+	ssidLeaf      = "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID" // TR-098, WLANConfiguration.1 = 2.4 GHz on the bench model (checked at H3)
+	taskSetValues = "setParameterValues"                                         // the one write task name of this file (the reboot file only watches for it)
+	ssidMaxBytes  = 32
+	restoreTries  = 3
 )
 
 var restorePause = 2 * time.Second
@@ -65,7 +66,7 @@ func (c *Client) SetBenchSSID(parent context.Context, d BenchDevice, ssid string
 		return SSIDOutcome{}, err
 	}
 	for _, t := range docs {
-		if t.Name == "setParameterValues" || t.Name == "reboot" {
+		if t.Name == taskSetValues || t.Name == "reboot" {
 			return SSIDOutcome{}, ErrBenchPending
 		}
 	}
@@ -97,7 +98,7 @@ func (c *Client) SetBenchSSID(parent context.Context, d BenchDevice, ssid string
 		out.Applied = true
 	case err == nil && status == http.StatusAccepted:
 		// queued: the CPE did not answer. Nothing changed; remove our task so it cannot fire later.
-		if cerr := c.removeOwnTask(ctx, d.DeviceID, "setParameterValues", taskID, since); cerr != nil {
+		if cerr := c.removeOwnTask(ctx, d.DeviceID, taskSetValues, taskID, since); cerr != nil {
 			out.Detail = "ssid task queued and not removed"
 			return out, fmt.Errorf("%w: %v", ErrBenchUncleaned, cerr)
 		}
@@ -112,7 +113,7 @@ func (c *Client) SetBenchSSID(parent context.Context, d BenchDevice, ssid string
 			return out, errNotDelivered
 		}
 		// ambiguous: it may have been applied. Remove what is ours and fall through to the restore, which is safe either way.
-		if cerr := c.removeOwnTask(ctx, d.DeviceID, "setParameterValues", taskID, since); cerr != nil {
+		if cerr := c.removeOwnTask(ctx, d.DeviceID, taskSetValues, taskID, since); cerr != nil {
 			out.Detail = "ambiguous ssid request and cleanup failed"
 			return out, fmt.Errorf("%w: %v", ErrBenchUncleaned, cerr)
 		}
@@ -136,7 +137,7 @@ restore:
 		st, id, perr := c.postSetSSID(ctx, d.DeviceID, original)
 		if st == http.StatusAccepted && perr == nil {
 			// queued: the CPE did not answer. A queued restore must not survive to overwrite a newer value later: remove it now, or stop.
-			if cerr := c.removeOwnTask(ctx, d.DeviceID, "setParameterValues", id, since); cerr != nil {
+			if cerr := c.removeOwnTask(ctx, d.DeviceID, taskSetValues, id, since); cerr != nil {
 				uncleaned = cerr
 				break restore
 			}
@@ -152,7 +153,7 @@ restore:
 	if !out.Restored {
 		// whatever we sent and could not attribute must not stay queued on the ACS: prove none is left, else say so
 		if uncleaned == nil {
-			uncleaned = c.removeOwnTask(ctx, d.DeviceID, "setParameterValues", "", since)
+			uncleaned = c.removeOwnTask(ctx, d.DeviceID, taskSetValues, "", since)
 		}
 		out.Detail = "restore not confirmed"
 		if uncleaned != nil {
