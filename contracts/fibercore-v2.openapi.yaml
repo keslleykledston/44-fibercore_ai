@@ -1156,6 +1156,8 @@ components:
       - latency_rtt
       - packet_loss
       - uptime_seconds
+      - pon_onus_online
+      - pon_onus_recent_drops
     StateValue:
       type: string
       enum:

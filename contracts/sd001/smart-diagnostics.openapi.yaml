@@ -187,7 +187,7 @@ components:
       description: Identificador opaco; rejeita o formato de MAC
     MetricName:
       type: string
-      enum: [rx_optical_power, tx_optical_power, onu_status, wan_link_status, wan_connection_status, wan_download, wan_upload, associated_client_rssi, wifi_channel, wifi_band, wifi_radio_enabled, lan_port_status, latency_rtt, packet_loss, uptime_seconds]
+      enum: [rx_optical_power, tx_optical_power, onu_status, wan_link_status, wan_connection_status, wan_download, wan_upload, associated_client_rssi, wifi_channel, wifi_band, wifi_radio_enabled, lan_port_status, latency_rtt, packet_loss, uptime_seconds, pon_onus_online, pon_onus_recent_drops]
     StateValue:
       type: string
       enum: [Up, Down, Connected, Connecting, Disconnected, Unconfigured, Enabled, Disabled, Error, Unknown, online, offline, los, dying_gasp, PendingDisconnect, Disconnecting, Initializing, Unavailable, Dormant, NotPresent, LowerLayerDown]

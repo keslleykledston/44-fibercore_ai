@@ -99,10 +99,14 @@ def _evaluate(conn: Connection, req: dict) -> dict:
     for n, o in enumerate(onus, 1):
         fresh = bool(o.observed_at and now - o.observed_at <= EVAL_FRESH_FOR)
         s: dict = {"n": n, "onu": {"status": o.status, "rx_dbm": float(o.rx_dbm) if o.rx_dbm is not None else None,
-                                   "observed_at": _iso(o.observed_at), "fresh": fresh}, "pon_finding": None, "cpe": None}
+                                   "observed_at": _iso(o.observed_at), "fresh": fresh}, "pon_finding": None, "pon": None, "cpe": None}
         if "pon" in domains and o.pon_id is not None:
             inputs, _ = _pon_inputs(conn, None, o.pon_id)
             s["pon_finding"] = run_rule("R-D001", str(o.pon_id), inputs[:1]) if inputs else None
+            if inputs:
+                row = inputs[0]
+                s["pon"] = {"online": row["online"], "recent_drops": row["recent_drops"], "reference_at": _iso(
+                    datetime.fromisoformat(row["reference_at"]) if row["reference_at"] else None), "fresh": row["fresh_data"]}
         if "wan" in domains and o.linked_cpe is not None:
             s["cpe"] = {"states": _cpe_states(conn, o.linked_cpe, now),
                         "finding": run_rule("R-D002", str(o.linked_cpe), _cpe_inputs(conn, o.linked_cpe))}

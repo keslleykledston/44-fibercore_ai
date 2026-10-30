@@ -8,8 +8,9 @@ from __future__ import annotations
 
 ONU_STATES = {"online", "offline", "los", "dying_gasp"}   # words of the contract's StateValue that the OLT snapshot can produce
 DOWN_STATES = {"offline", "los", "dying_gasp"}
-WAN_METRICS = {"wan_link_status", "wan_connection_status", "uptime_seconds"}
-UNITS = {"uptime_seconds": "seconds"}
+WAN_METRICS = {"wan_link_status", "wan_connection_status", "uptime_seconds"}   # evidence shown for the WAN
+RULE_WAN_METRICS = {"wan_link_status", "wan_connection_status"}   # the ones R-D002 reads: only these may back a WAN finding
+UNITS = {"uptime_seconds": "seconds", "pon_onus_online": "count", "pon_onus_recent_drops": "count"}
 STATE_PT = {"offline": "fora do ar", "los": "sem sinal óptico (LOS)", "dying_gasp": "desligada por falta de energia (dying gasp)"}
 CAUSE_PT = {
     "wan_link_down": "O CPE informa a WAN sem enlace; hipótese a confirmar no equipamento.",
@@ -36,6 +37,7 @@ def _evidence(eid: str, source: str, status: str, metric: str, value, captured_a
 def assemble(subjects: list[dict], domains: list[str], truncated: bool = False) -> dict:
     """subjects: one per ONU of the customer:
     {"n": int, "onu": {"status", "rx_dbm", "observed_at", "fresh"}, "pon_finding": dict | None,
+     "pon": None | {"online": int, "recent_drops": int, "reference_at": str | None, "fresh": bool},   (the aggregate R-D001 judged)
      "cpe": None | {"states": [{"metric", "scope", "value", "captured_at", "received_at", "fresh"}], "finding": dict | None}}"""
     evidences: list[dict] = []
     findings: list[dict] = []
@@ -64,9 +66,14 @@ def assemble(subjects: list[dict], domains: list[str], truncated: bool = False) 
                 if onu["status"] in DOWN_STATES:
                     finding("ONU_OFFLINE", "confirmed", [status_id],
                             f"A OLT informa a ONU {STATE_PT[onu['status']]}; isso não indica a causa.")
-                pf = s.get("pon_finding")
-                if pf and pf["status"] == "inferred":
-                    finding("PON_MASS_OUTAGE", "likely", [status_id],
+                pf, pon = s.get("pon_finding"), s.get("pon")
+                if pf and pf["status"] == "inferred" and pon and pon["reference_at"]:
+                    # the finding rests on the AGGREGATE the rule judged (ONUs online / recently dropped on the PON), so that is cited too
+                    pid = [f"ev-pon{n}-online", f"ev-pon{n}-drops"]
+                    pst = "available" if pon["fresh"] else "stale"
+                    evidences.append(_evidence(pid[0], "olt", pst, "pon_onus_online", int(pon["online"]), pon["reference_at"]))
+                    evidences.append(_evidence(pid[1], "olt", pst, "pon_onus_recent_drops", int(pon["recent_drops"]), pon["reference_at"]))
+                    finding("PON_MASS_OUTAGE", "likely", [status_id, *pid],
                             "Várias ONUs da mesma PON caíram juntas; hipótese a confirmar com o incidente e eventos de campo.")
                 elif pf and pf["status"] == "unknown":
                     finding("INCONCLUSIVE", "insufficient_evidence", [status_id],
@@ -77,12 +84,13 @@ def assemble(subjects: list[dict], domains: list[str], truncated: bool = False) 
                 finding("INCONCLUSIVE", "insufficient_evidence", [],
                         "Não há CPE com vínculo confirmado a esta ONU; a WAN não foi avaliada.")
                 continue
-            ids = []
+            ids = []  # what the rule actually read: only these back a finding (uptime is shown as evidence, not as support)
             for st in cpe["states"]:
                 if st["metric"] not in WAN_METRICS:
                     continue
                 eid = f"ev-cpe{n}-{st['metric']}-{_slug(st['scope'])}"
-                ids.append(eid)
+                if st["metric"] in RULE_WAN_METRICS:
+                    ids.append(eid)
                 evidences.append(_evidence(eid, "cpe_cwmp", "available" if st["fresh"] else "stale", st["metric"], st["value"],
                                            st["captured_at"], st["received_at"], "genieacs_nbi"))
             cf = cpe.get("finding")
