@@ -250,3 +250,8 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - Registro: `reboot_cpe`/tr069 do perfil Huawei EG8145V5 V5R019C10S350 promovido a `observed` com a evidência `docs/wiki/bench/H2-reboot_cpe-2026-10-30.md` (checada pelo owner CLI). `certified` NÃO concedida.
 - NOT_RUN: segunda execução (pedida pelo responsável, com autorização normal); H3 (SSID) e H4 (OLT).
 
+## 2026-10-30 — H2 repetido com autorização NORMAL (sem `first_run`)
+- Autorização `b43be4aa-…` (janela 03:47:04–04:02:04 UTC), job `2d14e3be-5f4f-4d6b-aed0-79c7f1cbb8df`: aprovado 04:01:34, despachado 04:01:54 (o Edge só liberou o ritmo às 04:01:31 — 30 min após o reboot anterior), `_lastBoot` novo 04:02:56, `SUCCEEDED` com pós-checagem; claim `DONE`, autorização `consumed`, alvo sem trava. Só a ONT de bancada teve boot novo.
+- Valida o caminho de rotina: com `reboot_cpe` `observed`, a autorização normal abre o gate. A primeira autorização desta repetição (`19e9380b-…`) expirou sem uso porque foi registrada antes de o ritmo abrir (o Edge recusaria o envio).
+- As contas de serviço de ensaio (`lab-bench-h2-*`, `lab-refresh-trial*`) foram desativadas.
+
