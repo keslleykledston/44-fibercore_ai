@@ -241,3 +241,49 @@ def test_roles_endpoint_lists_the_catalog_per_role_and_what_the_caller_may_hand_
 def test_access_manager_is_always_an_mfa_role_even_with_an_empty_policy():
     settings.get_settings.cache_clear()
     assert "access_manager" in settings.required_mfa_roles(settings.get_settings())
+
+
+def test_the_runtime_role_cannot_change_a_membership_role_except_through_the_checked_function(migrated, new_tenant, make):
+    from app.core.db import get_engine, scoped_connection
+
+    t = new_tenant()
+    adm, gm, sup = make(t, "isp_admin"), make(t, "access_manager"), make(t, "support")
+    # raw SQL as the runtime role: no UPDATE on the column at all
+    with pytest.raises(DBAPIError):
+        with scoped_connection(get_engine(), user_id=gm["id"], tenant_id=t) as c:
+            c.execute(text("UPDATE tenant_memberships SET role='isp_admin' WHERE tenant_id=:t AND user_id=:u"), {"t": t, "u": sup["id"]})
+    # the function re-validates in SQL: an access_manager cannot make anyone isp_admin / access_manager, nor touch a protected target, nor itself
+    for target, new in [(sup["id"], "isp_admin"), (sup["id"], "access_manager"), (adm["id"], "engineer"), (gm["id"], "support"), (sup["id"], "platform_support"), (sup["id"], "edge_agent")]:
+        with pytest.raises(DBAPIError):
+            with scoped_connection(get_engine(), user_id=gm["id"], tenant_id=t) as c:
+                c.execute(text("SELECT app_change_member_role(:u, :r)"), {"u": target, "r": new})
+    # a non-granting role is refused as well, and so is a call outside any workspace/actor context
+    with pytest.raises(DBAPIError):
+        with scoped_connection(get_engine(), user_id=sup["id"], tenant_id=t) as c:
+            c.execute(text("SELECT app_change_member_role(:u, 'engineer')"), {"u": gm["id"]})
+    assert _role(migrated, t, sup["id"]) == "support" and _role(migrated, t, adm["id"]) == "isp_admin" and _role(migrated, t, gm["id"]) == "access_manager"
+    # what it MAY do goes through
+    with scoped_connection(get_engine(), user_id=gm["id"], tenant_id=t) as c:
+        assert c.execute(text("SELECT app_change_member_role(:u, 'engineer')"), {"u": sup["id"]}).scalar() == "support"
+    assert _role(migrated, t, sup["id"]) == "engineer"
+
+
+def test_the_sql_rules_are_exactly_the_python_policy(migrated):
+    with migrated.begin() as c:
+        grants = {(g, a) for g, a in c.execute(text("SELECT granter, assignable FROM rbac_role_grants"))}
+        protected = {r for (r,) in c.execute(text("SELECT role FROM rbac_protected_roles"))}
+    assert grants == {(g, a) for g, roles in role_policy.ASSIGNABLE_BY.items() for a in roles}
+    assert protected == set(role_policy.PROTECTED_TARGETS)
+
+
+def test_a_role_change_signs_the_member_out_of_every_workspace_of_the_account(client, migrated, new_tenant, make):
+    t1, t2 = new_tenant(), new_tenant()
+    adm = make(t1, "isp_admin")
+    eng = make(t1, "engineer")
+    with migrated.begin() as c:   # the same account is also a member of a second workspace
+        c.execute(text("INSERT INTO tenant_memberships(tenant_id, user_id, role) VALUES (:t,:u,'support')"), {"t": t2, "u": eng["id"]})
+    tok = _login(client, eng)["access_token"]
+    other = {**_bearer(tok), "X-Workspace-ID": str(t2)}
+    assert client.get("/v1/onus", headers=other).status_code == 200
+    assert _put(client, _h(client, adm), eng["id"], "noc_n1").status_code == 200
+    assert client.get("/v1/onus", headers=other).status_code == 401    # account-wide, declared in the contract

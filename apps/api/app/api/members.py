@@ -12,6 +12,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import Connection, text
+from sqlalchemy.exc import DBAPIError
 
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import _client_ip, _gate, _record, _throttled, audit
@@ -151,9 +152,11 @@ def change_member_role(user_id: UUID, body: RoleChangeIn, p: Principal = Depends
     # ONE lock per workspace first, then the account lock shared with every membership writer (add-member, MFA reset): fixed order, no deadlock
     conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"tenant-roles:{p.tenant_id}"})
     conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{user_id}"})
+    # no FOR UPDATE here: the runtime role has no UPDATE privilege (that is the point); the advisory locks above serialise our writers and the
+    # SQL function locks the row itself
     row = conn.execute(
         text("SELECT m.role FROM tenant_memberships m JOIN users_global u ON u.id = m.user_id "
-             "WHERE m.tenant_id = :t AND m.user_id = :u AND u.is_active FOR UPDATE OF m"), {"t": p.tenant_id, "u": user_id}).first()
+             "WHERE m.tenant_id = :t AND m.user_id = :u AND u.is_active"), {"t": p.tenant_id, "u": user_id}).first()
     if row is None:
         raise HTTPException(404, "member not found")
     # the caller's role is read again under the lock: a demotion that just committed must not leave a stale token with the old power
@@ -169,8 +172,15 @@ def change_member_role(user_id: UUID, body: RoleChangeIn, p: Principal = Depends
                  "WHERE m.tenant_id = :t AND m.role = 'isp_admin' AND u.is_active AND m.user_id <> :u"), {"t": p.tenant_id, "u": user_id}).scalar_one()
         if others == 0:
             raise HTTPException(409, "last_isp_admin")
-    conn.execute(text("UPDATE tenant_memberships SET role = :r WHERE tenant_id = :t AND user_id = :u"), {"r": body.role, "t": p.tenant_id, "u": user_id})
-    # the member's old tokens stop working now (they carry the old role's power) and their refresh tokens end; they sign in again with the new role
+    try:  # the ONLY write path: a SQL function that re-validates the actor and the transition (the runtime role has no UPDATE on the column)
+        with conn.begin_nested():
+            conn.execute(text("SELECT app_change_member_role(:u, :r)"), {"u": user_id, "r": body.role})
+    except DBAPIError as exc:
+        if getattr(getattr(exc.orig, "sqlstate", None), "__str__", lambda: "")() == "42501":
+            raise HTTPException(403, "role_change_refused") from exc
+        raise
+    # the member's old tokens stop working now (they carry the old role's power) and their refresh tokens end; they sign in again with the new role.
+    # Sessions belong to the ACCOUNT, not to a workspace: this signs the member out of every workspace they belong to (declared effect, tested).
     conn.execute(text("UPDATE users_global SET tokens_valid_after = clock_timestamp() WHERE id = :u"), {"u": user_id})
     revoked = conn.execute(
         text("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = :u AND revoked_at IS NULL RETURNING 1"), {"u": user_id}).rowcount
