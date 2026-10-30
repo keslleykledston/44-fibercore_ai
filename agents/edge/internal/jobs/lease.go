@@ -40,7 +40,10 @@ type Lease struct {
 type LeaseHolder struct {
 	// Schema is the lease family this holder accepts: "" = the bench lease; "olt-lease/1" = the ownership lease of the OLTs (ADR-0029). A lease of the
 	// other family does not parse here.
-	Schema   string
+	Schema string
+	// MaxSkew, when > 0, refuses a lease whose issued_at is further than this from the local clock: the Cloud waits LONGER than this after the last lease
+	// before moving the OLT, so a skew inside it cannot let the old owner outlive the transfer (ADR-0029 item 3).
+	MaxSkew  time.Duration
 	Pub      ed25519.PublicKey
 	EdgeID   string
 	TenantID string
@@ -118,6 +121,9 @@ func (h *LeaseHolder) parse(header string) (*Lease, error) {
 	now := h.now()
 	if e1 != nil || e2 != nil || !exp.After(now) || iss.After(now.Add(clockSkew)) || exp.Sub(iss) > LeaseTTL+time.Second {
 		return nil, fmt.Errorf("%w: expired or not valid now", ErrNoLease)
+	}
+	if h.MaxSkew > 0 && (iss.Sub(now) > h.MaxSkew || now.Sub(iss) > h.MaxSkew) {
+		return nil, fmt.Errorf("%w: this clock and the Cloud's differ by more than %s", ErrNoLease, h.MaxSkew)
 	}
 	for _, t := range l.Targets {
 		if !targetRefRe.MatchString(t.TargetRef) || t.OwnerEpoch < 1 {

@@ -378,3 +378,37 @@ def test_the_application_role_cannot_move_an_olt(client, seed, inv, olt, migrate
             c.execute(text("SET LOCAL ROLE fibercore_app"))
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
             c.execute(text(stmt))
+
+
+def test_the_recorded_lease_end_is_the_signed_one_and_a_racing_transfer_takes_the_olt_out(client, seed, inv, olt, on, migrated, monkeypatch):
+    from datetime import datetime
+
+    from app.core import olt_ownership
+    lease = _lease(client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1")))
+    signed_end = datetime.fromisoformat(lease["expires_at"])
+    with migrated.connect() as c:
+        recorded = c.execute(text("SELECT lease_until FROM olts WHERE id = :o"), {"o": olt}).scalar_one()
+    assert recorded >= signed_end                       # never earlier than what the Edge can honour
+    assert signed_end.microsecond == 0 and datetime.fromisoformat(lease["issued_at"]).microsecond == 0
+    # the transfer started between listing the eligible OLTs and recording the lease: the OLT is NOT in the lease that goes out
+    real = olt_ownership.lease_targets
+    with migrated.begin() as c:
+        c.execute(text("UPDATE olts SET transfer_to = :e, transfer_started_at = now() WHERE id = :o"), {"e": inv["a2"]["edge"], "o": olt})
+    monkeypatch.setattr(olt_ownership, "lease_targets", lambda *a: [{"target_ref": olt, "owner_epoch": 1}])
+    r = client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1"))
+    assert _lease(r) is None
+    monkeypatch.setattr(olt_ownership, "lease_targets", real)
+    with migrated.begin() as c:
+        c.execute(text("UPDATE olts SET transfer_to = NULL, transfer_started_at = NULL WHERE id = :o"), {"o": olt})
+
+
+def test_snapshots_follow_the_owner_after_a_transfer(client, seed, inv, olt, on, migrated, monkeypatch):
+    name = next(o["name"] for o in client.get("/v1/olts", headers=hdr(client, "alice", seed, "A")).json() if o["id"] == olt)
+    _cli(monkeypatch, migrated, "olt-transfer-start", str(seed["A"]), olt, str(inv["a2"]["edge"]))
+    assert client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a1"), json=snap(inv, name=name)).status_code == 202   # the owner keeps reporting meanwhile
+    assert client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a2"), json=snap(inv, key="a2", name=name)).status_code == 409
+    with migrated.begin() as c:
+        c.execute(text("UPDATE olts SET lease_until = now() - interval '2 minutes' WHERE id = :o"), {"o": olt})
+    _cli(monkeypatch, migrated, "olt-transfer-finish", str(seed["A"]), olt)
+    assert client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a2"), json=snap(inv, key="a2", name=name)).status_code == 202
+    assert client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a1"), json=snap(inv, name=name)).status_code == 409   # the old owner is told

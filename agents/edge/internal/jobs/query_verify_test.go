@@ -143,3 +143,19 @@ func TestTheTwoLeaseFamiliesNeverPassForEachOther(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAnOLTLeaseIsRefusedWhenTheClocksDisagreeBeyondTheSkew(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	for name, shift := range map[string]time.Duration{"edge clock behind": -50 * time.Second, "edge clock ahead": 50 * time.Second, "inside the skew": 30 * time.Second} {
+		clk := func() time.Time { return inWindow.Add(shift) }
+		h := &LeaseHolder{Schema: "olt-lease/1", MaxSkew: 45 * time.Second, Pub: pub, EdgeID: benchBase()["edge_id"].(string), TenantID: benchBase()["tenant_id"].(string), Now: clk}
+		raw := base64.StdEncoding.EncodeToString(signedEnv(t, priv, map[string]any{
+			"schema": "olt-lease/1", "tenant_id": h.TenantID, "edge_id": h.EdgeID, "issued_at": inWindow.Format(time.RFC3339),
+			"expires_at": inWindow.Add(LeaseTTL).Format(time.RFC3339), "targets": []any{map[string]any{"target_ref": qOLT, "owner_epoch": 1}},
+		}, func(map[string]any) {}))
+		err := h.Accept(raw)
+		if (name == "inside the skew") != (err == nil) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}

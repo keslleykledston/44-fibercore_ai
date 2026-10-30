@@ -248,7 +248,7 @@ func main() {
 					known[o.CloudID] = true
 				}
 			}
-			oltLease = &jobs.LeaseHolder{Schema: "olt-lease/1", Pub: pub, EdgeID: cfg.EdgeID, TenantID: cfg.TenantID}
+			oltLease = &jobs.LeaseHolder{Schema: "olt-lease/1", MaxSkew: 45 * time.Second, Pub: pub, EdgeID: cfg.EdgeID, TenantID: cfg.TenantID}
 			oltCol.Queries = &collector.Queries{Store: qs, Run: olt.HuaweiR015{}.RunQueryInConfig, Lease: oltLease}
 			verifier.QueryEnabled = true
 			verifier.QueryCheck = func(params map[string]any, targetID string) error {
