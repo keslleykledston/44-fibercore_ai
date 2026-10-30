@@ -24,6 +24,8 @@ type Queries struct {
 const (
 	queryCommandsEach = 8       // identify + enable + config + enter + command + quit, with room: one query never exceeds this many commands
 	queryMaxBytes     = 2 << 20 // bytes the batch may read in one session
+	// minQueryWindow is the least time the collection must still have for a query to start (identify + modes + command + quit, each with a margin).
+	minQueryWindow = 30 * time.Second
 )
 
 func (q *Queries) timeout() time.Duration {
@@ -67,10 +69,17 @@ func (q *Queries) Drain(ctx context.Context, src OLTSource, raw olt.Session, clo
 	if _, err := q.Store.ExpireDue(); err != nil {
 		return 0 // an unreadable queue file means nothing is claimed
 	}
+	// Only inside the time the collection still has: a query never extends the round (ctx is the collection's own time box). Too little left = none starts.
+	if dl, ok := ctx.Deadline(); ok && time.Until(dl) < minQueryWindow {
+		return 0
+	}
 	ctx, cancel := context.WithTimeout(ctx, q.timeout())
 	defer cancel()
 	sess := olt.NewBudget(olt.ReadOnlySession{Inner: raw, Allowed: src.Driver.Allowed}, queryCommandsEach*oltquery.PerSession, queryMaxBytes)
 	for {
+		if ctx.Err() != nil {
+			return ran
+		}
 		e, err := q.Store.Claim(cloudID, session) // CLAIMED is on disk before anything is sent
 		if err != nil {
 			return ran

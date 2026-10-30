@@ -169,3 +169,31 @@ func TestFailureReasonsAreCategoriesNeverDeviceText(t *testing.T) {
 	}
 	_ = json.RawMessage(nil)
 }
+
+func TestQueriesNeverOutliveTheCollectionsTimeBox(t *testing.T) {
+	sess := &qSession{inner: r015Session{}}
+	o, store := queryRig(t, sess)
+	enqueue(t, store, "job-v", "olt.version")
+	// a collection that has almost no time left starts no query (and claims nothing: the query waits for the next window)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	src := o.Sources[0]
+	if n := o.Queries.Drain(ctx, src, sess, qCloud, "s"); n != 0 {
+		t.Fatalf("ran %d", n)
+	}
+	if e, _, _ := store.Get("job-v"); e.State != oltquery.Queued {
+		t.Fatalf("%+v", e)
+	}
+	// with time left it runs, and its own deadline never exceeds the collection's
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel2()
+	if n := o.Queries.Drain(ctx2, src, sess, qCloud, "s"); n != 1 {
+		t.Fatalf("ran %d", n)
+	}
+	cancelled, c3 := context.WithCancel(context.Background())
+	c3()
+	enqueue(t, store, "job-w", "olt.version")
+	if n := o.Queries.Drain(cancelled, src, sess, qCloud, "s2"); n != 0 {
+		t.Fatalf("a cancelled collection starts nothing: %d", n)
+	}
+}

@@ -230,7 +230,6 @@ func (o *OLT) collectOne(ctx context.Context, src OLTSource, observed string) ([
 
 func (o *OLT) collectCLI(ctx context.Context, src OLTSource, observed string) ([]Item, error) {
 	// Per-OLT limits: wall-clock (the login included), commands and total bytes (bounded regardless of port count).
-	parent := ctx // the queries of ADR-0029 get their own, separate time box on the same session
 	ctx, cancel := context.WithTimeout(ctx, src.budget())
 	defer cancel()
 	raw, closeFn, err := src.Open(ctx)
@@ -271,8 +270,9 @@ func (o *OLT) collectCLI(ctx context.Context, src OLTSource, observed string) ([
 	o.applyLastDown(src, &snap)
 	items, berr := o.buildItems(src.Name, observed, id, level, snap, func(p olt.PON) bool { return ponComplete(level, raw, p) })
 	if berr == nil && o.Queries != nil && src.CloudID != "" {
-		// the snapshot is final: the queries run on the same open session with their own allowlist and budget, and cannot change this round's outcome
-		o.Queries.Drain(parent, src, raw, src.CloudID, fmt.Sprintf("%s@%d", src.Name, o.now().UnixNano()))
+		// the snapshot is final: the queries run on the same open session with their own allowlist and budget, inside what is LEFT of this collection's time box
+		// (never beyond it), and cannot change this round's outcome
+		o.Queries.Drain(ctx, src, raw, src.CloudID, fmt.Sprintf("%s@%d", src.Name, o.now().UnixNano()))
 	}
 	return items, berr
 }
