@@ -13,6 +13,7 @@ import (
 
 // OLTSource is one configured OLT. Open returns a raw CLI session (SSH) plus its closer.
 type OLTSource struct {
+	failCooldown    func(error) time.Duration // internal: see Exclusive
 	Name            string
 	Driver          olt.Driver
 	Ports           []string
@@ -93,21 +94,29 @@ var ErrOLTNotDue = errors.New("olt session not due yet (guard interval)")
 // I/O, not before `minGap` has passed since the last session of any kind, and the usual cooldown after a failure. The bench maneuvers use it so
 // a maneuver and a collection can never talk to the device together.
 //
-// cooldown is how long the device is left alone after a FAILED session (0 = the CLI default of 15 min): a maneuver that stopped on a question or on
-// a check is not a rejected login, so the homologation may shorten it; it still lives in the guard (memory and file), shared with the collections.
-func (o *OLT) Exclusive(ctx context.Context, name string, minGap, cooldown time.Duration, run func() error) error {
+// cooldown is how long the device is left alone after a session that FAILED AFTER a successful login (a maneuver that stopped on a question or on a
+// check): 0 = the usual CLI default of 15 min. A failure BEFORE the login completes (refused credentials, unreachable, host key) always keeps the
+// default, so repeated failed logins can never lock the account that the operator's own tools share. `run` calls `opened()` right after the login.
+// The reservation made before the session is the default one in every case (a crash or kill keeps the long cooldown).
+func (o *OLT) Exclusive(ctx context.Context, name string, minGap, cooldown time.Duration, run func(opened func()) error) error {
 	for _, src := range o.Sources {
 		if src.Name != name {
 			continue
 		}
 		src.Interval = minGap
+		loggedIn := false
 		if cooldown > 0 {
-			src.Cooldown = cooldown
+			src.failCooldown = func(error) time.Duration {
+				if loggedIn {
+					return cooldown
+				}
+				return 0 // default
+			}
 		}
 		ran := false
 		_, err := o.guarded(ctx, src, func() ([]Item, error) {
 			ran = true
-			return nil, run()
+			return nil, run(func() { loggedIn = true })
 		})
 		if err == nil && !ran {
 			return ErrOLTNotDue
@@ -302,7 +311,13 @@ func (o *OLT) guarded(ctx context.Context, src OLTSource, run func() ([]Item, er
 	if err == nil {
 		o.st[key] = GuardState{Last: o.st[key].Last} // success lifts the pessimistic cooldown; if the save fails the file stays cooled (safe side)
 	} else {
-		o.st[key] = GuardState{Last: o.st[key].Last, CoolUntil: o.now().Add(cooldown)} // counted from the END of the failed attempt
+		failFor := cooldown
+		if src.failCooldown != nil { // a failure AFTER the login may be shorter (bench maneuvers); 0 keeps the default
+			if d := src.failCooldown(err); d > 0 {
+				failFor = d
+			}
+		}
+		o.st[key] = GuardState{Last: o.st[key].Last, CoolUntil: o.now().Add(failFor)} // counted from the END of the failed attempt
 	}
 	_ = o.persistLocked() // best effort: the pessimistic reservation already on disk is the floor if this save fails
 	o.mu.Unlock()

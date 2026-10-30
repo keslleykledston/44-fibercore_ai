@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18b8a-9e22-7a20-b835-d678a768f7ea).
+[codex] Turn started (01a18b8a-9e5b-7ea1-ad2a-077b7ade7a37).
+[codex] Assistant message captured: I’ll inspect the branch diff against `main` and trace the cooldown through config loading, th...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"Exclusive\\(|CooldownSeconds|func \\(o \\*OLT\\) guarded|CoolUntil|Coo...
+[codex] Command completed: /bin/bash -lc "rg -n \"Exclusive\\(|CooldownSeconds|func \\(o \\*OLT\\) guarded|CoolUntil|Coo... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '52,72p' agents/edge/internal/config/config.go; sed -n '220,320p' agent...
+[codex] Command completed: /bin/bash -lc "sed -n '52,72p' agents/edge/internal/config/config.go; sed -n '220,320p' agent... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship: the shorter bench cooldown also applies ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship: the shorter bench cooldown also applies to failed OLT logins, weakening the shared guard for the collector and risking account lockout from retries.
+
+Findings:
+- [high] Short bench cooldown weakens protection after login failures (agents/edge/internal/collector/olt.go:98-106)
+  `Exclusive` replaces the source cooldown before entering the shared guard, which applies that value to every error from the session. In the caller, `src.Open` errors—including rejected or failed SSH logins—are returned through the same `run` callback, so a configured 60-second cooldown is persisted for a failed login too. Periodic collections share this state and can resume after that shorter window, removing the existing 15-minute protection against repeated failed logins and possible account lockout.
+  Recommendation: Keep the CLI login-failure cooldown at 15 minutes. Track whether session opening succeeded and only apply the configurable shorter cooldown to failures after a successful login; add coverage showing an open/login failure retains the default cooldown.

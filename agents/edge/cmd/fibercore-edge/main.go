@@ -243,7 +243,7 @@ func main() {
 				}
 				benchRunner.OLT = func(ctx context.Context, op string, notAfter time.Time, before func() error) (olt.ManeuverOutcome, error) {
 					var out olt.ManeuverOutcome
-					xerr := oltCol.Exclusive(ctx, bo.Name, gap, cool, func() error {
+					xerr := oltCol.Exclusive(ctx, bo.Name, gap, cool, func(opened func()) error {
 						cctx, cancel := context.WithTimeout(ctx, wait+3*time.Minute) // login + commands + the wait for the ONU to come back
 						defer cancel()
 						raw, closeFn, err := src.Open(cctx)
@@ -251,6 +251,7 @@ func main() {
 							return err
 						}
 						defer closeFn()
+						opened() // the login worked: from here a failure may use the shorter cooldown
 						var rerr error
 						out, rerr = olt.RunBenchManeuver(cctx, raw, onu, op, notAfter, before, wait, 10*time.Second, time.Now)
 						return rerr
