@@ -1,6 +1,6 @@
 # ADR-0029: Canal de execução das consultas somente leitura da OLT (job `olt_query`)
 
-Status: Proposed (aguarda Codex gate e aceite do responsável) | Data: 2026-10-30 | Owner: equipe | Origem: ADR-0026 item 5 (o catálogo existe e é inerte; falta o canal)
+Status: Accepted (Codex approve em 5 rodadas; aceite do responsável em 2026-10-30; implementação e cada ensaio na OLT real exigem autorização operacional separada) | Data: 2026-10-30 | Owner: equipe | Origem: ADR-0026 item 5 (o catálogo existe e é inerte; falta o canal)
 
 ## Contexto
 O ADR-0026 criou o catálogo tipado de consultas `display` da OLT (25 consultas, 4 validadas na OLT real) e deixou de propósito sem canal de execução: nada chama `RunQuery`. A OLT real tem um agente SNMP que limita a 1 requisição por segundo (cooldown de 5 min após estouro) e o guard de CLI (PR 43/44) impõe uma sessão por vez por equipamento, reserva persistida, intervalo e cooldown de 15 min e instância única por `flock`. Qualquer canal novo compete com a coleta periódica pelo mesmo equipamento e não pode enfraquecer esse limite.

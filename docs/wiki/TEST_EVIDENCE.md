@@ -220,3 +220,9 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - R-D002 v1 executada na LAB (conta de serviço de ensaio, `POST /v1/diagnostics/runs`) sobre a ONT Huawei EG8145V5 de bancada, depois de um `refresh` real (11 grupos, `completed=11 faulted=0 readable_metrics=7`) e da entrega do estado à nuvem (idade mínima 6 s): achado `observed` — "o CPE informa uma conexão WAN estabelecida"; enlace Up e conexão Connected, ambos recentes; sem vínculo ONU↔CPE confirmado (contexto da ONU não considerado); replay `reproducible: true`. A regra não afirmou queda nenhuma, como esperado para a ONT de bancada saudável.
 - Ainda NOT_RUN: R-D002 com o caso de conexão caída (só em teste automatizado) e job diagnóstico na LAB.
 
+## 2026-10-30 — job diagnóstico passivo REAL na LAB (PR 55, ADR-0028)
+- A pedido do responsável: flag `smart_diagnostics_jobs` ligada na LAB (`feature-set`, owner CLI; `diagnostic_engine` já estava ligada).
+- Fixture de bancada (NÃO é cliente real): cliente `BANCADA K3G (teste)` (`erp_source=bancada-lab`), associação `approved` à ONU da ONT de bancada (a mesma ONT aparece na OLT real e no ACS, mesmo serial) e vínculo ONU↔CPE `confirmed`, ambos marcados na evidência como fixture criada a pedido do responsável; reviewer = o admin da LAB.
+- Depois de um `refresh` real (11 grupos, `completed=11 faulted=0 readable_metrics=7`) e da entrega do estado à nuvem, `POST /v1/diagnostics/jobs` (conta de serviço de ensaio, modo passivo): `status=complete`, `data_quality=fresh`, `reproducible=true`, regras R-D001 v1 e R-D002 v1. Evidências (todas `available`): ONU online e RX -13,04 dBm (OLT real), enlace WAN Up, conexão PPP Connected e uptime (CPE, `genieacs_nbi`). Nenhum achado: a ONT de bancada está saudável e o job não inventou nada.
+- Ainda NOT_RUN: job com queda real (só em teste automatizado) e tela que consuma o job.
+
