@@ -400,6 +400,17 @@ paths:
           description: "{roles[{role, label, assignable_by_me, permissions[{name, risk R0..R3, description}]}]}"
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /members/role-history:
+    get:
+      tags: [Platform]
+      operationId: listRoleHistory
+      summary: Histórico de trocas de papel do provedor, da mais recente para a mais antiga (audit:read) — quem trocou o papel de quem, de qual para qual e por quê. Nomes só de quem ainda é membro
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}]
+      responses:
+        '200':
+          description: "{truncated, items[{id, at, from, to, reason, revoked_sessions, actor{id,name,email}, target{id,name,email}}]}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /members/{user_id}/role:
     put:
       tags: [Platform]

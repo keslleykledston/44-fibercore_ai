@@ -404,3 +404,35 @@ def test_a_direct_function_call_and_an_account_deactivation_do_not_deadlock(migr
     assert out == {"change": "ok", "deactivate": "ok"}, out
 
 
+
+
+def test_me_describes_only_the_callers_own_role_from_the_catalog(client, new_tenant, make):
+    t = new_tenant()
+    make(t, "isp_admin")
+    n1 = make(t, "noc_n1")
+    d = client.get("/v1/auth/me", headers=_h(client, n1)).json()
+    assert d["role"] == "noc_n1" and {x["name"] for x in d["permissions"]} == {"tenant:read", "inventory:read", "incidents:read"}
+    assert all(set(x) == {"name", "risk", "description"} for x in d["permissions"])
+
+
+def test_role_history_lists_changes_with_who_whom_and_why_and_is_scoped_and_permissioned(client, migrated, new_tenant, make):
+    t, t2 = new_tenant(), new_tenant()
+    adm, eng, aud, sup = make(t, "isp_admin"), make(t, "engineer"), make(t, "auditor"), make(t, "support")
+    other_adm, other_eng = make(t2, "isp_admin"), make(t2, "engineer")
+    assert _put(client, _h(client, adm), eng["id"], "noc_n2", "ajuste de escala").status_code == 200
+    assert _put(client, _h(client, other_adm), other_eng["id"], "support", "outro provedor").status_code == 200
+    h = client.get("/v1/members/role-history", headers=_h(client, aud)).json()      # auditor holds audit:read
+    assert [i["reason"] for i in h["items"]] == ["ajuste de escala"] and h["truncated"] is False   # the other workspace's change is not here
+    i = h["items"][0]
+    assert (i["from"], i["to"]) == ("engineer", "noc_n2") and i["actor"]["name"] and i["target"]["name"]
+    assert i["actor"]["email"] is None and i["target"]["email"] is None            # the auditor has audit:read but not members:read: names yes, e-mails no
+    full = client.get("/v1/members/role-history", headers=_h(client, adm)).json()["items"][0]   # the administrator holds both
+    assert full["actor"]["email"] == adm["email"] and full["target"]["email"] == eng["email"]
+    assert client.get("/v1/members/role-history", headers=_h(client, sup)).status_code == 403    # support has no audit:read
+    assert client.get("/v1/members/role-history", headers=_h(client, eng)).status_code in (401, 403)   # the engineer's old token ended with the change
+    # a person who left the workspace shows no name, only the id
+    with migrated.begin() as c:
+        c.execute(text("DELETE FROM tenant_memberships WHERE tenant_id=:t AND user_id=:u"), {"t": t, "u": eng["id"]})
+    h2 = client.get("/v1/members/role-history", headers=_h(client, aud)).json()["items"][0]
+    assert h2["target"]["name"] is None and h2["target"]["id"] == str(eng["id"])
+    assert client.get("/v1/members/role-history?limit=0", headers=_h(client, aud)).status_code == 422

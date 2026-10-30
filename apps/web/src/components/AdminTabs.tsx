@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-const TABS = [{ href: "/administracao/modulos", label: "Módulos" }, { href: "/administracao/membros", label: "Membros" }];
+const TABS = [{ href: "/administracao/modulos", label: "Módulos" }, { href: "/administracao/membros", label: "Membros" }, { href: "/administracao/papeis", label: "Papéis e permissões" }];
 
 export function AdminTabs({ current }: { current: string }) {
   return (

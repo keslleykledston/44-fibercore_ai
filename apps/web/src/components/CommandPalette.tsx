@@ -7,7 +7,7 @@ interface Hit { kind: string; label: string; href: string }
 const PAGES: Hit[] = [
   { kind: "Tela", label: "Visão Geral", href: "/" }, { kind: "Tela", label: "Rede", href: "/rede" }, { kind: "Tela", label: "ONUs offline", href: "/rede/offline" }, { kind: "Tela", label: "Dispositivos (CPEs)", href: "/dispositivos" }, { kind: "Tela", label: "Edges", href: "/dispositivos/edges" }, { kind: "Tela", label: "Capacidades", href: "/dispositivos/capacidades" },
   { kind: "Tela", label: "Assinantes", href: "/assinantes" }, { kind: "Tela", label: "NOC", href: "/noc" },
-  { kind: "Tela", label: "Operações", href: "/operacoes" }, { kind: "Tela", label: "Membros e MFA", href: "/administracao/membros" }, { kind: "Tela", label: "Segurança da conta", href: "/conta/seguranca" }, { kind: "Tela", label: "Administração · Módulos", href: "/administracao/modulos" },
+  { kind: "Tela", label: "Operações", href: "/operacoes" }, { kind: "Tela", label: "Membros e MFA", href: "/administracao/membros" }, { kind: "Tela", label: "Papéis e permissões", href: "/administracao/papeis" }, { kind: "Tela", label: "Segurança da conta", href: "/conta/seguranca" }, { kind: "Tela", label: "Administração · Módulos", href: "/administracao/modulos" },
   { kind: "Tela", label: "Central de Ajuda", href: "/ajuda" },
 ];
 

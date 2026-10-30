@@ -31,6 +31,9 @@ articles:
 - slug: rede/capacidades
   ui_route: /dispositivos/capacidades
   status: draft
+- slug: administracao/papeis-e-permissoes
+  ui_route: /administracao/papeis
+  status: draft
 - slug: rede/onu-360
   ui_route: /rede/onu/[id]
   status: published
