@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18df1-7372-7222-8bbb-950ce822f027).
+[codex] Turn started (01a18df1-76f0-7553-b958-cf19b7732e0f).
+[codex] Assistant message captured: Vou comparar a branch com `main` e seguir os caminhos de autorização, submissão, execução e r...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/app/api/device_act...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/app/api/device_act... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/tests/test_invento...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/tests/test_invento... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,200p' apps/api/app/api/deps.py; rg -n \"CREATE POLICY|cpes.*tenant|j...
+[codex] Command completed: /bin/bash -lc "sed -n '1,200p' apps/api/app/api/deps.py; rg -n \"CREATE POLICY|cpes.*tenant|j... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"requester|outra pessoa|another person|MIN_APPROVALS|first_run\" docs/a...
+[codex] Command failed: /bin/bash -lc "rg -n \"requester|outra pessoa|another person|MIN_APPROVALS|first_run\" docs/a... (exit 2)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/security.py | sed -n '17,39p'; nl -ba apps/api/app/ap...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/security.py | sed -n '17,39p'; nl -ba apps/api/app/ap... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar: o caminho novo permite que um solicitant...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar: o caminho novo permite que um solicitante com papel isp_admin aprove a própria escrita de bancada, contrariando a separação prometida pela tela.
+
+Findings:
+- [high] Solicitante pode aprovar a própria ação de bancada (apps/api/app/core/security.py:19-23)
+  A mudança concede `devices:act:*` ao `isp_admin`, que já tem `jobs:request` e `jobs:approve`. Para operações de bancada, `jobs.approve` explicitamente isenta o solicitante da proibição de autoaprovação; assim, um administrador pode pedir e aprovar a própria ação se houver autorização prévia do owner CLI. A tela afirma que outra pessoa precisa aprovar, mas essa separação não é garantida neste caminho e uma escrita pode avançar sem uma segunda pessoa.
+  Recommendation: Remova a exceção de autoaprovação para as operações de bancada ou imponha a verificação de solicitante distinto no fluxo de aprovação usado por essas ações; cubra o caso de `isp_admin` solicitante/aprovador.
