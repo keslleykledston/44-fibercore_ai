@@ -239,3 +239,8 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - `make test-api` 373 passed (identified+first_run abre o gate e a autorização é de uso único; identified sem first_run, entrada ausente, `unknown` → `capability_not_observed`; banco recusa `supported` sem evidência; mudança do registro entre aprovação e despacho cancela; com `observed` só a autorização normal abre e a first_run não; first_run consumida cancela se `observed` aparecer; CLI recusa sem entrada `identified`, com `observed` e uma segunda aberta; escopo de tenant das consultas; exclusão mútua promoção × avaliação). validate PASS; secrets-scan sem vazamento.
 - NOT_RUN: qualquer escrita em equipamento.
 
+## 2026-10-30 — deploy na LAB do gate de bancada (PR 56–59) e firmware do CPE (PR 59)
+- Backup `fibercore-20261030T030646Z.dump` antes; `make up-prod` (API + web saudáveis); `alembic current` = 0022 (head). Edge do host do GenieACS trocado só no binário (`0.5.0-lab-c3edd1a`, configuração inalterada: SEM seção `bench`, portanto escritas desligadas; flag `bench_writes` continua desligada).
+- PR 59: `go test -race ./...` PASS (formatos de firmware aceitos/rejeitados, snapshot com e sem firmware).
+- NOT_RUN: qualquer escrita em equipamento; Edge com o firmware (0.5.x+PR 59) ainda a implantar.
+

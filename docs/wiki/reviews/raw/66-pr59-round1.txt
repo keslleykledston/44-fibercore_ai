@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18acb-3aaf-71c3-b4ae-f8af65f8900a).
+[codex] Turn started (01a18acb-3deb-7881-b262-fff26006128c).
+[codex] Assistant message captured: I’ll inspect the branch diff and the surrounding collector/NBI behavior, focusing on data exp...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/nbi/nbi.go | sed -n '45,125p'; nl -ba agents/edge/...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/nbi/nbi.go | sed -n '45,125p'; nl -ba agents/edge/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship until firmware sanitization is stronger: ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship until firmware sanitization is stronger: the regex limits syntax and length, but still forwards arbitrary secret-like strings from a device-controlled field to the cloud.
+
+Findings:
+- [medium] Firmware regex accepts arbitrary credential-like values (agents/edge/internal/nbi/nbi.go:67-74)
+  `Firmware` treats any 1–64 character string from the CPE's cached `SoftwareVersion` as safe if it uses this broad character set. Values such as `Admin1234` or `MySecret-2026` pass and are copied into every retained device's `cpe_snapshot`, so a hostile or misconfigured CPE can use this field to exfiltrate a secret that happens to fit the regex. The projection adds only the two `SoftwareVersion` leaves, and this path performs GETs only, but the regex does not establish that an accepted value is actually a firmware identifier.
+  Recommendation: Validate against known firmware-version formats or an explicitly maintained vendor/model-specific policy, and add tests showing that secret-like values made only of allowed characters are omitted.

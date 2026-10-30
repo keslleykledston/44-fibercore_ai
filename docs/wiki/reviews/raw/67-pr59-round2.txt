@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18acb-d8f9-7480-ab73-ba00a894c825).
+[codex] Turn started (01a18acb-d933-71c2-a3fb-afacaff2d533).
+[codex] Assistant message captured: I’ll inspect the branch diff against `main` and trace the firmware validation into the invent...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/nbi/nbi.go | sed -n '64,91p'; git diff --no-ext-di...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/nbi/nbi.go | sed -n '64,91p'; git diff --no-ext-di... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship: the dotted-version rule still forwards m...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship: the dotted-version rule still forwards mixed-case free text and punctuation, contrary to the stated filter.
+
+Findings:
+- [medium] Dotted versions accept arbitrary suffix text (agents/edge/internal/nbi/nbi.go:73)
+  The version regex accepts suffixes such as `-Secret12` and `_Abc`, so a device-controlled value like `1.2.3-Secret12` is forwarded in the CPE snapshot. This bypasses the stated rule to drop mixed-case strings and punctuation, and can carry secret-like text to the cloud. The documented `V2.0.1-b12` example also relies on this exception. Restrict the accepted shape to the agreed dotted numeric form, or define a narrow suffix policy and confirm it is intended.
+  Recommendation: Remove the free-form suffix from `firmwareVersion` unless suffixes are explicitly required; add rejection cases for mixed-case and secret-like suffixes.
