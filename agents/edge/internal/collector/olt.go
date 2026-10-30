@@ -86,6 +86,31 @@ type OLT struct {
 	corrupt bool // the state file could not be trusted: a device with no entry is treated as touched just now
 }
 
+// ErrOLTNotDue: the shared OLT guard says the last session on this device is too recent for another one now.
+var ErrOLTNotDue = errors.New("olt session not due yet (guard interval)")
+
+// Exclusive runs `run` as the ONE session on the named OLT, under the SAME guard as the collections: one at a time, reserved on disk before any
+// I/O, not before `minGap` has passed since the last session of any kind, and the usual cooldown after a failure. The bench maneuvers use it so
+// a maneuver and a collection can never talk to the device together.
+func (o *OLT) Exclusive(ctx context.Context, name string, minGap time.Duration, run func() error) error {
+	for _, src := range o.Sources {
+		if src.Name != name {
+			continue
+		}
+		src.Interval = minGap
+		ran := false
+		_, err := o.guarded(ctx, src, func() ([]Item, error) {
+			ran = true
+			return nil, run()
+		})
+		if err == nil && !ran {
+			return ErrOLTNotDue
+		}
+		return err
+	}
+	return fmt.Errorf("olt %q is not configured", name)
+}
+
 // snmpCooldown: after ANY failed SNMP collection of an OLT the Edge leaves its agent alone for this long. The measured
 // MA5608T agent goes mute for over a minute once its rate limit trips, and retrying into a mute agent only prolongs it (and
 // starves the operator's own monitoring that shares the community).

@@ -15,7 +15,7 @@
     "authorization_ends_at": {"type": "string", "format": "date-time", "description": "bench writes only: end of the authorization window; expires_at is never later"},
     "owner_epoch": {"type": "integer", "minimum": 1, "description": "bench writes only: generation of the target's ownership; the Edge rejects a lower one (ADR-0029/0030)"},
     "params": {"type": "object", "additionalProperties": false, "properties": {"ssid": {"type": "string", "pattern": "^BANCADA-[A-Z0-9]{1,16}$"}}, "description": "bench writes only (ADR-0030): the catalog-validated parameters of the operation; covered by the signature"},
-    "operation": {"type": "string", "enum": ["collect", "refresh", "reboot_cpe", "set_wifi_ssid", "provision_onu"]},
+    "operation": {"type": "string", "enum": ["collect", "refresh", "reboot_cpe", "set_wifi_ssid", "onu_reset", "onu_deactivate", "provision_onu"]},
     "parameters_ref": {"type": "string", "description": "Encrypted, scoped payload reference; no plaintext secret in envelope"},
     "idempotency_key": {"type": "string", "minLength": 8},
     "issued_at": {"type": "string", "format": "date-time"},

@@ -47,6 +47,20 @@ type BenchConfig struct {
 	MinIntervalSeconds int                 `json:"min_interval_seconds"`
 	MaxPerHour         int                 `json:"max_per_hour"`
 	Devices            []BenchDeviceConfig `json:"devices"`
+	// OLT is the bench ONU for the H4 maneuvers (onu_reset, onu_deactivate): the ONLY ONU they may touch. Port and ONT-ID live here, never in the Cloud.
+	OLT *BenchOLTConfig `json:"olt"`
+}
+
+// BenchOLTConfig names the OLT (one of `olts`, CLI transport) and the position of the bench ONU on it.
+type BenchOLTConfig struct {
+	Name          string `json:"name"`
+	Frame         int    `json:"frame"`
+	Slot          int    `json:"slot"`
+	Port          int    `json:"port"`
+	OntID         int    `json:"ont_id"`
+	GPONSerial    string `json:"gpon_serial"`     // 16 hex, must equal the serial of one bench device
+	MinGapSeconds int    `json:"min_gap_seconds"` // between two OLT sessions (any kind); 0 = 900 (15 min); floor 60
+	WaitSeconds   int    `json:"wait_seconds"`    // how long to watch the ONU come back; 0 = 240; 30..600
 }
 
 // BenchDeviceConfig: the ACS identity (the three parts of the GenieACS _id) of one bench device, in clear: it is checked against the ACS.
@@ -156,6 +170,35 @@ func (c *Config) Validate() error {
 		if b.MaxPerHour < 0 || b.MaxPerHour > 20 {
 			errs = append(errs, errors.New("bench.max_per_hour must be 0 (2) or between 1 and 20"))
 		}
+		if o := b.OLT; o != nil {
+			cli := false
+			for _, x := range c.OLTs {
+				cli = cli || (x.Name == o.Name && x.Transport != "snmp")
+			}
+			serialOK := false
+			for _, d := range b.Devices {
+				serialOK = serialOK || strings.EqualFold(d.Serial, o.GPONSerial)
+			}
+			switch {
+			case !cli:
+				errs = append(errs, errors.New("bench.olt.name must be one of the configured olts with CLI transport"))
+			case o.Frame < 0 || o.Frame > 7 || o.Slot < 0 || o.Slot > 21 || o.Port < 0 || o.Port > 15 || o.OntID < 0 || o.OntID > 127:
+				errs = append(errs, errors.New("bench.olt frame/slot/port/ont_id out of range"))
+			case !gponSerialRe.MatchString(o.GPONSerial) || !serialOK:
+				errs = append(errs, errors.New("bench.olt.gpon_serial must be 16 upper-case hex and equal to the serial of a bench device"))
+			case o.MinGapSeconds != 0 && (o.MinGapSeconds < BenchMinIntervalFloor || o.MinGapSeconds > 3600):
+				errs = append(errs, fmt.Errorf("bench.olt.min_gap_seconds must be 0 (15 min) or between %d and 3600", BenchMinIntervalFloor))
+			case o.WaitSeconds != 0 && (o.WaitSeconds < 30 || o.WaitSeconds > 600):
+				errs = append(errs, errors.New("bench.olt.wait_seconds must be 0 (240) or between 30 and 600"))
+			}
+		}
+		oltOps := false
+		for _, o := range c.AllowedOps {
+			oltOps = oltOps || o == "onu_reset" || o == "onu_deactivate"
+		}
+		if oltOps && b.OLT == nil {
+			errs = append(errs, errors.New("onu_reset/onu_deactivate in allowed_operations need bench.olt"))
+		}
 		ids := map[string]bool{}
 		for _, d := range b.Devices {
 			if !benchPartRe.MatchString(d.OUI) || !benchPartRe.MatchString(d.ProductClass) || !benchPartRe.MatchString(d.Serial) || ids[d.ID()] {
@@ -166,7 +209,7 @@ func (c *Config) Validate() error {
 		}
 		ok := false
 		for _, o := range c.AllowedOps {
-			ok = ok || o == "reboot_cpe" || o == "set_wifi_ssid"
+			ok = ok || o == "reboot_cpe" || o == "set_wifi_ssid" || o == "onu_reset" || o == "onu_deactivate"
 		}
 		if !ok {
 			errs = append(errs, errors.New("bench writes need \"reboot_cpe\" and/or \"set_wifi_ssid\" listed in allowed_operations (explicit)"))
@@ -309,6 +352,8 @@ func (b BenchConfig) BenchPacing() (time.Duration, int) {
 	}
 	return min, per
 }
+
+var gponSerialRe = regexp.MustCompile(`^[0-9A-F]{16}$`)
 
 var benchPartRe = regexp.MustCompile(`^[A-Za-z0-9._]{2,64}$`)
 
