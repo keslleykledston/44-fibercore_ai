@@ -240,3 +240,4 @@
 ## Unreleased — PR 90 (olt_query, fatia 5: canal ligado no código; ADR-0029 item 7)
 - `olt_query.EDGE_SUPPORT = True`: o canal existe de ponta a ponta. Nada é oferecido nem despachado enquanto a flag `olt_query` do provedor estiver desligada (continua assim por padrão) e cada Edge só roda consultas com `olt_query_enabled`, `olts[].cloud_id` e `olt_query` em `allowed_operations`. Rollout só `olt.version` e `olt.board`.
 - Edge do LAB reimplantado com o binário que entende o canal (versão `0.1.0-lab-9242b01`), configuração inalterada (canal desligado) até o ensaio supervisionado, autorizado pelo responsável em 2026-10-30.
+- PR 91: ensaio supervisionado na OLT real do LAB concluído com `olt.version` e `olt.board` (ver TEST_EVIDENCE); a vida do envelope de `olt_query` passou de 10 para 15 min (janela do job) porque as janelas da coleta são de 15 min.

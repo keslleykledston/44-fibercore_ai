@@ -22,3 +22,10 @@ OLT (CLI, somente leitura): LIGADA em 2026-10-29 com autorização explícita (p
 - Disparo: job `refresh` aprovado sobre UM CPE (R0, sem aprovação humana extra). Cada job faz até 5 tarefas `getParameterValues` (uma conexão ao CPE por tarefa), no máximo 1 por dispositivo a cada 10 min e 20 por hora.
 - Nunca em lote por PON. Para desligar: `"refresh_tasks": false` e reiniciar o Edge (o job passa a falhar fechado).
 - Verificação depois do primeiro teste: no GenieACS conferir (somente leitura) que não ficou tarefa nem falha pendente para o dispositivo (`GET /tasks`, `GET /faults` filtrando o `_id`).
+
+## Consultas somente leitura da OLT (`olt_query`, ADR-0029) — ligado em 2026-10-30
+- Autorizada pelo responsável. Só `olt.version` e `olt.board` (rollout do ADR-0029 item 7). As consultas rodam na sessão CLI da coleta periódica (sem login extra), depois dos comandos dela; uma consulta pode esperar até a próxima janela (15 min). Resultado tipado e fechado; a saída crua nunca sai do Edge.
+- Config do Edge: `"olt_query_enabled": true`, `"olt_query"` em `allowed_operations` e `"cloud_id"` (id da OLT na nuvem) na entrada da OLT. Fila durável: `olt-queries.json` (0600) ao lado da fila do Edge.
+- Nuvem: flag do provedor `olt_query` (owner CLI `feature-set`), permissão `olt_query:run` (isp_admin, engineer, noc_n2), cota 10/h por usuário, 60/h por provedor, 20/h por OLT.
+- Desligar: `olt_query_enabled` removido (ou `false`) e reiniciar o Edge; e/ou `feature-set <tenant> olt_query off`. A cópia anterior da configuração fica em `config.json.pre-oltquery`.
+- Mover a OLT para outro Edge: `olt-transfer-start` e, depois do último arrendamento + 60 s, `olt-transfer-finish` (ver CHANGELOG, PR 89). Os relógios do Edge e da nuvem devem estar a menos de 45 s um do outro.
