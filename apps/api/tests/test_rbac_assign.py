@@ -424,7 +424,10 @@ def test_role_history_lists_changes_with_who_whom_and_why_and_is_scoped_and_perm
     h = client.get("/v1/members/role-history", headers=_h(client, aud)).json()      # auditor holds audit:read
     assert [i["reason"] for i in h["items"]] == ["ajuste de escala"] and h["truncated"] is False   # the other workspace's change is not here
     i = h["items"][0]
-    assert (i["from"], i["to"]) == ("engineer", "noc_n2") and i["actor"]["email"] == adm["email"] and i["target"]["email"] == eng["email"]
+    assert (i["from"], i["to"]) == ("engineer", "noc_n2") and i["actor"]["name"] and i["target"]["name"]
+    assert i["actor"]["email"] is None and i["target"]["email"] is None            # the auditor has audit:read but not members:read: names yes, e-mails no
+    full = client.get("/v1/members/role-history", headers=_h(client, adm)).json()["items"][0]   # the administrator holds both
+    assert full["actor"]["email"] == adm["email"] and full["target"]["email"] == eng["email"]
     assert client.get("/v1/members/role-history", headers=_h(client, sup)).status_code == 403    # support has no audit:read
     assert client.get("/v1/members/role-history", headers=_h(client, eng)).status_code in (401, 403)   # the engineer's old token ended with the change
     # a person who left the workspace shows no name, only the id

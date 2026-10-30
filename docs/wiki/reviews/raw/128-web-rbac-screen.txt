@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18d80-d27d-78a0-9f39-f4ffbe5e785e).
+[codex] Turn started (01a18d80-d642-7081-ac0f-c639b63c002d).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os limites de confiança entre UI, BFF e API, in...
+[codex] Running command: /bin/bash -lc "git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/api/a...
+[codex] Command completed: /bin/bash -lc "git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/api/a... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --unified=30 main...HEAD -- apps/web/src/app/administracao/papeis/pag...
+[codex] Command completed: /bin/bash -lc "git diff --unified=30 main...HEAD -- apps/web/src/app/administracao/papeis/pag... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "app_change_member_role|member.role_change|evidence_redacted|readFields|...
+[codex] Command completed: /bin/bash -lc 'rg -n "app_change_member_role|member.role_change|evidence_redacted|readFields|... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,100p' apps/web/src/lib/mfa-bff.ts && sed -n '1,130p' apps/api/alembi...
+[codex] Command completed: /bin/bash -lc "sed -n '1,100p' apps/web/src/lib/mfa-bff.ts && sed -n '1,130p' apps/api/alembi... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "audit:read|members:read|ROLE_PERMISSIONS|roles:read" apps/api/app/core/...
+[codex] Command completed: /bin/bash -lc 'rg -n "audit:read|members:read|ROLE_PERMISSIONS|roles:read" apps/api/app/core/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: o novo histórico amplia `audit:read...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: o novo histórico amplia `audit:read` para expor e-mails de membros sem `members:read`.
+
+Findings:
+- [medium] Histórico expõe e-mails a papéis sem permissão para ler membros (apps/api/app/api/members.py:182-186)
+  A rota exige apenas `audit:read`, mas os joins retornam `actor_email` e `target_email` para membros atuais. O papel `auditor` tem `audit:read` e não `members:read`, então passa a receber esses e-mails pelo histórico apesar de não poder consultar a lista de membros. Isso amplia o acesso a dados pessoais por uma permissão distinta. Remova os e-mails da resposta ou exija também `members:read` antes de incluí-los.
+  Recommendation: Não retornar e-mails no histórico, ou condicionar esses campos a uma verificação explícita de `members:read`.

@@ -176,7 +176,7 @@ def change_member_role(user_id: UUID, body: RoleChangeIn, p: Principal = Depends
 @router.get("/v1/members/role-history")
 def role_history(limit: int = Query(50, ge=1, le=200), p: Principal = Depends(require("audit:read")), conn: Connection = TENANT_CONN) -> dict:
     """Role changes of this workspace, newest first: who changed whose role, from what to what, why. Names come from current members only
-    (a person who left shows no name); the reason is the free text the administrator typed and is shown as plain text."""
+    (a person who left shows no name; e-mail only with members:read); the reason is the free text the administrator typed and is shown as plain text."""
     rows = conn.execute(
         text(
             "SELECT a.id, a.created_at, a.actor_id, a.target_id, a.evidence_redacted AS ev, "
@@ -190,9 +190,10 @@ def role_history(limit: int = Query(50, ge=1, le=200), p: Principal = Depends(re
         ),
         {"t": p.tenant_id, "l": limit + 1},
     ).all()
+    see_email = p.can("members:read")   # audit:read alone shows names (needed to audit) but not e-mail addresses: those belong to members:read
     return {"truncated": len(rows) > limit, "items": [
         {"id": str(r.id), "at": r.created_at.isoformat(), "from": r.ev.get("from"), "to": r.ev.get("to"), "reason": r.ev.get("reason"),
          "revoked_sessions": r.ev.get("revoked_sessions"),
-         "actor": {"id": str(r.actor_id) if r.actor_id else None, "name": r.actor_name, "email": r.actor_email},
-         "target": {"id": r.target_id, "name": r.target_name, "email": r.target_email}}
+         "actor": {"id": str(r.actor_id) if r.actor_id else None, "name": r.actor_name, "email": r.actor_email if see_email else None},
+         "target": {"id": r.target_id, "name": r.target_name, "email": r.target_email if see_email else None}}
         for r in rows[:limit]]}
