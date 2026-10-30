@@ -136,6 +136,7 @@ func (q *Queries) Drain(ctx context.Context, src OLTSource, raw olt.Session, clo
 			return ran
 		}
 		leaseLeft := q.Lease.Remaining(cloudID)
+		leaseEnd := time.Now().Add(leaseLeft) // an ABSOLUTE instant (monotonic), fixed at the measurement: time spent afterwards eats the query's time, not the lease's
 		if leaseLeft < minQueryWindow { // the claim took the lease's last seconds: nothing is sent
 			_ = q.Store.Fail(e.JobID, "lease_lost")
 			return ran
@@ -162,7 +163,7 @@ func (q *Queries) Drain(ctx context.Context, src OLTSource, raw olt.Session, clo
 			continue // nothing was sent to the device
 		}
 		// the query can never outlive the lease it started under: the transfer of the OLT waits for the lease (and a margin), not for a command still running
-		runCtx, stop := context.WithTimeout(ctx, leaseLeft)
+		runCtx, stop := context.WithDeadline(ctx, leaseEnd)
 		res, err := q.Run(runCtx, sess, e.Intent.QueryID, olt.Params{Slot: e.Intent.Slot, Port: e.Intent.Port, ONT: e.Intent.ONT})
 		stop()
 		if err != nil {
