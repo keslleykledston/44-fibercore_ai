@@ -13,6 +13,9 @@ exec 9>"$DIR/.retention.lock"; flock -n 9 || exit 0
 log() { echo "$(date -Is) $*" >> "$DIR/retention.log"; }
 trap 'rc=$?; [[ $rc -eq 0 ]] || log "FALHA rc=$rc"' EXIT
 COMPOSE=(docker compose -p fibercore-prod --env-file .env.prod -f infra/compose/compose.yaml)
+# precondition of the function: the connection must ignore the RLS (database owner); say so clearly instead of failing inside the function
+bypass=$("${COMPOSE[@]}" exec -T postgres psql -U fibercore -d fibercore -Atc "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user")
+[[ "$bypass" == "t" ]] || { log "FALHA: o papel do banco usado não é dono/BYPASSRLS; a poda não pode ver todos os provedores"; exit 3; }
 before=$("${COMPOSE[@]}" exec -T postgres psql -U fibercore -d fibercore -Atc "SELECT count(*) FROM onu_state_events")
 removed=$("${COMPOSE[@]}" exec -T postgres psql -U fibercore -d fibercore -Atc "SELECT onu_state_events_prune($KEEP)")
 log "OK removidos=$removed de $before (keep_days=$KEEP)"
