@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/jobs"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/olt"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/oltquery"
 )
@@ -17,6 +18,19 @@ import (
 const qCloud = "8f14e45f-ceea-467a-9a36-4a1b5c3d2e10"
 
 // qSession replays the real R015 captures (collection) plus the board listing, and records every command it is sent.
+// fakeLease is a valid lease: OLT ref -> epoch.
+type fakeLease map[string]int
+
+func (l fakeLease) Epoch(ref string) (int, bool) { e, ok := l[ref]; return e, ok }
+func (l fakeLease) Check(ref string, epoch int) error {
+	if e, ok := l[ref]; !ok {
+		return jobs.ErrNoLease
+	} else if e != epoch {
+		return jobs.ErrLeaseTarget
+	}
+	return nil
+}
+
 type qSession struct {
 	inner  r015Session
 	sent   []string
@@ -41,13 +55,13 @@ func queryRig(t *testing.T, sess olt.Session) (*OLT, *oltquery.Store) {
 	drv := olt.HuaweiR015{}
 	src := OLTSource{Name: "OLT-R015", Driver: drv, Ports: []string{"0/0/14"}, CloudID: qCloud, AllowUnverified: true,
 		Open: func(context.Context) (olt.Session, func(), error) { return sess, func() {}, nil }}
-	o := &OLT{EdgeID: "e", Sources: []OLTSource{src}, Queries: &Queries{Store: store, Run: drv.RunQueryInConfig}}
+	o := &OLT{EdgeID: "e", Sources: []OLTSource{src}, Queries: &Queries{Store: store, Run: drv.RunQueryInConfig, Lease: fakeLease{qCloud: 1}}}
 	return o, store
 }
 
 func enqueue(t *testing.T, s *oltquery.Store, id, query string) {
 	t.Helper()
-	if err := s.Enqueue(id, oltquery.Intent{QueryID: query, OLTRef: qCloud}, time.Now().Add(10*time.Minute)); err != nil {
+	if err := s.Enqueue(id, oltquery.Intent{QueryID: query, OLTRef: qCloud, Epoch: 1}, time.Now().Add(10*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(2 * time.Millisecond)
@@ -248,5 +262,75 @@ func TestAClaimThatEatsTheWindowSendsNothing(t *testing.T) {
 	}
 	if e, _, _ := store.Get("job-v"); e.State != oltquery.Failed || e.Reason != "window_closed" {
 		t.Fatalf("%+v", e)
+	}
+}
+
+func TestNothingIsClaimedWithoutAValidLeaseForThisOLT(t *testing.T) {
+	for name, lease := range map[string]LeaseChecker{"no checker": nil, "no lease at all": fakeLease{}, "a lease for another OLT": fakeLease{"9a14e45f-ceea-467a-9a36-4a1b5c3d2e11": 1}} {
+		sess := &qSession{inner: r015Session{}}
+		o, store := queryRig(t, sess)
+		o.Queries.Lease = lease
+		enqueue(t, store, "job-v", "olt.version")
+		items, err := o.Collect(context.Background())
+		if err != nil || len(items) != 1 {
+			t.Fatalf("%s: the collection must be unaffected: %v", name, err)
+		}
+		if e, _, _ := store.Get("job-v"); e.State != oltquery.Queued {
+			t.Errorf("%s: %+v", name, e)
+		}
+		if sess.sent[len(sess.sent)-1] != "quit" {
+			t.Errorf("%s: nothing after the collection's own commands: %v", name, sess.sent)
+		}
+	}
+}
+
+func TestAQueryOfAnotherOwnerGenerationEndsAloneAndTheCurrentOneRuns(t *testing.T) {
+	sess := &qSession{inner: r015Session{}}
+	o, store := queryRig(t, sess)
+	o.Queries.Lease = fakeLease{qCloud: 5}
+	if err := store.Enqueue("old", oltquery.Intent{QueryID: "olt.version", OLTRef: qCloud, Epoch: 4}, time.Now().Add(10*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(2 * time.Millisecond)
+	if err := store.Enqueue("new", oltquery.Intent{QueryID: "olt.board", OLTRef: qCloud, Epoch: 5}, time.Now().Add(10*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := o.Collect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if e, _, _ := store.Get("old"); e.State != oltquery.Failed || e.Reason != "stale_owner" {
+		t.Fatalf("old: %+v", e)
+	}
+	if e, _, _ := store.Get("new"); e.State != oltquery.Executed {
+		t.Fatalf("new: %+v", e)
+	}
+	if strings.Count(strings.Join(sess.sent, "|"), "display version") != 3 { // two by the collection itself + one by the current query; the stale one sent nothing
+		t.Fatalf("%v", sess.sent)
+	}
+}
+
+// a lease that is valid when the loop asks, and gone when the claim is checked
+type flakyLease struct{ asked int }
+
+func (l *flakyLease) Epoch(string) (int, bool) { return 1, true }
+func (l *flakyLease) Check(string, int) error  { return jobs.ErrNoLease }
+
+func TestALeaseLostBetweenTheAskAndTheClaimSendsNothing(t *testing.T) {
+	sess := &qSession{inner: r015Session{}}
+	o, store := queryRig(t, sess)
+	o.Queries.Lease = &flakyLease{}
+	enqueue(t, store, "job-v", "olt.version")
+	enqueue(t, store, "job-b", "olt.board")
+	if _, err := o.Collect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if e, _, _ := store.Get("job-v"); e.State != oltquery.Failed || e.Reason != "lease_lost" {
+		t.Fatalf("%+v", e)
+	}
+	if e, _, _ := store.Get("job-b"); e.State != oltquery.Queued {
+		t.Fatalf("the rest waits for a lease: %+v", e)
+	}
+	if sess.sent[len(sess.sent)-1] != "quit" {
+		t.Fatalf("%v", sess.sent)
 	}
 }

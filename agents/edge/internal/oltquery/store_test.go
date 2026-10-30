@@ -23,7 +23,7 @@ func newStore(t *testing.T) (*Store, *clock) {
 	return &Store{Path: filepath.Join(t.TempDir(), "oltquery.json"), Now: c.now}, c
 }
 
-func in(ref string) Intent { return Intent{QueryID: "olt.version", OLTRef: ref} }
+func in(ref string) Intent { return Intent{QueryID: "olt.version", OLTRef: ref, Epoch: 1} }
 
 func enq(t *testing.T, s *Store, c *clock, id, ref string) {
 	t.Helper()
@@ -70,7 +70,7 @@ func TestEnqueueIsIdempotentAndBounded(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := s.Enqueue("j1", Intent{QueryID: "olt.board", OLTRef: olt1}, c.t.Add(time.Hour)); !errors.Is(err, ErrConflict) {
+	if err := s.Enqueue("j1", Intent{QueryID: "olt.board", OLTRef: olt1, Epoch: 1}, c.t.Add(time.Hour)); !errors.Is(err, ErrConflict) {
 		t.Fatalf("the same job id with another intent must be refused: %v", err)
 	}
 	e1, _ := s.Claim(olt1, "s")
@@ -363,5 +363,38 @@ func TestRefusedAndAcknowledgedEntriesAreBothPrunedAfterADay(t *testing.T) {
 		if _, ok, _ := s.Get(id); ok {
 			t.Fatalf("%s must be pruned", id)
 		}
+	}
+}
+
+func TestAnEnvelopeOfAnOlderOwnerGenerationIsRefusedAndTheGenerationOnlyGoesUp(t *testing.T) {
+	s, c := newStore(t)
+	exp := c.t.Add(10 * time.Minute)
+	if err := s.Enqueue("a", Intent{QueryID: "olt.version", OLTRef: olt1, Epoch: 3}, exp); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Enqueue("b", Intent{QueryID: "olt.version", OLTRef: olt1, Epoch: 2}, exp); !errors.Is(err, ErrStaleOwner) {
+		t.Fatalf("a lower epoch belongs to an owner that was replaced: %v", err)
+	}
+	if err := s.Enqueue("c", Intent{QueryID: "olt.version", OLTRef: olt1, Epoch: 0}, exp); !errors.Is(err, ErrStaleOwner) {
+		t.Fatalf("epoch 0 does not exist: %v", err)
+	}
+	restarted := &Store{Path: s.Path, Now: c.now} // the highest epoch seen is on disk, not in memory
+	if err := restarted.Enqueue("d", Intent{QueryID: "olt.version", OLTRef: olt1, Epoch: 2}, exp); !errors.Is(err, ErrStaleOwner) {
+		t.Fatalf("after a restart: %v", err)
+	}
+	if err := restarted.Enqueue("e", Intent{QueryID: "olt.version", OLTRef: olt1, Epoch: 4}, exp); err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.Enqueue("f", Intent{QueryID: "olt.version", OLTRef: olt1, Epoch: 3}, exp); !errors.Is(err, ErrStaleOwner) {
+		t.Fatalf("4 was seen: 3 is stale now: %v", err)
+	}
+	if err := restarted.Enqueue("g", Intent{QueryID: "olt.version", OLTRef: olt2, Epoch: 1}, exp); err != nil {
+		t.Fatalf("epochs are per OLT: %v", err)
+	}
+	if err := os.WriteFile(s.Path, []byte(`{"entries":{},"claims":{},"epochs":{"x":0}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Claim(olt1, "s"); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("a malformed epoch table is corruption: %v", err)
 	}
 }

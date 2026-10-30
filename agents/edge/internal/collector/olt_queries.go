@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/jobs"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/olt"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/oltquery"
 )
@@ -15,11 +16,20 @@ import (
 // Nothing here can fail the collection: a query that goes wrong ends the batch, and the snapshot that was already built is returned as it was.
 type Queries struct {
 	Store *oltquery.Store
+	// Lease says which OLTs this Edge owns right now and with what epoch (the Cloud's signed lease, held in memory only). nil, or no lease for the OLT, runs
+	// nothing: the same fail-closed rule as the bench writes.
+	Lease LeaseChecker
 	// Run executes one catalog query on the open session (olt.HuaweiR015.RunQuery); nil makes every query end as `no_driver`.
 	Run func(ctx context.Context, s olt.Session, queryID string, p olt.Params) (olt.QueryResult, error)
 	// SessionTimeout bounds the whole batch of one session (0 = 3 minutes).
 	SessionTimeout time.Duration
 	Now            func() time.Time
+}
+
+// LeaseChecker is the part of jobs.LeaseHolder the executor needs.
+type LeaseChecker interface {
+	Epoch(ref string) (int, bool)
+	Check(ref string, epoch int) error
 }
 
 const (
@@ -102,11 +112,25 @@ func (q *Queries) Drain(ctx context.Context, src OLTSource, raw olt.Session, clo
 		if !windowLeft(ctx) {
 			return ran
 		}
+		if q.Lease == nil {
+			return ran
+		}
+		if _, ok := q.Lease.Epoch(cloudID); !ok { // no valid lease for this OLT (lost, withdrawn, mid-transfer, or the Edge just restarted): nothing is claimed
+			return ran
+		}
 		e, err := q.Store.Claim(cloudID, session) // CLAIMED is on disk before anything is sent
 		if err != nil {
 			return ran
 		}
 		ran++
+		if err := q.Lease.Check(cloudID, e.Intent.Epoch); err != nil { // the lease is asked again right at the claim, and for THIS query's epoch
+			if errors.Is(err, jobs.ErrLeaseTarget) { // issued for another generation of the ownership: only THIS query is stale, the next one may be current
+				_ = q.Store.Fail(e.JobID, "stale_owner")
+				continue
+			}
+			_ = q.Store.Fail(e.JobID, "lease_lost") // the lease ran out between the check and the claim: nothing was sent, stop
+			return ran
+		}
 		if !windowLeft(ctx) { // writing the claim took the time that was left: nothing was sent, and the query ends honestly instead of starting half-way
 			_ = q.Store.Fail(e.JobID, "window_closed")
 			return ran

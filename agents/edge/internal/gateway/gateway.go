@@ -146,16 +146,22 @@ func (c *Client) Deliver(ctx context.Context, kind string, payload []byte) (Outc
 // LeaseHeader carries the Cloud's signed bench lease (ADR-0030) on every poll answer, with or without a job.
 const LeaseHeader = "X-Bench-Lease"
 
+// OLTLeaseHeader carries the Cloud's signed ownership lease of the OLTs (ADR-0029), on every poll answer too.
+const OLTLeaseHeader = "X-OLT-Lease"
+
+// Leases are the raw lease headers of one poll answer (empty = the Cloud sent none).
+type Leases struct{ Bench, OLT string }
+
 // NextJob polls for one approved job. Returns a nil body when none is available. The second value is the raw bench lease header
 // (empty when the Cloud sent none); the caller verifies it, nothing is trusted here.
-func (c *Client) NextJob(ctx context.Context) ([]byte, string, error) {
+func (c *Client) NextJob(ctx context.Context) ([]byte, Leases, error) {
 	for attempt := 0; attempt < 2; attempt++ {
 		c.mu.Lock()
 		tok := c.token
 		c.mu.Unlock()
 		if tok == "" {
 			if err := c.login(ctx); err != nil {
-				return nil, "", err
+				return nil, Leases{}, err
 			}
 			c.mu.Lock()
 			tok = c.token
@@ -165,13 +171,16 @@ func (c *Client) NextJob(ctx context.Context) ([]byte, string, error) {
 		req.Header.Set("Authorization", "Bearer "+tok)
 		resp, err := c.http.Do(req)
 		if err != nil {
-			return nil, "", err
+			return nil, Leases{}, err
 		}
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
 		resp.Body.Close()
-		lease := resp.Header.Get(LeaseHeader)
-		if len(lease) > 1<<15 {
-			lease = "!oversize" // never parses: the caller withdraws the lease
+		lease := Leases{Bench: resp.Header.Get(LeaseHeader), OLT: resp.Header.Get(OLTLeaseHeader)}
+		if len(lease.Bench) > 1<<15 {
+			lease.Bench = "!oversize" // never parses: the caller withdraws the lease
+		}
+		if len(lease.OLT) > 1<<15 {
+			lease.OLT = "!oversize"
 		}
 		switch resp.StatusCode {
 		case http.StatusOK:
@@ -183,8 +192,8 @@ func (c *Client) NextJob(ctx context.Context) ([]byte, string, error) {
 			c.token = ""
 			c.mu.Unlock()
 		default:
-			return nil, "", fmt.Errorf("next job: status %d", resp.StatusCode)
+			return nil, Leases{}, fmt.Errorf("next job: status %d", resp.StatusCode)
 		}
 	}
-	return nil, "", errors.New("next job: auth retry exhausted")
+	return nil, Leases{}, errors.New("next job: auth retry exhausted")
 }

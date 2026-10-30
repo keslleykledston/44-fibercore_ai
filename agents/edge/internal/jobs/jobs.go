@@ -169,8 +169,11 @@ func (v *Verifier) Verify(ctx context.Context, raw []byte) (*Envelope, error) {
 		return nil, fmt.Errorf("%w: target_ref only exists on refresh and bench writes", ErrFormat)
 	}
 	if query {
-		if env.AuthorizationID != "" || env.AuthorizationEndsAt != "" || env.OwnerEpoch != 0 || exp.Sub(iss) > QueryEnvelopeTTL+time.Second {
+		if env.AuthorizationID != "" || env.AuthorizationEndsAt != "" || exp.Sub(iss) > QueryEnvelopeTTL+time.Second {
 			return nil, fmt.Errorf("%w: a query carries no authorization and lives at most %s", ErrFormat, QueryEnvelopeTTL)
+		}
+		if env.OwnerEpoch < 1 { // the generation of the OLT's ownership the Cloud issued this for (ADR-0029 item 3)
+			return nil, fmt.Errorf("%w: a query carries the owner epoch", ErrFormat)
 		}
 		// the signed hash must be the hash of the intent actually carried: an envelope whose params were swapped under a reused hash is refused
 		if h, err := IntentHash(env.Operation, "olt", env.TargetID, env.Params); err != nil || h != env.IntentSHA256 {

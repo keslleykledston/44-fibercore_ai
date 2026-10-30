@@ -292,3 +292,89 @@ def test_board_shape_is_checked_too_and_data_does_not_ride_on_other_outcomes(cli
     assert _report(client, inv, jid, state="succeeded", postcheck_ok=False, data=VERSION).status_code == 422
     assert _report(client, inv, jid, state="succeeded", postcheck_ok=False).status_code == 204     # unknown outcome after a restart
     assert client.get(f"/v1/jobs/{jid}", headers=h).json()["status"] == "UNKNOWN"
+
+
+# ---- ownership: the lease, the epoch and the two-phase transfer (ADR-0029 item 3)
+def _lease(resp):
+    import base64
+    import json
+    raw = resp.headers.get("X-OLT-Lease")
+    return json.loads(base64.b64decode(raw)) if raw else None
+
+
+def _cli(monkeypatch, migrated, *argv):
+    from app import cli
+    monkeypatch.setenv("ADMIN_DATABASE_URL", str(migrated.url.render_as_string(hide_password=False)))
+    cli.main(list(argv))
+
+
+def test_the_lease_names_the_olts_this_edge_owns_with_their_epoch(client, seed, inv, olt, on):
+    from app.core import jobsign
+    r = client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1"))
+    lease = _lease(r)
+    assert lease and lease["schema"] == "olt-lease/1" and jobsign.verify(_pub_b64(), lease)
+    assert {"target_ref": olt, "owner_epoch": 1} in lease["targets"]
+    assert lease["edge_id"] == str(inv["a1"]["edge"]) and lease["tenant_id"] == str(seed["A"])
+    other = client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a2"))
+    assert not _lease(other) or all(t["target_ref"] != olt for t in _lease(other)["targets"])      # another Edge is not leased this OLT
+    assert "X-Bench-Lease" not in r.headers or _lease(r)["schema"] != "bench-lease/1"
+
+
+def test_no_lease_without_the_flag_or_the_channel(client, seed, inv, olt, migrated, monkeypatch):
+    assert _lease(client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1"))) is None
+    monkeypatch.setattr(olt_query, "EDGE_SUPPORT", True)
+    assert _lease(client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1"))) is None      # the flag is off
+
+
+def test_the_envelope_carries_the_owner_epoch(client, seed, inv, olt, on, migrated):
+    h = hdr(client, "alice", seed, "A")
+    _ask(client, h, olt)
+    e = client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1")).json()
+    assert e["owner_epoch"] == 1
+    with migrated.begin() as c:
+        c.execute(text("UPDATE olts SET owner_epoch = 4 WHERE id = :o"), {"o": olt})
+    _ask(client, h, olt, "olt.board")
+    assert client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1")).json()["owner_epoch"] == 4
+    with migrated.begin() as c:
+        c.execute(text("UPDATE olts SET owner_epoch = 1 WHERE id = :o"), {"o": olt})
+
+
+def test_a_transfer_in_two_phases(client, seed, inv, olt, on, migrated, monkeypatch):
+    h = hdr(client, "alice", seed, "A")
+    a1, a2 = agent(client, inv, "a1"), agent(client, inv, "a2")
+    jid = _ask(client, h, olt).json()["job"]["id"]                                       # approved, not yet dispatched
+    t, o, new = str(seed["A"]), olt, str(inv["a2"]["edge"])
+    _cli(monkeypatch, migrated, "olt-transfer-start", t, o, new)
+    assert client.get(f"/v1/jobs/{jid}", headers=h).json()["status"] == "CANCELLED"       # open queries end with the transfer
+    assert client.get("/v1/edge/jobs/next", headers=a1).status_code == 204
+    assert not _lease(client.get("/v1/edge/jobs/next", headers=a1)) or all(x["target_ref"] != olt for x in _lease(client.get("/v1/edge/jobs/next", headers=a1))["targets"])
+    assert _ask(client, h, olt).status_code == 200 and client.get("/v1/edge/jobs/next", headers=a1).status_code == 204   # accepted, never dispatched mid-transfer
+    assert _ask(client, h, olt, "olt.board").status_code == 200
+    with pytest.raises(SystemExit):                                                       # the same OLT cannot be moved twice at once
+        _cli(monkeypatch, migrated, "olt-transfer-start", t, o, new)
+    # phase 2 waits for the old owner's last lease
+    with migrated.begin() as c:
+        c.execute(text("UPDATE olts SET lease_until = now() + interval '30 seconds' WHERE id = :o"), {"o": o})
+    with pytest.raises(SystemExit, match="may still hold a lease"):
+        _cli(monkeypatch, migrated, "olt-transfer-finish", t, o)
+    with migrated.begin() as c:
+        c.execute(text("UPDATE olts SET lease_until = now() - interval '2 minutes' WHERE id = :o"), {"o": o})
+        c.execute(text("UPDATE jobs SET status = 'CANCELLED' WHERE operation = 'olt_query' AND status = 'APPROVED'"))
+    _cli(monkeypatch, migrated, "olt-transfer-finish", t, o)
+    lease = _lease(client.get("/v1/edge/jobs/next", headers=a2))
+    assert {"target_ref": olt, "owner_epoch": 2} in lease["targets"]                       # the new owner, one generation up
+    old = _lease(client.get("/v1/edge/jobs/next", headers=a1))
+    assert not old or all(x["target_ref"] != olt for x in old["targets"])
+    with migrated.connect() as c:
+        assert c.execute(text("SELECT edge_id::text, owner_epoch, transfer_to FROM olts WHERE id = :o"), {"o": o}).one() == (new, 2, None)
+    with pytest.raises(SystemExit):
+        _cli(monkeypatch, migrated, "olt-transfer-finish", t, o)                           # nothing left to finish
+
+
+def test_the_application_role_cannot_move_an_olt(client, seed, inv, olt, migrated):
+    from sqlalchemy.exc import DBAPIError
+    for stmt in ("UPDATE olts SET owner_epoch = 9", "UPDATE olts SET edge_id = edge_id", "UPDATE olts SET transfer_to = edge_id, transfer_started_at = now()"):
+        with pytest.raises(DBAPIError), migrated.begin() as c:
+            c.execute(text("SET LOCAL ROLE fibercore_app"))
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+            c.execute(text(stmt))

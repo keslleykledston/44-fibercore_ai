@@ -44,6 +44,7 @@ const (
 var (
 	ErrCorrupt     = errors.New("oltquery: state file is unreadable; the budget is treated as spent")
 	ErrConflict    = errors.New("oltquery: this job id is already queued with a different intent")
+	ErrStaleOwner  = errors.New("oltquery: the query was issued for an older owner of this OLT")
 	ErrQueueFull   = errors.New("oltquery: too many queries waiting for this OLT")
 	ErrBadState    = errors.New("oltquery: illegal state transition")
 	ErrResultSize  = errors.New("oltquery: result too large")
@@ -54,6 +55,7 @@ var (
 type Intent struct {
 	QueryID string `json:"query_id"`
 	OLTRef  string `json:"olt_ref"`
+	Epoch   int    `json:"epoch"` // owner epoch of the OLT the Cloud issued the query for (ADR-0029 item 3)
 	Slot    int    `json:"slot"`
 	Port    int    `json:"port"`
 	ONT     int    `json:"ont"`
@@ -75,6 +77,7 @@ type Entry struct {
 
 type file struct {
 	Entries map[string]*Entry      `json:"entries"`
+	Epochs  map[string]int         `json:"epochs"` // highest owner epoch ever seen per OLT: an envelope of a lower one belongs to an owner that was replaced
 	Claims  map[string][]time.Time `json:"claims"` // by olt_ref: the instants of claims in the last hour
 }
 
@@ -95,7 +98,7 @@ func (s *Store) now() time.Time {
 func (s *Store) load() (*file, error) {
 	b, err := os.ReadFile(s.Path)
 	if errors.Is(err, os.ErrNotExist) {
-		return &file{Entries: map[string]*Entry{}, Claims: map[string][]time.Time{}}, nil
+		return &file{Entries: map[string]*Entry{}, Claims: map[string][]time.Time{}, Epochs: map[string]int{}}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrCorrupt, err)
@@ -106,6 +109,14 @@ func (s *Store) load() (*file, error) {
 	}
 	if f.Claims == nil { // a file that lost its budget history would hand out a fresh budget: it is corrupt, not new
 		return nil, fmt.Errorf("%w: no claims history", ErrCorrupt)
+	}
+	if f.Epochs == nil { // a file from before ownership epochs existed: nothing was ever seen, which is the truth
+		f.Epochs = map[string]int{}
+	}
+	for ref, n := range f.Epochs {
+		if ref == "" || n < 1 {
+			return nil, fmt.Errorf("%w: malformed epochs", ErrCorrupt)
+		}
 	}
 	for ref, ts := range f.Claims {
 		for _, t := range ts {
@@ -191,6 +202,10 @@ func (s *Store) Enqueue(jobID string, in Intent, expires time.Time) error {
 			}
 			return nil
 		}
+		if in.Epoch < 1 || in.Epoch < f.Epochs[in.OLTRef] {
+			return ErrStaleOwner
+		}
+		f.Epochs[in.OLTRef] = in.Epoch // remembered even if the query is then refused for room: the owner generation only goes up
 		n := 0
 		for _, e := range f.Entries {
 			if e.State == Queued && e.Intent.OLTRef == in.OLTRef {
