@@ -30,10 +30,14 @@ const (
 )
 
 const (
-	PerSession      = 5
-	PerHour         = 20
-	MaxQueuedPerOLT = 50
-	KeepReported    = 24 * time.Hour
+	PerSession = 5  // on-demand queries per CLI session (class cap)
+	PerHour    = 20 // on-demand queries per hour per OLT (class cap)
+	// ADR-0032 item 5: the AGGREGATE budget of one CLI session (on-demand + routines + captures) and the class caps of the captures.
+	MaxPerSession      = 8
+	CapturesPerSession = 2
+	CapturesPerHour    = 4
+	MaxQueuedPerOLT    = 50
+	KeepReported       = 24 * time.Hour
 	// StaleClaim: a CLAIMED entry older than this belongs to a session that cannot still be running (a session lives at most ~12 minutes), so its outcome
 	// is unknown and it becomes UNKNOWN without waiting for a restart.
 	StaleClaim = 15 * time.Minute
@@ -44,6 +48,7 @@ const (
 var (
 	ErrCorrupt     = errors.New("oltquery: state file is unreadable; the budget is treated as spent")
 	ErrConflict    = errors.New("oltquery: this job id is already queued with a different intent")
+	ErrBudget      = errors.New("oltquery: the session or hour budget of this class is spent")
 	ErrStaleOwner  = errors.New("oltquery: the query was issued for an older owner of this OLT")
 	ErrQueueFull   = errors.New("oltquery: too many queries waiting for this OLT")
 	ErrBadState    = errors.New("oltquery: illegal state transition")
@@ -75,10 +80,19 @@ type Entry struct {
 	HandedAt   time.Time       `json:"handed_at,omitempty"` // when the outcome was last handed to the delivery queue and is waiting for the Cloud's answer (durable: survives a restart)
 }
 
+// capSess counts the captures that ran in one CLI session.
+type capSess struct {
+	N  int       `json:"n"`
+	At time.Time `json:"at"`
+}
+
 type file struct {
-	Entries map[string]*Entry      `json:"entries"`
-	Epochs  map[string]int         `json:"epochs"` // highest owner epoch ever seen per OLT: an envelope of a lower one belongs to an owner that was replaced
-	Claims  map[string][]time.Time `json:"claims"` // by olt_ref: the instants of claims in the last hour
+	Entries map[string]*Entry `json:"entries"`
+	// Captures (ADR-0032 item 5): the supervised captures of unvalidated queries have their OWN persisted class budget, apart from the on-demand one.
+	Captures    map[string][]time.Time `json:"captures,omitempty"`     // by olt_ref: instants of captures in the last hour
+	CaptureSess map[string]capSess     `json:"capture_sess,omitempty"` // by session id: how many captures ran in it
+	Epochs      map[string]int         `json:"epochs"`                 // highest owner epoch ever seen per OLT: an envelope of a lower one belongs to an owner that was replaced
+	Claims      map[string][]time.Time `json:"claims"`                 // by olt_ref: the instants of claims in the last hour
 }
 
 // Store is the durable queue. All methods are safe for concurrent use.
@@ -109,6 +123,12 @@ func (s *Store) load() (*file, error) {
 	}
 	if f.Claims == nil { // a file that lost its budget history would hand out a fresh budget: it is corrupt, not new
 		return nil, fmt.Errorf("%w: no claims history", ErrCorrupt)
+	}
+	if f.Captures == nil {
+		f.Captures = map[string][]time.Time{}
+	}
+	if f.CaptureSess == nil {
+		f.CaptureSess = map[string]capSess{}
 	}
 	if f.Epochs == nil { // a file from before ownership epochs existed: nothing was ever seen, which is the truth
 		f.Epochs = map[string]int{}
@@ -191,6 +211,39 @@ func (s *Store) update(fn func(f *file) error) error {
 		return err
 	}
 	return s.save(f)
+}
+
+// ReserveCapture spends ONE capture from the class budget (2 per session, 4 per hour per OLT) and from the aggregate one of the session (on-demand queries
+// already run in it + captures <= 8), writing the reservation to disk BEFORE the command can be sent. ErrBudget = nothing may run now.
+func (s *Store) ReserveCapture(oltRef, session string) error {
+	return s.update(func(f *file) error {
+		now := s.now()
+		keep := make([]time.Time, 0, len(f.Captures[oltRef])+1)
+		for _, t := range f.Captures[oltRef] {
+			if now.Sub(t) < time.Hour {
+				keep = append(keep, t)
+			}
+		}
+		f.Captures[oltRef] = keep
+		for id, c := range f.CaptureSess { // sessions older than 2 h are forgotten
+			if now.Sub(c.At) > 2*time.Hour {
+				delete(f.CaptureSess, id)
+			}
+		}
+		onDemand := 0
+		for _, e := range f.Entries {
+			if e.SessionID == session && e.State != Queued {
+				onDemand++
+			}
+		}
+		c := f.CaptureSess[session]
+		if len(keep) >= CapturesPerHour || c.N >= CapturesPerSession || onDemand+c.N >= MaxPerSession {
+			return ErrBudget
+		}
+		f.Captures[oltRef] = append(keep, now)
+		f.CaptureSess[session] = capSess{N: c.N + 1, At: now}
+		return nil
+	})
 }
 
 // Enqueue records an approved query. The same job twice changes nothing (the Cloud may redeliver an envelope the Edge already has).

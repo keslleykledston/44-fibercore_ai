@@ -109,6 +109,8 @@ type OLT struct {
 	OnCollected func(name string, took time.Duration, items int, err error)
 	// Queries (ADR-0029), when set, runs the approved read-only queries of this OLT in the collection's own session, after the collection's commands.
 	Queries *Queries
+	// Capture (ADR-0032), when set, runs the listed supervised captures of unvalidated queries in the same session, after the queries. Raw output stays on this host.
+	Capture *Capture
 
 	mu      sync.Mutex
 	st      map[string]GuardState // device key -> pacing state
@@ -272,7 +274,9 @@ func (o *OLT) collectCLI(ctx context.Context, src OLTSource, observed string) ([
 	if berr == nil && o.Queries != nil && src.CloudID != "" {
 		// the snapshot is final: the queries run on the same open session with their own allowlist and budget, inside what is LEFT of this collection's time box
 		// (never beyond it), and cannot change this round's outcome
-		o.Queries.Drain(ctx, src, raw, src.CloudID, fmt.Sprintf("%s@%d", src.Name, o.now().UnixNano()))
+		session := fmt.Sprintf("%s@%d", src.Name, o.now().UnixNano())
+		o.Queries.Drain(ctx, src, raw, src.CloudID, session)
+		o.Capture.Do(ctx, src, raw, src.CloudID, session) // nil-safe: no capture configured = nothing happens
 	}
 	return items, berr
 }
