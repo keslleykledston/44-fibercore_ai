@@ -171,6 +171,20 @@ def main(argv: list[str] | None = None) -> None:
             if start.tzinfo is None or end.tzinfo is None:
                 sys.exit("--from/--to need a time zone (e.g. 2026-10-30T14:00:00+00:00)")
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            if a.first_run:  # ADR-0030 amendment: only while the evidence-backed entry does not exist yet, and only with the entry it needs
+                cpe = c.execute(text("SELECT vendor, model, firmware FROM cpes WHERE tenant_id = :t AND id = :c"),
+                                {"t": a.tenant_id, "c": a.cpe_id}).first()
+                if cpe is None or not (cpe.vendor and cpe.model and cpe.firmware):
+                    sys.exit("refused: the CPE profile (vendor, model, firmware) is not known")
+                have = {r.certification for r in c.execute(
+                    text("SELECT certification FROM device_capabilities WHERE tenant_id = :t AND lower(vendor) = lower(:v) "
+                         "AND lower(model) = lower(:m) AND firmware = :f AND protocol = 'tr069' AND operation = :o AND status = 'supported' "
+                         "AND evidence_ref IS NOT NULL AND verified_at IS NOT NULL"),
+                    {"t": a.tenant_id, "v": cpe.vendor.strip(), "m": cpe.model.strip(), "f": cpe.firmware.strip(), "o": a.operation})}
+                if have & {"observed", "certified"}:
+                    sys.exit("refused: an observed entry already exists for this profile; record a normal authorization (no --first-run)")
+                if "identified" not in have:
+                    sys.exit("refused: --first-run needs a complete `supported`/`identified` registry entry of the exact profile first")
             aid = c.execute(
                 text("INSERT INTO bench_authorizations "
                      "(tenant_id, operation, cpe_id, params_hash, window_start, window_end, authorized_by, first_run) "

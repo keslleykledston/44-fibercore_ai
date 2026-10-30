@@ -18,7 +18,11 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute("ALTER TABLE bench_authorizations ADD COLUMN first_run boolean NOT NULL DEFAULT false")
+    # at most ONE open first-run authorization per target and operation: the owner cannot stack several to cover a series of writes
+    op.execute("CREATE UNIQUE INDEX bench_authorizations_one_open_first_run ON bench_authorizations (tenant_id, cpe_id, operation) "
+               "WHERE first_run AND state = 'open'")
 
 
 def downgrade() -> None:
+    op.execute("DROP INDEX IF EXISTS bench_authorizations_one_open_first_run")
     op.execute("ALTER TABLE bench_authorizations DROP COLUMN first_run")

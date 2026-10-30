@@ -518,3 +518,43 @@ def test_owner_cli_records_the_first_run_flag(client, seed, inv, migrated, admin
               "--by", "responsavel", "--first-run"])
     with migrated.begin() as c:
         assert c.execute(text("SELECT first_run FROM bench_authorizations")).scalar() is True
+
+
+def test_first_run_cli_refuses_without_identified_entry_with_observed_entry_and_a_second_open_one(client, seed, inv, migrated, admin_url, monkeypatch):
+    from app import cli
+
+    _flag(migrated, seed["A"])
+    cpe = _cpe(client, inv, seed)
+    _bench(migrated, seed, inv, cpe, authorization=False, capability=False)
+    monkeypatch.setenv("ADMIN_DATABASE_URL", admin_url)
+    now = datetime.now(UTC)
+    argv = ["bench-authorize", str(seed["A"]), "reboot_cpe", cpe, "--from", now.isoformat(), "--to", (now + timedelta(minutes=5)).isoformat(),
+            "--by", "responsavel", "--first-run"]
+    with pytest.raises(SystemExit, match="needs a complete"):
+        cli.main(argv)                                         # no registry entry at all
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("INSERT INTO device_capabilities (tenant_id, vendor, model, firmware, protocol, operation, status, certification, "
+                       "verified_at, evidence_ref) VALUES (:t,:v,:m,:f,'tr069','reboot_cpe','supported','identified',now(),'docs/x.md')"),
+                  {"t": str(seed["A"]), "v": PROFILE[0], "m": PROFILE[1], "f": PROFILE[2]})
+    cli.main(argv)                                             # one open first-run authorization
+    with pytest.raises(Exception, match="one_open_first_run|duplicate key"):
+        cli.main(argv)                                         # the owner cannot stack a second one
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE device_capabilities SET certification = 'observed'"))
+        c.execute(text("DELETE FROM bench_authorizations"))
+    with pytest.raises(SystemExit, match="observed entry already exists"):
+        cli.main(argv)                                         # moot once the evidence-backed entry exists
+
+
+def test_the_gate_scopes_every_lookup_to_the_tenant_it_is_given(client, seed, inv, migrated):
+    cpe, h = _full(client, seed, inv, migrated, cert="identified", first_run=True)
+    jid = _preview(client, h, cpe).json()["id"]
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        job = c.execute(text("SELECT id, operation, target_id, target_type, edge_id, params FROM jobs WHERE id = :j"), {"j": jid}).one()
+        assert bench.gate(c, seed["A"], job, mode="submit") is None
+        # the same rows, visible through the session (RLS is set to A), are NOT usable under another tenant id: every lookup names the tenant
+        for mode in ("submit", "consume", "dispatch"):
+            assert bench.gate(c, seed["B"], job, mode=mode) in ("bench_writes_disabled", "target_not_bench")
