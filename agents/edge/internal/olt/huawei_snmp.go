@@ -282,7 +282,7 @@ func (HuaweiSNMP) LastDowns(ctx context.Context, r SNMPReader, targets []DownTar
 		}
 		got, err := r.Get(ctx, oids)
 		if err != nil {
-			return out, err
+			return out, fmt.Errorf("last-down port %s ont-ids %d..%d: %w", targets[0].PonPath, targets[0].OntID, targets[n-1].OntID, err) // where the agent stopped answering
 		}
 		if first && !hwIfDesc.MatchString(string(got[descOID].Bytes)) {
 			return out, fmt.Errorf("ifIndex %d is not a GPON port", ifx)

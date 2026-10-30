@@ -578,3 +578,17 @@ func (c *countingMIB) Get(ctx context.Context, oids []string) (map[string]SNMPVa
 	c.maxOIDs = max(c.maxOIDs, len(oids))
 	return c.fakeMIB.Get(ctx, oids)
 }
+
+type deadMIB struct{ *fakeMIB }
+
+func (deadMIB) Get(context.Context, []string) (map[string]SNMPValue, error) {
+	return nil, errors.New("request timeout")
+}
+
+func TestLastDownsErrorSaysWhichPortAndOntIDsTheAgentStoppedAnsweringOn(t *testing.T) {
+	_, err := HuaweiSNMP{}.LastDowns(context.Background(), deadMIB{newPon14()}, []DownTarget{
+		{PonPath: "0/0/14", OntID: 3, Serial: "A"}, {PonPath: "0/0/14", OntID: 9, Serial: "B"}})
+	if err == nil || !strings.Contains(err.Error(), "port 0/0/14 ont-ids 3..9") || !strings.Contains(err.Error(), "request timeout") {
+		t.Fatalf("the error must carry the port and the ONT-ID range: %v", err)
+	}
+}
