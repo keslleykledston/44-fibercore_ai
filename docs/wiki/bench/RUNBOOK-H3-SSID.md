@@ -14,7 +14,7 @@ $C bench-authorize <tenant> set_wifi_ssid <cpe> --from "<agora>" --to "<agora+15
 `--first-run` só na primeira execução (enquanto não existe entrada `observed`). Respeite o intervalo de 30 min entre manobras na mesma ONT (o ritmo do Edge é por dispositivo).
 
 ## Execução
-Job `set_wifi_ssid` com `params: {"ssid": "BANCADA-H3"}` (preview → submit → approve pelo próprio solicitante). Resultado `SUCCEEDED` = mudou, leu de volta, restaurou e leu de volta. `FAILED`/`UNKNOWN` = alvo travado; se o detalhe disser que a restauração não foi confirmada, restaure o SSID original (arquivo `bench-restore.json` no host do Edge) antes de `bench-unlock`.
+Job `set_wifi_ssid` com `params: {"ssid": "BANCADA-H3"}` (preview → submit → approve pelo próprio solicitante). Resultado `SUCCEEDED` = mudou, leu de volta, restaurou e leu de volta. `FAILED`/`UNKNOWN` = alvo travado; se o detalhe disser que a restauração não foi confirmada, restaure o SSID original (arquivo `bench-restore.json` no host do Edge) antes de `bench-unlock`. **Antes de qualquer `bench-unlock` depois de um H3 com falha, confira no ACS que não resta nenhuma tarefa `setParameterValues`/`reboot` do dispositivo de bancada** (`GET /tasks?query={"device":"<id>"}` no host do ACS): uma tarefa enfileirada dispara quando a ONT se conecta. O Edge já remove as próprias tarefas e recusa nova manobra enquanto existir uma pendente, mas o `bench-unlock` roda na nuvem e não enxerga o ACS.
 
 ## Evidência
 `TEMPLATE.md` → `H3-set_wifi_ssid-<data>.md` → `capability-set ... observed --evidence-file`.

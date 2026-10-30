@@ -123,6 +123,7 @@ func (c *Client) SetBenchSSID(parent context.Context, d BenchDevice, ssid string
 		}
 	}
 	// restore: the value read before, set and read back; repeated (it is the return to the safe state), never the change itself
+	var uncleaned error
 restore:
 	for i := 0; i < restoreTries && !out.Restored; i++ {
 		if i > 0 {
@@ -132,7 +133,16 @@ restore:
 			case <-time.After(restorePause):
 			}
 		}
-		if st, _, perr := c.postSetSSID(ctx, d.DeviceID, original); perr != nil || st != http.StatusOK {
+		st, id, perr := c.postSetSSID(ctx, d.DeviceID, original)
+		if st == http.StatusAccepted && perr == nil {
+			// queued: the CPE did not answer. A queued restore must not survive to overwrite a newer value later: remove it now, or stop.
+			if cerr := c.removeOwnTask(ctx, d.DeviceID, "setParameterValues", id, since); cerr != nil {
+				uncleaned = cerr
+				break restore
+			}
+			continue
+		}
+		if perr != nil || st != http.StatusOK {
 			continue
 		}
 		if v, rerr := c.readSSID(ctx, d.DeviceID); rerr == nil && v == original {
@@ -140,7 +150,15 @@ restore:
 		}
 	}
 	if !out.Restored {
+		// whatever we sent and could not attribute must not stay queued on the ACS: prove none is left, else say so
+		if uncleaned == nil {
+			uncleaned = c.removeOwnTask(ctx, d.DeviceID, "setParameterValues", "", since)
+		}
 		out.Detail = "restore not confirmed"
+		if uncleaned != nil {
+			out.Detail = "restore not confirmed and a queued ssid task may remain on the ACS"
+			return out, errors.Join(ErrBenchRestore, ErrBenchUncleaned)
+		}
 		return out, ErrBenchRestore
 	}
 	_ = os.Remove(restoreFile)

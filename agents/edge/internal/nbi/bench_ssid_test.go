@@ -32,6 +32,7 @@ type ssidACS struct {
 	setCode   int  // status of a set POST (0 = apply and 200)
 	hangup    bool // applies, then drops the connection
 	restoreKO bool // sets of the ORIGINAL value fail with 500
+	restoreQ  bool // sets of the ORIGINAL value are queued (202) and stay on the ACS
 	getCode   int
 }
 
@@ -81,6 +82,12 @@ func (f *ssidACS) handler() http.Handler {
 			}
 			val := b.Values[0][1]
 			f.sets = append(f.sets, dev+"="+val)
+			if f.restoreQ && val == origSSID {
+				f.tasks = append(f.tasks, map[string]any{"_id": id, "name": b.Name, "device": dev, "timestamp": time.Now().UTC().Format(time.RFC3339)})
+				w.WriteHeader(202)
+				_ = json.NewEncoder(w).Encode(map[string]any{"_id": id})
+				return
+			}
 			if f.restoreKO && val == origSSID {
 				w.WriteHeader(500)
 				return
@@ -285,5 +292,41 @@ func TestSSIDSourceWritesOnlyTheOneLeaf(t *testing.T) {
 	}
 	if strings.Count(s, `"name": "setParameterValues"`) != 1 || strings.Count(s, "WLANConfiguration.1.SSID") != 1 {
 		t.Error("exactly one set body and one leaf")
+	}
+}
+
+func TestSSIDQueuedRestoreIsRemovedNotLeftToFireLater(t *testing.T) {
+	f := newSSIDACS()
+	f.restoreQ = true
+	out, err, rf := run(t, f, "BANCADA-H3")
+	if !errors.Is(err, ErrBenchRestore) || errors.Is(err, ErrBenchUncleaned) || out.Restored {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+	if len(f.tasks) != 0 {
+		t.Fatalf("no restore task may stay queued on the ACS: %v", f.tasks)
+	}
+	if b, e := os.ReadFile(rf); e != nil || !strings.Contains(string(b), origSSID) {
+		t.Fatal("the restore record stays for the operator")
+	}
+}
+
+func TestSSIDRestoreThatCannotBeCleanedSaysSo(t *testing.T) {
+	f := newSSIDACS()
+	f.restoreQ = true
+	c := f.client(t)
+	// the ACS refuses to delete tasks: the queued restore stays, and the result must say an operator has to look
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(500)
+			return
+		}
+		f.handler().ServeHTTP(w, r)
+	}))
+	defer srv.Close()
+	c, _ = New(srv.URL, srv.Client(), "")
+	rf := filepath.Join(t.TempDir(), "r.json")
+	_, err := c.SetBenchSSID(context.Background(), benchDev, "BANCADA-H3", okSSID, time.Now().Add(time.Hour), rf, realNow)
+	if !errors.Is(err, ErrBenchRestore) || !errors.Is(err, ErrBenchUncleaned) {
+		t.Fatalf("got %v", err)
 	}
 }
