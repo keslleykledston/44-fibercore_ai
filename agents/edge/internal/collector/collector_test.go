@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -264,5 +267,54 @@ func TestStateIsSplitIntoBoundedItems(t *testing.T) {
 		if json.Unmarshal(it.Payload, &s) != nil || len(s.States) > maxStatesPerItem || it.Kind != "cpe_state" {
 			t.Fatalf("%+v", it)
 		}
+	}
+}
+
+func lf(v any) map[string]any {
+	return map[string]any{"_value": v, "_type": "x", "_timestamp": "2026-10-29T11:59:00.000Z"}
+}
+
+// The payload below is produced by the REAL parser from a realistic ACS document (every metric, both data models) and compared with the golden
+// file the Cloud tests post verbatim (apps/api/tests/test_inventory_cpe_state.py): both sides agree on value formats, not only on names.
+// Regenerate with UPDATE_GOLDEN=1 after a deliberate change.
+func TestCPEStatePayloadFromTheRealParserMatchesTheGoldenTheCloudAccepts(t *testing.T) {
+	doc := map[string]any{"_id": "OUI-PC-1",
+		"InternetGatewayDevice": map[string]any{
+			"WANDevice": map[string]any{"1": map[string]any{
+				"WANCommonInterfaceConfig": map[string]any{"PhysicalLinkStatus": lf("Up")},
+				"WANConnectionDevice": map[string]any{
+					"3": map[string]any{"WANPPPConnection": map[string]any{"1": map[string]any{"ConnectionStatus": lf("Connected"), "Uptime": lf("5844")}}},
+					"2": map[string]any{"WANIPConnection": map[string]any{"1": map[string]any{"ConnectionStatus": lf("Disconnected"), "Uptime": lf(float64(0))}}}}}},
+			"LANDevice": map[string]any{"1": map[string]any{"WLANConfiguration": map[string]any{
+				"1": map[string]any{"Enable": lf(true), "Channel": lf(float64(1))},
+				"5": map[string]any{"Enable": lf(false), "Channel": lf(float64(36))}}}}},
+		"Device": map[string]any{
+			"DeviceInfo": map[string]any{"UpTime": lf(float64(86400))},
+			"PPP":        map[string]any{"Interface": map[string]any{"1": map[string]any{"Status": lf("LowerLayerDown")}}}}}
+	ms, rej := nbi.ExtractMetrics(doc)
+	if rej != 0 || len(ms) != 11 {
+		t.Fatalf("metrics=%d rejected=%d: %+v", len(ms), rej, ms)
+	}
+	sort.Slice(ms, func(i, j int) bool { return ms[i].Name+"@"+ms[i].Scope < ms[j].Name+"@"+ms[j].Scope })
+	g := &GenieACS{EdgeID: "e1", ConnectorID: "genieacs-lab", Client: fakeLister{[]nbi.Device{dev(1, "SER00001")}},
+		Params: &fakeParams{byID: map[string][]nbi.Metric{"OUI-PC-1": ms}}, Now: stateNow}
+	items, err := g.Collect(context.Background())
+	if err != nil || len(items) != 2 || items[1].Kind != "cpe_state" {
+		t.Fatalf("%v %+v", err, items)
+	}
+	var pretty bytes.Buffer
+	if err := json.Indent(&pretty, items[1].Payload, "", "  "); err != nil {
+		t.Fatal(err)
+	}
+	pretty.WriteByte('\n')
+	golden := filepath.Join("..", "..", "..", "..", "tests", "fixtures", "cpe_state", "edge-payload.json")
+	if os.Getenv("UPDATE_GOLDEN") != "" {
+		if err := os.WriteFile(golden, pretty.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(golden)
+	if err != nil || !bytes.Equal(want, pretty.Bytes()) {
+		t.Fatalf("golden payload differs (run with UPDATE_GOLDEN=1 after a deliberate change): err=%v\n%s", err, pretty.String())
 	}
 }

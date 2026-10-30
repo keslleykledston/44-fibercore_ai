@@ -30,12 +30,12 @@ SCOPE_RE = {
 }
 _CONN = ("Unconfigured", "Connecting", "Connected", "PendingDisconnect", "Disconnecting", "Disconnected",  # TR-098 WANxxxConnection
          "Up", "Down", "Dormant", "NotPresent", "LowerLayerDown", "Error", "Unknown")  # TR-181 PPP interface
-# metric -> ("enum", accepted values) | ("int", min, max) | ("bool",). Mirrors agents/edge/internal/nbi/params.go (a test checks it).
+# metric -> ("enum", accepted values) | ("int", min, max). Mirrors agents/edge/internal/nbi/params.go (a test checks it).
 METRICS: dict[str, tuple] = {
     "wan_link_status": ("enum", frozenset({"Up", "Down", "Initializing", "Unavailable"})),
     "wan_connection_status": ("enum", frozenset(_CONN)),
     "uptime_seconds": ("int", 0, 1 << 31),
-    "wifi_radio_enabled": ("bool",),
+    "wifi_radio_enabled": ("enum", frozenset({"Enabled", "Disabled"})),  # the Edge reports state words, not JSON booleans
     "wifi_channel": ("int", 0, 196),
 }
 MetricName = Literal["wan_link_status", "wan_connection_status", "uptime_seconds", "wifi_radio_enabled", "wifi_channel"]
@@ -62,10 +62,8 @@ class MetricIn(BaseModel):
         v = self.value
         if spec[0] == "enum":
             ok = isinstance(v, str) and v in spec[1]
-        elif spec[0] == "int":
-            ok = isinstance(v, int) and not isinstance(v, bool) and spec[1] <= v <= spec[2]
         else:
-            ok = isinstance(v, bool)
+            ok = isinstance(v, int) and not isinstance(v, bool) and spec[1] <= v <= spec[2]
         if not ok:
             raise ValueError(f"value is not valid for {self.name}")
         return self
