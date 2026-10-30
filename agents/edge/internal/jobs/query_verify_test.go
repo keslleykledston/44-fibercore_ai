@@ -159,3 +159,34 @@ func TestAnOLTLeaseIsRefusedWhenTheClocksDisagreeBeyondTheSkew(t *testing.T) {
 		}
 	}
 }
+
+func TestGrantIsOneAtomicAnswerForEpochAndTime(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	clk := func() time.Time { return inWindow }
+	h := &LeaseHolder{Schema: "olt-lease/1", Pub: pub, EdgeID: benchBase()["edge_id"].(string), TenantID: benchBase()["tenant_id"].(string), Now: clk}
+	lease := func(epoch int) string {
+		return base64.StdEncoding.EncodeToString(signedEnv(t, priv, map[string]any{
+			"schema": "olt-lease/1", "tenant_id": h.TenantID, "edge_id": h.EdgeID, "issued_at": inWindow.Format(time.RFC3339),
+			"expires_at": inWindow.Add(LeaseTTL).Format(time.RFC3339), "targets": []any{map[string]any{"target_ref": qOLT, "owner_epoch": epoch}},
+		}, func(map[string]any) {}))
+	}
+	if _, err := h.Grant(qOLT, 1); !errors.Is(err, ErrNoLease) {
+		t.Fatalf("no lease: %v", err)
+	}
+	if err := h.Accept(lease(1)); err != nil {
+		t.Fatal(err)
+	}
+	left, err := h.Grant(qOLT, 1)
+	if err != nil || left <= 0 || left > LeaseTTL {
+		t.Fatalf("%v %v", left, err)
+	}
+	if _, err := h.Grant(qOLT, 2); !errors.Is(err, ErrLeaseTarget) {
+		t.Fatalf("another generation: %v", err)
+	}
+	if err := h.Accept(lease(2)); err != nil { // the renewal changed the generation
+		t.Fatal(err)
+	}
+	if _, err := h.Grant(qOLT, 1); !errors.Is(err, ErrLeaseTarget) {
+		t.Fatalf("the old epoch no longer gets a deadline: %v", err)
+	}
+}

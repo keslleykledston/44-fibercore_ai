@@ -28,13 +28,13 @@ func (l fakeLease) Remaining(ref string) time.Duration {
 	}
 	return 0
 }
-func (l fakeLease) Check(ref string, epoch int) error {
+func (l fakeLease) Grant(ref string, epoch int) (time.Duration, error) {
 	if e, ok := l[ref]; !ok {
-		return jobs.ErrNoLease
+		return 0, jobs.ErrNoLease
 	} else if e != epoch {
-		return jobs.ErrLeaseTarget
+		return 0, jobs.ErrLeaseTarget
 	}
-	return nil
+	return l.Remaining(ref), nil
 }
 
 type qSession struct {
@@ -318,9 +318,9 @@ func TestAQueryOfAnotherOwnerGenerationEndsAloneAndTheCurrentOneRuns(t *testing.
 // a lease that is valid when the loop asks, and gone when the claim is checked
 type flakyLease struct{ asked int }
 
-func (l *flakyLease) Epoch(string) (int, bool)       { return 1, true }
-func (l *flakyLease) Check(string, int) error        { return jobs.ErrNoLease }
-func (l *flakyLease) Remaining(string) time.Duration { return 2 * time.Minute }
+func (l *flakyLease) Epoch(string) (int, bool)                 { return 1, true }
+func (l *flakyLease) Grant(string, int) (time.Duration, error) { return 0, jobs.ErrNoLease }
+func (l *flakyLease) Remaining(string) time.Duration           { return 2 * time.Minute }
 
 func TestALeaseLostBetweenTheAskAndTheClaimSendsNothing(t *testing.T) {
 	sess := &qSession{inner: r015Session{}}
@@ -349,6 +349,12 @@ type shortLease struct {
 }
 
 func (l shortLease) Remaining(string) time.Duration { return l.left }
+func (l shortLease) Grant(ref string, epoch int) (time.Duration, error) {
+	if _, err := l.fakeLease.Grant(ref, epoch); err != nil {
+		return 0, err
+	}
+	return l.left, nil
+}
 
 func TestAQueryNeverOutlivesTheLeaseItStartedUnder(t *testing.T) {
 	var deadline time.Time

@@ -29,8 +29,9 @@ type Queries struct {
 // LeaseChecker is the part of jobs.LeaseHolder the executor needs.
 type LeaseChecker interface {
 	Epoch(ref string) (int, bool)
-	Check(ref string, epoch int) error
 	Remaining(ref string) time.Duration
+	// Grant checks, atomically, that the valid lease names this OLT with exactly this epoch and says how long it still covers it.
+	Grant(ref string, epoch int) (time.Duration, error)
 }
 
 const (
@@ -127,7 +128,8 @@ func (q *Queries) Drain(ctx context.Context, src OLTSource, raw olt.Session, clo
 			return ran
 		}
 		ran++
-		if err := q.Lease.Check(cloudID, e.Intent.Epoch); err != nil { // the lease is asked again right at the claim, and for THIS query's epoch
+		leaseLeft, err := q.Lease.Grant(cloudID, e.Intent.Epoch) // epoch and remaining time from ONE answer
+		if err != nil {
 			if errors.Is(err, jobs.ErrLeaseTarget) { // issued for another generation of the ownership: only THIS query is stale, the next one may be current
 				_ = q.Store.Fail(e.JobID, "stale_owner")
 				continue
@@ -135,9 +137,8 @@ func (q *Queries) Drain(ctx context.Context, src OLTSource, raw olt.Session, clo
 			_ = q.Store.Fail(e.JobID, "lease_lost") // the lease ran out between the check and the claim: nothing was sent, stop
 			return ran
 		}
-		leaseLeft := q.Lease.Remaining(cloudID)
 		leaseEnd := time.Now().Add(leaseLeft) // an ABSOLUTE instant (monotonic), fixed at the measurement: time spent afterwards eats the query's time, not the lease's
-		if leaseLeft < minQueryWindow { // the claim took the lease's last seconds: nothing is sent
+		if leaseLeft < minQueryWindow {       // the claim took the lease's last seconds: nothing is sent
 			_ = q.Store.Fail(e.JobID, "lease_lost")
 			return ran
 		}

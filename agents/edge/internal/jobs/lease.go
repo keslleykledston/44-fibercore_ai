@@ -176,3 +176,18 @@ func (h *LeaseHolder) Remaining(targetRef string) time.Duration {
 	}
 	return 0
 }
+
+// Grant atomically (one lock) checks that the lease valid right now names this target with exactly this epoch and returns how long it still covers it. The
+// caller derives the query's deadline from THIS answer: no renewal can slip a different generation between the check and the measurement.
+func (h *LeaseHolder) Grant(targetRef string, epoch int) (time.Duration, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	left := h.deadline.Sub(h.now())
+	if h.targets == nil || left <= 0 {
+		return 0, ErrNoLease
+	}
+	if e, ok := h.targets[targetRef]; !ok || e != epoch {
+		return 0, ErrLeaseTarget
+	}
+	return left, nil
+}
