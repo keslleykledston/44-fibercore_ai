@@ -55,13 +55,13 @@ Escopo opcional por atribuição: `provedor` (padrão) → `site` → `OLT` → 
 - **Rollback fail-closed:** com a flag do provedor desligada (ou tabelas ilegíveis), membros de papel customizado resolvem para **nenhuma permissão além de `tenant:read`** até serem reatribuídos a um papel de sistema; nunca para o papel base, que pode ter mais poder que o customizado.
 - **Ordem:** 1) catálogo + teste de inventário (sem alterar nada em produção); 2) tabelas e CHECK, papéis de sistema como sementes; 3) API e tela; 4) escopo; 5) delegação e MFA recente. Cada etapa reversível; nenhuma exige mudar o papel de quem já existe.
 
-## Perguntas ao responsável (precisam de resposta antes da construção)
-1. Papéis customizados por provedor entram já no MVP, ou ficamos só com os 8 papéis + catálogo + tela de leitura e atribuição (opção A+)?
-2. Escopo por OLT/site é necessário agora (NOC gerenciado com vários clientes de campo)? Se não, fica para depois da tela.
-3. Quem pode conceder papéis de risco: só `isp_admin`, ou também um papel "gestor de acessos" sem poder operacional?
-4. Janela de "MFA recente" aceitável (sugestão: 10 minutos)?
-5. Visão de `platform_support`: prazo máximo da delegação (sugestão: 8 h, renovável com novo motivo)?
-6. **Confirmar a dispensa de SoD na bancada:** hoje o solicitante pode aprovar o próprio job de bancada (decisão sua de 2026-10-30, ADR-0030) porque a autorização prévia de uso único é a decisão real. Mantém? Se não, a bancada passa a exigir aprovador distinto também.
+## Decisões do responsável (2026-10-30) e perguntas ainda abertas
+1. **Papéis customizados por provedor: NÃO por enquanto.** Valem só os papéis de sistema (os 8 atuais + o novo papel do item 3). As seções 2 (papéis customizados) e 7 (`role_id`, leitura de papel customizado, rollback fail-closed) ficam como desenho FUTURO, sem construção; a entrega 2 passa a ser só atribuição de papéis de sistema com travas e auditoria.
+2. **Escopo por OLT/site: ainda sem decisão** (o responsável pediu explicação; ver seção 3). Não entra na construção até decidir.
+3. **Quem concede papéis: `isp_admin` OU um novo papel de sistema `access_manager` ("Gestor de Acesso")**, sem nenhum poder operacional (só `members:read`, `members:manage`, `roles:read`, `audit:read`, `tenant:read`). Regras desta decisão: o `access_manager` atribui qualquer papel de sistema **exceto `isp_admin`, `access_manager`, `platform_support` e `edge_agent`** (esses quatro só o `isp_admin` atribui ou revoga); ninguém altera o próprio papel; `access_manager` exige MFA. (Os limites sobre o que o gestor pode atribuir são proposta nossa, a confirmar.)
+4. **MFA recente: 10 minutos.**
+5. **Delegação da plataforma: 8 h, renovável com novo motivo** (sugestão aceita).
+6. **Em aberto: confirmar a dispensa de SoD na bancada.** Hoje o solicitante pode aprovar o próprio job de bancada (decisão do responsável de 2026-10-30, ADR-0030) porque a autorização prévia de uso único é a decisão real. Mantém? Se não, a bancada passa a exigir aprovador distinto também.
 
 ## Consequências
 
@@ -69,7 +69,7 @@ Escopo opcional por atribuição: `provedor` (padrão) → `site` → `OLT` → 
 - **Rollback:** cada etapa é aditiva; desligar a flag do provedor devolve o comportamento dos papéis de sistema e, para quem tinha papel customizado, o fail-closed descrito na seção 7.
 - **Monitorar:** mudanças de papel por dia, tentativas negadas de escalada, delegações ativas, membros sem MFA em papel que exige.
 - **Revisão:** Codex adversarial em cada entrega (CRITICAL/HIGH bloqueiam); nenhuma exposição fora de LAB/INTERNAL_PILOT sem o gate formal.
-- **Entregas:** (1) catálogo + teste de inventário + matriz gerada; (2) papéis no banco + API de atribuição com travas + auditoria; (3) tela Administração → Papéis e permissões; (4) escopo por OLT/site; (5) delegação da plataforma e MFA recente por risco. A entrega 4 da fase Dispositivos (ações na tela do CPE) usa as permissões `devices:act:*` da entrega 1.
+- **Entregas:** (1) catálogo + teste de inventário + matriz gerada; (2) atribuição de papéis de sistema (incluindo `access_manager`) + API com travas + auditoria (papéis customizados adiados por decisão); (3) tela Administração → Papéis e permissões; (4) escopo por OLT/site; (5) delegação da plataforma (8 h) e MFA recente (10 min) por risco. A entrega 4 da fase Dispositivos (ações na tela do CPE) usa as permissões `devices:act:*` da entrega 1.
 
 ## Registro da revisão adversarial (Codex)
 - Rodada 5 (`raw/118-*`): 1 HIGH remanescente, e só ele — a dispensa de SoD na bancada (solicitante aprova o próprio job de bancada), que é decisão registrada do responsável (ADR-0030) e fica como RISCO RESIDUAL a confirmar na pergunta 6; nenhum outro HIGH/CRITICAL. Não se declara "zero HIGH": o ADR continua Proposed até o responsável aceitar ou revogar a dispensa.

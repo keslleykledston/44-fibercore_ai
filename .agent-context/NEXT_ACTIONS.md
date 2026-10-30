@@ -136,3 +136,5 @@ Estado hoje: 8 papéis FIXOS no código (`ROLE_PERMISSIONS` em `apps/api/app/cor
 4. **Escopo por OLT/site** (filtro por linha nas leituras e nas ações; negação por padrão fora do escopo).
 5. **Tela Administração → Papéis e permissões:** matriz papel × permissão, membros e papéis, "o que posso fazer" do usuário logado, histórico de mudanças; gestão de MFA continua em Membros.
 6. **Testes e revisão:** matriz positiva/negativa, isolamento entre provedores, tentativas de escalada, concorrência (dois admins), Codex adversarial por entrega; nada de produção sem gate formal.
+
+- (2026-10-30) RBAC: decisões do responsável — só papéis de sistema por ora (sem customizados); novo papel de sistema `access_manager` (Gestor de Acesso) além do `isp_admin` para conceder papéis; MFA recente 10 min; delegação da plataforma 8 h renovável. Em aberto: escopo por OLT/site (pediu explicação) e confirmar a dispensa de SoD na bancada. Construção em andamento: entrega 1 (catálogo único + teste de inventário de rotas + matriz gerada), sem mudar comportamento.
