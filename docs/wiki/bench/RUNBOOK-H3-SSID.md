@@ -18,3 +18,7 @@ Job `set_wifi_ssid` com `params: {"ssid": "BANCADA-H3"}` (preview → submit →
 
 ## Evidência
 `TEMPLATE.md` → `H3-set_wifi_ssid-<data>.md` → `capability-set ... observed --evidence-file`.
+
+## Primeira tentativa (2026-10-30): recusada com segurança, sem escrita
+O job `121d1ad6-…` terminou `FAILED` ("ssid not sent or not delivered"): o Edge não conseguiu ler o SSID atual porque o ACS não conseguiu acordar a ONT (o pedido de tarefa voltava `202` em ~30 ms, sem sessão). Causa: a credencial de Connection Request que a ONT usa passou a diferir do par configurado no ACS (`cwmp.connectionRequestAuth`); o teste direto com a credencial da própria ONT funcionava. Nada foi escrito: claim `FAILED`, sem arquivo de restauração, SSID original intacto, fila do ACS conferida vazia. Para repetir: alinhar de novo a credencial de Connection Request da ONT ao par do ACS (como na "opção A" anterior), `bench-unlock` (depois de conferir a fila do ACS), nova autorização (`--first-run`, pois `set_wifi_ssid` ainda não tem `observed`) depois de 05:25 UTC (ritmo de 30 min por dispositivo, contado da reserva das 04:55).
+
