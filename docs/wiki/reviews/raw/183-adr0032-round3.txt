@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18f29-ed44-7e20-ba31-f249340455f5).
+[codex] Turn started (01a18f29-ef92-7982-8e51-9cb5df0ec7a0).
+[codex] Assistant message captured: Vou comparar o diff com `main` e verificar se as cotas por classe ficam realmente aplicáveis,...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/adr/ADR-0032-capt...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/adr/ADR-0032-capt... (exit 0)
+[codex] Running command: /bin/bash -lc "cat docs/wiki/adr/ADR-0029-canal-de-execucao-de-consultas-da-olt.md && rg --fi...
+[codex] Command completed: /bin/bash -lc "cat docs/wiki/adr/ADR-0029-canal-de-execucao-de-consultas-da-olt.md && rg --fi... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: a ordenação por `seq` pode congela...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: a ordenação por `seq` pode congelar o cache após transferir uma OLT para outro Edge.
+
+Findings:
+- [high] A transferência de Edge pode impedir novas gravações no cache (docs/wiki/adr/ADR-0032-captura-supervisionada-e-cache-de-dados-da-olt.md:50)
+  `seq` é monotônico por OLT e consulta, mas fica persistido na fila local do Edge. Se a OLT mudar de Edge, o novo Edge pode começar com uma sequência menor que a já gravada no banco; como o upsert aceita apenas `seq` maior, os resultados do novo dono serão descartados até ultrapassarem a sequência antiga. O cache pode ficar obsoleto indefinidamente, apesar de consultas e ingestão bem-sucedidas. Isso decorre da descrição do armazenamento local e da regra de upsert; o ADR não especifica transferência dessa sequência.
+  Recommendation: Torne a ordenação válida entre transferências: por exemplo, compare uma geração de proprietário junto com a sequência e ordene primeiro pela geração, ou inicialize atomicamente a sequência do novo Edge acima do valor já persistido antes de aceitar resultados.
+
+Next steps:
+- Definir e documentar uma regra de ordenação de resultados que continue válida após transferência de Edge.

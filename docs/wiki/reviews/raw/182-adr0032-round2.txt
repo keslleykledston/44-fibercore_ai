@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18f29-9b63-7350-a51c-598d23cb311d).
+[codex] Turn started (01a18f29-9b9c-7283-bb4b-f8d3a74647ab).
+[codex] Assistant message captured: Vou conferir o ADR atualizado contra o ADR-0029 e o catálogo, procurando inconsistências oper...
+[codex] Running command: /bin/bash -lc "cat /home/suporte/.codex/skills/code-review/SKILL.md && printf '\\n--- files -...
+[codex] Command completed: /bin/bash -lc "cat /home/suporte/.codex/skills/code-review/SKILL.md && printf '\\n--- files -... (exit 0)
+[codex] Running command: /bin/bash -lc 'cat docs/wiki/adr/ADR-0029-canal-de-execucao-de-consultas-da-olt.md && cat doc...
+[codex] Command completed: /bin/bash -lc 'cat docs/wiki/adr/ADR-0029-canal-de-execucao-de-consultas-da-olt.md && cat doc... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0032-captura-supervisionada-e-cache-de-dados-da-olt.m...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0032-captura-supervisionada-e-cache-de-dados-da-olt.m... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: o limite horário agregado é especific...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: o limite horário agregado é especificado de modo incompatível com as reservas por classe, permitindo que rotinas ou captura consumam a cota protegida para consultas sob demanda.
+
+Findings:
+- [high] A cota horária agregada pode bloquear consultas sob demanda (docs/wiki/adr/ADR-0032-captura-supervisionada-e-cache-de-dados-da-olt.md:56-57)
+  A linha 56 protege sob demanda em até 20 execuções por hora, mas limita o total agregado a 30 sem reservar as outras 10 execuções para rotinas e capturas. Se sob demanda consumir 20 e rotinas consumirem 10, captura fica sem cota; mais grave, se rotinas/capturas consumirem primeiro parte das 30, uma consulta sob demanda pode ser bloqueada antes de atingir sua reserva declarada de 20. A prioridade por ordem de execução não resolve isso entre sessões dentro da mesma hora. Defina reservas horárias por classe e uma regra de empréstimo/preempção, ou especifique que as cotas de classes são apenas tetos subordinados ao total e retire a garantia de prioridade horária para sob demanda.
+  Recommendation: Explicite contadores e reservas horários persistidos para cada classe, com soma limitada a 30 e regra determinística quando uma classe não usa sua reserva.

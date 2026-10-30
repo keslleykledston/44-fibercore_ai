@@ -1,0 +1,36 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18f28-d8ee-7af3-a57e-f2e34a698737).
+[codex] Turn started (01a18f28-d928-7f20-a998-eecd083f8ad6).
+[codex] Assistant message captured: Vou conferir o ADR contra o catálogo e o ADR-0029 para localizar riscos concretos no plano.
+[codex] Running command: /bin/bash -lc "cat /home/suporte/.codex/skills/code-review/SKILL.md && rg --files docs/wiki/a...
+[codex] Command completed: /bin/bash -lc "cat /home/suporte/.codex/skills/code-review/SKILL.md && rg --files docs/wiki/a... (exit 0)
+[codex] Running command: /bin/bash -lc 'cat docs/wiki/adr/ADR-0029-canal-de-execucao-de-consultas-da-olt.md; cat docs/...
+[codex] Command completed: /bin/bash -lc 'cat docs/wiki/adr/ADR-0029-canal-de-execucao-de-consultas-da-olt.md; cat docs/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o plano pode ultrapassar o orçamen...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o plano pode ultrapassar o orçamento de sessão acordado, deixa material sensível sem regra de descarte e usa horário da OLT como critério de ordenação do cache apesar do desvio de relógio ser um problema conhecido.
+
+Findings:
+- [high] O orçamento combinado excede o limite por sessão do ADR-0029 (docs/wiki/adr/ADR-0032-captura-supervisionada-e-cache-de-dados-da-olt.md:40-52)
+  O ADR-0029 limita `olt_query` a 5 consultas por sessão. Aqui, após a coleta, o plano permite até 5 consultas sob demanda, 6 comandos de rotina e 3 capturas (linha 52), além de permitir até 3 capturas por sessão (linha 40). Não há um limite agregado que reconcilie essas etapas com o teto do ADR-0029 nem um critério operacional para cancelar trabalho quando o tempo restante for insuficiente. Como a OLT responde cerca de 1 comando/s e a coleta já dura ~190 s, a sessão pode crescer e atrasar ou interromper a coleta. Defina um único orçamento agregado, compatível com o ADR-0029, e imponha-o antes de cada comando, priorizando a coleta.
+  Recommendation: Especifique e imponha o limite total por sessão e por hora para consultas, rotinas e capturas; ajuste o ADR-0029 se a intenção for mudar seus limites.
+- [high] Saídas cruas sensíveis não têm prazo de retenção nem descarte definido (docs/wiki/adr/ADR-0032-captura-supervisionada-e-cache-de-dados-da-olt.md:39-43)
+  O plano reconhece que alarmes, eventos e autofind podem conter seriais e outros dados de cliente, mas mantém a saída crua em arquivo local 0600 e descreve cópia e sanitização sem definir quem pode ler o arquivo no Edge, quanto tempo ele permanece, ou como é apagado após a fixture. O modo captura também grava saídas de consultas globais que podem conter esses dados. Uma interrupção antes da sanitização pode deixar informação identificável persistente no host sem controle de retenção descrito. Defina acesso restrito, expiração e descarte verificável para todos os arquivos brutos, inclusive capturas incompletas.
+  Recommendation: Acrescente política explícita de acesso e retenção para `captures/`, com remoção após uso ou prazo curto, incluindo o tratamento de arquivos truncados, falhos e abandonados.
+- [high] Ordenar upserts pelo relógio da OLT pode congelar o cache (docs/wiki/adr/ADR-0032-captura-supervisionada-e-cache-de-dados-da-olt.md:24-49)
+  A escrita aceita upsert apenas quando `observed_at` é mais novo (linha 46), enquanto `olt.time` existe justamente para medir desvio do relógio da OLT em relação à hora dos eventos (linha 24). Se esse relógio estiver adiantado, um valor futuro pode impedir que resultados posteriores atualizem o cache até alcançarem aquele horário; se estiver atrasado, atualizações podem ser descartadas. Isso pode manter dado obsoleto apresentado como recente, mesmo com ingestão funcionando. Use uma ordenação confiável e definida para revisões/recebimentos e trate explicitamente timestamps futuros ou regressivos da OLT.
+  Recommendation: Defina limites de plausibilidade para `observed_at` e use uma sequência monotônica de coleta ou critério de recebimento para impedir que timestamps inválidos bloqueiem atualizações.
+- [medium] A autorização operacional é declarada com data futura e conflita com ADR-0029 (docs/wiki/adr/ADR-0032-captura-supervisionada-e-cache-de-dados-da-olt.md:3)
+  O status afirma que a autorização para prosseguir já foi dada em 2026-10-31 (linha 3), mas o contexto do repositório informa a data atual como 2026-10-30. Além disso, o ADR-0029 diz que cada ensaio na OLT real exige autorização operacional separada. A formulação pode levar a tratar capturas reais como autorizadas quando a própria evidência temporal não sustenta isso. Registre a autorização verificável e preserve a exigência de autorização por ensaio/lote antes da captura.
+  Recommendation: Corrija a data e esclareça que cada lote de captura na OLT real depende da autorização operacional exigida pelo ADR-0029.
+
+Next steps:
+- Reconciliar o orçamento de sessão com o limite do ADR-0029.
+- Definir retenção e descarte seguro das saídas brutas.
+- Especificar ordenação robusta do cache frente a relógio da OLT incorreto.
+- Corrigir e comprovar a autorização operacional antes de executar qualquer captura real.
