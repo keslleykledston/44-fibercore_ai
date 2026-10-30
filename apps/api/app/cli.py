@@ -61,6 +61,7 @@ def main(argv: list[str] | None = None) -> None:
     ba.add_argument("--from", dest="start", required=True, help="ISO-8601 start of the window")
     ba.add_argument("--to", dest="end", required=True, help="ISO-8601 end of the window (at most 4 h after the start)")
     ba.add_argument("--by", required=True, help="who authorizes (the responsible person)")
+    ba.add_argument("--ssid", help="set_wifi_ssid only: the exact SSID this authorization covers (BANCADA-<A-Z0-9>)")
     ba.add_argument("--first-run", action="store_true", help="ADR-0030 amendment: stands in for the missing `observed` registry entry (single use)")
     bu = sub.add_parser("bench-unlock", help="ADR-0030: clear the write lock of a bench target after a documented reconciliation")
     bu.add_argument("tenant_id"); bu.add_argument("cpe_id"); bu.add_argument("--reason", required=True)
@@ -169,6 +170,9 @@ def main(argv: list[str] | None = None) -> None:
                 sys.exit(f"{a.operation!r} is not in the bench catalog: {sorted(bench.BENCH_OPS)}")
             if not bench.EDGE_SUPPORT:
                 sys.exit("refused: no bench authorization can be recorded until the Edge-side bench gate exists and is tested (ADR-0030)")
+            params = {"ssid": a.ssid} if a.ssid is not None else {}
+            if not bench.params_valid(a.operation, params):
+                sys.exit(f"parameters outside the bench catalog for {a.operation!r} (set_wifi_ssid needs --ssid BANCADA-...; others take none)")
             start, end = datetime.fromisoformat(a.start), datetime.fromisoformat(a.end)
             if start.tzinfo is None or end.tzinfo is None:
                 sys.exit("--from/--to need a time zone (e.g. 2026-10-30T14:00:00+00:00)")
@@ -191,7 +195,7 @@ def main(argv: list[str] | None = None) -> None:
                 text("INSERT INTO bench_authorizations "
                      "(tenant_id, operation, cpe_id, params_hash, window_start, window_end, authorized_by, first_run) "
                      "VALUES (:t,:o,:c,:h,:s,:e,:by,:fr) RETURNING id"),
-                {"t": a.tenant_id, "o": a.operation, "c": a.cpe_id, "h": bench.params_hash({}), "s": start, "e": end, "by": a.by,
+                {"t": a.tenant_id, "o": a.operation, "c": a.cpe_id, "h": bench.params_hash(params), "s": start, "e": end, "by": a.by,
                  "fr": a.first_run}).scalar()
             print(f"authorization {aid}: {a.operation} on {a.cpe_id}, {start.isoformat()} .. {end.isoformat()}, single use"
                   + (", FIRST RUN (valid only while no `observed` entry exists)" if a.first_run else ""))

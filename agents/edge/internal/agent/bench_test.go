@@ -63,6 +63,9 @@ type recACS struct {
 	reboots []string
 }
 
+func (r *recACS) SetBenchSSID(context.Context, nbi.BenchDevice, string, func(string) bool, time.Time, string, func() time.Time) (nbi.SSIDOutcome, error) {
+	return nbi.SSIDOutcome{}, nil
+}
 func (r *recACS) BenchIdentity(context.Context, nbi.BenchDevice, time.Time) error { return nil }
 func (r *recACS) RebootBench(_ context.Context, d nbi.BenchDevice, _ time.Time, _, _ time.Duration, _ func() time.Time) (nbi.BenchOutcome, error) {
 	r.mu.Lock()

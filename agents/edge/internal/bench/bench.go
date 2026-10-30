@@ -17,6 +17,7 @@ import (
 
 type ACS interface {
 	BenchIdentity(ctx context.Context, d nbi.BenchDevice, now time.Time) error
+	SetBenchSSID(ctx context.Context, d nbi.BenchDevice, ssid string, valid func(string) bool, notAfter time.Time, restoreFile string, now func() time.Time) (nbi.SSIDOutcome, error)
 	RebootBench(ctx context.Context, d nbi.BenchDevice, notAfter time.Time, wait, poll time.Duration, now func() time.Time) (nbi.BenchOutcome, error)
 }
 
@@ -29,15 +30,16 @@ type Result struct {
 }
 
 type Runner struct {
-	Devices map[string]nbi.BenchDevice // by ACS device id: the local closed list
-	Lease   *jobs.LeaseHolder
-	Claims  *jobs.Claims
-	Guard   Guard
-	ACS     ACS
-	Wait    time.Duration // how long to wait for the CPE to boot again
-	Poll    time.Duration
-	Now     func() time.Time
-	Log     *slog.Logger
+	Devices     map[string]nbi.BenchDevice // by ACS device id: the local closed list
+	Lease       *jobs.LeaseHolder
+	Claims      *jobs.Claims
+	Guard       Guard
+	ACS         ACS
+	RestoreFile string        // H3: where the original SSID is kept (local only) until the restore is confirmed
+	Wait        time.Duration // how long to wait for the CPE to boot again
+	Poll        time.Duration
+	Now         func() time.Time
+	Log         *slog.Logger
 
 	busy atomic.Bool
 }
@@ -53,7 +55,7 @@ func fail(detail string) Result { return Result{State: "failed", Detail: detail}
 
 // Run executes one verified bench envelope. At most one runs at a time on this Edge.
 func (r *Runner) Run(ctx context.Context, env *jobs.Envelope) Result {
-	if !jobs.BenchWriteOps[env.Operation] || env.Operation != "reboot_cpe" {
+	if !jobs.BenchWriteOps[env.Operation] || (env.Operation != "reboot_cpe" && env.Operation != "set_wifi_ssid") {
 		return fail("operation not supported on the bench")
 	}
 	if !r.busy.CompareAndSwap(false, true) {
@@ -97,6 +99,9 @@ func (r *Runner) Run(ctx context.Context, env *jobs.Envelope) Result {
 		return fail("claim state unavailable")
 	}
 	// From here the authorization is spent.
+	if env.Operation == "set_wifi_ssid" {
+		return r.setSSID(ctx, env, dev, notAfter)
+	}
 	out, err := r.ACS.RebootBench(ctx, dev, notAfter, r.Wait, r.Poll, r.now)
 	switch {
 	case err == nil && out.Accepted && out.PostcheckOK:
@@ -108,6 +113,28 @@ func (r *Runner) Run(ctx context.Context, env *jobs.Envelope) Result {
 	case !out.Attempted || nbi.IsNotDelivered(err):
 		r.finish(env, jobs.ClaimFailed)
 		return fail("reboot not sent or not delivered")
+	default:
+		r.finish(env, jobs.ClaimUnknown)
+		return Result{State: "failed", Detail: "outcome unknown; operator check required"}
+	}
+}
+
+// setSSID is H3: the value was validated at the envelope; the ACS layer validates it again and restores the original before it reports.
+func (r *Runner) setSSID(ctx context.Context, env *jobs.Envelope, dev nbi.BenchDevice, notAfter time.Time) Result {
+	out, err := r.ACS.SetBenchSSID(ctx, dev, env.Params["ssid"], jobs.BenchSSIDRe.MatchString, notAfter, r.RestoreFile, r.now)
+	switch {
+	case err == nil && out.Applied && out.Verified && out.Restored:
+		r.finish(env, jobs.ClaimDone)
+		return Result{State: "succeeded", Detail: out.Detail, Postcheck: true}
+	case err == nil && out.Restored: // the original is back, but the change was not proven (acknowledged without read-back, or unanswered)
+		r.finish(env, jobs.ClaimUnknown)
+		return Result{State: "failed", Detail: out.Detail}
+	case !out.Attempted || nbi.IsNotDelivered(err):
+		r.finish(env, jobs.ClaimFailed)
+		return fail("ssid not sent or not delivered")
+	case errors.Is(err, nbi.ErrBenchRestore):
+		r.finish(env, jobs.ClaimUnknown)
+		return Result{State: "failed", Detail: "restore of the original SSID not confirmed; operator must restore it"}
 	default:
 		r.finish(env, jobs.ClaimUnknown)
 		return Result{State: "failed", Detail: "outcome unknown; operator check required"}

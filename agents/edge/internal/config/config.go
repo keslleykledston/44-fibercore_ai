@@ -157,10 +157,10 @@ func (c *Config) Validate() error {
 		}
 		ok := false
 		for _, o := range c.AllowedOps {
-			ok = ok || o == "reboot_cpe"
+			ok = ok || o == "reboot_cpe" || o == "set_wifi_ssid"
 		}
 		if !ok {
-			errs = append(errs, errors.New("bench writes need \"reboot_cpe\" listed in allowed_operations (explicit)"))
+			errs = append(errs, errors.New("bench writes need \"reboot_cpe\" and/or \"set_wifi_ssid\" listed in allowed_operations (explicit)"))
 		}
 	}
 	if c.JobsEnabled && c.JobPublicKey == "" {
@@ -291,6 +291,11 @@ var benchPartRe = regexp.MustCompile(`^[A-Za-z0-9._]{2,64}$`)
 // BenchClaimsFile and BenchGuardFile are the durable state of the bench writes (spent authorizations, pacing); they live next to the queue.
 func BenchClaimsFile(queuePath string) string {
 	return filepath.Join(filepath.Dir(queuePath), "bench-claims.json")
+}
+
+// BenchRestoreFile keeps the original SSID (H3) on this host until its restore is confirmed.
+func BenchRestoreFile(queuePath string) string {
+	return filepath.Join(filepath.Dir(queuePath), "bench-restore.json")
 }
 
 func BenchGuardFile(queuePath string) string {

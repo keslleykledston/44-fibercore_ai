@@ -77,7 +77,64 @@ func TestBenchSetIsDisjointFromReadOnly(t *testing.T) {
 			t.Fatalf("%s in both sets", op)
 		}
 	}
-	if len(BenchWriteOps) != 1 || !BenchWriteOps["reboot_cpe"] {
-		t.Fatalf("only reboot_cpe is compiled in for H2: %v", BenchWriteOps)
+	if len(BenchWriteOps) != 2 || !BenchWriteOps["reboot_cpe"] || !BenchWriteOps["set_wifi_ssid"] {
+		t.Fatalf("only reboot_cpe (H2) and set_wifi_ssid (H3) are compiled in: %v", BenchWriteOps)
+	}
+}
+
+func TestBenchSSIDParamsAreSignedAndShaped(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	v := verifier(pub, inWindow)
+	v.Allowed["set_wifi_ssid"], v.Allowed["reboot_cpe"], v.BenchEnabled = true, true, true
+	ctx := context.Background()
+	ok := func(m map[string]any) {
+		m["operation"] = "set_wifi_ssid"
+		m["params"] = map[string]any{"ssid": "BANCADA-H3"}
+	}
+	if _, err := v.Verify(ctx, signedEnv(t, priv, benchBase(), ok)); err != nil {
+		t.Fatalf("a complete ssid envelope must verify: %v", err)
+	}
+	bad := map[string]func(map[string]any){
+		"no params":    func(m map[string]any) { m["operation"] = "set_wifi_ssid" },
+		"empty params": func(m map[string]any) { m["operation"] = "set_wifi_ssid"; m["params"] = map[string]any{} },
+		"customer ssid": func(m map[string]any) {
+			m["operation"] = "set_wifi_ssid"
+			m["params"] = map[string]any{"ssid": "CLIENTE-1"}
+		},
+		"lower case": func(m map[string]any) {
+			m["operation"] = "set_wifi_ssid"
+			m["params"] = map[string]any{"ssid": "bancada-h3"}
+		},
+		"trailing nl": func(m map[string]any) {
+			m["operation"] = "set_wifi_ssid"
+			m["params"] = map[string]any{"ssid": "BANCADA-H3\n"}
+		},
+		"too long": func(m map[string]any) {
+			m["operation"] = "set_wifi_ssid"
+			m["params"] = map[string]any{"ssid": "BANCADA-" + strings.Repeat("A", 17)}
+		},
+		"extra param":    func(m map[string]any) { ok(m); m["params"] = map[string]any{"ssid": "BANCADA-H3", "psk": "x"} },
+		"reboot w/ ssid": func(m map[string]any) { m["params"] = map[string]any{"ssid": "BANCADA-H3"} },
+	}
+	for name, mut := range bad {
+		if _, err := v.Verify(ctx, signedEnv(t, priv, benchBase(), mut)); err == nil {
+			t.Errorf("%s: must be refused", name)
+		}
+	}
+	for _, op := range []string{"collect", "refresh"} {
+		_, err := v.Verify(ctx, signedEnv(t, priv, benchBase(), func(m map[string]any) {
+			delete(m, "authorization_id")
+			delete(m, "authorization_ends_at")
+			delete(m, "owner_epoch")
+			m["operation"] = op
+			m["params"] = map[string]any{"ssid": "BANCADA-H3"}
+		}))
+		if err == nil {
+			t.Errorf("%s must not carry params", op)
+		}
+	}
+	raw1 := signedEnv(t, priv, benchBase(), ok)
+	if _, err := v.Verify(ctx, []byte(strings.Replace(string(raw1), "BANCADA-H3", "BANCADA-H4", 1))); !errors.Is(err, ErrSignature) {
+		t.Fatalf("tampered ssid: %v", err)
 	}
 }

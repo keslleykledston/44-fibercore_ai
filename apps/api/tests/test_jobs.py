@@ -107,7 +107,7 @@ def test_success_without_postcheck_is_unknown_not_succeeded(client, seed, inv, t
     assert client.get(f"/v1/jobs/{jid}", headers=h).json()["status"] == "UNKNOWN"
 
 
-@pytest.mark.parametrize("op,target", [("reboot_cpe", "cpe"), ("set_wifi_ssid", "cpe"), ("provision_onu", "olt")])
+@pytest.mark.parametrize("op,target", [("reboot_cpe", "cpe"), ("provision_onu", "olt")])
 def test_write_operations_are_blocked_until_homologated(client, seed, inv, targets, op, target):
     h = hdr(client, "alice", seed, "A")
     r = preview(client, h, op, targets[target])
@@ -122,6 +122,7 @@ def test_write_operations_are_blocked_until_homologated(client, seed, inv, targe
 def test_gate_logic_for_approvals_when_a_write_op_is_homologated(client, seed, inv, targets, monkeypatch):
     """Simulates a FUTURE homologation to prove the approval rules (not enabled in this build)."""
     monkeypatch.setattr(jobs_mod, "HOMOLOGATED_WRITES", frozenset({"set_wifi_ssid", "provision_onu"}))
+    monkeypatch.setattr(jobs_mod.bench, "BENCH_OPS", {k: v for k, v in jobs_mod.bench.BENCH_OPS.items() if k != "set_wifi_ssid"})  # the generic R2 rules
     ha, hb = hdr(client, "alice", seed, "A"), hdr(client, "dave", seed, "A")
     # R2: engineer-level requester cannot be their own approver; needs ONE distinct approver with jobs:approve
     jid = preview(client, ha, "set_wifi_ssid", targets["cpe"]).json()["id"]

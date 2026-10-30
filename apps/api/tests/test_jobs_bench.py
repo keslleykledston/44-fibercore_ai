@@ -62,15 +62,15 @@ def _bench(migrated, seed, inv, cpe, **kw):
                       {"t": t, "c": cpe, "e": str(inv["a1"]["edge"])})
         if kw.get("capability", True):
             c.execute(text("INSERT INTO device_capabilities (tenant_id, vendor, model, firmware, protocol, operation, status, certification, "
-                           "verified_at, evidence_ref) VALUES (:t,:v,:m,:f,'tr069','reboot_cpe',:s,:cert,CAST(:va AS timestamptz),:ev)"),
-                      {"t": t, "v": PROFILE[0], "m": PROFILE[1], "f": PROFILE[2], "s": kw.get("status", "supported"),
+                           "verified_at, evidence_ref) VALUES (:t,:v,:m,:f,'tr069',:op,:s,:cert,CAST(:va AS timestamptz),:ev)"),
+                      {"t": t, "op": kw.get("op", "reboot_cpe"), "v": PROFILE[0], "m": PROFILE[1], "f": PROFILE[2], "s": kw.get("status", "supported"),
                        "cert": kw.get("cert", "observed"), "va": None if kw.get("no_evidence") else datetime.now(UTC).isoformat(),
                        "ev": None if kw.get("no_evidence") else "docs/wiki/bench/H2-reboot_cpe-test.md"})
         if kw.get("authorization", True) and kw.get("target", True):
             now = datetime.now(UTC)
             c.execute(text("INSERT INTO bench_authorizations (tenant_id, operation, cpe_id, params_hash, window_start, window_end, authorized_by, first_run) "
-                           "VALUES (:t,'reboot_cpe',:c,:h,:s,:e,'responsavel',:fr)"),
-                      {"t": t, "c": cpe, "fr": kw.get("first_run", False), "h": kw.get("hash", bench.params_hash({})), "s": now + timedelta(seconds=kw.get("start", -60)),
+                           "VALUES (:t,:op,:c,:h,:s,:e,'responsavel',:fr)"),
+                      {"t": t, "op": kw.get("op", "reboot_cpe"), "c": cpe, "fr": kw.get("first_run", False), "h": kw.get("hash", bench.params_hash(kw.get("params", {}))), "s": now + timedelta(seconds=kw.get("start", -60)),
                        "e": now + timedelta(seconds=kw.get("end", 1800))})
 
 
@@ -83,8 +83,8 @@ def _approver(client, seed, migrated):
     return {**login_as(client, email), "X-Workspace-ID": str(seed["A"])}
 
 
-def _preview(client, h, cpe):
-    return client.post("/v1/jobs/preview", headers={**h, **idem()}, json={"operation": "reboot_cpe", "target_id": cpe})
+def _preview(client, h, cpe, op="reboot_cpe", params=None):
+    return client.post("/v1/jobs/preview", headers={**h, **idem()}, json={"operation": op, "target_id": cpe, "params": params or {}})
 
 
 def _full(client, seed, inv, migrated, **kw):
@@ -136,15 +136,15 @@ def test_firmware_must_match_the_registry_exactly_and_missing_firmware_refuses(c
 
 
 def test_global_gate_still_blocks_everything_that_is_not_a_bench_operation(client, seed, inv, migrated):
-    cpe, h = _full(client, seed, inv, migrated)
-    for op in ("set_wifi_ssid", "provision_onu"):
-        target = cpe if op == "set_wifi_ssid" else None
-        if target is None:
-            continue
-        jid = client.post("/v1/jobs/preview", headers={**h, **idem()}, json={"operation": op, "target_id": target}).json()["id"]
-        r = client.post(f"/v1/jobs/{jid}/submit", headers=h)
-        assert r.status_code == 409 and r.json()["detail"] == "operation_not_homologated", op  # not in the bench catalog (yet)
+    assert jobs_mod._blocked_reason("provision_onu") == "operation_not_homologated" and "provision_onu" not in bench.BENCH_OPS
     assert jobs_mod.HOMOLOGATED_WRITES == frozenset()
+    # and an SSID job with every other condition missing (flag off) is still refused by the global gate
+    cpe = _cpe(client, inv, seed)
+    _bench(migrated, seed, inv, cpe, op="set_wifi_ssid", params={"ssid": "BANCADA-H3"})
+    h = hdr(client, "alice", seed, "A")
+    jid = _preview(client, h, cpe, "set_wifi_ssid", {"ssid": "BANCADA-H3"}).json()["id"]
+    r = client.post(f"/v1/jobs/{jid}/submit", headers=h)
+    assert r.status_code == 409 and r.json()["detail"] == "operation_not_homologated"
 
 
 def test_bench_reboot_full_path_authorization_is_consumed_with_the_approval_and_signed(client, seed, inv, migrated):
@@ -285,7 +285,7 @@ def test_bench_evidence_file_check_and_the_catalog():
     assert "Aprovador" in bench.evidence_missing("\n".join(ok.splitlines()[:-4]))
     assert bench.evidence_missing(ok + "\n- **Nota:** 192.168.0.1")[-1].startswith("conteúdo sensível")
     assert bench.evidence_missing(ok + "\nsenha: x")[-1].startswith("conteúdo sensível")
-    assert set(bench.BENCH_OPS) == {"reboot_cpe"} and bench.MIN_APPROVALS == 1
+    assert set(bench.BENCH_OPS) == {"reboot_cpe", "set_wifi_ssid"} and bench.MIN_APPROVALS == 1
     assert all(jobs_mod.OPERATIONS[o].writes for o in bench.BENCH_OPS)  # the catalog is a subset of the engine's write operations
 
 
@@ -307,7 +307,7 @@ def test_owner_cli_manages_targets_authorizations_locks_and_checks_the_evidence(
         cli.main(["bench-target-add", t, str(uuid4()), edge])
     cli.main(["bench-target-add", t, cpe, edge, "--note", "bancada"])
     with pytest.raises(SystemExit, match="not in the bench catalog"):
-        cli.main(["bench-authorize", t, "set_wifi_ssid", cpe, "--from", iso(-1), "--to", iso(30), "--by", "responsavel"])
+        cli.main(["bench-authorize", t, "provision_onu", cpe, "--from", iso(-1), "--to", iso(30), "--by", "responsavel"])
     with pytest.raises(SystemExit, match="time zone"):
         cli.main(["bench-authorize", t, "reboot_cpe", cpe, "--from", "2026-10-30T10:00:00", "--to", "2026-10-30T11:00:00", "--by", "r"])
     with pytest.raises(DBAPIError):  # more than 4 hours
@@ -371,7 +371,7 @@ def test_the_shipped_default_has_the_edge_support_but_every_other_condition_stay
     import importlib
 
     assert importlib.reload(bench).EDGE_SUPPORT is True   # flipped by the PR that implements and tests the Edge side
-    assert bench.BENCH_OPS.keys() == {"reboot_cpe"}       # still one operation; H3/H4 need an ADR amendment
+    assert bench.BENCH_OPS.keys() == {"reboot_cpe", "set_wifi_ssid"}   # H2 and H3; H4 needs an ADR amendment
     assert features_default("bench_writes") is False      # the tenant flag still defaults off
 
 
@@ -603,3 +603,62 @@ def test_capability_promotion_and_gate_evaluation_exclude_each_other(client, see
         t.join(5)
     assert got.is_set()                    # and proceeds once it ends
 
+
+
+# ---- H3 set_wifi_ssid: one catalog parameter with one fixed shape, bound to the authorization by its hash and signed into the envelope ----
+SSID = {"ssid": "BANCADA-H3"}
+
+
+@pytest.mark.parametrize("params", [{}, {"ssid": "CLIENTE-1"}, {"ssid": "bancada-h3"}, {"ssid": "BANCADA-"}, {"ssid": "BANCADA-" + "A" * 17},
+                                    {"ssid": "BANCADA-H3", "x": "1"}, {"ssid": 5}, {"ssid": "BANCADA-H3\n"}, {"ssid": "BANCADA-H 3"}])
+def test_ssid_preview_refuses_anything_outside_the_catalog_shape(client, seed, inv, migrated, params):
+    cpe, h = _full(client, seed, inv, migrated, op="set_wifi_ssid", params=SSID)
+    assert _preview(client, h, cpe, "set_wifi_ssid", params).status_code == 422
+
+
+def test_reboot_still_accepts_no_parameters(client, seed, inv, migrated):
+    cpe, h = _full(client, seed, inv, migrated)
+    assert _preview(client, h, cpe, "reboot_cpe", {"ssid": "BANCADA-H3"}).status_code == 422
+
+
+def test_ssid_authorization_is_bound_to_the_exact_value_and_the_value_is_signed(client, seed, inv, migrated):
+    cpe, h = _full(client, seed, inv, migrated, op="set_wifi_ssid", params=SSID)
+    other = _preview(client, h, cpe, "set_wifi_ssid", {"ssid": "BANCADA-H4"}).json()["id"]
+    r = client.post(f"/v1/jobs/{other}/submit", headers=h)
+    assert r.status_code == 409 and r.json()["detail"] == "authorization_missing"     # an authorization for another SSID does not open it
+    jid = _preview(client, h, cpe, "set_wifi_ssid", SSID).json()["id"]
+    assert client.post(f"/v1/jobs/{jid}/submit", headers=h).status_code == 200
+    done = client.post(f"/v1/jobs/{jid}/approve", headers=h)                           # the requester approves a bench job
+    assert done.status_code == 200 and done.json()["status"] == "APPROVED", done.text
+    env = client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1")).json()
+    assert env["operation"] == "set_wifi_ssid" and env["params"] == SSID and env["target_ref"] == EXT
+    assert not list(Draft202012Validator(SCHEMA).iter_errors(env)) and jobsign.verify(_pub_b64(), env)
+    assert not jobsign.verify(_pub_b64(), {**env, "params": {"ssid": "BANCADA-EVIL"}})  # the value is covered by the signature
+
+
+def test_reboot_envelope_carries_no_params(client, seed, inv, migrated):
+    cpe, h = _full(client, seed, inv, migrated)
+    jid, r = _run_to_dispatch(client, seed, inv, migrated, h, cpe)
+    env = client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1")).json()
+    assert "params" not in env
+
+
+def test_owner_cli_records_the_ssid_in_the_authorization_hash(client, seed, inv, migrated, admin_url, monkeypatch):
+    from app import cli
+
+    _flag(migrated, seed["A"])
+    cpe = _cpe(client, inv, seed)
+    _bench(migrated, seed, inv, cpe, authorization=False, op="set_wifi_ssid", cert="identified")
+    monkeypatch.setenv("ADMIN_DATABASE_URL", admin_url)
+    now = datetime.now(UTC)
+    base = ["bench-authorize", str(seed["A"]), "set_wifi_ssid", cpe, "--from", now.isoformat(), "--to", (now + timedelta(minutes=5)).isoformat(),
+            "--by", "r"]
+    for bad in ([], ["--ssid", "OUTRO"], ["--ssid", "BANCADA-" + "A" * 17]):
+        with pytest.raises(SystemExit, match="outside the bench catalog"):
+            cli.main(base + bad)
+    cli.main(base + ["--ssid", "BANCADA-H3", "--first-run"])
+    with migrated.begin() as c:
+        assert c.execute(text("SELECT params_hash FROM bench_authorizations")).scalar() == bench.params_hash(SSID)
+    with pytest.raises(SystemExit, match="outside the bench catalog"):
+        cli.main(["bench-authorize", str(seed["A"]), "reboot_cpe", cpe, "--from", now.isoformat(), "--to", (now + timedelta(minutes=5)).isoformat(),
+                  "--by", "r", "--ssid", "BANCADA-H3"])      # a reboot takes no parameter

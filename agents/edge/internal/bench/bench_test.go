@@ -26,8 +26,15 @@ type fakeACS struct {
 	out              nbi.BenchOutcome
 	identityCalls    int
 	rebootCalls      []string
+	ssidCalls        []string
+	ssidOut          nbi.SSIDOutcome
+	ssidErr          error
 }
 
+func (f *fakeACS) SetBenchSSID(_ context.Context, d nbi.BenchDevice, ssid string, _ func(string) bool, _ time.Time, _ string, _ func() time.Time) (nbi.SSIDOutcome, error) {
+	f.ssidCalls = append(f.ssidCalls, d.DeviceID+"="+ssid)
+	return f.ssidOut, f.ssidErr
+}
 func (f *fakeACS) BenchIdentity(_ context.Context, d nbi.BenchDevice, _ time.Time) error {
 	f.identityCalls++
 	return f.idErr
@@ -222,5 +229,58 @@ func TestRunOutcomes(t *testing.T) {
 		if len(e.acs.rebootCalls) != 1 {
 			t.Errorf("%s: calls=%v", c.name, e.acs.rebootCalls)
 		}
+	}
+}
+
+func ssidEnvelope(ref string) *jobs.Envelope {
+	x := envelope(ref)
+	x.Operation, x.Params = "set_wifi_ssid", map[string]string{"ssid": "BANCADA-H3"}
+	return x
+}
+
+func TestRunSSIDOutcomesAndGates(t *testing.T) {
+	good := nbi.SSIDOutcome{Attempted: true, Applied: true, Verified: true, Restored: true, Detail: "ok"}
+	cases := []struct {
+		name  string
+		out   nbi.SSIDOutcome
+		err   error
+		state string
+		post  bool
+		claim string
+	}{
+		{"changed, read back, restored", good, nil, "succeeded", true, jobs.ClaimDone},
+		{"restored but change unproven", nbi.SSIDOutcome{Attempted: true, Applied: true, Restored: true}, nil, "failed", false, jobs.ClaimUnknown},
+		{"restore not confirmed", nbi.SSIDOutcome{Attempted: true, Applied: true, Verified: true}, nbi.ErrBenchRestore, "failed", false, jobs.ClaimUnknown},
+		{"not delivered", nbi.SSIDOutcome{Attempted: true}, nbi.ErrBenchIdentity, "failed", false, jobs.ClaimUnknown},
+		{"before any send", nbi.SSIDOutcome{}, nbi.ErrBenchPending, "failed", false, jobs.ClaimFailed},
+	}
+	for _, c := range cases {
+		e := setup(t)
+		e.lease(t, jobs.LeaseTarget{TargetRef: benchRef, OwnerEpoch: 2})
+		e.acs.ssidOut, e.acs.ssidErr = c.out, c.err
+		res := e.r.Run(context.Background(), ssidEnvelope(benchRef))
+		if res.State != c.state || res.Postcheck != c.post || e.cl.State(authID) != c.claim {
+			t.Errorf("%s: %+v claim=%q", c.name, res, e.cl.State(authID))
+		}
+		if len(e.acs.ssidCalls) != 1 || e.acs.ssidCalls[0] != benchRef+"=BANCADA-H3" || len(e.acs.rebootCalls) != 0 {
+			t.Errorf("%s: calls %v %v", c.name, e.acs.ssidCalls, e.acs.rebootCalls)
+		}
+	}
+}
+
+func TestSSIDGatesAreTheSameAsTheRebootOnes(t *testing.T) {
+	e := setup(t)
+	if res := e.r.Run(context.Background(), ssidEnvelope(benchRef)); res.State != "failed" || len(e.acs.ssidCalls) != 0 {
+		t.Fatalf("no lease: %+v", res)
+	}
+	e.lease(t, jobs.LeaseTarget{TargetRef: prodRef, OwnerEpoch: 2})
+	if res := e.r.Run(context.Background(), ssidEnvelope(prodRef)); res.State != "failed" || len(e.acs.ssidCalls) != 0 {
+		t.Fatalf("production device: %+v", res)
+	}
+	e = setup(t)
+	e.lease(t, jobs.LeaseTarget{TargetRef: benchRef, OwnerEpoch: 2})
+	e.acs.idErr = nbi.ErrBenchIdentity
+	if res := e.r.Run(context.Background(), ssidEnvelope(benchRef)); res.State != "failed" || len(e.acs.ssidCalls) != 0 || e.cl.State(authID) != "" {
+		t.Fatalf("identity: %+v", res)
 	}
 }
