@@ -104,6 +104,7 @@ func (o *OLT) Exclusive(ctx context.Context, name string, minGap, cooldown time.
 			continue
 		}
 		src.Interval = minGap
+		src.Cooldown = cliCooldown // the reservation and every failure before the login keep the CLI default, whatever the OLT's own (collection) cooldown is
 		loggedIn := false
 		if cooldown > 0 {
 			src.failCooldown = func(error) time.Duration {

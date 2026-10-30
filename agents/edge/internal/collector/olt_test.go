@@ -862,3 +862,34 @@ func TestExclusiveSharesTheGuardAndHonoursAShorterCooldownOnlyAfterALogin(t *tes
 		t.Fatalf("not due: %v", err)
 	}
 }
+
+func TestExclusiveIgnoresAShortCollectionCooldownBeforeTheLogin(t *testing.T) {
+	var opens, runs int
+	clock := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	src := cliSrc(&opens, &runs, nil)
+	src.Cooldown = time.Minute // the OLT's own collection cooldown is short
+	o := &OLT{EdgeID: "e", Sources: []OLTSource{src}, Now: func() time.Time { return clock }}
+	loginFail := func(opened func()) error { return errors.New("ssh: unable to authenticate") }
+	if err := o.Exclusive(context.Background(), src.Name, time.Minute, 2*time.Minute, loginFail); err == nil {
+		t.Fatal("login failure")
+	}
+	clock = clock.Add(5 * time.Minute) // longer than the OLT's own 1 min and than the bench 2 min
+	if err := o.Exclusive(context.Background(), src.Name, time.Minute, 2*time.Minute, func(opened func()) error { opened(); return nil }); err == nil ||
+		!strings.Contains(err.Error(), "cooling down") {
+		t.Fatalf("a failed login keeps 15 min: %v", err)
+	}
+	// the reservation made before the session is the long one too: a session that reserves and is then killed leaves 15 min on disk/in memory
+	o2 := &OLT{EdgeID: "e", Sources: []OLTSource{src}, Now: func() time.Time { return clock }}
+	_ = o2.Exclusive(context.Background(), src.Name, time.Minute, 2*time.Minute, func(opened func()) error {
+		o2.mu.Lock()
+		got := o2.st[src.SNMPKey]
+		if src.SNMPKey == "" {
+			got = o2.st[src.Name]
+		}
+		o2.mu.Unlock()
+		if want := clock.Add(15 * time.Minute); got.CoolUntil.Before(want.Add(-time.Second)) {
+			t.Errorf("the pre-session reservation must be the 15 min default, got until %s", got.CoolUntil)
+		}
+		return nil
+	})
+}
