@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18d3f-985f-7c41-95d2-e3b02876848c).
+[codex] Turn started (01a18d3f-9899-7543-b3da-c4efb90a10cb).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir as regras propostas até os caminhos de autorização...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/adr/ADR-0031-rbac...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/adr/ADR-0031-rbac... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"bench_targets|bench_authorizations|BENCH_OPS|bench|bench_author\" apps...
+[codex] Command completed: /bin/bash -lc "rg -n \"bench_targets|bench_authorizations|BENCH_OPS|bench|bench_author\" apps... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/bench.py | sed -n '30,175p'; nl -ba apps/api/app/api/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/bench.py | sed -n '30,175p'; nl -ba apps/api/app/api/... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/cli.py | sed -n '167,204p'; rg -n \"4 hours|4h|window.*hou...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/cli.py | sed -n '167,204p'; rg -n \"4 hours|4h|window.*hou... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/alembic/versions/0021_bench_gate.py | sed -n '1,75p'; nl -ba a...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/alembic/versions/0021_bench_gate.py | sed -n '1,75p'; nl -ba a... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar: a autorização da bancada não vincula nem...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar: a autorização da bancada não vincula nem verifica a identidade do responsável, permitindo que a mesma pessoa solicite e autoaprove um job enquanto o campo `authorized_by` é apenas texto livre.
+
+Findings:
+- [high] A autorização da bancada não prova quem a concedeu (docs/wiki/adr/ADR-0031-rbac-papeis-permissoes-e-escopo.md:31)
+  A exceção depende de uma autorização criada pelo responsável, mas os critérios listados vinculam apenas operação, alvo e hash dos parâmetros. No código atual, `bench-authorize` grava `--by` diretamente em `authorized_by`, sem autenticar ou comparar essa identidade; a rota de aprovação permite que o solicitante aprove operações de `BENCH_OPS` (apps/api/app/cli.py:178-201; apps/api/app/api/jobs.py:199-201). Assim, se alguém com acesso ao owner CLI puder criar uma autorização, pode informar qualquer nome e depois solicitar e autoaprovar a operação. Isso contradiz o ADR-0030, que exige que o responsável seja distinto de quem solicita e de quem aprova, e enfraquece a separação de funções que esta exceção deveria preservar.
+  Recommendation: Vincule a autorização a uma identidade autenticada do responsável, em vez de texto livre, e faça o servidor rejeitar sua reutilização quando essa identidade coincidir com o solicitante ou aprovador; inclua testes para esses dois casos.

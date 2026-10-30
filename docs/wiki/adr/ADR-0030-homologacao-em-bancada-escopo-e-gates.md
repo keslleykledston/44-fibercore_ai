@@ -69,3 +69,7 @@ Operações da H4 no catálogo de bancada, sem parâmetros e só para a ONU de b
 - **Sessão:** o guard da OLT vale (uma sessão por vez, 15 min entre sessões, reserva persistida antes de conectar, instância única); o ritmo pode ser reduzido por configuração, nunca abaixo de 60 s, como na bancada TR-069. Sequência: `enable` → `display ont info by-sn` → `config` → `interface gpon` → comando → `quit` → `quit` → `display ont info by-sn` (pós-checagem). Resposta de confirmação do comando é tratada por um único padrão conhecido; qualquer outra pergunta ou erro → encerra sem repetir.
 - Resultado incerto trava o alvo; nada é repetido. Recuperação manual documentada (`ont activate <porta> <ontid>`).
 
+
+
+## Emenda (2026-10-30, ADR-0031)
+O autorizador distinto do solicitante e do aprovador, hoje só convenção da via do CLI do dono, passa a ser regra verificada pelo servidor assim que a via autenticada (`authorized_via=api`, permissão `bench:authorize`, MFA recente) existir; a via `owner_cli` fica transitória, atrás de chave de configuração, e desligada por padrão a partir de então. Detalhes e testes em ADR-0031, seção 2.

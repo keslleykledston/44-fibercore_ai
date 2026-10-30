@@ -1,0 +1,18 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18d3f-0830-7cf3-bcec-abd0177227cc).
+[codex] Turn started (01a18d3f-0aa7-7343-b402-b69ebe31a00f).
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0031-rbac-papeis-permissoes-e-escopo.md | sed -n '20,...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0031-rbac-papeis-permissoes-e-escopo.md | sed -n '20,... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: a exceção de SoD da bancada está d...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: a exceção de SoD da bancada está descrita com abrangência maior que o limite operacional que o ADR pretende preservar.
+
+Findings:
+- [high] A exceção de SoD da bancada não está restrita a operações explicitamente autorizadas (docs/wiki/adr/ADR-0031-rbac-papeis-permissoes-e-escopo.md:31)
+  A seção declara que o solicitante pode aprovar operações de bancada quando houver autorização prévia de uso único, mas não define como o motor identifica essas operações nem vincula essa exceção a uma lista fechada de operações, alvos ou parâmetros. Assim, a ressalva pode ser implementada como exceção genérica para jobs de bancada, permitindo autoaprovação de operações além das previstas no ADR-0030; isso contrariaria a afirmação de que a exceção é limitada e não pode ser ampliada por papéis customizados. O risco é inferido da falta de critérios no desenho, não de uma implementação existente.
+  Recommendation: Referenciar as operações de bancada permitidas por uma lista fechada e definir que a autorização de uso único vincula ator, operação, alvo e parâmetros; exigir validação no servidor e testes negativos para operações fora dessa lista.

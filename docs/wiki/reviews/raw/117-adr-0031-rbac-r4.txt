@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18d40-2e64-76f0-bd11-3f809306d2ad).
+[codex] Turn started (01a18d40-2e9f-76f0-bfa9-27223ed077bc).
+[codex] Assistant message captured: Vou comparar o diff completo com `main` e seguir as referências relevantes do ADR-0030, focan...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/adr/ADR-0031-rbac...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/adr/ADR-0031-rbac... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"ADR-0030|bench|autoriz|responsável|solicitante|aprovador\" docs/wiki/a...
+[codex] Command completed: /bin/bash -lc "rg -n \"ADR-0030|bench|autoriz|responsável|solicitante|aprovador\" docs/wiki/a... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar: a exceção `owner_cli` ainda contraria a ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar: a exceção `owner_cli` ainda contraria a separação de funções exigida pelo ADR-0030; declarar o limite conhecido não o reconcilia com essa exigência.
+
+Findings:
+- [high] A via owner_cli permite autorização sem provar a separação de funções do ADR-0030 (docs/wiki/adr/ADR-0031-rbac-papeis-permissoes-e-escopo.md:31)
+  O ADR-0030 exige que o responsável que autoriza seja distinto tanto de quem solicita quanto de quem aprova o job (seção 4). Aqui, na via `owner_cli`, `authorized_by` é apenas um rótulo e a identidade confiável é a conta do sistema operacional; o servidor não verifica se esse responsável difere do solicitante ou do aprovador. Assim, alguém com acesso ao CLI pode autorizar e também solicitar ou aprovar a manobra, contornando a SoD que a autorização prévia deveria garantir. Chamar isso de limite conhecido não elimina a contradição com o ADR-0030 nem com a regra geral de solicitante diferente do aprovador.
+  Recommendation: Tornar a autorização `owner_cli` vinculada a uma identidade autenticada e fazer o servidor validar que o autorizador difere do solicitante e do aprovador, como exige o ADR-0030; se a política for mudar, registrar a alteração no próprio ADR-0030 antes de preservar essa exceção.
