@@ -15,12 +15,12 @@ export default async function CpeDetalhe({ params }: { params: Promise<{ id: str
   const { id } = await params;
   if (!isUuid(id)) notFound();
   const [list, state, caps, links] = await Promise.all([
-    apiSafe<Cpe[]>("/v1/cpes?limit=1000"), apiSafe<CpeStateView>(`/v1/cpes/${id}/state`), apiSafe<Capability[]>(`/v1/cpes/${id}/capabilities`),
+    apiSafe<Cpe>(`/v1/cpes/${id}`), apiSafe<CpeStateView>(`/v1/cpes/${id}/state`), apiSafe<Capability[]>(`/v1/cpes/${id}/capabilities`),
     apiSafe<OnuCpeLink[]>("/v1/onu-cpe-links?status=confirmed&limit=1000"),
   ]);
   if (list.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver o inventário." /></AppShell>;
-  const cpe = list.data?.find((c) => c.id === id);
-  if (state.status === 404 || (list.data && !cpe)) notFound();
+  if (list.status === 404) notFound();
+  const cpe = list.data;
   if (!cpe) return <AppShell active="/rede" user="1"><ErrorState title="Falha ao carregar o CPE" hint="Tente novamente em instantes." /></AppShell>;
   const link = links.data?.find((l) => l.cpe.id === id) ?? null; // flag onu_cpe_links desligada (403) => o bloco diz que não está disponível
   const metrics = state.data?.metrics ?? [];

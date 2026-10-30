@@ -49,7 +49,11 @@ export default async function Capacidades() {
                       <div className="font-medium">{p.vendor ?? "—"} · {p.model ?? "—"}</div>
                       <div className="text-xs text-muted">{p.kind === "olt" ? "OLT" : "CPE"} · {p.firmware ?? "firmware não informado"} · {p.count} no inventário</div>
                     </th>
-                    {ops.map((o) => {
+                    {caps.data === null ? (
+                      <td colSpan={Math.max(1, ops.length)} className="p-3 text-warn" data-testid="caps-unavailable">
+                        {caps.status === 403 ? "Registro de capacidades desligado ou sem permissão para este provedor." : "Não foi possível carregar as capacidades deste perfil."} Isso não significa que não há suporte.
+                      </td>
+                    ) : ops.map((o) => {
                       const c = caps.data?.find((x) => x.name === o);
                       if (!c) return <td key={o} className="p-3 text-muted">—</td>;
                       return (

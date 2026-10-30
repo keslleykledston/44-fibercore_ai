@@ -594,25 +594,35 @@ def olt_capabilities(olt_id: UUID, p: Principal = Depends(require("inventory:rea
     return _capabilities(conn, p.tenant_id, "olt", o.vendor, o.model, o.firmware)
 
 
+_CPE_SELECT = (
+    "SELECT c.id, c.canonical_serial, c.vendor, c.model, c.firmware, c.observed_at, "
+    "COALESCE(json_agg(json_build_object('protocol', b.protocol, 'connector_id', b.connector_id, "
+    "'external_id', b.external_id)) FILTER (WHERE b.id IS NOT NULL), '[]') AS bindings "
+    "FROM cpes c LEFT JOIN cpe_protocol_bindings b ON b.cpe_id = c.id AND b.tenant_id = c.tenant_id "
+)
+
+
+def _cpe_view(r) -> dict:
+    return {"id": str(r.id), "canonical_serial": r.canonical_serial, "vendor": r.vendor, "model": r.model,
+            "firmware": r.firmware, "bindings": r.bindings,
+            "observed_at": r.observed_at.isoformat() if r.observed_at else None, "freshness": _fresh(r.observed_at)}
+
+
 @router.get("/v1/cpes")
 def list_cpes(
     limit: int = Query(100, ge=1, le=1000),
     p: Principal = Depends(require("inventory:read")),
     conn: Connection = TENANT_CONN,
 ) -> list[dict]:
-    rows = conn.execute(
-        text(
-            "SELECT c.id, c.canonical_serial, c.vendor, c.model, c.firmware, c.observed_at, "
-            "COALESCE(json_agg(json_build_object('protocol', b.protocol, 'connector_id', b.connector_id, "
-            "'external_id', b.external_id)) FILTER (WHERE b.id IS NOT NULL), '[]') AS bindings "
-            "FROM cpes c LEFT JOIN cpe_protocol_bindings b ON b.cpe_id = c.id AND b.tenant_id = c.tenant_id "
-            "GROUP BY c.tenant_id, c.id ORDER BY c.canonical_serial LIMIT :l"
-        ),
-        {"l": limit},
-    )
-    return [
-        {"id": str(r.id), "canonical_serial": r.canonical_serial, "vendor": r.vendor, "model": r.model,
-         "firmware": r.firmware, "bindings": r.bindings,
-         "observed_at": r.observed_at.isoformat() if r.observed_at else None, "freshness": _fresh(r.observed_at)}
-        for r in rows
-    ]
+    rows = conn.execute(text(_CPE_SELECT + "GROUP BY c.tenant_id, c.id ORDER BY c.canonical_serial LIMIT :l"), {"l": limit})  # noqa: S608
+    return [_cpe_view(r) for r in rows]
+
+
+@router.get("/v1/cpes/{cpe_id}")
+def get_cpe(cpe_id: UUID, p: Principal = Depends(require("inventory:read")), conn: Connection = TENANT_CONN) -> dict:
+    """One CPE by id (the list is capped, so a detail page cannot depend on it). Another provider's CPE is a 404 (RLS)."""
+    r = conn.execute(text(_CPE_SELECT + "WHERE c.id = :i GROUP BY c.tenant_id, c.id"), {"i": cpe_id}).first()  # noqa: S608
+    if r is None:
+        raise HTTPException(404, "cpe not found")
+    return _cpe_view(r)
+

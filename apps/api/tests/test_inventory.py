@@ -581,3 +581,14 @@ def test_csv_cell_neutralises_formulas_even_behind_blanks_and_control_characters
         assert _csv_cell(bad) == "'" + bad, repr(bad)
     for ok in ["HWTC00000001", "OLT-1", "0/0/14", "a=b", "", None, 3.5, "x -1"]:
         assert _csv_cell(ok) == ok, repr(ok)
+
+
+def test_get_cpe_by_id_is_tenant_isolated_and_matches_the_list(client, seed, inv, migrated):
+    ha, hb = hdr(client, "alice", seed, "A"), hdr(client, "bob", seed, "B")
+    rows = client.get("/v1/cpes", headers=ha).json()
+    assert rows, "the fixtures must have at least one CPE for tenant A"
+    one = client.get(f"/v1/cpes/{rows[0]['id']}", headers=ha)
+    assert one.status_code == 200 and one.json() == rows[0]
+    assert client.get(f"/v1/cpes/{rows[0]['id']}", headers=hb).status_code == 404   # another provider's CPE does not exist for bob
+    assert client.get("/v1/cpes/00000000-0000-0000-0000-000000000000", headers=ha).status_code == 404
+    assert client.get("/v1/cpes/not-a-uuid", headers=ha).status_code == 422
