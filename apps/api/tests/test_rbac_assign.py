@@ -379,3 +379,41 @@ def test_a_role_change_and_an_account_deactivation_at_the_same_time_do_not_deadl
     [x.start() for x in ts]
     [x.join() for x in ts]
     assert out == {"change": 200, "deactivate": "ok"}, out   # no deadlock (40P01) on either side
+
+
+def test_a_direct_function_call_and_an_account_deactivation_do_not_deadlock(migrated, new_tenant, make):
+    import time
+
+    from app.core.db import get_engine, scoped_connection
+
+    t = new_tenant()
+    a, b = make(t, "isp_admin"), make(t, "isp_admin")
+    out: dict = {}
+    got_lock = threading.Event()
+
+    def change():   # holds the workspace lock a while, then touches the target's account row like the API does
+        try:
+            with scoped_connection(get_engine(), user_id=a["id"], tenant_id=t) as c:
+                c.execute(text("SELECT app_change_member_role(:u, 'engineer')"), {"u": b["id"]})
+                got_lock.set()
+                time.sleep(0.8)
+                c.execute(text("UPDATE users_global SET tokens_valid_after = clock_timestamp() WHERE id = :u"), {"u": b["id"]})
+            out["change"] = "ok"
+        except DBAPIError as exc:
+            got_lock.set()
+            out["change"] = f"error {getattr(exc.orig, 'sqlstate', '?')}"
+
+    def deactivate():
+        got_lock.wait(10)
+        try:
+            with migrated.begin() as c:
+                c.execute(text("SET LOCAL lock_timeout = '10s'"))
+                c.execute(text("UPDATE users_global SET is_active=false WHERE id=:u"), {"u": b["id"]})
+            out["deactivate"] = "ok"
+        except DBAPIError as exc:
+            out["deactivate"] = f"error {getattr(exc.orig, 'sqlstate', '?')}"
+
+    ts = [threading.Thread(target=change), threading.Thread(target=deactivate)]
+    [x.start() for x in ts]
+    [x.join() for x in ts]
+    assert out == {"change": "ok", "deactivate": "ok"}, out

@@ -36,6 +36,8 @@ def upgrade() -> None:
           IF t IS NULL OR a IS NULL OR a = p_target THEN
             RAISE EXCEPTION 'role change refused' USING ERRCODE = 'insufficient_privilege';
           END IF;
+          -- lock order, the same as the API and the deactivation trigger: 1) the target's ACCOUNT row, 2) the workspace lock
+          PERFORM 1 FROM users_global WHERE id = p_target FOR UPDATE;
           -- the SAME per-workspace lock the API takes: direct callers of this function serialise too (two administrators cannot demote each other at once)
           PERFORM pg_advisory_xact_lock(hashtextextended('tenant-roles:' || t::text, 0));
           SELECT role INTO actor_role FROM tenant_memberships WHERE tenant_id = t AND user_id = a;
