@@ -1,0 +1,18 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18ea8-23ee-7340-97f4-31e556f4b853).
+[codex] Turn started (01a18ea8-2428-7163-9221-0d73ecfd4560).
+[codex] Assistant message captured: Vou examinar o diff de `main` e rastrear especificamente o ciclo de vida da poda de resultado...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- agents/edge/internal/oltque...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- agents/edge/internal/oltque... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/oltquery/store.go | sed -n '330,435p'; git diff --...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/oltquery/store.go | sed -n '330,435p'; git diff --... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"No material remaining risk found in the reviewed change. The ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+No material remaining risk found in the reviewed change. The periodic ExpireDue sweep prunes both acknowledged and cloud-rejected entries after 24 hours, and the added test covers both states.
+
+No material findings.

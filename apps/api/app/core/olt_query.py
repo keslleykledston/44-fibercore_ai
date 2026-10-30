@@ -9,6 +9,7 @@ until it exists and is tested, so nothing is dispatched and the tenant flag cann
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
@@ -100,3 +101,37 @@ def build_intent(olt_id: UUID, raw: dict) -> dict:
         raise ValueError("query_id_required")
     rest = {k: v for k, v in raw.items() if k != "query_id"}
     return {"query_id": raw["query_id"], **check_params(raw["query_id"], rest), "olt_ref": str(olt_id), "catalog_version": catalog_version()}
+
+
+# ---- typed results (ADR-0029 item 4): the Edge sends a closed object per query, never device output; the Cloud checks the shape again before storing it
+_PRODUCT = re.compile(r"^[A-Z0-9][A-Z0-9-]{1,23}$")
+_RELEASE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{1,39}$")
+_BOARD = re.compile(r"^[A-Za-z0-9]{3,20}$")
+_STATUS = re.compile(r"^[A-Za-z_]{3,24}$")
+
+
+def _is_slot(v) -> bool:
+    return _is_int(v) and 0 <= v <= LIMITS["slot"]
+
+
+def check_result(query_id: str, data) -> bool:
+    """True only for the exact typed shape of a query that has a parser; anything else (extra keys, wrong types, free text) is refused."""
+    if not isinstance(data, dict):
+        return False
+    if query_id == "olt.version":
+        return (set(data) == {"product", "version", "patch", "uptime_seconds"} and isinstance(data["product"], str) and bool(_PRODUCT.match(data["product"]))
+                and isinstance(data["version"], str) and bool(_RELEASE.match(data["version"])) and isinstance(data["patch"], str)
+                and bool(_RELEASE.match(data["patch"])) and _is_int(data["uptime_seconds"]) and 0 <= data["uptime_seconds"] <= 10**9)
+    if query_id == "olt.board":
+        b, e = data.get("boards"), data.get("empty_slots")
+        if set(data) != {"boards", "empty_slots"} or not isinstance(b, list) or not isinstance(e, list) or len(b) + len(e) > LIMITS["slot"] + 1:
+            return False
+        slots = []
+        for x in b:
+            if not (isinstance(x, dict) and set(x) == {"slot", "name", "status"} and _is_slot(x["slot"]) and isinstance(x["name"], str)
+                    and _BOARD.match(x["name"]) and isinstance(x["status"], str) and _STATUS.match(x["status"])):
+                return False
+            slots.append(x["slot"])
+        slots += list(e)
+        return all(_is_slot(s) for s in slots) and len(set(slots)) == len(slots) and len(b) > 0
+    return False

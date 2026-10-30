@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18ea7-6ab8-7110-806d-a5b8939e9a4a).
+[codex] Turn started (01a18ea7-6af2-7812-8f9a-3833ca283d1a).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main`, concentrando a revisão no fluxo 4xx → `MarkRejected`, r...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/agent/...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/agent/... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- agents/edge/internal/agent/...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- agents/edge/internal/agent/... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "MarkRejected|cloud_rejected|KeepReported|Reported" agents/edge/internal...
+[codex] Command completed: /bin/bash -lc 'rg -n "MarkRejected|cloud_rejected|KeepReported|Reported" agents/edge/internal... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: rejeições 4xx são classificadas, m...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: rejeições 4xx são classificadas, mas os registros rejeitados não são removidos após 24 h e ficam acumulando no armazenamento local.
+
+Findings:
+- [medium] Registros rejeitados nunca passam pela limpeza de 24 h (agents/edge/internal/oltquery/store.go:392-402)
+  `MarkRejected` muda o estado para `Reported` e atualiza `FinishedAt`, mas não executa a limpeza de registros antigos. A limpeza existe somente em `MarkReported`; depois da rejeição, `resultSettled` não chama esse método, e futuras chamadas a `MarkReported` retornam cedo para entradas já `Reported`, antes de limpar. Assim, cada resultado recusado permanece no arquivo indefinidamente, contrariando a retenção de 24 h e podendo inflar o armazenamento persistente em instalações com rejeições recorrentes. A recomendação é centralizar a poda de entradas `Reported` nos dois caminhos de conclusão ou executá-la independentemente da confirmação recebida.
+  Recommendation: Aplicar a mesma poda por `KeepReported` em `MarkRejected` e garantir que a limpeza também rode quando uma entrada já está em `Reported`.

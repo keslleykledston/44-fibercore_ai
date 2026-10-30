@@ -34,6 +34,9 @@ const (
 	PerHour         = 20
 	MaxQueuedPerOLT = 50
 	KeepReported    = 24 * time.Hour
+	// StaleClaim: a CLAIMED entry older than this belongs to a session that cannot still be running (a session lives at most ~12 minutes), so its outcome
+	// is unknown and it becomes UNKNOWN without waiting for a restart.
+	StaleClaim = 15 * time.Minute
 	// MaxResultBytes bounds a typed result kept on disk (the parsers produce small closed objects; ADR-0029 item 5 caps what leaves the Edge).
 	MaxResultBytes = 64 << 10
 )
@@ -67,6 +70,7 @@ type Entry struct {
 	Result     json.RawMessage `json:"result,omitempty"` // typed object produced by the query's parser; never raw device output
 	Reason     string          `json:"reason,omitempty"` // category of a failure (olt_busy, device_rejected, expired, restart...), never device text
 	FinishedAt time.Time       `json:"finished_at,omitempty"`
+	HandedAt   time.Time       `json:"handed_at,omitempty"` // when the outcome was last handed to the delivery queue and is waiting for the Cloud's answer (durable: survives a restart)
 }
 
 type file struct {
@@ -325,17 +329,22 @@ func (s *Store) Recover() (unknown, expired int, err error) {
 	return
 }
 
-// ExpireDue ends waiting queries whose deadline passed (the window did not open in time).
+// ExpireDue ends waiting queries whose deadline passed (the window did not open in time) and turns long-abandoned claims into UNKNOWN (never run again).
 func (s *Store) ExpireDue() (int, error) {
 	n := 0
 	err := s.update(func(f *file) error {
 		now := s.now()
 		for _, e := range f.Entries {
-			if e.State == Queued && !e.ExpiresAt.After(now) {
+			switch {
+			case e.State == Queued && !e.ExpiresAt.After(now):
 				e.State, e.Reason, e.FinishedAt = Expired, "expired", now
+				n++
+			case e.State == Claimed && now.Sub(e.ClaimedAt) > StaleClaim:
+				e.State, e.Reason, e.FinishedAt = Unknown, "claim_abandoned", now
 				n++
 			}
 		}
+		s.pruneReported(f)
 		return nil
 	})
 	return n, err
@@ -366,6 +375,45 @@ func (s *Store) PendingReports() ([]Entry, error) {
 	return out, nil
 }
 
+// pruneReported drops REPORTED entries (acknowledged or refused) older than KeepReported: the file stays small whatever the Cloud answered.
+func (s *Store) pruneReported(f *file) {
+	for id, x := range f.Entries {
+		if x.State == Reported && s.now().Sub(x.FinishedAt) > KeepReported {
+			delete(f.Entries, id)
+		}
+	}
+}
+
+// MarkHanded records, durably, that the outcome of a finished query was handed to the delivery queue now.
+func (s *Store) MarkHanded(jobID string) error {
+	return s.update(func(f *file) error {
+		e, ok := f.Entries[jobID]
+		if !ok || e.State == Queued || e.State == Claimed || e.State == Reported {
+			return fmt.Errorf("%w: not waiting for a report", ErrBadState)
+		}
+		e.HandedAt = s.now()
+		return nil
+	})
+}
+
+// MarkRejected ends the reporting of a finished query whose result the Cloud refused for good (a 4xx such as "illegal transition": the job is no longer in
+// a state that can take it, e.g. it expired there). Resending would only loop. The entry is kept with its result and the reason `cloud_rejected` for
+// KeepReported, and the delivery queue's dead-letter table holds the sent copy: a person can see it, it is not silently the same as an acknowledged report.
+func (s *Store) MarkRejected(jobID string) error {
+	return s.update(func(f *file) error {
+		e, ok := f.Entries[jobID]
+		if !ok {
+			return fmt.Errorf("%w: unknown job", ErrBadState)
+		}
+		if err := transition(e, []State{Executed, Failed, Expired, Unknown}, Reported); err != nil {
+			return err
+		}
+		e.Reason, e.FinishedAt = "cloud_rejected", s.now()
+		s.pruneReported(f)
+		return nil
+	})
+}
+
 // MarkReported records the Cloud's acknowledgement and drops reported entries older than KeepReported (the file stays small).
 func (s *Store) MarkReported(jobID string) error {
 	return s.update(func(f *file) error {
@@ -380,11 +428,7 @@ func (s *Store) MarkReported(jobID string) error {
 			return err
 		}
 		e.FinishedAt = s.now()
-		for id, x := range f.Entries {
-			if x.State == Reported && s.now().Sub(x.FinishedAt) > KeepReported {
-				delete(f.Entries, id)
-			}
-		}
+		s.pruneReported(f)
 		return nil
 	})
 }

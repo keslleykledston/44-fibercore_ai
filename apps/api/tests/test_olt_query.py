@@ -241,3 +241,54 @@ def test_the_vectors_the_edge_pins_are_the_ones_the_cloud_computes():
     assert olt_query.catalog_version() == "1e1e5b3010c3788d6d86ae858c3d7bc976fc40a56916342d131b42acd5723b84"
     params = olt_query.build_intent(oid, {"query_id": "pon.ont.info", "slot": 1, "port": 0})
     assert _intent_hash("olt_query", "olt", oid, params) == "775f8c74e86cbbd5112a6c798605ab0654c31a748b05fae20024e74e3393adde"
+
+
+def _report(client, inv, jid, **body):
+    return client.post(f"/v1/edge/jobs/{jid}/result", headers=agent(client, inv, "a1"), json=body)
+
+
+def _dispatched(client, seed, inv, olt, qid="olt.version"):
+    h = hdr(client, "alice", seed, "A")
+    jid = _ask(client, h, olt, qid).json()["job"]["id"]
+    assert client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1")).status_code == 200
+    return h, jid
+
+
+VERSION = {"product": "MA5608T", "version": "MA5600V800R015C00", "patch": "SPC100 HP1013", "uptime_seconds": 88838745}
+BOARD = {"boards": [{"slot": 0, "name": "H805GPFD", "status": "Normal"}, {"slot": 2, "name": "H801MCUD1", "status": "Active_normal"}], "empty_slots": [3]}
+
+
+def test_the_typed_result_is_stored_in_its_exact_shape(client, seed, inv, olt, on):
+    h, jid = _dispatched(client, seed, inv, olt)
+    assert _report(client, inv, jid, state="accepted").status_code == 204
+    assert _report(client, inv, jid, state="succeeded", postcheck_ok=True, data=VERSION).status_code == 204
+    j = client.get(f"/v1/jobs/{jid}", headers=h).json()
+    assert j["status"] == "SUCCEEDED" and j["result"]["data"] == VERSION
+    assert _report(client, inv, jid, state="succeeded", postcheck_ok=True, data=VERSION).status_code == 204     # the Edge's resend is a no-op
+    h, jid = _dispatched(client, seed, inv, olt, "olt.board")
+    assert _report(client, inv, jid, state="succeeded", postcheck_ok=True, data=BOARD).status_code == 204
+    assert client.get(f"/v1/jobs/{jid}", headers=h).json()["result"]["data"] == BOARD
+
+
+def test_a_result_that_is_not_the_closed_shape_is_a_failure_and_is_not_stored(client, seed, inv, olt, on):
+    bad = [None, {}, {**VERSION, "extra": "x"}, {**VERSION, "product": "<script>"}, {**VERSION, "uptime_seconds": "5"}, {**VERSION, "uptime_seconds": True},
+           {"raw": "display version\n  VERSION : x"}, BOARD]   # the board shape for a version query
+    for data in bad:
+        h, jid = _dispatched(client, seed, inv, olt)
+        assert _report(client, inv, jid, state="succeeded", postcheck_ok=True, **({"data": data} if data is not None else {})).status_code == 204
+        j = client.get(f"/v1/jobs/{jid}", headers=h).json()
+        assert j["status"] == "FAILED" and "data" not in j["result"] and j["result"]["detail"] == "invalid_result", (data, j)
+
+
+def test_board_shape_is_checked_too_and_data_does_not_ride_on_other_outcomes(client, seed, inv, olt, on):
+    for data in ({"boards": [], "empty_slots": []}, {"boards": [{"slot": 99, "name": "H805GPFD", "status": "Normal"}], "empty_slots": []},
+                 {"boards": [{"slot": 0, "name": "H805GPFD", "status": "Normal"}], "empty_slots": [0]},
+                 {"boards": [{"slot": 0, "name": "H805GPFD", "status": "Normal", "x": 1}], "empty_slots": []}, VERSION):
+        h, jid = _dispatched(client, seed, inv, olt, "olt.board")
+        _report(client, inv, jid, state="succeeded", postcheck_ok=True, data=data)
+        assert client.get(f"/v1/jobs/{jid}", headers=h).json()["status"] == "FAILED", data
+    h, jid = _dispatched(client, seed, inv, olt)
+    assert _report(client, inv, jid, state="failed", detail="device_rejected", data=VERSION).status_code == 422
+    assert _report(client, inv, jid, state="succeeded", postcheck_ok=False, data=VERSION).status_code == 422
+    assert _report(client, inv, jid, state="succeeded", postcheck_ok=False).status_code == 204     # unknown outcome after a restart
+    assert client.get(f"/v1/jobs/{jid}", headers=h).json()["status"] == "UNKNOWN"

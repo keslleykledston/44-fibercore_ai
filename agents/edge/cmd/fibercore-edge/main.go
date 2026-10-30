@@ -23,6 +23,7 @@ import (
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/jobs"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/nbi"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/olt"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/oltquery"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/queue"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/singleton"
 )
@@ -155,7 +156,7 @@ func main() {
 				drv = olt.HuaweiR015{DownTimes: o.DownTimes != nil}
 			}
 			src := collector.OLTSource{
-				Name: o.Name, Driver: drv, Ports: o.PonPorts, AllowUnverified: o.AllowUnverifiedFirmware,
+				Name: o.Name, Driver: drv, Ports: o.PonPorts, AllowUnverified: o.AllowUnverifiedFirmware, CloudID: o.CloudID,
 				SNMPKey: config.DeviceKey(o.Address), Interval: o.OLTInterval(), Cooldown: o.OLTCooldown(),
 				Open: func(ctx context.Context) (olt.Session, func(), error) {
 					pw, err := config.ReadSecret(o.SecretFile)
@@ -198,6 +199,7 @@ func main() {
 	}
 
 	var verifier *jobs.Verifier
+	var queryStore *oltquery.Store
 	var benchRunner *bench.Runner
 	if cfg.JobsEnabled {
 		pub, err := jobs.ParsePublicKey(cfg.JobPublicKey)
@@ -216,6 +218,10 @@ func main() {
 				allowed[o] = true
 				continue
 			}
+			if jobs.QueryOps[o] && cfg.OLTQueryEnabled { // ADR-0029: only through the explicit olt_query_enabled switch
+				allowed[o] = true
+				continue
+			}
 			if !jobs.ReadOnlyOps[o] { // config can narrow the read-only set, never widen it
 				log.Error("operation not allowed on this Edge build", "operation", o)
 				os.Exit(2)
@@ -223,6 +229,38 @@ func main() {
 			allowed[o] = true
 		}
 		verifier = &jobs.Verifier{Pub: pub, EdgeID: cfg.EdgeID, TenantID: cfg.TenantID, Allowed: allowed, BenchEnabled: benchOn, Nonces: q, Now: time.Now}
+		if cfg.OLTQueryEnabled {
+			if oltCol == nil {
+				log.Error("olt_query_enabled needs the olts collector")
+				os.Exit(2)
+			}
+			qs := &oltquery.Store{Path: config.OLTQueriesFile(cfg.QueuePath)}
+			unknown, expired, err := qs.Recover() // a query that was claimed when the last process died has an unknown outcome and is never run again
+			if err != nil {
+				log.Error("olt query queue cannot be opened; refusing to start with olt_query enabled", "err", err)
+				os.Exit(2)
+			}
+			log.Info("olt query queue recovered", "unknown_outcome", unknown, "expired", expired)
+			known := map[string]bool{}
+			for _, o := range cfg.OLTs {
+				if o.CloudID != "" {
+					known[o.CloudID] = true
+				}
+			}
+			oltCol.Queries = &collector.Queries{Store: qs, Run: olt.HuaweiR015{}.RunQueryInConfig}
+			verifier.QueryEnabled = true
+			verifier.QueryCheck = func(params map[string]any, targetID string) error {
+				in, err := olt.ParseIntent(params)
+				if err != nil {
+					return err
+				}
+				if in.OLTRef != targetID || !known[in.OLTRef] {
+					return errors.New("olt_ref is not an OLT of this edge")
+				}
+				return nil
+			}
+			queryStore = qs
+		}
 		if benchOn {
 			claims, err := jobs.OpenClaims(config.BenchClaimsFile(cfg.QueuePath))
 			if err != nil || benchACS == nil {
@@ -292,7 +330,7 @@ func main() {
 	}
 	ag := &agent.Agent{
 		EdgeID: cfg.EdgeID, TenantID: cfg.TenantID, Version: cfg.Version, GW: gw, Q: q, Collectors: collectors,
-		Jobs: verifier, Refresher: refresher, Bench: benchRunner, JobPollEvery: 15 * time.Second, HeartbeatEvery: cfg.HeartbeatEvery(), CollectEvery: cfg.CollectEvery(), Log: log,
+		Jobs: verifier, Queries: queryStore, Refresher: refresher, Bench: benchRunner, JobPollEvery: 15 * time.Second, HeartbeatEvery: cfg.HeartbeatEvery(), CollectEvery: cfg.CollectEvery(), Log: log,
 	}
 	log.Info("fibercore-edge starting", "version", cfg.Version, "edge_id", cfg.EdgeID, "collectors", len(collectors))
 	ag.Run(ctx)

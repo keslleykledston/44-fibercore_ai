@@ -447,3 +447,39 @@ func TestOLTDownTimesConfig(t *testing.T) {
 		t.Error("down_times without the validated profile must be refused")
 	}
 }
+
+func TestOLTQueryConfig(t *testing.T) {
+	cid := "8f14e45f-ceea-467a-9a36-4a1b5c3d2e10"
+	olt := func(extra string) string {
+		return `{"name":"OLT-A","vendor":"huawei","address":"10.0.0.1:22","username":"u","secret_file":"/s","host_key_sha256":"SHA256:abc","pon_ports":["0/0/14"],"profile":"huawei_ma56_r015"` + extra + `}`
+	}
+	mk := func(enabled bool, ops, olts string) string {
+		e := ""
+		if enabled {
+			e = `,"olt_query_enabled":true`
+		}
+		return `,"jobs_enabled":true,"job_public_key":"k","allowlist":["10.0.0.1:22"],"allowed_operations":[` + ops + `]` + e + `,"olts":[` + olts + `]`
+	}
+	if _, err := Load(write(t, 0o600, good(mk(true, `"collect","olt_query"`, olt(`,"cloud_id":"`+cid+`"`)))), "v"); err != nil {
+		t.Fatalf("valid: %v", err)
+	}
+	if _, err := Load(write(t, 0o600, good(mk(false, `"collect"`, olt(`,"cloud_id":"`+cid+`"`)))), "v"); err != nil {
+		t.Fatalf("a cloud_id alone enables nothing: %v", err)
+	}
+	for name, cfg := range map[string]string{
+		"no operation listed":  mk(true, `"collect"`, olt(`,"cloud_id":"`+cid+`"`)),
+		"no olt with cloud_id": mk(true, `"collect","olt_query"`, olt("")),
+		"upper-case id":        mk(true, `"collect","olt_query"`, olt(`,"cloud_id":"`+strings.ToUpper(cid)+`"`)),
+		"not a uuid":           mk(true, `"collect","olt_query"`, olt(`,"cloud_id":"OLT-A"`)),
+		"cloud_id on a generic profile": mk(true, `"collect","olt_query"`,
+			strings.Replace(olt(`,"cloud_id":"`+cid+`"`), `,"profile":"huawei_ma56_r015"`, "", 1)),
+		"duplicate id": mk(true, `"collect","olt_query"`, olt(`,"cloud_id":"`+cid+`"`)+","+strings.Replace(strings.Replace(olt(`,"cloud_id":"`+cid+`"`), "OLT-A", "OLT-B", 1), "10.0.0.1:22", "10.0.0.2:22", 1)),
+	} {
+		if _, err := Load(write(t, 0o600, good(cfg)), "v"); err == nil {
+			t.Errorf("%s: must be refused", name)
+		}
+	}
+	if _, err := Load(write(t, 0o600, good(`,"jobs_enabled":false,"olt_query_enabled":true,"allowed_operations":["olt_query"],"olts":[`+olt(`,"cloud_id":"`+cid+`"`)+`],"allowlist":["10.0.0.1:22"]`)), "v"); err == nil {
+		t.Error("olt_query_enabled without jobs_enabled must be refused")
+	}
+}

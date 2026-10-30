@@ -200,6 +200,16 @@ type QueryResult struct {
 // RunQuery executes one catalog query on a MA5600 R015 session: display version (identity, checked here), enable, config, [interface gpon 0/<slot>], the command, [quit]. It always
 // leaves an opened interface context (best effort) and never sends anything but the rendered command and those mode words.
 func (h HuaweiR015) RunQuery(ctx context.Context, s Session, queryID string, p Params) (QueryResult, error) {
+	return h.runQuery(ctx, s, queryID, p, []string{"enable", "config"})
+}
+
+// RunQueryInConfig is RunQuery for a session the collection of the same round already left in config mode (the R015 snapshot ends there, see
+// HuaweiR015.Snapshot): it does not send `enable`/`config` again, which a device already in config mode may refuse. Everything else is identical.
+func (h HuaweiR015) RunQueryInConfig(ctx context.Context, s Session, queryID string, p Params) (QueryResult, error) {
+	return h.runQuery(ctx, s, queryID, p, nil)
+}
+
+func (h HuaweiR015) runQuery(ctx context.Context, s Session, queryID string, p Params, modes []string) (QueryResult, error) {
 	q, ok := QueryByID(queryID)
 	if !ok {
 		return QueryResult{}, ErrUnknownQuery
@@ -229,7 +239,7 @@ func (h HuaweiR015) RunQuery(ctx context.Context, s Session, queryID string, p P
 		}
 		return out, nil
 	}
-	for _, c := range []string{"enable", "config"} {
+	for _, c := range modes {
 		if _, err := run(c); err != nil {
 			return QueryResult{}, err
 		}

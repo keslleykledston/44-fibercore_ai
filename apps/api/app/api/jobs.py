@@ -406,6 +406,7 @@ class ResultIn(BaseModel):
     state: Literal["accepted", "succeeded", "failed"]
     detail: str | None = Field(default=None, max_length=500)
     postcheck_ok: bool = False
+    data: dict | None = None  # olt_query only: the typed result (ADR-0029 item 4), checked against the query's closed shape
 
 
 @router.post("/v1/edge/jobs/{job_id}/result", status_code=204)
@@ -416,10 +417,21 @@ def job_result(
     if p.edge_id is None or row.edge_id != p.edge_id:
         raise HTTPException(403, "job belongs to another edge")
     to = {"accepted": "ACCEPTED", "failed": "FAILED"}.get(body.state) or ("SUCCEEDED" if body.postcheck_ok else "UNKNOWN")
+    detail, res = body.detail, {"detail": body.detail, "postcheck_ok": body.postcheck_ok}
+    if body.data is not None and row.operation != "olt_query":
+        raise HTTPException(422, "data only exists on olt_query results")
+    if row.operation == "olt_query" and to == "SUCCEEDED":
+        # a success needs the typed result, in the exact shape of THIS job's query; otherwise it is a failure, and nothing the Edge sent is stored as a result
+        if body.data is None or not olt_query.check_result(_row_params(row).get("query_id", ""), body.data):
+            to, detail = "FAILED", "invalid_result"
+            res = {"detail": detail, "postcheck_ok": False}
+        else:
+            res["data"] = body.data
+    elif row.operation == "olt_query" and body.data is not None:
+        raise HTTPException(422, "a typed result comes only with a success")
     if row.status == to:
         return  # idempotent: the Edge re-sends a durable result until acknowledged; the same outcome is a no-op
-    if not cas(conn, job_id, to, extra=", result = CAST(:res AS jsonb)",
-               params={"res": json.dumps({"detail": body.detail, "postcheck_ok": body.postcheck_ok})}):
+    if not cas(conn, job_id, to, extra=", result = CAST(:res AS jsonb)", params={"res": json.dumps(res)}):
         raise HTTPException(409, f"illegal transition from {row.status} to {to}")
     if to in ("FAILED", "UNKNOWN") and row.operation in bench.BENCH_OPS and _blocked_reason(row.operation):
         bench.lock_target(conn, row.target_id, f"bench write ended {to}")  # no retry, no new write until `bench-unlock`

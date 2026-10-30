@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18ea4-a632-7320-9675-2e8b07ab0bd2).
+[codex] Turn started (01a18ea4-a66c-7223-845e-11c04c2eecf4).
+[codex] Assistant message captured: Vou revisar o diff contra `main` e seguir os caminhos de retry/expiração e concorrência para ...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- agents/edg...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- agents/edg... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --unified=30 main...HEAD -- agents/edge/internal/agent/agent.go agent...
+[codex] Command completed: /bin/bash -lc "git diff --unified=30 main...HEAD -- agents/edge/internal/agent/agent.go agent... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/agent/agent.go | sed -n '325,360p'; nl -ba agents/...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/agent/agent.go | sed -n '325,360p'; nl -ba agents/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: o Edge marca resultados como report...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: o Edge marca resultados como reportados antes de o Cloud confirmá-los, permitindo perda irrecuperável de resultados em filas congestionadas ou após falhas persistentes de entrega.
+
+Findings:
+- [high] Resultado marcado como reportado antes da confirmação do Cloud (agents/edge/internal/agent/agent.go:345-350)
+  Após apenas enfileirar `job_result`, o código chama `MarkReported`, embora essa transição seja documentada como confirmação do Cloud. `Enqueue` pode remover itens antigos por limite de fila e não sinaliza essa remoção; além disso, falhas persistentes movem resultados para dead letter. Se a entrega não ocorrer, o relatório deixa de ser reenfileirado e a entrada `REPORTED` pode ser apagada após 24 horas. Isso pode perder permanentemente o resultado tipado ou o estado final do job. Marque como reportado somente após o ACK de entrega; vincule o ACK ao `job_id` e preserve/reemita a entrada até essa confirmação.
+  Recommendation: Adie `MarkReported` até o ACK do item `job_result` no Cloud e assegure que dead lettering ou descarte por backpressure não apague a única cópia recuperável do resultado.

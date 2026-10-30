@@ -37,6 +37,8 @@ type OLTSource struct {
 	Timeout time.Duration
 	// LastDown (CLI sources only): optional read-only SNMP side channel for the OLT's own "last down time" of the offline ONUs.
 	LastDown *LastDownSource
+	// CloudID is the OLT's id in the Cloud (olts[].cloud_id): what an `olt_query` names. Empty = this OLT takes no queries.
+	CloudID string
 	// DownTimes (CLI sources only): also read the OLT's own "last down time" of offline ONUs over the CLI session of the collection itself, at most
 	// MaxPerRound ONUs per collection. Needs a driver that implements olt.DownReader. Exclusive with LastDown.
 	DownTimes *DownTimesSource
@@ -105,6 +107,8 @@ type OLT struct {
 	// OnCollected, when set, is told how every attempt that reached the device ended (never called for skips): the only way an
 	// operator can see how long a real OLT takes and whether it answered. err is the collection error, never device output.
 	OnCollected func(name string, took time.Duration, items int, err error)
+	// Queries (ADR-0029), when set, runs the approved read-only queries of this OLT in the collection's own session, after the collection's commands.
+	Queries *Queries
 
 	mu      sync.Mutex
 	st      map[string]GuardState // device key -> pacing state
@@ -264,7 +268,13 @@ func (o *OLT) collectCLI(ctx context.Context, src OLTSource, observed string) ([
 	}
 	o.applyDownTimes(src, &snap)
 	o.applyLastDown(src, &snap)
-	return o.buildItems(src.Name, observed, id, level, snap, func(p olt.PON) bool { return ponComplete(level, raw, p) })
+	items, berr := o.buildItems(src.Name, observed, id, level, snap, func(p olt.PON) bool { return ponComplete(level, raw, p) })
+	if berr == nil && o.Queries != nil && src.CloudID != "" {
+		// the snapshot is final: the queries run on the same open session with their own allowlist and budget, inside what is LEFT of this collection's time box
+		// (never beyond it), and cannot change this round's outcome
+		o.Queries.Drain(ctx, src, raw, src.CloudID, fmt.Sprintf("%s@%d", src.Name, o.now().UnixNano()))
+	}
+	return items, berr
 }
 
 func (o *OLT) persistLocked() error {

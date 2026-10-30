@@ -14,6 +14,8 @@ import (
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/gateway"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/jobs"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/nbi"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/olt"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/oltquery"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/queue"
 )
 
@@ -25,14 +27,19 @@ type Agent struct {
 	GW                        *gateway.Client
 	Q                         *queue.Queue
 	Collectors                []collector.Collector
-	Jobs                      *jobs.Verifier // nil => job polling disabled
-	Refresher                 RefreshFunc    // nil => refresh jobs that name a device fail closed
-	Bench                     *bench.Runner  // nil => bench writes are refused (ADR-0030); its Lease is fed from every poll answer
+	Jobs                      *jobs.Verifier  // nil => job polling disabled
+	Refresher                 RefreshFunc     // nil => refresh jobs that name a device fail closed
+	Queries                   *oltquery.Store // nil => olt_query jobs are refused (ADR-0029); the queries run in the OLT collector's own session
+	Bench                     *bench.Runner   // nil => bench writes are refused (ADR-0030); its Lease is fed from every poll answer
 	JobPollEvery              time.Duration
 	HeartbeatEvery            time.Duration
 	CollectEvery              time.Duration
 	Log                       *slog.Logger
 }
+
+// queryResendAfter: a result handed to the delivery queue that is still not acknowledged after this long is handed over again (the delivery queue may have
+// dropped it under backpressure); repeats are harmless, the Cloud treats the same outcome as a no-op.
+const queryResendAfter = 10 * time.Minute
 
 // CollectOnce runs every collector and persists results BEFORE any network delivery (store-and-forward).
 // A failing collector is logged and never blocks the others. Returns an error when the round was incomplete
@@ -71,6 +78,7 @@ func (a *Agent) CollectOnce(ctx context.Context) error {
 	if d := a.Q.Dropped; d > 0 {
 		a.Log.Warn("queue backpressure dropped oldest snapshots", "total_dropped", d)
 	}
+	a.reportQueries(ctx) // queries that ran in this round's session
 	return errors.Join(errs...)
 }
 
@@ -91,12 +99,14 @@ func (a *Agent) Flush(ctx context.Context) {
 					a.Log.Error("ack failed; item will be redelivered (idempotent)", "id", it.ID, "err", err)
 					return
 				}
+				a.resultSettled(it.Kind, it.Payload, false)
 			case gateway.Rejected:
 				a.Log.Error("payload rejected by cloud; dead-lettering", "id", it.ID, "err", derr)
 				if err := a.Q.Dead(ctx, it, derr.Error()); err != nil {
 					a.Log.Error("dead-letter failed; stopping flush to retry later", "id", it.ID, "err", err)
 					return
 				}
+				a.resultSettled(it.Kind, it.Payload, true) // the Cloud refused it for good (the sent copy is in the dead-letter table): resending would only loop; marked as refused, not as acknowledged
 			default:
 				dead, _ := a.Q.Retry(ctx, it, errString(derr))
 				a.Log.Warn("delivery deferred", "id", it.ID, "err", derr, "dead_lettered", dead)
@@ -114,6 +124,7 @@ func (a *Agent) PollJob(ctx context.Context) {
 	if a.Jobs == nil {
 		return
 	}
+	a.reportQueries(ctx) // outcomes of queries that ran in a collection session, or that expired or lost their outcome, travel as they become known
 	raw, lease, err := a.GW.NextJob(ctx)
 	if err != nil {
 		a.Log.Warn("job poll failed", "err", err) // the lease already held simply runs out on its own
@@ -133,6 +144,11 @@ func (a *Agent) PollJob(ctx context.Context) {
 		return
 	}
 	a.Log.Info("job accepted", "job_id", env.JobID, "operation", env.Operation)
+	if jobs.QueryOps[env.Operation] {
+		a.reportJob(ctx, env.JobID, "accepted", "", false)
+		a.queueQuery(ctx, env)
+		return
+	}
 	// Outcomes go through the durable queue (ordered after the data they refer to, retried until the Cloud acknowledges;
 	// the Cloud treats repeats of the same outcome as no-ops). A lost response can no longer strand a job.
 	a.reportJob(ctx, env.JobID, "accepted", "", false)
@@ -280,5 +296,97 @@ func refreshReason(err error) string {
 		return "device unknown or data model unsupported"
 	default:
 		return "acs request failed"
+	}
+}
+
+// queueQuery puts a verified olt_query on the durable queue. NOTHING runs here: the query is executed later, inside a CLI session the OLT guard already
+// permits, after the collection's own commands (collector.Queries). The Cloud sees `accepted` now and the typed result (or the failure category) later.
+func (a *Agent) queueQuery(ctx context.Context, env *jobs.Envelope) {
+	if a.Queries == nil {
+		a.reportJob(ctx, env.JobID, "failed", "olt queries are not enabled on this edge", false)
+		a.Flush(ctx)
+		return
+	}
+	intent, err := olt.ParseIntent(env.Params) // verified once already; the queue only ever holds what the catalog accepts
+	exp, terr := time.Parse(time.RFC3339, env.ExpiresAt)
+	if err != nil || terr != nil {
+		a.reportJob(ctx, env.JobID, "failed", "query_not_accepted", false)
+		a.Flush(ctx)
+		return
+	}
+	if err := a.Queries.Enqueue(env.JobID, oltquery.Intent{QueryID: intent.Query.ID, OLTRef: intent.OLTRef, Slot: intent.Params.Slot, Port: intent.Params.Port, ONT: intent.Params.ONT}, exp); err != nil {
+		a.Log.Warn("olt query not queued", "job_id", env.JobID, "err", err)
+		reason := "queue_error"
+		if errors.Is(err, oltquery.ErrQueueFull) {
+			reason = "queue_full"
+		}
+		a.reportJob(ctx, env.JobID, "failed", reason, false)
+	}
+	a.Flush(ctx) // delivers the acceptance (or the refusal) now
+}
+
+// reportQueries hands the finished queries to the durable delivery queue. They are marked REPORTED only when the Cloud has answered for that job
+// (resultSettled), and are handed over again if no answer came within queryResendAfter. Re-sending is safe (the Cloud treats a repeated outcome as a
+// no-op) and never executes anything.
+func (a *Agent) reportQueries(ctx context.Context) {
+	if a.Queries == nil {
+		return
+	}
+	_, _ = a.Queries.ExpireDue() // waiting queries past their deadline end, and a claim nobody finished becomes UNKNOWN (no restart needed)
+	pending, err := a.Queries.PendingReports()
+	if err != nil {
+		a.Log.Warn("olt query queue unreadable; nothing reported", "err", err)
+		return
+	}
+	now := time.Now()
+	sent := 0
+	for _, e := range pending {
+		if !e.HandedAt.IsZero() && now.Sub(e.HandedAt) < queryResendAfter {
+			continue // already handed over (recorded on disk, so a restart does not hand it over again): REPORTED only when the Cloud answers (resultSettled)
+		}
+		m := map[string]any{"job_id": e.JobID}
+		switch e.State {
+		case oltquery.Executed:
+			m["state"], m["postcheck_ok"], m["detail"], m["data"] = "succeeded", true, "typed result", json.RawMessage(e.Result)
+		case oltquery.Unknown: // it may have reached the OLT: not a failure, not a success, never repeated
+			m["state"], m["postcheck_ok"], m["detail"] = "succeeded", false, "outcome unknown"
+		default:
+			m["state"], m["postcheck_ok"], m["detail"] = "failed", false, e.Reason
+		}
+		b, _ := json.Marshal(m)
+		if err := a.Q.Enqueue(ctx, "job_result", "", 0, b); err != nil {
+			a.Log.Error("could not persist olt query result", "job_id", e.JobID, "err", err)
+			return
+		}
+		if err := a.Queries.MarkHanded(e.JobID); err != nil {
+			a.Log.Warn("could not record the hand-over of an olt query result", "job_id", e.JobID, "err", err)
+		}
+		sent++
+	}
+	if sent > 0 {
+		a.Flush(ctx)
+	}
+}
+
+// resultSettled is told whenever a delivered (or finally rejected) job_result leaves the delivery queue: an olt_query result becomes REPORTED only now,
+// bound to its job id, so a result dropped or dead-lettered before the Cloud heard it is never forgotten.
+func (a *Agent) resultSettled(kind string, payload []byte, rejected bool) {
+	if kind != "job_result" || a.Queries == nil {
+		return
+	}
+	var m struct {
+		JobID string `json:"job_id"`
+		State string `json:"state"`
+	}
+	if json.Unmarshal(payload, &m) != nil || m.JobID == "" || m.State == "accepted" { // the acceptance is not the outcome
+		return
+	}
+	mark := a.Queries.MarkReported
+	if rejected {
+		a.Log.Warn("the Cloud refused an olt query result for good; kept locally and in the dead-letter table", "job_id", m.JobID)
+		mark = a.Queries.MarkRejected
+	}
+	if err := mark(m.JobID); err != nil && !errors.Is(err, oltquery.ErrBadState) { // ErrBadState = not an olt_query (a collect/bench result)
+		a.Log.Error("could not mark olt query reported", "job_id", m.JobID, "err", err)
 	}
 }

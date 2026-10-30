@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18ea5-bb90-7810-b878-729c0c17ebf8).
+[codex] Turn started (01a18ea5-bde3-7713-ba0d-f9f5be6fe4f5).
+[codex] Assistant message captured: Vou comparar a branch com `main` e seguir o ciclo de entrega/ACK e reenvio nos caminhos de fa...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=60 main...HEAD -- agents/edg...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=60 main...HEAD -- agents/edg... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/agent/agent.go | sed -n '286,390p'; nl -ba agents/...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/agent/agent.go | sed -n '286,390p'; nl -ba agents/... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/gateway/gateway.go | sed -n '100,160p'; nl -ba age...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/gateway/gateway.go | sed -n '100,160p'; nl -ba age... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: a sincronização só vive em memória; uma rei...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: a sincronização só vive em memória; uma reinicialização após enfileirar o resultado pode impedir o reenvio até a fila comum descartá-lo, deixando a consulta sem ACK permanente.
+
+Findings:
+- [high] Janela de reinício pode perder o resultado da consulta (agents/edge/internal/agent/agent.go:345-373)
+  `qInflight` registra o envio apenas em memória. Se o processo reiniciar depois de `Q.Enqueue` gravar o `job_result`, mas antes de `Flush` obter a resposta e chamar `MarkReported`, `Recover` deixa a consulta terminal pendente, porém `reportQueries` não reconstrói o horário de envio a partir da fila durável. Ele enfileira outra cópia imediatamente; se a fila comum ainda entregar uma cópia, `resultSettled` marca a consulta como REPORTED. Porém, se `Flush` não conseguir alcançar a nuvem e a fila comum descartar cópias por pressão, a consulta pode continuar sendo reenfileirada a cada ciclo, com o resultado original sem garantia de recuperação. Mais concretamente, a lógica de deduplicação/reenvio anunciada só cobre o processo atual: não há vínculo durável entre a consulta pendente e seu `job_result`. A fila comum também pode podar snapshots, e o teste de reinício deve cobrir o caso de entrega adiada e fila sob backpressure. Persistir o timestamp/id da entrega junto do estado da consulta ou localizar/deduplicar o resultado existente antes de criar outro mantém a recuperação determinística após restart.
+  Recommendation: Torne o controle de entrega durável: associe o resultado terminal ao item persistido na fila e atualize o estado da consulta somente quando esse item receber ACK/rejeição definitiva; ao reiniciar, reenvie ou aguarde com base nessa associação, sem criar cópias sem limite.
+
+Next steps:
+- Adicionar cobertura de reinício entre `Q.Enqueue` e resposta da nuvem, incluindo fila congestionada, e ajustar a coordenação durável antes do merge.
