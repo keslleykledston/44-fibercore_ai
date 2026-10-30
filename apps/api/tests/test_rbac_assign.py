@@ -211,6 +211,23 @@ def test_database_refuses_to_leave_a_workspace_without_an_active_isp_admin(migra
     make(t, "isp_admin")                       # with a second active administrator the first may go
     with migrated.begin() as c:
         c.execute(text("UPDATE tenant_memberships SET role='engineer' WHERE tenant_id=:t AND user_id=:u"), {"t": t, "u": only["id"]})
+    # deactivating the ACCOUNT of the only active administrator is refused too (same invariant), and a second administrator makes it possible
+    t4 = new_tenant()
+    solo = make(t4, "isp_admin")
+    with pytest.raises(DBAPIError):
+        with migrated.begin() as c:
+            c.execute(text("UPDATE users_global SET is_active=false WHERE id=:u"), {"u": solo["id"]})
+    second = make(t4, "isp_admin")
+    with migrated.begin() as c:
+        c.execute(text("UPDATE users_global SET is_active=false WHERE id=:u"), {"u": solo["id"]})
+    with pytest.raises(DBAPIError):   # now `second` is the last ACTIVE one
+        with migrated.begin() as c:
+            c.execute(text("UPDATE users_global SET is_active=false WHERE id=:u"), {"u": second["id"]})
+    with migrated.begin() as c:       # a member who is not an administrator, and reactivation, are never blocked
+        c.execute(text("UPDATE users_global SET is_active=true WHERE id=:u"), {"u": solo["id"]})
+    eng = make(t4, "engineer")
+    with migrated.begin() as c:
+        c.execute(text("UPDATE users_global SET is_active=false WHERE id=:u"), {"u": eng["id"]})
     # an INACTIVE second administrator does not count
     t3 = new_tenant()
     keep, ghost = make(t3, "isp_admin"), make(t3, "isp_admin")

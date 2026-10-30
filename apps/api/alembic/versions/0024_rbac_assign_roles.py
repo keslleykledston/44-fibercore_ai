@@ -72,6 +72,26 @@ def upgrade() -> None:
         END $$;
         CREATE TRIGGER keep_one_isp_admin BEFORE UPDATE OF role OR DELETE ON tenant_memberships
           FOR EACH ROW EXECUTE FUNCTION keep_one_isp_admin();
+
+        -- deactivating an ACCOUNT is the same thing as taking its administrator role away in every workspace it administers
+        CREATE FUNCTION keep_one_isp_admin_on_deactivate() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+        DECLARE ws uuid;
+        BEGIN
+          IF OLD.is_active AND NOT NEW.is_active THEN
+            FOR ws IN SELECT tenant_id FROM tenant_memberships WHERE user_id = OLD.id AND role = 'isp_admin' ORDER BY tenant_id LOOP
+              PERFORM pg_advisory_xact_lock(hashtextextended('tenant-roles:' || ws::text, 0));
+              IF NOT EXISTS (
+                SELECT 1 FROM tenant_memberships m JOIN users_global u ON u.id = m.user_id
+                 WHERE m.tenant_id = ws AND m.role = 'isp_admin' AND u.is_active AND m.user_id <> OLD.id
+              ) THEN
+                RAISE EXCEPTION 'a workspace must keep at least one active isp_admin' USING ERRCODE = 'check_violation';
+              END IF;
+            END LOOP;
+          END IF;
+          RETURN NEW;
+        END $$;
+        CREATE TRIGGER keep_one_isp_admin_on_deactivate BEFORE UPDATE OF is_active ON users_global
+          FOR EACH ROW EXECUTE FUNCTION keep_one_isp_admin_on_deactivate();
         """
     )
 
@@ -79,6 +99,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute(
         f"""
+        DROP TRIGGER IF EXISTS keep_one_isp_admin_on_deactivate ON users_global;
+        DROP FUNCTION IF EXISTS keep_one_isp_admin_on_deactivate();
         DROP TRIGGER IF EXISTS keep_one_isp_admin ON tenant_memberships;
         DROP FUNCTION IF EXISTS keep_one_isp_admin();
         DROP FUNCTION IF EXISTS app_change_member_role(uuid, text);
