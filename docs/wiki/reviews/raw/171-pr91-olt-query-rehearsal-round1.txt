@@ -1,0 +1,29 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18efa-0d24-7051-b0c9-25a18a96e150).
+[codex] Turn started (01a18efa-0f8c-7c73-9eee-9e0fcae954a1).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e rastrear os pontos do código que definem validade do enve...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/olt_query...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/olt_query... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=8 main...HEAD -- apps/api/app/core/olt_query....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=8 main...HEAD -- apps/api/app/core/olt_query.... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/olt_query.py | sed -n '64,74p'; nl -ba docs/wiki/TEST...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/olt_query.py | sed -n '64,74p'; nl -ba docs/wiki/TEST... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "ExpireDue|ExpiresAt|expired" agents/edge/internal/oltquery/store.go'
+[codex] Command completed: /bin/bash -lc 'rg -n "ExpireDue|ExpiresAt|expired" agents/edge/internal/oltquery/store.go' (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: 15 min não cobre o caminho documen...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: 15 min não cobre o caminho documentado de espera até a próxima coleta e execução só depois dos comandos da coleta; consultas podem expirar antes de rodar.
+
+Findings:
+- [medium] TTL não cobre a espera real até a execução (apps/api/app/core/olt_query.py:71)
+  O comentário equipara o TTL ao intervalo de 15 min entre coletas, mas a consulta roda depois dos comandos da coleta. Segundo a evidência, uma coleta leva cerca de 190 s; portanto, um pedido feito logo após uma janela pode chegar à próxima coleta já expirado ou expirar antes de `Drain` reivindicá-lo. O Edge encerra consultas enfileiradas vencidas em `ExpireDue` e só reivindica as que ainda não expiraram. O ensaio documentado esperou cerca de 8 min, então não verifica esse limite. Isso deixa uma faixa previsível de pedidos marcados como expirados, apesar do ajuste. Defina o TTL para cobrir intervalo entre coletas mais duração máxima da coleta e margem, ou documente e imponha um prazo máximo de espera compatível.
+  Recommendation: Ajuste o TTL para incluir o tempo até o início da próxima coleta, a execução dos comandos antes de `Drain` e uma margem operacional; inclua evidência ou cobertura para pedido imediatamente após uma janela.
+
+Next steps:
+- Corrigir o TTL ou o agendamento para que pedidos válidos não vençam antes da próxima oportunidade de execução.
+- Atualizar a documentação para refletir o limite de espera real e registrar evidência do caso de pior janela.

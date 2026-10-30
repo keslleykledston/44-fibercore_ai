@@ -414,3 +414,17 @@ def test_snapshots_follow_the_owner_after_a_transfer(client, seed, inv, olt, on,
     _cli(monkeypatch, migrated, "olt-transfer-finish", str(seed["A"]), olt)
     assert client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a2"), json=snap(inv, key="a2", name=name)).status_code == 202
     assert client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, "a1"), json=snap(inv, name=name)).status_code == 409   # the old owner is told
+
+
+def test_a_query_lives_long_enough_for_the_worst_collection_wait(client, seed, inv, olt, on, migrated):
+    from datetime import datetime, timedelta
+    h = hdr(client, "alice", seed, "A")
+    j = _ask(client, h, olt).json()["job"]
+    life = datetime.fromisoformat(j["expires_at"]) - datetime.now(j and datetime.fromisoformat(j["expires_at"]).tzinfo)
+    assert timedelta(minutes=21) < life <= timedelta(minutes=22)                 # a request right after a window: 15 min interval + the ~3 min collection, with margin
+    e = client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1")).json()
+    assert datetime.fromisoformat(e["expires_at"]) - datetime.fromisoformat(e["issued_at"]) <= timedelta(minutes=20)   # what the Edge accepts
+    other = client.post("/v1/jobs/preview", headers={**h, **_key()}, json={"operation": "collect", "target_id": olt, "params": {}}).json()["id"]
+    j2 = client.post(f"/v1/jobs/{other}/submit", headers=h).json()
+    assert datetime.fromisoformat(j2["expires_at"]) - datetime.now(datetime.fromisoformat(j2["expires_at"]).tzinfo) <= timedelta(minutes=15)   # other operations keep 15 min
+    assert client.post(f"/v1/jobs/{other}/cancel", headers=h).status_code == 200     # leave nothing behind for the other modules

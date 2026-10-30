@@ -68,7 +68,8 @@ ROLLOUT: frozenset[str] = frozenset({"olt.version", "olt.board"})
 EDGE_SUPPORT = True
 
 # an olt_query envelope is short-lived on its own: a copy that waits in transit or in a queue dies in minutes
-ENVELOPE_TTL = timedelta(minutes=10)
+ENVELOPE_TTL = timedelta(minutes=20)  # the Edge accepts at most 20 min (+1 s). Worst wait: a request right after a window waits the 15 min interval, then the ~3 min collection before the queries run (about 18.5 min)
+JOB_TTL = timedelta(minutes=22)       # the job outlives its envelope slightly, so the result of a query run at the very end is still accepted
 
 # quota (ADR-0029 item 5): requests per rolling hour. The Edge has its own, stricter, budget per OLT (5 per session, 20 per hour).
 USER_PER_HOUR = 10
