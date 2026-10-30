@@ -10,6 +10,6 @@ Escopo: SOMENTE a ONU de bancada (`0/0/14`, ONT-ID 10) na OLT Huawei MA5608T (fi
 - **Versões:** Edge `0.7.2-lab-…`; firmware do CPE `V5R019C10S350`; OLT Huawei MA5608T, firmware MA5600V800R015C00
 - **Aprovador:** o próprio solicitante, conta de serviço `isp_admin` de ensaio (`lab-bench-h4-…`, emenda "aprovação da bancada" do ADR-0030); autorização prévia `7e9ab27a-0e11-4138-b6a7-6468e4afa3ce` registrada pelo responsável (`--first-run`, janela 06:36:16–06:51:16 UTC)
 - **Horário:** aprovação 06:36:43 UTC, despacho 06:36:53, job `SUCCEEDED` 06:37:23 UTC (duração ≈ 30 s)
-- **Aceite do responsável:** PENDENTE — a registrar no chat da sessão antes de promover a `observed`
+- **Aceite do responsável:** dado em 2026-10-30 pelo chat da sessão ("aceito"), sobre o resultado acima
 
 `ont deactivate` e `ont activate` não pedem confirmação nesta OLT (ver `H1-olt-caracterizacao-2026-10-30.md`); por isso o ciclo sempre reativa.

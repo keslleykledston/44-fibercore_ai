@@ -104,3 +104,7 @@
 ## Estado do H4 (2026-10-30 ~05:50 UTC)
 - `ont reset 14 10` PEDE CONFIRMAÇÃO no CLI da OLT: o Edge parou (fail-closed), a ONU NÃO foi reiniciada (ACS: `_lastBoot` inalterado). Job `6c5d99e1-…` FAILED, alvo travado, autorização `fe3a6406-…` consumida. Próximo: capturar o texto exato da pergunta (sonda supervisionada, responde "n"), tratar UMA confirmação conhecida por comando, Codex, nova autorização do responsável.
 
+## Atualização 2026-10-30 (H4 feito)
+- H2 (`reboot_cpe`), H3 (`set_wifi_ssid`) e H4 (`onu_reset`, `onu_deactivate`) REAIS na ONT de bancada, todos `observed` e aceitos. Próximas autorizações são NORMAIS (sem `--first-run`).
+- Pendentes: (1) cooldown pós-falha da bancada configurável no Edge (hoje 15 min em memória; editar o arquivo não adianta sem reiniciar); (2) relatório de ONUs offline há X horas; (3) 2º modelo de ONU (`bench.olt` vira lista + emenda do ADR-0030); (4) `olt_query` (ADR-0029); (5) persistência do SSID após reboot (teste opcional).
+
