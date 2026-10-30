@@ -164,6 +164,8 @@ def main(argv: list[str] | None = None) -> None:
             from app.core import bench
             if a.operation not in bench.BENCH_OPS:
                 sys.exit(f"{a.operation!r} is not in the bench catalog: {sorted(bench.BENCH_OPS)}")
+            if not bench.EDGE_SUPPORT:
+                sys.exit("refused: no bench authorization can be recorded until the Edge-side bench gate exists and is tested (ADR-0030)")
             start, end = datetime.fromisoformat(a.start), datetime.fromisoformat(a.end)
             if start.tzinfo is None or end.tzinfo is None:
                 sys.exit("--from/--to need a time zone (e.g. 2026-10-30T14:00:00+00:00)")
@@ -189,6 +191,10 @@ def main(argv: list[str] | None = None) -> None:
             from app.core.features import FEATURES
             if a.feature not in FEATURES:
                 sys.exit(f"unknown feature {a.feature!r}; known: {', '.join(sorted(FEATURES))}")
+            if a.feature == "bench_writes" and a.state == "on":
+                from app.core import bench
+                if not bench.EDGE_SUPPORT:
+                    sys.exit("refused: bench_writes cannot be turned on until the Edge-side bench gate exists and is tested (ADR-0030)")
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
             if a.state == "default":
                 c.execute(text("DELETE FROM tenant_features WHERE tenant_id = :t AND feature = :f"), {"t": a.tenant_id, "f": a.feature})

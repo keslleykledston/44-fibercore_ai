@@ -23,7 +23,8 @@ PROFILE = ("Huawei Technologies Co., Ltd", "EG8145V5", "V5R019C10S350")
 
 
 @pytest.fixture(autouse=True)
-def _cleanup(migrated):
+def _cleanup(migrated, monkeypatch):
+    monkeypatch.setattr(bench, "EDGE_SUPPORT", True)  # the Edge side is a separate PR: tests that exercise the cloud gate assume it exists
     yield
     with migrated.begin() as c:
         c.execute(text("DELETE FROM tenant_features"))
@@ -347,3 +348,27 @@ def test_owner_cli_manages_targets_authorizations_locks_and_checks_the_evidence(
     cli.main(["capability-set", *base, "observed", *claim, "--evidence-file", str(good)])
     with migrated.begin() as c:
         assert c.execute(text("SELECT certification FROM device_capabilities WHERE operation = 'reboot_cpe'")).scalar() == "observed"
+
+
+def test_nothing_can_be_enabled_or_dispatched_while_the_edge_support_is_missing(client, seed, inv, migrated, admin_url, monkeypatch):
+    from app import cli
+
+    cpe, h = _full(client, seed, inv, migrated)  # flag, target, registry and authorization are all in place (written directly)
+    jid = _preview(client, h, cpe).json()["id"]
+    monkeypatch.setattr(bench, "EDGE_SUPPORT", False)
+    r = client.post(f"/v1/jobs/{jid}/submit", headers=h)
+    assert r.status_code == 409 and r.json()["detail"] == "operation_not_homologated"  # the bench path is invisible
+    monkeypatch.setenv("ADMIN_DATABASE_URL", admin_url)
+    with pytest.raises(SystemExit, match="cannot be turned on"):
+        cli.main(["feature-set", str(seed["A"]), "bench_writes", "on"])
+    with pytest.raises(SystemExit, match="no bench authorization can be recorded"):
+        cli.main(["bench-authorize", str(seed["A"]), "reboot_cpe", cpe, "--from", datetime.now(UTC).isoformat(),
+                  "--to", (datetime.now(UTC) + timedelta(minutes=5)).isoformat(), "--by", "r"])
+    cli.main(["feature-set", str(seed["A"]), "bench_writes", "off"])  # turning it OFF is always allowed
+    assert bench.EDGE_SUPPORT is False
+
+
+def test_the_shipped_default_keeps_the_edge_support_off():
+    import importlib
+
+    assert importlib.reload(bench).EDGE_SUPPORT is False  # flipped only by the PR that implements and tests the Edge side

@@ -32,6 +32,11 @@ class BenchOp:
 BENCH_OPS: dict[str, BenchOp] = {"reboot_cpe": BenchOp("tr069", frozenset())}
 from datetime import timedelta  # noqa: E402
 
+# Edge-side readiness (ADR-0030 items 2, 3 and 5): the Edge must confirm the device against the ACS, keep the durable claim and enforce
+# lease and the local bench list BEFORE a write can be enabled or dispatched. This stays False until that Edge code exists and is
+# tested; the server, the owner CLI and the tests all refuse while it is False (the tenant flag alone is not enough).
+EDGE_SUPPORT = False
+
 ENVELOPE_TTL = timedelta(minutes=2)  # a bench envelope lives at most this long after it is issued
 MIN_APPROVALS = 1  # a bench write always needs one approval from someone other than the requester
 
@@ -47,6 +52,8 @@ def gate(conn: Connection, tenant_id: UUID, job, *, mode: str) -> str | None:
     spec = BENCH_OPS.get(job.operation)
     if spec is None or job.target_type != "cpe":
         return "operation_not_homologated"
+    if not EDGE_SUPPORT:
+        return "edge_support_missing"
     if not features.enabled(conn, tenant_id, "bench_writes"):
         return "bench_writes_disabled"
     if set(json.loads(job.params) if isinstance(job.params, str) else (job.params or {})) - spec.params:

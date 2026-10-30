@@ -79,7 +79,8 @@ def _write_gate(conn: Connection, tenant_id: UUID, row, mode: str) -> str | None
     if reason is None or row.operation not in bench.BENCH_OPS:
         return reason
     refusal = bench.gate(conn, tenant_id, row, mode=mode)
-    return "operation_not_homologated" if refusal == "bench_writes_disabled" else refusal  # flag off: the bench path is not visible
+    # flag off, or no Edge support yet: the bench path is not visible, the global reason stays
+    return "operation_not_homologated" if refusal in ("bench_writes_disabled", "edge_support_missing") else refusal
 
 
 def cas(conn: Connection, job_id: UUID, to: str, *, extra: str = "", params: dict | None = None) -> bool:

@@ -77,5 +77,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP INDEX IF EXISTS jobs_one_per_authorization; ALTER TABLE jobs DROP COLUMN IF EXISTS authorization_id, DROP COLUMN IF EXISTS owner_epoch;"
-               " DROP TABLE IF EXISTS bench_authorizations; DROP TABLE IF EXISTS bench_target_epochs; DROP TABLE IF EXISTS bench_targets;")
+    op.execute(
+        "DROP INDEX IF EXISTS jobs_one_per_authorization;"
+        " ALTER TABLE jobs DROP COLUMN IF EXISTS authorization_id, DROP COLUMN IF EXISTS owner_epoch;"
+        " DROP TABLE IF EXISTS bench_authorizations; DROP TABLE IF EXISTS bench_target_epochs; DROP TABLE IF EXISTS bench_targets;"
+    )
