@@ -421,7 +421,8 @@ def change_password(body: PasswordChangeIn, request: Request, authorization: str
     with scoped_connection(get_engine()) as conn:
         conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{uid}"})
         email = _reauth(conn, request, settings, uid, body.current_password)
-        name = conn.execute(text("SELECT display_name FROM users_global WHERE id = :u"), {"u": uid}).scalar()
+        row = conn.execute(text("SELECT display_name, password_hash FROM users_global WHERE id = :u"), {"u": uid}).one()
+        name, verified_hash = row.display_name, row.password_hash
     if email is None:
         raise HTTPException(401, "invalid credentials")
     if body.new_password == body.current_password:
@@ -429,5 +430,6 @@ def change_password(body: PasswordChangeIn, request: Request, authorization: str
     reason = check_password(body.new_password, email, name)
     if reason:
         raise HTTPException(422, reason)
-    res = _call("SELECT app_password_change(:u, :h)", {"u": uid, "h": hash_secret(body.new_password)})
+    # compare-and-swap in the database: only if the stored password is still the one just verified (two changes racing cannot both win)
+    res = _call("SELECT app_password_change(:u, :old, :h)", {"u": uid, "old": verified_hash, "h": hash_secret(body.new_password)})
     return {"status": "changed", "revoked_sessions": res["revoked_sessions"]}

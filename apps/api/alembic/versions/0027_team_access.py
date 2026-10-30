@@ -235,14 +235,16 @@ def upgrade() -> None:
         END $$;
 
         -- ---- a person changes THEIR OWN password (the API verified the current one) -------------------------------------
-        CREATE FUNCTION app_password_change(p_user uuid, p_new_hash text) RETURNS jsonb
+        CREATE FUNCTION app_password_change(p_user uuid, p_expected_hash text, p_new_hash text) RETURNS jsonb
         LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
         DECLARE revoked int;
         BEGIN
           IF p_new_hash IS NULL OR length(p_new_hash) < 20 THEN RAISE EXCEPTION 'details_required'; END IF;
           PERFORM pg_advisory_xact_lock(hashtextextended('account:' || p_user::text, 0));
-          UPDATE users_global SET password_hash = p_new_hash, tokens_valid_after = clock_timestamp() WHERE id = p_user AND is_active;
-          IF NOT FOUND THEN RAISE EXCEPTION 'member_not_found'; END IF;
+          -- compare-and-swap: the password the API VERIFIED must still be the stored one, or a concurrent change already happened
+          UPDATE users_global SET password_hash = p_new_hash, tokens_valid_after = clock_timestamp()
+           WHERE id = p_user AND is_active AND password_hash IS NOT DISTINCT FROM p_expected_hash;
+          IF NOT FOUND THEN RAISE EXCEPTION 'password_changed'; END IF;
           UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = p_user AND revoked_at IS NULL;
           GET DIAGNOSTICS revoked = ROW_COUNT;
           INSERT INTO audit_log (tenant_id, actor_id, action, target_type, target_id, evidence_redacted)
@@ -257,14 +259,14 @@ def upgrade() -> None:
         REVOKE ALL ON FUNCTION app_invite_lookup(bytea) FROM PUBLIC;
         REVOKE ALL ON FUNCTION app_invite_accept(bytea, text, text, boolean) FROM PUBLIC;
         REVOKE ALL ON FUNCTION app_member_remove(uuid, uuid, uuid, text) FROM PUBLIC;
-        REVOKE ALL ON FUNCTION app_password_change(uuid, text) FROM PUBLIC;
+        REVOKE ALL ON FUNCTION app_password_change(uuid, text, text) FROM PUBLIC;
         GRANT EXECUTE ON FUNCTION app_invite_create(uuid, uuid, text, text, text, bytea, int) TO fibercore_rbac;
         GRANT EXECUTE ON FUNCTION app_invite_revoke(uuid, uuid, uuid) TO fibercore_rbac;
         GRANT EXECUTE ON FUNCTION app_reset_create(uuid, uuid, uuid, bytea, int) TO fibercore_rbac;
         GRANT EXECUTE ON FUNCTION app_invite_lookup(bytea) TO fibercore_rbac;
         GRANT EXECUTE ON FUNCTION app_invite_accept(bytea, text, text, boolean) TO fibercore_rbac;
         GRANT EXECUTE ON FUNCTION app_member_remove(uuid, uuid, uuid, text) TO fibercore_rbac;
-        GRANT EXECUTE ON FUNCTION app_password_change(uuid, text) TO fibercore_rbac;
+        GRANT EXECUTE ON FUNCTION app_password_change(uuid, text, text) TO fibercore_rbac;
         """
     )
 
@@ -272,7 +274,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute(
         """
-        DROP FUNCTION IF EXISTS app_password_change(uuid, text);
+        DROP FUNCTION IF EXISTS app_password_change(uuid, text, text);
         DROP FUNCTION IF EXISTS app_member_remove(uuid, uuid, uuid, text);
         DROP FUNCTION IF EXISTS app_invite_accept(bytea, text, text, boolean);
         DROP FUNCTION IF EXISTS app_invite_lookup(bytea);

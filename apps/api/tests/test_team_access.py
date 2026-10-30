@@ -286,7 +286,7 @@ def test_the_application_role_cannot_do_any_of_it(client, make, tenant, migrated
     admin, h = _admin(client, make, tenant)
     inv = _invite(client, h).json()
     for stmt in ("SELECT app_invite_create(:u, :t, 'a@example.com', NULL, 'engineer', decode(repeat('ab',32),'hex'), 24)", "SELECT app_member_remove(:u, :t, :u, 'xxx')",
-                 "SELECT app_invite_accept(decode(repeat('ab',32),'hex'), 'n', 'h', false)", "SELECT app_password_change(:u, repeat('x', 30))",
+                 "SELECT app_invite_accept(decode(repeat('ab',32),'hex'), 'n', 'h', false)", "SELECT app_password_change(:u, NULL, repeat('x', 30))",
                  "INSERT INTO member_invites (tenant_id, purpose, email, role, token_hash, created_by, expires_at) VALUES (:t,'invite','x@example.com','isp_admin',decode(repeat('cd',32),'hex'),:u, now() + interval '1 hour')",
                  "UPDATE member_invites SET revoked_at = NULL", "DELETE FROM member_invites", "INSERT INTO tenant_memberships(tenant_id, user_id, role) VALUES (:t,:u,'isp_admin')"):
         with pytest.raises(DBAPIError), migrated.begin() as c:
@@ -324,3 +324,32 @@ def test_activity_reads_as_facts_and_hides_addresses_from_those_who_do_not_read_
     assert seen and all(i["email"] is None for i in seen)
     assert client.get("/v1/team/activity", headers=_h(_tok(client, make("support", tenant)), tenant)).status_code == 403
     assert ana["access_token"]
+
+
+def test_two_password_changes_racing_on_the_same_current_password_cannot_both_win(client, make, tenant):
+    import threading
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    for _ in range(6):   # a race is probabilistic: several rounds make a missing compare-and-swap fail reliably
+        who = make("support", tenant)
+        toks = [_tok(client, who) for _ in range(2)]
+        out: list = []
+        gate = threading.Barrier(2)
+
+        def go(i):
+            c = TestClient(app, raise_server_exceptions=False)
+            gate.wait()
+            out.append(c.post("/v1/auth/password", headers={"Authorization": f"Bearer {toks[i]}"},
+                              json={"current_password": PW, "new_password": f"senha numero {i} bem longa 2026"}))
+
+        ts = [threading.Thread(target=go, args=(i,)) for i in range(2)]
+        [t.start() for t in ts]
+        [t.join() for t in ts]
+        assert len(out) == 2 and sorted(r.status_code for r in out) in ([200, 401], [200, 409]), [(r.status_code, r.text) for r in out]
+        winner = [i for i, r in enumerate(out) if r.status_code == 200]
+        assert len(winner) == 1
+        # the account keeps exactly ONE of the two new passwords: the one of the request that won
+        logins = [client.post("/v1/auth/token", json={"email": who["email"], "password": f"senha numero {i} bem longa 2026"}).status_code for i in range(2)]
+        assert sorted(logins) == [200, 401]

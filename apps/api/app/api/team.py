@@ -29,7 +29,7 @@ INVITE_HOURS = 72
 RESET_HOURS = 24
 STATUS = {
     "role_cannot_grant": 403, "role_not_assignable": 403, "target_role_protected": 403, "cannot_remove_self": 403, "use_change_password": 403,
-    "member_not_found": 404, "invite_not_found": 404,
+    "member_not_found": 404, "invite_not_found": 404, "password_changed": 409,
     "already_member": 409, "invite_not_open": 409, "last_isp_admin": 409, "account_shared": 409, "account_exists": 409, "account_inactive": 409,
     "invite_used": 409, "invite_revoked": 409, "invite_expired": 410, "invite_invalid": 404, "reset_not_allowed": 409,
     "email_invalid": 422, "name_invalid": 422, "validity_invalid": 422, "reason_required": 422, "details_required": 422,
