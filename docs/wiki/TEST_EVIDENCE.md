@@ -284,3 +284,6 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - Registro: `onu_reset` e `onu_deactivate` (protocolo `olt`, perfil huawei MA5608T MA5600V800R015C00) promovidos a `observed` com as evidências `H4-onu_reset-2026-10-30.md` e `H4-onu_deactivate-2026-10-30.md` (aceitas pelo responsável). `certified` NÃO concedida.
 - Quatro tentativas até o primeiro `SUCCEEDED` do reset (duas recusadas pelo guard da OLT antes de enviar, uma parada na confirmação, uma com bug do eco da resposta, corrigido no PR 66): ver o histórico na evidência.
 
+## 2026-10-30 — relatório de ONUs offline há mais de X horas (PR 68)
+- `make test-api` 398 passed; validate PASS. Provas por teste: ordenação (mais antigas primeiro), base explícita (`transition_observed` / `since_last_online`), ONU nunca vista online só contada, filtros por OLT e PON (padrão estrito), dado velho (ONU ou OLT, inclusive horário ausente) fora e contado antes do limit, isolamento entre tenants, CSV com fórmulas neutralizadas e cabeçalhos de exclusão, sem dado pessoal.
+
