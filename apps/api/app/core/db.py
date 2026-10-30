@@ -23,6 +23,13 @@ def get_engine() -> Engine:
     return create_engine(_url(dsn), pool_pre_ping=True, pool_size=5, max_overflow=5)
 
 
+@lru_cache
+def get_rbac_engine() -> Engine | None:
+    """Connection of the dedicated `fibercore_rbac` role (ADR-0031); None when not configured, so the caller can fail closed."""
+    dsn = get_settings().rbac_database_url
+    return create_engine(_url(dsn), pool_pre_ping=True, pool_size=2, max_overflow=2) if dsn else None
+
+
 def make_engine(dsn: str) -> Engine:
     return create_engine(_url(dsn), pool_pre_ping=True)
 

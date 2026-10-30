@@ -1,6 +1,14 @@
-"""RBAC delivery 2 (ADR-0031): the `access_manager` role; the ONLY way for the runtime role to change a membership role is a narrow SECURITY DEFINER function
-that re-validates the actor and the transition in SQL (no column grant); and a trigger so a workspace can never be left without an `isp_admin`.
-The API checks the same rules first (clear error codes, per-workspace lock); the database is the backstop."""
+"""RBAC delivery 2 (ADR-0031): the `access_manager` role and the ONLY way to change a membership role.
+
+* A dedicated database role `fibercore_rbac` (own password, like `fibercore_worker`) is the only one that may EXECUTE `app_change_member_role`, a
+  SECURITY DEFINER function that validates the actor and the transition in SQL and does the whole change in ONE transaction (role, session revocation,
+  audit, outbox). The runtime role `fibercore_app` has no UPDATE on the column and no EXECUTE on the function, so SQL that reaches the database through
+  the application's normal connection (injection) cannot change a role, even by forging the session settings that RLS reads.
+* Triggers keep at least one active `isp_admin` in every workspace (role change, delete, account deactivation), serialised by the per-workspace lock.
+"""
+import os
+import re
+
 from alembic import op
 
 revision = "0024"
@@ -12,9 +20,25 @@ OLD = "('isp_admin','engineer','noc_n2','noc_n1','support','auditor','platform_s
 NEW = "('isp_admin','access_manager','engineer','noc_n2','noc_n1','support','auditor','platform_support')"
 
 
+def _pw() -> str:
+    pw = os.environ.get("RBAC_DB_PASSWORD", "")
+    if len(pw) < 16 or not re.fullmatch(r"[A-Za-z0-9_.\-]+", pw):
+        raise RuntimeError("RBAC_DB_PASSWORD must be >=16 chars of [A-Za-z0-9_.-]")
+    return pw
+
+
 def upgrade() -> None:
-    op.execute(
+    pw = _pw()
+    op.execute(  # noqa: S608 - pw validated by the regex above
         f"""
+        DO $$ BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fibercore_rbac') THEN
+            CREATE ROLE fibercore_rbac LOGIN;
+          END IF;
+        END $$;
+        ALTER ROLE fibercore_rbac LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD '{pw}';
+        GRANT USAGE ON SCHEMA public TO fibercore_rbac;
+
         ALTER TABLE tenant_memberships DROP CONSTRAINT tenant_memberships_role_check;
         ALTER TABLE tenant_memberships ADD CONSTRAINT tenant_memberships_role_check CHECK (role IN {NEW});
 
@@ -26,32 +50,45 @@ def upgrade() -> None:
         CREATE TABLE rbac_protected_roles (role text PRIMARY KEY);
         INSERT INTO rbac_protected_roles VALUES ('isp_admin'),('access_manager'),('platform_support'),('edge_agent');
 
-        CREATE FUNCTION app_change_member_role(p_target uuid, p_new text) RETURNS text
+        CREATE FUNCTION app_change_member_role(p_actor uuid, p_tenant uuid, p_target uuid, p_new text, p_reason text) RETURNS jsonb
         LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
-        DECLARE
-          t uuid := NULLIF(current_setting('app.tenant_id', true), '')::uuid;
-          a uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
-          actor_role text; old_role text;
+        DECLARE actor_role text; old_role text; revoked int; others int;
         BEGIN
-          IF t IS NULL OR a IS NULL OR a = p_target THEN
-            RAISE EXCEPTION 'role change refused' USING ERRCODE = 'insufficient_privilege';
+          PERFORM set_config('app.tenant_id', p_tenant::text, true);   -- RLS context for an owner that is not a superuser
+          PERFORM set_config('app.user_id', p_actor::text, true);
+          IF p_actor = p_target THEN RAISE EXCEPTION 'cannot_change_own_role'; END IF;
+          IF p_reason IS NULL OR length(btrim(p_reason)) NOT BETWEEN 3 AND 200 THEN RAISE EXCEPTION 'reason_required'; END IF;
+          -- lock order, the same for every caller: 1) the target's ACCOUNT row, 2) the workspace lock, 3) the account advisory lock, 4) the membership row
+          PERFORM 1 FROM users_global WHERE id = p_target AND is_active FOR UPDATE;
+          IF NOT FOUND THEN RAISE EXCEPTION 'member_not_found'; END IF;
+          PERFORM pg_advisory_xact_lock(hashtextextended('tenant-roles:' || p_tenant::text, 0));
+          PERFORM pg_advisory_xact_lock(hashtextextended('account:' || p_target::text, 0));
+          SELECT role INTO old_role FROM tenant_memberships WHERE tenant_id = p_tenant AND user_id = p_target FOR UPDATE;
+          IF old_role IS NULL THEN RAISE EXCEPTION 'member_not_found'; END IF;
+          SELECT role INTO actor_role FROM tenant_memberships WHERE tenant_id = p_tenant AND user_id = p_actor;
+          IF actor_role IS NULL OR NOT EXISTS (SELECT 1 FROM rbac_role_grants WHERE granter = actor_role) THEN RAISE EXCEPTION 'role_cannot_grant'; END IF;
+          IF NOT EXISTS (SELECT 1 FROM rbac_role_grants WHERE granter = actor_role AND assignable = p_new) THEN RAISE EXCEPTION 'role_not_assignable'; END IF;
+          IF actor_role <> 'isp_admin' AND EXISTS (SELECT 1 FROM rbac_protected_roles WHERE role = old_role) THEN RAISE EXCEPTION 'target_role_protected'; END IF;
+          IF old_role = p_new THEN RAISE EXCEPTION 'role_unchanged'; END IF;
+          IF old_role = 'isp_admin' THEN
+            SELECT count(*) INTO others FROM tenant_memberships m JOIN users_global u ON u.id = m.user_id
+             WHERE m.tenant_id = p_tenant AND m.role = 'isp_admin' AND u.is_active AND m.user_id <> p_target;
+            IF others = 0 THEN RAISE EXCEPTION 'last_isp_admin'; END IF;
           END IF;
-          -- lock order, the same as the API and the deactivation trigger: 1) the target's ACCOUNT row, 2) the workspace lock
-          PERFORM 1 FROM users_global WHERE id = p_target FOR UPDATE;
-          -- the SAME per-workspace lock the API takes: direct callers of this function serialise too (two administrators cannot demote each other at once)
-          PERFORM pg_advisory_xact_lock(hashtextextended('tenant-roles:' || t::text, 0));
-          SELECT role INTO actor_role FROM tenant_memberships WHERE tenant_id = t AND user_id = a;
-          SELECT role INTO old_role FROM tenant_memberships WHERE tenant_id = t AND user_id = p_target FOR UPDATE;
-          IF actor_role IS NULL OR old_role IS NULL OR old_role = p_new
-             OR NOT EXISTS (SELECT 1 FROM rbac_role_grants WHERE granter = actor_role AND assignable = p_new)
-             OR (actor_role <> 'isp_admin' AND EXISTS (SELECT 1 FROM rbac_protected_roles WHERE role = old_role)) THEN
-            RAISE EXCEPTION 'role change refused' USING ERRCODE = 'insufficient_privilege';
-          END IF;
-          UPDATE tenant_memberships SET role = p_new WHERE tenant_id = t AND user_id = p_target;
-          RETURN old_role;
+          UPDATE tenant_memberships SET role = p_new WHERE tenant_id = p_tenant AND user_id = p_target;
+          -- the member's old tokens (they carry the old role's power) and refresh tokens end now; sessions belong to the ACCOUNT, so this reaches every workspace
+          UPDATE users_global SET tokens_valid_after = clock_timestamp() WHERE id = p_target;
+          UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = p_target AND revoked_at IS NULL;
+          GET DIAGNOSTICS revoked = ROW_COUNT;
+          INSERT INTO audit_log (tenant_id, actor_id, action, target_type, target_id, evidence_redacted)
+            VALUES (p_tenant, p_actor, 'member.role_change', 'user', p_target::text,
+                    jsonb_build_object('from', old_role, 'to', p_new, 'reason', btrim(p_reason), 'revoked_sessions', revoked));
+          INSERT INTO events_outbox (tenant_id, aggregate_type, aggregate_id, event_type, schema_version, payload)
+            VALUES (p_tenant, 'user', p_target, 'member.role_change', '1', jsonb_build_object('by', p_actor, 'from', old_role, 'to', p_new));
+          RETURN jsonb_build_object('previous_role', old_role, 'revoked_sessions', revoked);
         END $$;
-        REVOKE ALL ON FUNCTION app_change_member_role(uuid, text) FROM PUBLIC;
-        GRANT EXECUTE ON FUNCTION app_change_member_role(uuid, text) TO fibercore_app;
+        REVOKE ALL ON FUNCTION app_change_member_role(uuid, uuid, uuid, text, text) FROM PUBLIC;
+        GRANT EXECUTE ON FUNCTION app_change_member_role(uuid, uuid, uuid, text, text) TO fibercore_rbac;
 
         CREATE FUNCTION keep_one_isp_admin() RETURNS trigger LANGUAGE plpgsql AS $$
         DECLARE leaving boolean;
@@ -105,10 +142,11 @@ def downgrade() -> None:
         DROP FUNCTION IF EXISTS keep_one_isp_admin_on_deactivate();
         DROP TRIGGER IF EXISTS keep_one_isp_admin ON tenant_memberships;
         DROP FUNCTION IF EXISTS keep_one_isp_admin();
-        DROP FUNCTION IF EXISTS app_change_member_role(uuid, text);
+        DROP FUNCTION IF EXISTS app_change_member_role(uuid, uuid, uuid, text, text);
         DROP TABLE IF EXISTS rbac_role_grants, rbac_protected_roles;
         UPDATE tenant_memberships SET role = 'noc_n1' WHERE role = 'access_manager';
         ALTER TABLE tenant_memberships DROP CONSTRAINT tenant_memberships_role_check;
         ALTER TABLE tenant_memberships ADD CONSTRAINT tenant_memberships_role_check CHECK (role IN {OLD});
+        REVOKE USAGE ON SCHEMA public FROM fibercore_rbac;
         """
     )

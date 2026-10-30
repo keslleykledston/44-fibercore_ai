@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     environment: str = "dev"
     # Runtime role: non-owner, NO BYPASSRLS. Migrations use ADMIN_DATABASE_URL instead.
     database_url: str = ""
+    rbac_database_url: str = ""  # role fibercore_rbac: the ONLY connection that may change a membership role (empty => role changes answer 503)
     module_manifest: Path = Path("/app/configs/modules.yaml")
     nats_monitor_url: str = ""
     jwt_secret: str = Field(default="", repr=False)

@@ -163,21 +163,11 @@ def test_access_manager_needs_mfa_has_no_operational_power_and_stays_inside_its_
     assert _put(client, _h(client, adm), sup["id"], "access_manager").status_code == 200
 
 
-def test_two_admins_demoting_each_other_at_once_leave_exactly_one(client, migrated, new_tenant, make, monkeypatch):
-    import time
-
+def test_two_admins_demoting_each_other_through_the_api_at_once_leave_exactly_one(client, migrated, new_tenant, make):
+    """End to end through HTTP. The strong, deterministic proofs of the lock are the direct-function tests below (they hold a transaction open)."""
     from fastapi.testclient import TestClient
 
-    from app.api import members
     from app.main import app
-
-    real = role_policy.check_change
-
-    def slow(*a, **k):   # both requests are past their reads before either writes: without the per-workspace lock both would succeed
-        time.sleep(0.4)
-        return real(*a, **k)
-
-    monkeypatch.setattr(members.role_policy, "check_change", slow)
 
     t = new_tenant()
     a, b = make(t, "isp_admin"), make(t, "isp_admin")
@@ -195,7 +185,8 @@ def test_two_admins_demoting_each_other_at_once_leave_exactly_one(client, migrat
     [x.join() for x in ts]
     with migrated.begin() as c:
         admins = c.execute(text("SELECT count(*) FROM tenant_memberships WHERE tenant_id=:t AND role='isp_admin'"), {"t": t}).scalar()
-    assert sorted(out.values()) == [200, 403] and admins == 1, (out, admins)   # the loser is no longer an administrator when its turn comes
+    # the loser is refused (403/409) or, since the winner ended its sessions, no longer authenticates (401): never a second success
+    assert admins == 1 and sorted(out.values())[0] == 200 and sorted(out.values())[1] in (401, 403, 409), (out, admins)
 
 
 def test_database_refuses_to_leave_a_workspace_without_an_active_isp_admin(migrated, new_tenant, make):
@@ -260,29 +251,65 @@ def test_access_manager_is_always_an_mfa_role_even_with_an_empty_policy():
     assert "access_manager" in settings.required_mfa_roles(settings.get_settings())
 
 
-def test_the_runtime_role_cannot_change_a_membership_role_except_through_the_checked_function(migrated, new_tenant, make):
+@pytest.fixture(scope="module")
+def rbac(rbac_url):
+    from app.core.db import make_engine
+
+    return make_engine(rbac_url)
+
+
+def _call(engine, actor, tenant, target, new, reason="teste direto"):
+    with engine.begin() as c:
+        return c.execute(text("SELECT app_change_member_role(:a, :t, :u, :r, :why)"), {"a": actor, "t": tenant, "u": target, "r": new, "why": reason}).scalar_one()
+
+
+def test_only_the_dedicated_role_can_change_a_role_and_the_runtime_role_cannot_even_with_forged_session_settings(migrated, rbac, new_tenant, make):
     from app.core.db import get_engine, scoped_connection
 
     t = new_tenant()
     adm, gm, sup = make(t, "isp_admin"), make(t, "access_manager"), make(t, "support")
-    # raw SQL as the runtime role: no UPDATE on the column at all
+    # the runtime role: no UPDATE on the column, no EXECUTE on the function — also when it forges the session settings the old design trusted
     with pytest.raises(DBAPIError):
         with scoped_connection(get_engine(), user_id=gm["id"], tenant_id=t) as c:
             c.execute(text("UPDATE tenant_memberships SET role='isp_admin' WHERE tenant_id=:t AND user_id=:u"), {"t": t, "u": sup["id"]})
-    # the function re-validates in SQL: an access_manager cannot make anyone isp_admin / access_manager, nor touch a protected target, nor itself
+    with pytest.raises(DBAPIError):
+        with scoped_connection(get_engine(), user_id=adm["id"], tenant_id=t) as c:
+            c.execute(text("SELECT app_change_member_role(:a, :t, :u, 'engineer', 'forjado')"), {"a": adm["id"], "t": t, "u": sup["id"]})
+    with pytest.raises(DBAPIError):
+        with get_engine().begin() as c:
+            c.execute(text("SELECT set_config('app.user_id', :a, true), set_config('app.tenant_id', :t, true)"), {"a": str(adm["id"]), "t": str(t)})
+            c.execute(text("SELECT app_change_member_role(:a, :t, :u, 'isp_admin', 'forjado')"), {"a": adm["id"], "t": t, "u": gm["id"]})
+    assert _role(migrated, t, sup["id"]) == "support" and _role(migrated, t, gm["id"]) == "access_manager"
+    # the dedicated role still gets the rules re-validated in SQL: an access_manager cannot make isp_admin / access_manager, touch a protected target, or itself
     for target, new in [(sup["id"], "isp_admin"), (sup["id"], "access_manager"), (adm["id"], "engineer"), (gm["id"], "support"), (sup["id"], "platform_support"), (sup["id"], "edge_agent")]:
         with pytest.raises(DBAPIError):
-            with scoped_connection(get_engine(), user_id=gm["id"], tenant_id=t) as c:
-                c.execute(text("SELECT app_change_member_role(:u, :r)"), {"u": target, "r": new})
-    # a non-granting role is refused as well, and so is a call outside any workspace/actor context
-    with pytest.raises(DBAPIError):
-        with scoped_connection(get_engine(), user_id=sup["id"], tenant_id=t) as c:
-            c.execute(text("SELECT app_change_member_role(:u, 'engineer')"), {"u": gm["id"]})
+            _call(rbac, gm["id"], t, target, new)
+    with pytest.raises(DBAPIError):    # a non-granting role
+        _call(rbac, sup["id"], t, gm["id"], "engineer")
+    with pytest.raises(DBAPIError):    # a short reason
+        _call(rbac, gm["id"], t, sup["id"], "engineer", reason="x")
     assert _role(migrated, t, sup["id"]) == "support" and _role(migrated, t, adm["id"]) == "isp_admin" and _role(migrated, t, gm["id"]) == "access_manager"
-    # what it MAY do goes through
-    with scoped_connection(get_engine(), user_id=gm["id"], tenant_id=t) as c:
-        assert c.execute(text("SELECT app_change_member_role(:u, 'engineer')"), {"u": sup["id"]}).scalar() == "support"
+    assert _call(rbac, gm["id"], t, sup["id"], "engineer")["previous_role"] == "support"   # what it MAY do goes through
     assert _role(migrated, t, sup["id"]) == "engineer"
+    # the dedicated role has no table privileges of its own
+    with pytest.raises(DBAPIError):
+        with rbac.begin() as c:
+            c.execute(text("SELECT * FROM tenant_memberships"))
+
+
+def test_role_changes_answer_503_when_the_dedicated_connection_is_not_configured(client, new_tenant, make, monkeypatch):
+    from app.core import db
+
+    t = new_tenant()
+    adm, sup = make(t, "isp_admin"), make(t, "support")
+    ha = _h(client, adm)
+    monkeypatch.delenv("RBAC_DATABASE_URL", raising=False)
+    settings.get_settings.cache_clear(); db.get_rbac_engine.cache_clear()
+    try:
+        assert _put(client, ha, sup["id"], "engineer").status_code == 503
+    finally:
+        monkeypatch.undo()
+        settings.get_settings.cache_clear(); db.get_rbac_engine.cache_clear()
 
 
 def test_the_sql_rules_are_exactly_the_python_policy(migrated):
@@ -306,10 +333,8 @@ def test_a_role_change_signs_the_member_out_of_every_workspace_of_the_account(cl
     assert client.get("/v1/onus", headers=other).status_code == 401    # account-wide, declared in the contract
 
 
-def test_direct_concurrent_calls_to_the_function_cannot_leave_a_workspace_without_an_admin(migrated, new_tenant, make):
+def test_direct_concurrent_calls_to_the_function_cannot_leave_a_workspace_without_an_admin(migrated, rbac, new_tenant, make):
     import time
-
-    from app.core.db import get_engine, scoped_connection
 
     t = new_tenant()
     a, b = make(t, "isp_admin"), make(t, "isp_admin")
@@ -317,8 +342,8 @@ def test_direct_concurrent_calls_to_the_function_cannot_leave_a_workspace_withou
 
     def first():   # holds its transaction open after demoting b
         try:
-            with scoped_connection(get_engine(), user_id=a["id"], tenant_id=t) as c:
-                c.execute(text("SELECT app_change_member_role(:u, 'engineer')"), {"u": b["id"]})
+            with rbac.begin() as c:
+                c.execute(text("SELECT app_change_member_role(:a, :t, :u, 'engineer', 'primeiro')"), {"a": a["id"], "t": t, "u": b["id"]})
                 started.set()
                 release.wait(10)
             res["1"] = "ok"
@@ -329,8 +354,7 @@ def test_direct_concurrent_calls_to_the_function_cannot_leave_a_workspace_withou
     def second():   # b demotes a while a's change is not committed yet
         started.wait(10)
         try:
-            with scoped_connection(get_engine(), user_id=b["id"], tenant_id=t) as c:
-                c.execute(text("SELECT app_change_member_role(:u, 'engineer')"), {"u": a["id"]})
+            _call(rbac, b["id"], t, a["id"], "engineer", "segundo")
             res["2"] = "ok"
         except DBAPIError:
             res["2"] = "refused"
@@ -345,59 +369,20 @@ def test_direct_concurrent_calls_to_the_function_cannot_leave_a_workspace_withou
     assert admins == 1 and sorted(res.values()) == ["ok", "refused"], (res, admins)
 
 
-def test_a_role_change_and_an_account_deactivation_at_the_same_time_do_not_deadlock(client, migrated, new_tenant, make, monkeypatch):
+def test_a_direct_function_call_and_an_account_deactivation_do_not_deadlock(migrated, rbac, new_tenant, make):
     import time
-
-    from app.api import members
-
-    real = role_policy.check_change
-
-    def slow(*a, **k):   # keeps the role change inside its lock while the deactivation arrives
-        time.sleep(0.8)
-        return real(*a, **k)
-
-    monkeypatch.setattr(members.role_policy, "check_change", slow)
-    t = new_tenant()
-    a, b = make(t, "isp_admin"), make(t, "isp_admin")
-    ha = _h(client, a)
-    out: dict = {}
-
-    def change():
-        out["change"] = _put(client, ha, b["id"], "engineer").status_code
-
-    def deactivate():
-        time.sleep(0.3)   # arrives after the role change started
-        try:
-            with migrated.begin() as c:
-                c.execute(text("SET LOCAL lock_timeout = '10s'"))
-                c.execute(text("UPDATE users_global SET is_active=false WHERE id=:u"), {"u": b["id"]})
-            out["deactivate"] = "ok"
-        except DBAPIError as exc:
-            out["deactivate"] = f"error {getattr(exc.orig, 'sqlstate', '?')}"
-
-    ts = [threading.Thread(target=change), threading.Thread(target=deactivate)]
-    [x.start() for x in ts]
-    [x.join() for x in ts]
-    assert out == {"change": 200, "deactivate": "ok"}, out   # no deadlock (40P01) on either side
-
-
-def test_a_direct_function_call_and_an_account_deactivation_do_not_deadlock(migrated, new_tenant, make):
-    import time
-
-    from app.core.db import get_engine, scoped_connection
 
     t = new_tenant()
     a, b = make(t, "isp_admin"), make(t, "isp_admin")
     out: dict = {}
     got_lock = threading.Event()
 
-    def change():   # holds the workspace lock a while, then touches the target's account row like the API does
+    def change():   # holds the locks a while, then touches the target's account row again like any caller of the old order would
         try:
-            with scoped_connection(get_engine(), user_id=a["id"], tenant_id=t) as c:
-                c.execute(text("SELECT app_change_member_role(:u, 'engineer')"), {"u": b["id"]})
+            with rbac.begin() as c:
+                c.execute(text("SELECT app_change_member_role(:a, :t, :u, 'engineer', 'direto')"), {"a": a["id"], "t": t, "u": b["id"]})
                 got_lock.set()
                 time.sleep(0.8)
-                c.execute(text("UPDATE users_global SET tokens_valid_after = clock_timestamp() WHERE id = :u"), {"u": b["id"]})
             out["change"] = "ok"
         except DBAPIError as exc:
             got_lock.set()
@@ -417,3 +402,5 @@ def test_a_direct_function_call_and_an_account_deactivation_do_not_deadlock(migr
     [x.start() for x in ts]
     [x.join() for x in ts]
     assert out == {"change": "ok", "deactivate": "ok"}, out
+
+

@@ -18,7 +18,7 @@ from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import _client_ip, _gate, _record, _throttled, audit
 from app.api.session import _check_second_factor, _mfa_required, _reauth
 from app.core import role_policy
-from app.core.db import get_engine, scoped_connection
+from app.core.db import get_engine, get_rbac_engine, scoped_connection
 from app.core.permissions import CATALOG
 from app.core.security import ROLE_PERMISSIONS
 from app.core.settings import Settings, get_settings
@@ -140,57 +140,34 @@ class RoleChangeIn(BaseModel):
     reason: str = Field(min_length=3, max_length=200)
 
 
+# reason codes raised by app_change_member_role (the SQL function is the authority) -> HTTP status
+ROLE_CHANGE_STATUS = {
+    "member_not_found": 404, "cannot_change_own_role": 403, "role_cannot_grant": 403, "role_not_assignable": 403, "target_role_protected": 403,
+    "role_unchanged": 409, "last_isp_admin": 409, "reason_required": 422,
+}
+
+
 @router.put("/v1/members/{user_id}/role")
-def change_member_role(user_id: UUID, body: RoleChangeIn, p: Principal = Depends(require("members:manage")), conn: Connection = TENANT_CONN) -> dict:
-    """Changes a member's system role (ADR-0031). The rules are role_policy's; on top of them: one lock per workspace (two administrators cannot
-    demote each other at once), the last active isp_admin cannot leave, the member's sessions end now, and the change is audited with its reason."""
+def change_member_role(user_id: UUID, body: RoleChangeIn, p: Principal = Depends(require("members:manage"))) -> dict:
+    """Changes a member's system role (ADR-0031). The whole change — validation of actor and transition, the write, ending the member's sessions, the
+    audit record and the event — is ONE database function (`app_change_member_role`) that only the dedicated `fibercore_rbac` connection may execute:
+    the application's normal database role cannot change a role at all, not even with forged session settings. The rules mirror role_policy (tested
+    equal); this route only authenticates, validates the shape and maps the function's reason code."""
     if body.role not in ROLE_PERMISSIONS:
         raise HTTPException(422, "unknown role")
-    reason = body.reason.strip()
-    if len(reason) < 3:
-        raise HTTPException(422, "a reason is required")
-    # Lock order, the same everywhere: 1) the member's ACCOUNT ROW (an account deactivation takes it first too), 2) the workspace lock, 3) the account
-    # advisory lock shared with every membership writer (add-member, MFA reset). The opposite order between this and a deactivation deadlocked.
-    if conn.execute(text("SELECT 1 FROM users_global WHERE id = :u FOR UPDATE"), {"u": user_id}).first() is None:
-        raise HTTPException(404, "member not found")
-    conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"tenant-roles:{p.tenant_id}"})
-    conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{user_id}"})
-    # no FOR UPDATE here: the runtime role has no UPDATE privilege (that is the point); the advisory locks above serialise our writers and the
-    # SQL function locks the row itself
-    row = conn.execute(
-        text("SELECT m.role FROM tenant_memberships m JOIN users_global u ON u.id = m.user_id "
-             "WHERE m.tenant_id = :t AND m.user_id = :u AND u.is_active"), {"t": p.tenant_id, "u": user_id}).first()
-    if row is None:
-        raise HTTPException(404, "member not found")
-    # the caller's role is read again under the lock: a demotion that just committed must not leave a stale token with the old power
-    actor = conn.execute(text("SELECT role FROM tenant_memberships WHERE tenant_id = :t AND user_id = :u"), {"t": p.tenant_id, "u": p.id}).scalar()
-    if actor is None or not (ROLE_PERMISSIONS.get(actor, frozenset()) >= {"members:manage"}):
-        raise HTTPException(403, "forbidden")
-    why = role_policy.check_change(actor, row.role, body.role, is_self=user_id == p.id)
-    if why:
-        raise HTTPException(409 if why == "role_unchanged" else 403, why)
-    if row.role == "isp_admin":
-        others = conn.execute(
-            text("SELECT count(*) FROM tenant_memberships m JOIN users_global u ON u.id = m.user_id "
-                 "WHERE m.tenant_id = :t AND m.role = 'isp_admin' AND u.is_active AND m.user_id <> :u"), {"t": p.tenant_id, "u": user_id}).scalar_one()
-        if others == 0:
-            raise HTTPException(409, "last_isp_admin")
-    try:  # the ONLY write path: a SQL function that re-validates the actor and the transition (the runtime role has no UPDATE on the column)
-        with conn.begin_nested():
-            conn.execute(text("SELECT app_change_member_role(:u, :r)"), {"u": user_id, "r": body.role})
+    engine = get_rbac_engine()
+    if engine is None:
+        raise HTTPException(503, "rbac_unavailable")   # fail closed: no dedicated connection configured, no role change
+    try:
+        with engine.begin() as c:
+            res = c.execute(text("SELECT app_change_member_role(:a, :t, :u, :r, :why)"),
+                            {"a": p.id, "t": p.tenant_id, "u": user_id, "r": body.role, "why": body.reason}).scalar_one()
     except DBAPIError as exc:
         state = str(getattr(exc.orig, "sqlstate", "") or "")
-        if state == "42501":
-            raise HTTPException(403, "role_change_refused") from exc
+        code = str(getattr(getattr(exc.orig, "diag", None), "message_primary", "") or "")
+        if state == "P0001" and code in ROLE_CHANGE_STATUS:
+            raise HTTPException(ROLE_CHANGE_STATUS[code], code) from exc
         if state in ("40P01", "40001"):   # a deadlock/serialisation loser changed nothing: tell the caller to try again
             raise HTTPException(409, "conflict_retry") from exc
         raise
-    # the member's old tokens stop working now (they carry the old role's power) and their refresh tokens end; they sign in again with the new role.
-    # Sessions belong to the ACCOUNT, not to a workspace: this signs the member out of every workspace they belong to (declared effect, tested).
-    conn.execute(text("UPDATE users_global SET tokens_valid_after = clock_timestamp() WHERE id = :u"), {"u": user_id})
-    revoked = conn.execute(
-        text("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = :u AND revoked_at IS NULL RETURNING 1"), {"u": user_id}).rowcount
-    audit(conn, p, "member.role_change", "user", str(user_id), {"from": row.role, "to": body.role, "reason": reason, "revoked_sessions": revoked})
-    outbox.enqueue(conn, tenant_id=p.tenant_id, aggregate_type="user", aggregate_id=user_id, event_type="member.role_change",
-                   payload={"by": str(p.id), "from": row.role, "to": body.role})
-    return {"user_id": str(user_id), "role": body.role, "previous_role": row.role, "revoked_sessions": revoked}
+    return {"user_id": str(user_id), "role": body.role, "previous_role": res["previous_role"], "revoked_sessions": res["revoked_sessions"]}

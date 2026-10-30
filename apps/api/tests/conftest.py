@@ -17,6 +17,7 @@ from sqlalchemy import create_engine, text
 
 APP_PW = "app_role_test_pw_0123456789"
 WORKER_PW = "worker_role_test_pw_0123456789"
+RBAC_PW = "rbac_role_test_pw_0123456789"
 JWT_SECRET = "test-secret-with-more-than-32-characters!!"
 MFA_KEY = base64.urlsafe_b64encode(bytes(range(32, 64))).decode()
 PII_KEY = "pii-hmac-key-with-more-than-32-characters!!"
@@ -44,23 +45,29 @@ def app_url(admin_url: str) -> str:
 
 
 @pytest.fixture(scope="session")
+def rbac_url(admin_url: str) -> str:
+    p = urlparse(admin_url)
+    return urlunparse(p._replace(netloc=f"fibercore_rbac:{RBAC_PW}@{p.hostname}:{p.port}"))
+
+
+@pytest.fixture(scope="session")
 def worker_url(admin_url: str) -> str:
     p = urlparse(admin_url)
     return urlunparse(p._replace(netloc=f"fibercore_worker:{WORKER_PW}@{p.hostname}:{p.port}"))
 
 
 @pytest.fixture(scope="session", autouse=True)
-def migrated(admin_url: str, app_url: str):
+def migrated(admin_url: str, app_url: str, rbac_url: str):
     eng = create_engine(admin_url.replace("postgresql://", "postgresql+psycopg://", 1))
     with eng.begin() as c:
         c.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
-    env = {**os.environ, "ADMIN_DATABASE_URL": admin_url, "APP_DB_PASSWORD": APP_PW, "WORKER_DB_PASSWORD": WORKER_PW}
+    env = {**os.environ, "ADMIN_DATABASE_URL": admin_url, "APP_DB_PASSWORD": APP_PW, "WORKER_DB_PASSWORD": WORKER_PW, "RBAC_DB_PASSWORD": RBAC_PW}
     subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], cwd=API_DIR, env=env, check=True)
     os.environ.update(
-        DATABASE_URL=app_url, JWT_SECRET=JWT_SECRET, MFA_ENCRYPTION_KEY=MFA_KEY, PII_HMAC_KEY=PII_KEY, JOB_SIGNING_KEY=JOB_SEED_B64, MODULE_MANIFEST=str(MANIFEST), NATS_MONITOR_URL=""
+        DATABASE_URL=app_url, RBAC_DATABASE_URL=rbac_url, JWT_SECRET=JWT_SECRET, MFA_ENCRYPTION_KEY=MFA_KEY, PII_HMAC_KEY=PII_KEY, JOB_SIGNING_KEY=JOB_SEED_B64, MODULE_MANIFEST=str(MANIFEST), NATS_MONITOR_URL=""
     )
     from app.core import db, settings
-    settings.get_settings.cache_clear(); db.get_engine.cache_clear()
+    settings.get_settings.cache_clear(); db.get_engine.cache_clear(); db.get_rbac_engine.cache_clear()
     yield eng
 
 
