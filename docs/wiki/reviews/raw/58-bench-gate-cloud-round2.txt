@@ -1,0 +1,5 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), PR 56, round 2
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: needs-attention
+- [high] A escrita pode ser habilitada na nuvem antes do gate do Edge (flag desligada é só o padrão).

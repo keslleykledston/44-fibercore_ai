@@ -1,0 +1,7 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), PR 56, round 1
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: needs-attention
+- [high] Repetir polling pode emitir mais de um envelope para a mesma escrita (CAS de DISPATCHED ignorado).
+- [high] O envelope pode chegar ao Edge depois de expirar a autorização (validade/arrendamento).
+- [medium] Remover e readicionar alvo reinicia owner_epoch.

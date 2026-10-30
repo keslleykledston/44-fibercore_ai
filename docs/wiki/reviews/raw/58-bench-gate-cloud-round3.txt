@@ -1,0 +1,5 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), PR 56, round 3
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: approve
+Aprovado: não encontrei caminho novo que permita abrir ou despachar uma escrita de bancada antes do suporte do Edge. EDGE_SUPPORT = False faz o gate recusar submit, aprovação e despacho; a CLI também recusa ativar a flag ou registrar autorização. A lista global de escritas homologadas permanece vazia. No material findings.
