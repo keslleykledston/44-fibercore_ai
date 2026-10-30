@@ -36,6 +36,8 @@ def upgrade() -> None:
           IF t IS NULL OR a IS NULL OR a = p_target THEN
             RAISE EXCEPTION 'role change refused' USING ERRCODE = 'insufficient_privilege';
           END IF;
+          -- the SAME per-workspace lock the API takes: direct callers of this function serialise too (two administrators cannot demote each other at once)
+          PERFORM pg_advisory_xact_lock(hashtextextended('tenant-roles:' || t::text, 0));
           SELECT role INTO actor_role FROM tenant_memberships WHERE tenant_id = t AND user_id = a;
           SELECT role INTO old_role FROM tenant_memberships WHERE tenant_id = t AND user_id = p_target FOR UPDATE;
           IF actor_role IS NULL OR old_role IS NULL OR old_role = p_new
@@ -52,6 +54,7 @@ def upgrade() -> None:
         CREATE FUNCTION keep_one_isp_admin() RETURNS trigger LANGUAGE plpgsql AS $$
         DECLARE leaving boolean;
         BEGIN
+          PERFORM pg_advisory_xact_lock(hashtextextended('tenant-roles:' || OLD.tenant_id::text, 0));  -- serialise with every other role change of the workspace
           -- a membership that WAS an isp_admin stops being one (role change) or goes away: the workspace must still have another
           IF TG_OP = 'DELETE' THEN
             leaving := OLD.role = 'isp_admin';

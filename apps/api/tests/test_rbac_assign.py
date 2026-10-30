@@ -287,3 +287,42 @@ def test_a_role_change_signs_the_member_out_of_every_workspace_of_the_account(cl
     assert client.get("/v1/onus", headers=other).status_code == 200
     assert _put(client, _h(client, adm), eng["id"], "noc_n1").status_code == 200
     assert client.get("/v1/onus", headers=other).status_code == 401    # account-wide, declared in the contract
+
+
+def test_direct_concurrent_calls_to_the_function_cannot_leave_a_workspace_without_an_admin(migrated, new_tenant, make):
+    import time
+
+    from app.core.db import get_engine, scoped_connection
+
+    t = new_tenant()
+    a, b = make(t, "isp_admin"), make(t, "isp_admin")
+    started, release, res = threading.Event(), threading.Event(), {}
+
+    def first():   # holds its transaction open after demoting b
+        try:
+            with scoped_connection(get_engine(), user_id=a["id"], tenant_id=t) as c:
+                c.execute(text("SELECT app_change_member_role(:u, 'engineer')"), {"u": b["id"]})
+                started.set()
+                release.wait(10)
+            res["1"] = "ok"
+        except DBAPIError:
+            started.set()
+            res["1"] = "refused"
+
+    def second():   # b demotes a while a's change is not committed yet
+        started.wait(10)
+        try:
+            with scoped_connection(get_engine(), user_id=b["id"], tenant_id=t) as c:
+                c.execute(text("SELECT app_change_member_role(:u, 'engineer')"), {"u": a["id"]})
+            res["2"] = "ok"
+        except DBAPIError:
+            res["2"] = "refused"
+
+    ts = [threading.Thread(target=first), threading.Thread(target=second)]
+    [x.start() for x in ts]
+    time.sleep(0.8)      # with the lock the second call is waiting here; without it, it already finished
+    release.set()
+    [x.join() for x in ts]
+    with migrated.begin() as c:
+        admins = c.execute(text("SELECT count(*) FROM tenant_memberships WHERE tenant_id=:t AND role='isp_admin'"), {"t": t}).scalar()
+    assert admins == 1 and sorted(res.values()) == ["ok", "refused"], (res, admins)
