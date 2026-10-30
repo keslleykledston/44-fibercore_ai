@@ -1,0 +1,22 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18e90-af3a-7572-b8db-64eab04f3105).
+[codex] Turn started (01a18e90-af73-7e23-a4e3-c41cf58d9309).
+[codex] Assistant message captured: Vou conferir o diff real contra `main` e seguir os caminhos de create/submit até o despacho, ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/jobs.py ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/jobs.py ap... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- apps/api/app/api/jobs.py ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- apps/api/app/api/jobs.py ap... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"CREATE TABLE jobs|jobs \\(|params jsonb|tenant_id.*jobs|olt_query\" ap...
+[codex] Command completed: /bin/bash -lc "rg -n \"CREATE TABLE jobs|jobs \\(|params jsonb|tenant_id.*jobs|olt_query\" ap... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '110,160p' contracts/postgres_baseline_draft.sql; rg -n \"CREATE POLICY...
+[codex] Command failed: /bin/bash -lc "sed -n '110,160p' contracts/postgres_baseline_draft.sql; rg -n \"CREATE POLICY... (exit 2)
+[codex] Assistant message captured: {"verdict":"approve","summary":"Não encontrei risco material restante no diff. O caminho perm...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+Não encontrei risco material restante no diff. O caminho permanece inerte enquanto `EDGE_SUPPORT` é falso; quando habilitado, o submit compara o hash recalculado dos parâmetros persistidos e o despacho valida também o OLT e a versão do catálogo.
+
+No material findings.
