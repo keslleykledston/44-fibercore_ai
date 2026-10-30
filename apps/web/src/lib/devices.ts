@@ -47,3 +47,26 @@ export const PROTOCOL: Record<string, string> = { tr069: "TR-069 (GenieACS)", us
 export const protocolLabel = (p: string) => PROTOCOL[p] ?? p;
 
 export const EDGE_STATUS: Record<string, string> = { online: "Online", offline: "Sem sinal do Edge", unknown: "Sem batimento", revoked: "Revogado" };
+
+/** Por que uma ação não é oferecida (código estável da API; nunca texto livre). */
+export const ACTION_UNAVAILABLE: Record<string, string> = {
+  not_permitted: "Seu papel não pode pedir esta ação.",
+  capability_not_observed: "Ainda não foi observada nem comprovada neste modelo e firmware.",
+};
+/** O que o motor de jobs respondeu a um pedido que ele não deixou seguir. */
+export const ACTION_BLOCKED: Record<string, string> = {
+  operation_not_homologated: "Esta operação ainda não está homologada para este equipamento. Nada foi enviado.",
+  target_not_bench: "Este equipamento não é um alvo de bancada. Nada foi enviado.",
+  authorization_missing: "Falta a autorização prévia do responsável pela bancada. Nada foi enviado.",
+  authorization_expired: "A autorização do responsável venceu. Nada foi enviado.",
+  capability_not_observed: "A capacidade ainda não foi observada neste modelo e firmware. Nada foi enviado.",
+};
+export const ACTION_ERROR: Record<string, string> = {
+  ...ACTION_BLOCKED,
+  not_permitted: "Seu papel não pode pedir esta ação.",
+  bad_request: "Confira os dados da ação (o nome do Wi-Fi de bancada começa com BANCADA-).",
+  session: "Sua sessão expirou. Recarregue a página e entre de novo.",
+  not_found: "Este equipamento não existe mais.",
+  forbidden: "Seu papel não permite esta ação.",
+  failed: "Falha inesperada. Tente em instantes.",
+};

@@ -20,16 +20,17 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
         "customers:read", "customers:import", "associations:review", "incidents:read", "incidents:ack",
         "jobs:read", "jobs:request", "jobs:approve", "inventory:read", "tenant:read", "audit:read", "members:read", "edge:read",
         "members:mfa_reset", "diagnostics:run", "members:manage", "roles:read", "platform:delegate",
+        "devices:act:reboot_cpe", "devices:act:set_wifi_ssid",
     }),
     # ADR-0031: grants roles, has NO operational power at all (cannot see customers, jobs, incidents or the network)
     "access_manager": frozenset({"tenant:read", "members:read", "members:manage", "roles:read", "audit:read"}),
     "engineer": frozenset({
         "customers:read", "associations:review", "incidents:read", "incidents:ack", "jobs:read", "jobs:request",
-        "inventory:read", "tenant:read", "edge:read", "diagnostics:run",
+        "inventory:read", "tenant:read", "edge:read", "diagnostics:run", "devices:act:reboot_cpe", "devices:act:set_wifi_ssid",
     }),
     "noc_n2": frozenset({
         "customers:read", "incidents:read", "incidents:ack", "jobs:read", "jobs:request", "inventory:read", "tenant:read", "edge:read",
-        "diagnostics:run",
+        "diagnostics:run", "devices:act:reboot_cpe",
     }),
     "noc_n1": frozenset({"tenant:read", "inventory:read", "incidents:read"}),
     "support": frozenset({"tenant:read", "inventory:read", "customers:read"}),

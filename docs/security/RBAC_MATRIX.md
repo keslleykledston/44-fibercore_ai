@@ -18,6 +18,8 @@
 | `jobs:request` | R2 | não | sim | Solicitar uma operação em equipamento |
 | `jobs:approve` | R3 | sim | sim | Aprovar uma operação em equipamento |
 | `jobs:execute` | R3 | não | não | Executar operações aprovadas (somente contas de serviço do Edge) |
+| `devices:act:reboot_cpe` | R2 | não | sim | Pedir, pela tela do CPE, o reinício do equipamento do assinante (nasce bloqueado até a homologação) |
+| `devices:act:set_wifi_ssid` | R2 | não | sim | Pedir, pela tela do CPE, a troca do nome do Wi-Fi (nasce bloqueado até a homologação) |
 | `diagnostics:run` | R0 | não | sim | Rodar diagnósticos (somente leitura) |
 | `members:read` | R1 | não | não | Ver os membros do provedor e o estado do MFA de cada um |
 | `members:manage` | R3 | sim | não | Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite) |
@@ -44,6 +46,8 @@
 | `jobs:request` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `jobs:approve` | ✔ |  |  |  |  |  |  |  |  |
 | `jobs:execute` |  |  |  |  |  |  |  | ✔ |  |
+| `devices:act:reboot_cpe` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
+| `devices:act:set_wifi_ssid` | ✔ | ✔ |  |  |  |  |  |  |  |
 | `diagnostics:run` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `members:read` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `members:manage` | ✔ |  |  |  |  |  |  |  | ✔ |
@@ -79,6 +83,9 @@
 | GET | `/v1/auth/workspaces` | (autentica o token da própria conta) |
 | GET | `/v1/cpes` | `inventory:read` |
 | GET | `/v1/cpes/{cpe_id}` | `inventory:read` |
+| GET | `/v1/cpes/{cpe_id}/actions` | `inventory:read` |
+| POST | `/v1/cpes/{cpe_id}/actions/reboot_cpe` | `devices:act:reboot_cpe` |
+| POST | `/v1/cpes/{cpe_id}/actions/set_wifi_ssid` | `devices:act:set_wifi_ssid` |
 | GET | `/v1/cpes/{cpe_id}/capabilities` | `inventory:read` |
 | GET | `/v1/cpes/{cpe_id}/state` | `inventory:read` |
 | GET | `/v1/customers` | `customers:read` |

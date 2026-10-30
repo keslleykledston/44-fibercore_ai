@@ -2,21 +2,22 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { CapabilityGate } from "@/components/CapabilityGate";
+import { CpeActions } from "@/components/CpeActions";
 import { Card, Row } from "@/components/Panel";
 import { DevicesTabs } from "@/components/DevicesTabs";
 import { DataFreshness, ErrorState, PageHeader } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
 import { isUuid, metricLabel, metricValue, protocolLabel } from "@/lib/devices";
-import type { Capability, Cpe, CpeStateView, OnuCpeLink } from "@/lib/types";
+import type { Capability, Cpe, CpeActions as CpeActionsView, CpeStateView, OnuCpeLink } from "@/lib/types";
 
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" }) : "—");
 
 export default async function CpeDetalhe({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!isUuid(id)) notFound();
-  const [list, state, caps, links] = await Promise.all([
+  const [list, state, caps, links, actions] = await Promise.all([
     apiSafe<Cpe>(`/v1/cpes/${id}`), apiSafe<CpeStateView>(`/v1/cpes/${id}/state`), apiSafe<Capability[]>(`/v1/cpes/${id}/capabilities`),
-    apiSafe<OnuCpeLink[]>("/v1/onu-cpe-links?status=confirmed&limit=1000"),
+    apiSafe<OnuCpeLink[]>("/v1/onu-cpe-links?status=confirmed&limit=1000"), apiSafe<CpeActionsView>(`/v1/cpes/${id}/actions`),
   ]);
   if (list.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver o inventário." /></AppShell>;
   if (list.status === 404) notFound();
@@ -26,7 +27,7 @@ export default async function CpeDetalhe({ params }: { params: Promise<{ id: str
   const metrics = state.data?.metrics ?? [];
   return (
     <AppShell active="/rede" user="1">
-      <PageHeader title={`CPE ${cpe.canonical_serial}`} subtitle="Identidade, estado lido no ACS e capacidades (somente leitura)" helpSlug="rede/dispositivos">
+      <PageHeader title={`CPE ${cpe.canonical_serial}`} subtitle="Identidade, estado lido no ACS, capacidades e ações" helpSlug="rede/dispositivos">
         <Link href="/dispositivos" className="inline-flex min-h-touch items-center rounded-btn px-3 text-sm text-accent hover:underline">← Voltar para Dispositivos</Link>
       </PageHeader>
       <DevicesTabs current="/dispositivos" />
@@ -63,9 +64,13 @@ export default async function CpeDetalhe({ params }: { params: Promise<{ id: str
             </table>
           )}
         </Card>
+        <Card title="Ações" testid="cpe-actions">
+          {actions.data === null ? <p className="text-sm text-muted">{actions.status === 403 ? "Seu papel não permite ver as ações deste equipamento." : "As ações não estão disponíveis agora."}</p> : <CpeActions cpeId={id} actions={actions.data.items} />}
+          <p className="mt-3 text-xs text-muted">Só aparecem como disponíveis as ações já observadas neste modelo e firmware. Pedir cria um pedido de operação que outra pessoa aprova em Operações.</p>
+        </Card>
         <Card title="Capacidades" testid="cpe-capabilities">
           {caps.data ? <CapabilityGate caps={caps.data} title="Operações neste perfil" /> : <p className="text-sm text-muted">O registro de capacidades não está disponível.</p>}
-          <p className="mt-3 text-xs text-muted">Ações que alteram o equipamento ficam em Operações e só valem para o que está homologado para o alvo.</p>
+          <p className="mt-3 text-xs text-muted">Nenhuma ação altera o equipamento sem aprovação e sem o portão de escrita.</p>
         </Card>
       </div>
     </AppShell>

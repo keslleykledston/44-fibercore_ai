@@ -611,6 +611,67 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {description: Execução inexistente ou de outro provedor}
+  /cpes/{cpeId}/actions:
+    get:
+      tags: [CPE]
+      operationId: listCpeActions
+      summary: Ações que a tela do CPE pode oferecer a ESTE chamador (inventory:read). offered só é verdadeiro quando o papel tem a permissão devices:act:* e o registro tem entrada observed (ou melhor) para o perfil exato do CPE; reason = not_permitted | capability_not_observed. homologated e bench_target explicam o que o motor de jobs fará (nenhuma escrita é homologada; só alvo de bancada com autorização prévia do responsável)
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: cpeId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200':
+          description: "{cpe_id, items[{operation, label, risk, needs_params, offered, reason, certification, status, homologated, bench_target}]}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: CPE inexistente ou de outro provedor}
+  /cpes/{cpeId}/actions/reboot_cpe:
+    post:
+      tags: [CPE]
+      operationId: requestCpeReboot
+      summary: Pede o reinício do CPE pelo fluxo de jobs existente (devices:act:reboot_cpe + jobs:request). Recusa com 409 capability_not_observed ANTES de criar job. Depois cria o job e o submete; se o portão de escrita o recusar (operation_not_homologated, target_not_bench, authorization_missing…) o job é CANCELADO e a resposta é outcome=blocked. Nada chega ao Edge sem a aprovação de outra pessoa
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: cpeId, in: path, required: true, schema: {type: string, format: uuid}}, {name: Idempotency-Key, in: header, required: true, schema: {type: string}}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                params: {type: object, description: sem parâmetros}
+      responses:
+        '200':
+          description: "{outcome: submitted|blocked|existing, reason, job}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: CPE inexistente ou de outro provedor}
+        '409': {description: capability_not_observed ou not_permitted}
+        '422': {description: Parâmetros fora do catálogo}
+  /cpes/{cpeId}/actions/set_wifi_ssid:
+    post:
+      tags: [CPE]
+      operationId: requestCpeWifiSsid
+      summary: Pede a troca do nome do Wi-Fi 2,4 GHz (devices:act:set_wifi_ssid + jobs:request); params.ssid segue o catálogo de bancada (BANCADA-[A-Z0-9]{1,16}). Mesmo contrato de requestCpeReboot
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: cpeId, in: path, required: true, schema: {type: string, format: uuid}}, {name: Idempotency-Key, in: header, required: true, schema: {type: string}}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [params]
+              properties:
+                params:
+                  type: object
+                  required: [ssid]
+                  properties:
+                    ssid: {type: string, pattern: '^BANCADA-[A-Z0-9]{1,16}$'}
+      responses:
+        '200':
+          description: "{outcome: submitted|blocked|existing, reason, job}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: CPE inexistente ou de outro provedor}
+        '409': {description: capability_not_observed ou not_permitted}
+        '422': {description: Parâmetros fora do catálogo}
   /cpes/{cpeId}/capabilities:
     get:
       tags: [CPE]
