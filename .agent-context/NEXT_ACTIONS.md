@@ -93,3 +93,7 @@
 - Reverter o Edge: `config.json.pre-bench` no host (cópia da configuração anterior). Desligar: `feature-set ... bench_writes off` ou remover a seção `bench`.
 - Próximo código (sem equipamento): `olt_query` (ADR-0029, simuladores), H3/H4 só por emenda do ADR-0030 + autorização.
 
+## Atualização 2026-10-30 (H2 feito)
+- H2 `reboot_cpe` REAL executado na ONT de bancada com sucesso e aceito pelo responsável; registro `observed` (evidência `docs/wiki/bench/H2-reboot_cpe-2026-10-30.md`). Próximas autorizações de reboot são NORMAIS (sem `--first-run`); ritmo do Edge: 1 reboot por 30 min por dispositivo.
+- Pedido do responsável: repetir o teste para validar (após 04:02 UTC, nova autorização normal). Depois: H3 (SSID `BANCADA-…`) e H4 (ONU na OLT) só por emenda do ADR-0030 + autorização.
+
