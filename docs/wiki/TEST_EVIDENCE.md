@@ -255,3 +255,7 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - Valida o caminho de rotina: com `reboot_cpe` `observed`, a autorização normal abre o gate. A primeira autorização desta repetição (`19e9380b-…`) expirou sem uso porque foi registrada antes de o ritmo abrir (o Edge recusaria o envio).
 - As contas de serviço de ensaio (`lab-bench-h2-*`, `lab-refresh-trial*`) foram desativadas.
 
+## 2026-10-30 — H3 `set_wifi_ssid`, código (PR 61)
+- `make test-api` 385 passed; `go vet ./... && go test -race ./...` PASS. Provas por teste (ACS simulado com a bancada E um CPE de produção do mesmo modelo): troca → leitura de volta → restauração → leitura de volta, só no CPE de bancada e só a folha `WLANConfiguration.1.SSID`; registro de restauração gravado (0600) antes da troca e mantido se a restauração falhar; formato do SSID recusado fora de `^BANCADA-[A-Z0-9]{1,16}$` no preview, no gate, no CLI, no envelope e antes do envio; autorização presa ao SSID exato; `params` cobertos pela assinatura; tarefa enfileirada removida; resultado ambíguo nunca reenviado; restauração enfileirada removida.
+- NOT_RUN: nenhuma manobra H3 real. Pendentes: deploy na LAB, registro `set_wifi_ssid` identified e a autorização do responsável.
+

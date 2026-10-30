@@ -196,6 +196,16 @@ func TestBenchRefusals(t *testing.T) {
 			t.Fatal("wrote")
 		}
 	})
+	t.Run("an ssid task pending blocks the reboot", func(t *testing.T) {
+		f := &benchACS{informAt: benchTime, tasks: []map[string]any{{"_id": "old000002", "name": "setParameterValues", "device": benchID, "timestamp": benchTime}}}
+		c := f.setup(t)
+		if _, err := c.RebootBench(context.Background(), benchDev, farFuture, time.Second, 10*time.Millisecond, fixedNow); !errors.Is(err, ErrBenchPending) {
+			t.Fatalf("got %v", err)
+		}
+		if len(f.wrote()) != 0 {
+			t.Fatal("wrote")
+		}
+	})
 	t.Run("reboot already pending", func(t *testing.T) {
 		f := &benchACS{informAt: benchTime, tasks: []map[string]any{{"_id": "old000001", "name": "reboot", "device": benchID, "timestamp": benchTime}}}
 		c := f.setup(t)

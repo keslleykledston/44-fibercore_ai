@@ -20,7 +20,10 @@ var ReadOnlyOps = map[string]bool{"collect": true, "refresh": true}
 
 // BenchWriteOps (ADR-0030) is a SEPARATE compile-time set: the only writes this Edge can ever run, and only on the configured bench devices,
 // with a single-use prior authorization, a durable claim, a valid lease and the device confirmed against the ACS. ReadOnlyOps never grows.
-var BenchWriteOps = map[string]bool{"reboot_cpe": true}
+var BenchWriteOps = map[string]bool{"reboot_cpe": true, "set_wifi_ssid": true}
+
+// BenchSSIDRe is the ONLY SSID the bench may ever set (ADR-0030 H3). Checked here, again at the Cloud and again right before the task is sent.
+var BenchSSIDRe = regexp.MustCompile(`^BANCADA-[A-Z0-9]{1,16}$`)
 
 // BenchEnvelopeTTL bounds how long a bench envelope may live (the Cloud issues it for at most this long).
 const BenchEnvelopeTTL = 2 * time.Minute
@@ -61,7 +64,9 @@ type Envelope struct {
 	AuthorizationID     string `json:"authorization_id,omitempty"`
 	AuthorizationEndsAt string `json:"authorization_ends_at,omitempty"`
 	OwnerEpoch          int    `json:"owner_epoch,omitempty"`
-	Signature           string `json:"signature"`
+	// Bench writes with a parameter (set_wifi_ssid): the catalog-validated value, covered by the signature; absent everywhere else.
+	Params    map[string]string `json:"params,omitempty"`
+	Signature string            `json:"signature"`
 }
 
 // NonceStore remembers nonces until they expire (persisted: a restart must not reopen the replay window).
@@ -146,7 +151,7 @@ func (v *Verifier) Verify(ctx context.Context, raw []byte) (*Envelope, error) {
 		if err := checkBench(&env, iss, exp, now); err != nil {
 			return nil, err
 		}
-	} else if env.AuthorizationID != "" || env.AuthorizationEndsAt != "" || env.OwnerEpoch != 0 {
+	} else if env.AuthorizationID != "" || env.AuthorizationEndsAt != "" || env.OwnerEpoch != 0 || len(env.Params) != 0 {
 		return nil, fmt.Errorf("%w: authorization fields only exist on bench writes", ErrFormat)
 	}
 	if len(env.Nonce) < 16 {
@@ -177,6 +182,16 @@ func checkBench(env *Envelope, iss, exp, now time.Time) error {
 	}
 	if exp.Sub(iss) > BenchEnvelopeTTL+time.Second {
 		return fmt.Errorf("%w: a bench envelope lives at most %s", ErrExpired, BenchEnvelopeTTL)
+	}
+	switch env.Operation {
+	case "set_wifi_ssid":
+		if len(env.Params) != 1 || !BenchSSIDRe.MatchString(env.Params["ssid"]) {
+			return fmt.Errorf("%w: set_wifi_ssid takes exactly one ssid parameter of the bench shape", ErrFormat)
+		}
+	default:
+		if len(env.Params) != 0 {
+			return fmt.Errorf("%w: this bench operation takes no parameters", ErrFormat)
+		}
 	}
 	return nil
 }

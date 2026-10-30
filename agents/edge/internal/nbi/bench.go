@@ -124,7 +124,7 @@ func (c *Client) RebootBench(parent context.Context, d BenchDevice, notAfter tim
 		return BenchOutcome{}, err
 	}
 	for _, t := range docs {
-		if t.Name == "reboot" {
+		if t.Name == "reboot" || t.Name == taskSetValues { // any pending bench write blocks every new one
 			return BenchOutcome{}, ErrBenchPending
 		}
 	}
@@ -212,13 +212,18 @@ func (c *Client) postReboot(ctx context.Context, deviceID string) (status int, t
 // removeReboot deletes the reboot task(s) this call created and proves none is left. With a known id only that id; without one, the single
 // reboot task stamped not before the call (two or more cannot be attributed: fail closed).
 func (c *Client) removeReboot(ctx context.Context, deviceID, knownID string, since time.Time) error {
+	return c.removeOwnTask(ctx, deviceID, "reboot", knownID, since)
+}
+
+// removeOwnTask deletes the task(s) of the given name THIS call created and proves none is left (same attribution rules as the refresh cleanup).
+func (c *Client) removeOwnTask(ctx context.Context, deviceID, name, knownID string, since time.Time) error {
 	docs, err := c.deviceTasks(ctx, deviceID)
 	if err != nil {
 		return err
 	}
 	var cand []string
 	for _, t := range docs {
-		if t.Name != "reboot" {
+		if t.Name != name {
 			continue
 		}
 		if knownID != "" {
@@ -232,7 +237,7 @@ func (c *Client) removeReboot(ctx context.Context, deviceID, knownID string, sin
 		}
 	}
 	if knownID == "" && len(cand) > 1 {
-		return errors.New("cannot attribute the reboot task")
+		return errors.New("cannot attribute the task")
 	}
 	for _, id := range cand {
 		if err := c.deleteTask(ctx, id); err != nil {
@@ -244,12 +249,12 @@ func (c *Client) removeReboot(ctx context.Context, deviceID, knownID string, sin
 		return err
 	}
 	for _, t := range left {
-		if t.Name == "reboot" && (knownID == "" || t.ID == knownID) {
+		if t.Name == name && (knownID == "" || t.ID == knownID) {
 			if knownID != "" || func() bool {
 				ts, e := time.Parse(time.RFC3339, t.Timestamp)
 				return e == nil && !ts.Before(since.Add(-taskClockSkew))
 			}() {
-				return errors.New("reboot task still listed")
+				return errors.New("task still listed")
 			}
 		}
 	}

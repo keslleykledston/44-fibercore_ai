@@ -128,7 +128,10 @@ def preview(
     op = OPERATIONS.get(body.operation)
     if op is None:
         raise HTTPException(422, "unknown operation")
-    if body.params:
+    if body.operation in bench.BENCH_OPS:  # ADR-0030: exactly the catalog's parameters, each with its fixed shape
+        if not bench.params_valid(body.operation, body.params):
+            raise HTTPException(422, "parameters outside the bench catalog")
+    elif body.params:
         raise HTTPException(422, "this operation accepts no parameters yet")  # strict: nothing free-form reaches an Edge
     table = {"olt": "olts", "cpe": "cpes"}[op.target]
     tgt = conn.execute(text(f"SELECT edge_id FROM {table} WHERE id = :i"), {"i": body.target_id}).first()  # noqa: S608
@@ -312,6 +315,9 @@ def next_job(
             return None
         envelope["authorization_id"], envelope["authorization_ends_at"] = str(auth.id), auth.window_end.isoformat()
         envelope["owner_epoch"] = row.owner_epoch
+        prm = json.loads(row.params) if isinstance(row.params, str) else (row.params or {})
+        if prm:  # the exact, catalog-validated parameters travel inside the signed envelope; the Edge validates them again
+            envelope["params"] = prm
         # the envelope is also short-lived on its own (bench.ENVELOPE_TTL), so a copy that waits in transit or in a queue dies in minutes
         envelope["expires_at"] = min(row.expires_at, auth.window_end, issued + bench.ENVELOPE_TTL).isoformat()
     if (row.operation == "refresh" or bench_job) and row.target_type == "cpe":

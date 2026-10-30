@@ -210,7 +210,7 @@ func main() {
 				devs[d.ID()] = nbi.BenchDevice{DeviceID: d.ID(), OUI: d.OUI, ProductClass: d.ProductClass, Serial: d.Serial}
 			}
 			benchRunner = &bench.Runner{
-				Devices: devs, Claims: claims, ACS: benchACS, Wait: 4 * time.Minute, Poll: 10 * time.Second, Log: log,
+				Devices: devs, Claims: claims, ACS: benchACS, RestoreFile: config.BenchRestoreFile(cfg.QueuePath), Wait: 4 * time.Minute, Poll: 10 * time.Second, Log: log,
 				Lease: &jobs.LeaseHolder{Pub: pub, EdgeID: cfg.EdgeID, TenantID: cfg.TenantID},
 				// at most one reboot per device per 30 min, 2 per hour; reservation persisted before anything is sent
 				Guard: &nbi.RefreshGuard{Path: config.BenchGuardFile(cfg.QueuePath), MinPerDevice: 30 * time.Minute, MaxPerHour: 2},

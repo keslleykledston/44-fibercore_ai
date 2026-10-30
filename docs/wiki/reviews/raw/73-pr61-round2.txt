@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18b12-06ba-7c43-a863-28301f5d25ba).
+[codex] Turn started (01a18b12-06f8-70a3-8169-acbb7c1d4879).
+[codex] Assistant message captured: I’ll inspect the branch diff against `main`, focusing on task lifecycle and cleanup ordering,...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/nbi/be...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/nbi/be... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=40 main...HEAD -- agents/edge/internal/nbi/be...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=40 main...HEAD -- agents/edge/internal/nbi/be... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/nbi/bench.go | sed -n '116,138p'; nl -ba agents/ed...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/nbi/bench.go | sed -n '116,138p'; nl -ba agents/ed... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: reboot maneuvers can still start whi...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: reboot maneuvers can still start while an SSID task is pending, despite the stated shared pending-task gate.
+
+Findings:
+- [high] Reboot path ignores pending SSID tasks (agents/edge/internal/nbi/bench.go:126-130)
+  `SetBenchSSID` refuses to start when either `setParameterValues` or `reboot` is queued, but `RebootBench` only checks for an existing `reboot` task. If an SSID task is pending on the ACS, a new reboot can be sent before that task executes; the queued SSID change may then fire after the reboot and leave the device changed after the run. This also contradicts the runbook’s statement that the Edge refuses a new maneuver while either task is pending.
+  Recommendation: Make the reboot pending-task guard reject both `reboot` and `setParameterValues`, and cover the cross-operation case in a test.
+
+Next steps:
+- Block reboot execution when a `setParameterValues` task is pending.

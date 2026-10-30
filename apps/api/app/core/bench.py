@@ -33,7 +33,22 @@ class BenchOp:
 
 
 # ADR-0030 item 4: nothing outside this table can be a bench write. Adding a row is an amendment to the ADR and a new owner authorization.
-BENCH_OPS: dict[str, BenchOp] = {"reboot_cpe": BenchOp("tr069", frozenset())}
+BENCH_OPS: dict[str, BenchOp] = {
+    "reboot_cpe": BenchOp("tr069", frozenset()),
+    "set_wifi_ssid": BenchOp("tr069", frozenset({"ssid"})),   # H3: 2.4 GHz radio (instance 1) only; the Edge restores the original value
+}
+# the ONLY values a parameter may take, per operation (ADR-0030 item 4); anything else is refused at preview, at the gate and again at the Edge
+SSID_RE = re.compile(r"BANCADA-[A-Z0-9]{1,16}")
+
+
+def params_valid(operation: str, params) -> bool:
+    spec = BENCH_OPS.get(operation)
+    if spec is None or not isinstance(params, dict) or set(params) != spec.params:
+        return False
+    if operation == "set_wifi_ssid":
+        v = params["ssid"]
+        return isinstance(v, str) and SSID_RE.fullmatch(v) is not None
+    return True
 from datetime import timedelta  # noqa: E402
 
 # Edge-side readiness (ADR-0030 items 2, 3 and 5): the Edge must confirm the device against the ACS, keep the durable claim and enforce
@@ -86,7 +101,7 @@ def gate(conn: Connection, tenant_id: UUID, job, *, mode: str) -> str | None:
     conn.execute(text("SELECT pg_advisory_xact_lock_shared(hashtextextended(:k, 0))"), {"k": capability_lock_key(tenant_id, job.operation)})
     if not features.enabled(conn, tenant_id, "bench_writes"):
         return "bench_writes_disabled"
-    if set(json.loads(job.params) if isinstance(job.params, str) else (job.params or {})) - spec.params:
+    if not params_valid(job.operation, json.loads(job.params) if isinstance(job.params, str) else (job.params or {})):
         return "params_outside_catalog"
     bt = conn.execute(text("SELECT edge_id, owner_epoch, write_locked FROM bench_targets WHERE tenant_id = :t AND cpe_id = :c"),
         {"t": tenant_id, "c": job.target_id}).first()

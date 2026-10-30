@@ -166,3 +166,7 @@
 ## Unreleased — PR 59 (Edge: firmware do CPE no snapshot)
 - O coletor do GenieACS passa a ler `DeviceInfo.SoftwareVersion` do cache do ACS (GET, sem tarefa) e a enviá-lo como `firmware` no snapshot do CPE (identificador simples ou vazio). Necessário para o registro de capacidades casar firmware exato (ADR-0030).
 
+## Unreleased — PR 61 (ADR-0030 H3 `set_wifi_ssid`, código; nenhuma manobra executada)
+- Nuvem: `set_wifi_ssid` no catálogo de bancada com parâmetro `ssid` (formato fixo), `params` assinado no envelope, `bench-authorize --ssid`, hash da autorização ligado ao SSID.
+- Edge: `nbi/bench_ssid.go` (lê original, grava registro de restauração, muda uma vez, lê de volta, restaura e lê de volta), `RestoreFile`, runner com resultado por etapa.
+
