@@ -33,6 +33,9 @@ type lastDownState struct {
 	// attemptGen is the generation of the last run that was started: a run is started once per CLI snapshot, right after it, so that it ends
 	// long before the next CLI snapshot.
 	attemptGen uint64
+	// cursor is the last PON a run finished. The next run starts after it (wrapping around), so a budget too short for every PON of a big chassis
+	// still gets through all of them over successive runs instead of always re-reading the same first ones.
+	cursor string
 }
 
 func (o *OLT) ldState(name string) *lastDownState {
@@ -109,8 +112,20 @@ func (o *OLT) refreshLastDown(ctx context.Context, src OLTSource) {
 	}()
 }
 
+// rotate returns ports (sorted) starting after the cursor, wrapping around.
+func rotate(ports []string, cursor string) []string {
+	i := sort.SearchStrings(ports, cursor)
+	if i < len(ports) && ports[i] == cursor {
+		i++
+	}
+	return append(append([]string(nil), ports[i:]...), ports[:i]...)
+}
+
 func (o *OLT) readLastDown(ctx context.Context, src OLTSource, ports []string, gen uint64) error {
 	ld := src.LastDown
+	o.ldMu.Lock()
+	ports = rotate(ports, o.ldState(src.Name).cursor)
+	o.ldMu.Unlock()
 	budget := ld.Timeout
 	if budget <= 0 {
 		budget = lastDownTimeout
@@ -126,6 +141,9 @@ func (o *OLT) readLastDown(ctx context.Context, src OLTSource, ports []string, g
 		n := min(lastDownChunk, len(ports))
 		snap, err := ld.Driver.Snapshot(ctx, r, ports[:n])
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil // our own budget ran out, not the agent's fault: keep the chunks done, the cursor continues from there next time
+			}
 			return err // a failed chunk keeps what earlier chunks gave; the guard cools the agent down
 		}
 		o.ldMu.Lock()
@@ -139,6 +157,7 @@ func (o *OLT) readLastDown(ctx context.Context, src OLTSource, ports []string, g
 				st.at[u.Serial] = *u.LastDownAt
 			}
 		}
+		st.cursor = ports[n-1]
 		o.ldMu.Unlock()
 		ports = ports[n:]
 	}

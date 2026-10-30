@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"sync"
 	"testing"
@@ -36,10 +37,13 @@ func (ldSNMP) Vendor() string { return "huawei" }
 func (ldSNMP) Identify(context.Context, olt.SNMPReader, []string) (olt.Identity, error) {
 	return olt.Identity{}, nil
 }
-func (d ldSNMP) Snapshot(_ context.Context, _ olt.SNMPReader, ports []string) (olt.Snapshot, error) {
+func (d ldSNMP) Snapshot(ctx context.Context, _ olt.SNMPReader, ports []string) (olt.Snapshot, error) {
 	*d.calls = append(*d.calls, append([]string(nil), ports...))
 	if d.hook != nil {
 		d.hook()
+	}
+	if err := ctx.Err(); err != nil {
+		return olt.Snapshot{}, err
 	}
 	if d.err != nil {
 		return olt.Snapshot{}, d.err
@@ -216,5 +220,47 @@ func TestLastDownNeverBlocksTheRoundAndALateAnswerNeverRevivesAClearedTime(t *te
 	h.driver.down = map[string]time.Time{} // the next run (not due yet) would not know it either
 	if got := h.collect(t); got["HWTC00000001"] != "" {
 		t.Fatalf("a late answer must not give the new drop the previous outage's time: %v", got)
+	}
+}
+
+func TestLastDownContinuesWhereTheBudgetRanOutInsteadOfRereadingTheSamePons(t *testing.T) {
+	var snapOnus []olt.ONU
+	var ports []string
+	for i := 0; i < 20; i++ {
+		p := fmt.Sprintf("0/1/%02d", i)
+		ports = append(ports, p)
+		snapOnus = append(snapOnus, olt.ONU{Serial: fmt.Sprintf("HWTC%08d", i), PonPath: p, Status: "offline"})
+	}
+	var calls [][]string
+	slow := true
+	drv := &ldSNMP{calls: &calls, down: map[string]time.Time{}}
+	drv.hook = func() {
+		if slow && len(calls) == 2 { // the second chunk of the first run never answers in time
+			time.Sleep(120 * time.Millisecond)
+		}
+	}
+	src := OLTSource{Name: "OLT-ROT", LastDown: &LastDownSource{Key: "k", Every: time.Hour, Driver: drv, Timeout: 60 * time.Millisecond,
+		Open: func(context.Context) (olt.SNMPReader, func(), error) { return nil, func() {}, nil }}}
+	o := &OLT{}
+	o.applyLastDown(src, &olt.Snapshot{ONUs: snapOnus})
+	if err := o.readLastDown(context.Background(), src, ports, 1); err != nil {
+		t.Fatalf("running out of OUR budget is not a failure of the agent: %v", err)
+	}
+	if len(calls) != 2 || len(calls[0]) != lastDownChunk {
+		t.Fatalf("first run: one full chunk, then the budget ends: %v", calls)
+	}
+	slow = false
+	calls = nil
+	if err := o.readLastDown(context.Background(), src, ports, 1); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) == 0 || calls[0][0] != ports[lastDownChunk] {
+		t.Fatalf("the next run must start after the last PON that was finished (%s), not at the first again: %v", ports[lastDownChunk-1], calls)
+	}
+	if got := rotate([]string{"a", "b", "c"}, "b"); !reflect.DeepEqual(got, []string{"c", "a", "b"}) {
+		t.Fatalf("rotate: %v", got)
+	}
+	if got := rotate([]string{"a", "b"}, "z"); !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Fatalf("a cursor past the end wraps to the start: %v", got)
 	}
 }
