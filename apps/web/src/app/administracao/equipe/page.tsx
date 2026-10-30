@@ -80,7 +80,8 @@ function People({ t, q, funcao }: { t: Team; q: string; funcao: string }) {
   const rows = rowsOf(t, q, funcao);
   const memberOf = new Map(t.members.map((m) => [m.user_id, m]));
   const action = (r: Row) => {
-    if (!t.me.can_manage || r.self) return null;
+    if (r.self) return <Link href="/conta/seguranca" data-testid="my-security" className="inline-flex min-h-touch items-center rounded-btn border border-line px-3 text-sm hover:bg-bg">Minha segurança</Link>;
+    if (!t.me.can_manage) return null;
     if (r.kind === "invite") return <InviteActions id={r.key} email={r.email} />;
     const m = memberOf.get(r.key)!;
     return <PersonManage m={m} roles={t.roles} canManage={t.me.can_manage} />;
@@ -240,6 +241,12 @@ export default async function Equipe({ searchParams }: { searchParams: Promise<S
   const t = team.data;
   return shell(
     <div data-testid="team-ready">
+      {t.members.some((m) => m.is_self && !m.mfa_enabled) && (
+        <div role="status" data-testid="my-mfa-banner" className="panel mb-4 flex flex-wrap items-center justify-between gap-3 border-warn p-4 text-sm">
+          <span><strong>Ative a sua verificação em duas etapas.</strong> Ela protege a sua conta: o código é pedido só ao entrar na plataforma.</span>
+          <Link href="/conta/seguranca" className="inline-flex min-h-touch items-center rounded-btn bg-accent px-4 font-medium text-[color:var(--on-accent)]">Ativar agora</Link>
+        </div>
+      )}
       <Summary t={t} />
       <TeamTabs current={aba} />
       {aba === "pessoas" && (

@@ -37,8 +37,9 @@ class Settings(BaseSettings):
     # 403 mfa_enrolment_required on every tenant-scoped route until MFA is on, and cannot switch it off. Empty = policy off.
     mfa_required_roles: str = ""
     # ADR-0031: permissions marked `mfa_recent` in the catalog need a second factor proved in the last `mfa_recent_seconds` (login with MFA or a
-    # step-up). ON by default; turning it off is an explicit exception (a warning is logged at boot and /v1/auth/me reports it).
-    mfa_recent_enforce: bool = True
+    # step-up). OFF by default (owner decision 2026-10-30: the second factor is asked at LOGIN, not on every action); the machinery stays for a
+    # provider that wants it back (MFA_RECENT_ENFORCE=true). /v1/auth/me reports whether it is on.
+    mfa_recent_enforce: bool = False
     mfa_recent_seconds: int = Field(default=600, ge=60, le=3600)
     trusted_proxy: bool = False  # trust X-Forwarded-For (set only behind our own reverse proxy)
     job_signing_key: str = Field(default="", repr=False)  # base64 Ed25519 seed; empty => dispatch disabled (fail closed)
