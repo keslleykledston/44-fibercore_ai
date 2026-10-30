@@ -2,7 +2,7 @@ import { apiPost } from "@/lib/api";
 import { readFields, reply } from "@/lib/mfa-bff";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const KNOWN = new Set(["cannot_change_own_role", "role_cannot_grant", "role_not_assignable", "target_role_protected", "role_unchanged", "last_isp_admin", "conflict_retry", "reason_required"]);
+const KNOWN = new Set(["cannot_change_own_role", "role_cannot_grant", "role_not_assignable", "target_role_protected", "role_unchanged", "last_isp_admin", "conflict_retry", "reason_required", "mfa_recent_required"]);
 
 /** Troca o papel de um membro (a API decide tudo; aqui só se valida o formato e se repassam códigos estáveis, nunca texto da API). */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {

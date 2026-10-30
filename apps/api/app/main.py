@@ -14,6 +14,7 @@ from app.api.diagnostics import router as diagnostics_router
 from app.api.erp import router as erp_router
 from app.api.inventory import router as inventory_router
 from app.api.jobs import router as jobs_router
+from app.api.delegations import router as delegations_router
 from app.api.members import router as members_router
 from app.api.noc import router as noc_router
 from app.api.routes import router
@@ -28,6 +29,8 @@ logging.basicConfig(level=logging.INFO, format='{"ts":"%(asctime)s","level":"%(l
 async def lifespan(_app: FastAPI):
     # fail closed: a typo in MFA_REQUIRED_ROLES stops the API from booting instead of silently weakening the policy
     required_mfa_roles(get_settings())
+    if not get_settings().mfa_recent_enforce:  # an explicit, visible exception (ADR-0031): the default is ON
+        logging.getLogger("fibercore.security").warning("MFA_RECENT_ENFORCE is off: critical actions do not ask for a recent second factor")
     yield
 
 
@@ -54,6 +57,7 @@ app.include_router(erp_router)
 app.include_router(noc_router)
 app.include_router(jobs_router)
 app.include_router(members_router)
+app.include_router(delegations_router)
 app.include_router(context_router)
 app.include_router(diagnostics_router)
 app.include_router(diagnostic_jobs_router)

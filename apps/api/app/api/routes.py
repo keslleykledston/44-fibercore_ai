@@ -9,8 +9,9 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import Connection, text
 
 from app import __version__
-from app.api.deps import TENANT_CONN, Principal, authenticated_user_id, get_principal, require
+from app.api.deps import TENANT_CONN, Principal, authenticated_user_id, get_principal, mfa_is_recent, require
 from app.core.db import get_engine, scoped_connection
+from app.core.memberships import active_roles
 from app.core.modules import Infra, evaluate, load_manifest, probe_nats, probe_postgres
 from app.core.security import issue_mfa_challenge, issue_token, verify_secret
 from app.core.sessions import issue_session, mfa_enabled
@@ -185,21 +186,20 @@ def my_workspaces(
     """Workspaces (tenants) the authenticated USER belongs to; needs no tenant selection. Service tokens: not applicable."""
     uid = authenticated_user_id(authorization, settings)
     with scoped_connection(get_engine(), user_id=uid) as conn:
-        rows = conn.execute(
-            text("SELECT t.id, t.name, m.role FROM tenant_memberships m JOIN tenants t ON t.id = m.tenant_id "
-                 "WHERE m.user_id = :u AND t.status = 'active' ORDER BY t.name"),
-            {"u": uid},
-        )
-        return [{"tenant_id": str(r.id), "name": r.name, "role": r.role} for r in rows]
+        roles = active_roles(conn, uid)  # memberships + live platform delegations
+        rows = conn.execute(text("SELECT id, name FROM tenants WHERE id = ANY(:ids) AND status = 'active' ORDER BY name"), {"ids": list(roles)})
+        return [{"tenant_id": str(r.id), "name": r.name, "role": roles[r.id]} for r in rows]
 
 
 @router.get("/v1/auth/me")
-def me(p: Principal = Depends(get_principal)) -> dict:
+def me(p: Principal = Depends(get_principal), settings: Settings = Depends(get_settings)) -> dict:
     """Who the caller is and what their role may do (from the permission catalog: ADR-0031). Only the caller's OWN role is described."""
     from app.core.permissions import CATALOG
     from app.core.security import ROLE_PERMISSIONS
     mine = ROLE_PERMISSIONS.get(p.role, frozenset())
     return {"id": str(p.id), "kind": p.kind, "tenant_id": str(p.tenant_id), "role": p.role,
+            "mfa_recent": {"enforced": settings.mfa_recent_enforce, "window_seconds": settings.mfa_recent_seconds,
+                           "satisfied": mfa_is_recent(p, settings)},
             "permissions": [{"name": n, "risk": c.risk, "description": c.description} for n, c in CATALOG.items() if n in mine]}
 
 

@@ -16,7 +16,7 @@ from sqlalchemy import text
 from app.core.db import make_engine
 from app.core.security import hash_secret
 
-ROLES = ["isp_admin", "access_manager", "engineer", "noc_n2", "noc_n1", "support", "auditor", "platform_support", "edge_agent"]
+ROLES = ["isp_admin", "access_manager", "engineer", "noc_n2", "noc_n1", "support", "auditor", "edge_agent"]
 
 
 def _engine():
@@ -39,6 +39,9 @@ def main(argv: list[str] | None = None) -> None:
     t = sub.add_parser("create-tenant"); t.add_argument("name")
     u = sub.add_parser("create-user")
     u.add_argument("email"); u.add_argument("display_name"); u.add_argument("--password-env")
+    po = sub.add_parser("platform-operator", help="ADR-0031: mark/unmark an account as a platform operator (the only accounts a workspace can delegate access to)")
+    po.add_argument("--email", required=True)
+    po.add_argument("--off", action="store_true", help="remove the mark (the account's active delegations stop working at once)")
     m = sub.add_parser("add-member")
     m.add_argument("tenant_id"); m.add_argument("email"); m.add_argument("role", choices=ROLES)
     s = sub.add_parser("create-service-account")
@@ -80,6 +83,12 @@ def main(argv: list[str] | None = None) -> None:
             print(c.execute(
                 text("INSERT INTO users_global(email, display_name, password_hash) VALUES (:e,:d,:h) RETURNING id"),
                 {"e": a.email.lower(), "d": a.display_name, "h": h}).scalar())
+        elif a.cmd == "platform-operator":
+            n = c.execute(text("UPDATE users_global SET is_platform_operator = :v, tokens_valid_after = clock_timestamp() "
+                               "WHERE lower(email) = lower(:e) RETURNING 1"), {"v": not a.off, "e": a.email}).rowcount
+            if n != 1:
+                sys.exit("no such account")
+            print("platform operator " + ("removed" if a.off else "set"))
         elif a.cmd == "add-member":
             # same per-account lock as the administrator MFA reset: a membership cannot appear between that route's
             # "only this workspace" check and its DELETE

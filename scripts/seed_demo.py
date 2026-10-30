@@ -17,6 +17,7 @@ API = os.environ.get("API_URL", "http://127.0.0.1:18420")
 PW = os.environ.get("DEMO_PASSWORD", "demo-password-123")
 EMAIL = "admin@demo.example.com"
 AGENT_EMAIL = "agente@demo.example.com"
+OPERATOR_EMAIL = "suporte@plataforma.example.com"  # a platform operator, NOT a member: the E2E delegates temporary access to this account
 COMPOSE = ["docker", "compose", "--env-file", ".env.dev", "-f", "infra/compose/compose.yaml"]
 
 
@@ -33,6 +34,8 @@ def main() -> None:
     cli("add-member", tenant, EMAIL, "isp_admin")
     cli("create-user", AGENT_EMAIL, "Agente Demo", "--password-env", "DEMO_PW", env={"DEMO_PW": PW})  # second member: target of the MFA-reset E2E
     cli("add-member", tenant, AGENT_EMAIL, "engineer")
+    cli("create-user", OPERATOR_EMAIL, "Operador Plataforma Demo", "--password-env", "DEMO_PW", env={"DEMO_PW": PW})
+    cli("platform-operator", "--email", OPERATOR_EMAIL)
     cli("feature-set", tenant, "onu_cpe_links", "on")  # FC22-004 (ADR-0021/0023): off by default in production, on for the demo tenant
     cli("feature-set", tenant, "customer_context", "on")
     cli("feature-set", tenant, "subscriber_360", "on")  # FC22-005

@@ -56,7 +56,7 @@ export const apiLogin = (email: string, password: string, clientIp?: string) => 
 export const apiMfaVerify = (mfaToken: string, code: string, clientIp?: string) => postJson("/v1/auth/mfa/verify", { mfa_token: mfaToken, code }, clientIp);
 
 /** POST server-side com o token da sessão. Devolve status e corpo JSON (se houver). */
-export async function apiPost(path: string, body?: BodyInit, headers: Record<string, string> = {}, method: "POST" | "PUT" = "POST"): Promise<{ status: number; json: unknown }> {
+export async function apiPost(path: string, body?: BodyInit, headers: Record<string, string> = {}, method: "POST" | "PUT" | "DELETE" = "POST"): Promise<{ status: number; json: unknown }> {
   const { token, workspace } = await getSession();
   if (!token) return { status: 401, json: null };
   const res = await fetch(`${API}${path}`, {

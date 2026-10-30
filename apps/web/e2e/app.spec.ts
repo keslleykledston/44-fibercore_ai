@@ -557,3 +557,27 @@ test("Papéis e permissões: o administrador vê a matriz, troca o papel de outr
   await expect(page.getByTestId("role-history")).toContainText("teste de papel pela tela");
   await expect(page.getByTestId("role-history")).toContainText("Engenheiro → NOC nível 1");
 });
+
+test("Papéis e permissões: o administrador concede acesso temporário ao suporte da plataforma e o encerra", async ({ page }) => {
+  await login(page);
+  await page.goto("/administracao/papeis");
+  await expect(page.getByTestId("roles-ready")).toBeVisible();
+  const form = page.getByTestId("delegation-form");
+  await form.getByLabel(/E-mail do operador/).fill("suporte@plataforma.example.com");
+  await form.getByLabel(/Motivo/).fill("chamado 4711: diagnóstico acompanhado");
+  await form.getByLabel("Prazo").selectOption("2");
+  await form.getByRole("button", { name: "Conceder acesso" }).click();
+  await expect(page.getByTestId("delegation-done")).toHaveText("Acesso concedido.");
+  const table = page.getByTestId("delegations");
+  await expect(table).toContainText("suporte@plataforma.example.com");
+  await expect(table).toContainText("chamado 4711");
+  await expect(table.getByText("Ativo")).toBeVisible();
+  await table.getByTestId("delegation-revoke").click();
+  await expect(table.getByText(/Encerrado em/)).toBeVisible();
+  await expect(table.getByTestId("delegation-revoke")).toHaveCount(0);
+  // um e-mail que não é de operador recebe a mesma resposta que um inexistente
+  await form.getByLabel(/E-mail do operador/).fill("agente@demo.example.com");
+  await form.getByLabel(/Motivo/).fill("tentativa com conta que não é operadora");
+  await form.getByRole("button", { name: "Conceder acesso" }).click();
+  await expect(page.getByTestId("delegation-error")).toContainText("Não existe um operador");
+});

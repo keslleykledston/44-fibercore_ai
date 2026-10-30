@@ -8,7 +8,7 @@ export const RISK: Record<string, { label: string; hint: string }> = {
   R0: { label: "Leitura", hint: "Ver dados operacionais" },
   R1: { label: "Dado sensível", hint: "Ver dado pessoal ou sensível, ou importar" },
   R2: { label: "Ação reversível", hint: "Agir sobre algo que dá para desfazer" },
-  R3: { label: "Ação crítica", hint: "Irreversível ou de segurança; exige cuidado e, em breve, MFA recente" },
+  R3: { label: "Ação crítica", hint: "Irreversível ou de segurança; exige cuidado e, quando ativado, MFA confirmado há menos de 10 minutos" },
 };
 
 /** Mensagens fixas do painel para os códigos que a API devolve ao trocar um papel (nunca texto livre vindo da API). */
@@ -24,6 +24,29 @@ export const ROLE_CHANGE_ERROR: Record<string, string> = {
   bad_request: "Escolha o papel e escreva o motivo (3 a 200 caracteres).",
   session: "Sua sessão expirou. Recarregue a página e entre de novo.",
   unavailable: "Serviço indisponível. Tente em instantes.",
+  forbidden: "Seu papel não permite esta ação.",
+  failed: "Falha inesperada. Tente em instantes.",
+};
+
+/** Mensagens fixas da confirmação do segundo fator. */
+export const STEP_UP_ERROR: Record<string, string> = {
+  invalid: "Código inválido ou já usado. Use o próximo código do autenticador.",
+  throttled: "Muitas tentativas. Aguarde alguns minutos.",
+  not_enrolled: "Esta ação exige MFA. Ative o MFA em Conta → Segurança e tente de novo.",
+  session: "Sua sessão expirou. Recarregue a página e entre de novo.",
+  bad_request: "Digite o código de 6 dígitos (ou um código de recuperação).",
+  failed: "Falha inesperada. Tente em instantes.",
+};
+
+/** Mensagens fixas do acesso temporário do suporte da plataforma. */
+export const DELEGATION_ERROR: Record<string, string> = {
+  operator_not_found: "Não existe um operador da plataforma com este e-mail. Peça à plataforma para confirmar o e-mail do operador.",
+  already_member: "Esta pessoa já é membro do workspace: não precisa de acesso temporário.",
+  cannot_delegate_to_self: "Você não pode conceder o acesso a si mesmo.",
+  not_found: "Este acesso não existe mais.",
+  not_active: "Este acesso já terminou.",
+  bad_request: "Informe o e-mail, o motivo (10 a 300 caracteres) e o prazo (1 a 8 horas).",
+  session: "Sua sessão expirou. Recarregue a página e entre de novo.",
   forbidden: "Seu papel não permite esta ação.",
   failed: "Falha inesperada. Tente em instantes.",
 };

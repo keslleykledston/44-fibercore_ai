@@ -22,6 +22,17 @@ ui_route: "/administracao/papeis"
 3. Em **Membros e papéis**, clique em **Alterar papel** na pessoa, escolha o novo papel e escreva o motivo (3 a 200 caracteres).
 4. Em **Papéis do sistema** veja a matriz de permissões de cada papel. Em **Histórico de mudanças de papel** veja quem alterou o papel de quem, de qual para qual e por quê.
 
+## Acesso temporário do suporte da plataforma
+
+1. Em **Papéis e permissões**, abra **Acesso temporário do suporte da plataforma** (só o Administrador do provedor concede).
+2. Informe o e-mail do operador, o motivo (por exemplo, o número do chamado) e o prazo de 1 a 8 horas. Só contas que a própria plataforma marcou como operadoras podem receber.
+3. O operador **só consulta** dados básicos do workspace, não vê dado de cliente, e perde o acesso sozinho no prazo. Para encerrar antes, use **Encerrar agora** na linha do acesso.
+4. Para renovar, conceda de novo com um novo motivo: o acesso anterior termina na hora.
+
+## Confirmação do segundo fator
+
+Quando a plataforma exige MFA recente, ações como alterar papéis, aprovar operações em equipamento e conceder acesso pedem o código do autenticador de novo se o último foi há mais de 10 minutos. Digite o código no aviso que aparece e a ação continua.
+
 ## Regras importantes
 
 - Você não altera o seu próprio papel.
@@ -35,4 +46,6 @@ ui_route: "/administracao/papeis"
 - **“Seu papel não pode atribuir este papel”:** só o Administrador do provedor atribui esse papel.
 - **“Não dá para tirar o último Administrador”:** nomeie outro Administrador antes.
 - **“Outra mudança aconteceu ao mesmo tempo”:** tente de novo.
+- **“Código inválido ou já usado”:** cada código do autenticador vale uma vez; espere o próximo.
+- **“Esta ação exige MFA”:** ative o MFA em Conta → Segurança.
 - **“Serviço indisponível”:** a conexão de troca de papéis não está configurada; avise a plataforma.

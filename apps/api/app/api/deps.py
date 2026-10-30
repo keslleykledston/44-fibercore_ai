@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from uuid import UUID
@@ -9,7 +10,8 @@ from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy import Connection, text
 
 from app.core.db import get_engine, scoped_connection
-from app.core.permissions import require_known
+from app.core.memberships import active_roles
+from app.core.permissions import CATALOG, require_known
 from app.core.security import ROLE_PERMISSIONS, decode_token
 from app.core.settings import Settings, get_settings, required_mfa_roles
 
@@ -21,6 +23,7 @@ class Principal:
     tenant_id: UUID
     role: str
     edge_id: UUID | None = None
+    mfa_at: float | None = None  # epoch s of the last second factor proved in this session (users only); see mfa_is_recent
 
     def can(self, perm: str) -> bool:
         return perm in ROLE_PERMISSIONS.get(self.role, frozenset())
@@ -85,10 +88,7 @@ def get_principal(
 
     with scoped_connection(engine, user_id=claims.sub) as conn:
         assert_user_token_current(conn, claims)
-        memberships = {
-            r.tenant_id: r.role
-            for r in conn.execute(text("SELECT tenant_id, role FROM tenant_memberships WHERE user_id = :u"), {"u": claims.sub})
-        }
+        memberships = active_roles(conn, claims.sub)  # memberships + live platform delegations, resolved on EVERY request
         required = required_mfa_roles(settings)
         if required and required & set(memberships.values()):
             has_mfa = conn.execute(text("SELECT enabled FROM user_mfa WHERE user_id = :u"), {"u": claims.sub}).scalar()
@@ -105,15 +105,26 @@ def get_principal(
         raise HTTPException(400, "X-Workspace-ID required")
     if tid not in memberships:
         raise HTTPException(404, "tenant not found")
-    return Principal(claims.sub, "user", tid, memberships[tid])
+    return Principal(claims.sub, "user", tid, memberships[tid], mfa_at=claims.mfa_at)
+
+
+def mfa_is_recent(p: Principal, settings: Settings) -> bool:
+    """A second factor proved in the last MFA_RECENT_SECONDS (a timestamp in the future counts as not recent)."""
+    if p.mfa_at is None:
+        return False
+    age = time.time() - p.mfa_at
+    return 0 <= age <= settings.mfa_recent_seconds
 
 
 def require(perm: str):
     require_known(perm)  # a permission outside the catalog is a programming error: the app does not even import
+    needs_recent = CATALOG[perm].mfa_recent
 
-    def dep(p: Principal = Depends(get_principal)) -> Principal:
+    def dep(p: Principal = Depends(get_principal), settings: Settings = Depends(get_settings)) -> Principal:
         if not p.can(perm):
             raise HTTPException(403, "forbidden")
+        if needs_recent and settings.mfa_recent_enforce and p.kind == "user" and not mfa_is_recent(p, settings):
+            raise HTTPException(403, "mfa_recent_required")  # the client answers with POST /v1/auth/mfa/step-up and repeats the call
         return p
 
     dep.rbac_permission = perm  # type: ignore[attr-defined]  # read by the route inventory test and the generated matrix
