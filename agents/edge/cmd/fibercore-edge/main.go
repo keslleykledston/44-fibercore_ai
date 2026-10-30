@@ -174,7 +174,7 @@ func main() {
 			if l := o.LastDown; l != nil { // read-only SNMP side channel: the OLT's own "last down time" of the offline ONUs
 				l := l
 				src.LastDown = &collector.LastDownSource{
-					Key: "last-down|" + config.DeviceKey(l.SNMPAddress), Every: l.Every(), Driver: olt.HuaweiSNMP{},
+					Key: "last-down|" + config.DeviceKey(l.SNMPAddress), Every: l.Every(), Settle: l.Settle(), Driver: olt.HuaweiSNMP{},
 					Open: func(ctx context.Context) (olt.SNMPReader, func(), error) {
 						community, err := config.ReadSecret(l.SNMPCommunityFile)
 						if err != nil {

@@ -16,6 +16,9 @@ type LastDownSource struct {
 	Driver  olt.LastDownReader
 	Open    func(ctx context.Context) (olt.SNMPReader, func(), error)
 	Timeout time.Duration // wall-clock budget of one run (0 = lastDownTimeout)
+	// Settle is how long to wait after a CLI snapshot before the SNMP read starts. Measured on the real agent: right after a CLI collection it
+	// answers nothing for a while (every request timed out), minutes later it answers normally. 0 = start at once (tests).
+	Settle time.Duration
 }
 
 const (
@@ -91,11 +94,19 @@ func (o *OLT) refreshLastDown(ctx context.Context, src OLTSource) {
 		o.ldMu.Unlock()
 		return
 	}
+	st.attemptGen = st.gen // this snapshot has its (one) run, whatever its outcome; the wait below must not spawn another
 	o.ldMu.Unlock()
 	bg := context.WithoutCancel(ctx)
 	o.ldWG.Add(1)
 	go func() {
 		defer o.ldWG.Done()
+		if ld.Settle > 0 {
+			select {
+			case <-time.After(ld.Settle):
+			case <-bg.Done():
+				return
+			}
+		}
 		dev := src.SNMPKey
 		if dev == "" {
 			dev = src.Name
@@ -105,7 +116,6 @@ func (o *OLT) refreshLastDown(ctx context.Context, src OLTSource) {
 		_, _ = o.guarded(bg, syn, func() ([]Item, error) {
 			o.ldMu.Lock()
 			st := o.ldState(src.Name)
-			st.attemptGen = st.gen // this snapshot has its run, whatever its outcome
 			gen := st.gen
 			ports := make([]string, 0, len(st.targets))
 			byPon := make(map[string][]olt.DownTarget, len(st.targets))

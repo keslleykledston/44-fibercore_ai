@@ -107,6 +107,15 @@ type LastDownConfig struct {
 	PaceMillis        int    `json:"snmp_pace_ms"`        // 0 = 2000; minimum 1000
 	MaxRequests       int    `json:"snmp_max_requests"`   // SNMP packets per run (0 = 400, max 1000)
 	EverySeconds      int    `json:"every_seconds"`       // minimum seconds between two runs (0 = 3600; 900..86400)
+	SettleSeconds     int    `json:"settle_seconds"`      // wait after a CLI collection before reading (0 = 240; 60..600)
+}
+
+// Settle is the wait between the end of a CLI collection and the SNMP read: the real agent answers nothing right after a CLI session.
+func (l LastDownConfig) Settle() time.Duration {
+	if l.SettleSeconds <= 0 {
+		return 4 * time.Minute
+	}
+	return time.Duration(l.SettleSeconds) * time.Second
 }
 
 // Pace is the pause before every SNMP request of this channel. The default is 2 s, not the 1 s floor: measured on the real agent, requests 1 s
@@ -339,8 +348,9 @@ func (c *Config) Validate() error {
 				errs = append(errs, fmt.Errorf("%s: last_down.snmp_address must be the same device as the entry's address", p))
 			}
 			if l.SNMPCommunityFile == "" || (l.PaceMillis != 0 && l.PaceMillis < 1000) || l.PaceMillis > 10000 || l.MaxRequests < 0 || l.MaxRequests > 1000 ||
-				(l.EverySeconds != 0 && (l.EverySeconds < 900 || l.EverySeconds > 86400)) {
-				errs = append(errs, fmt.Errorf("%s: last_down needs snmp_community_file; snmp_pace_ms 0 or 1000..10000; snmp_max_requests 0..1000; every_seconds 0 or 900..86400", p))
+				(l.EverySeconds != 0 && (l.EverySeconds < 900 || l.EverySeconds > 86400)) ||
+				(l.SettleSeconds != 0 && (l.SettleSeconds < 60 || l.SettleSeconds > 600)) {
+				errs = append(errs, fmt.Errorf("%s: last_down needs snmp_community_file; snmp_pace_ms 0 or 1000..10000; snmp_max_requests 0..1000; every_seconds 0 or 900..86400; settle_seconds 0 or 60..600", p))
 			}
 		}
 		if (o.CollectSeconds != 0 && (o.CollectSeconds < 60 || o.CollectSeconds > 86400)) ||

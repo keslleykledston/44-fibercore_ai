@@ -26,6 +26,10 @@ func (d ldCLI) Snapshot(context.Context, olt.Session, []string) (olt.Snapshot, e
 	return olt.Snapshot{PONs: []olt.PON{{Path: "0/0/1", Status: "up"}, {Path: "0/0/2", Status: "up"}}, ONUs: append([]olt.ONU(nil), *d.onus...)}, nil
 }
 
+var ldCallsMu sync.Mutex // the fake is called from background goroutines
+
+func ldCalls(h ldHarness) int { ldCallsMu.Lock(); defer ldCallsMu.Unlock(); return len(*h.calls) }
+
 // ldSNMP is the last-down reader: it records the targets it was asked for (one call per PON) and answers with the times it is told about.
 type ldSNMP struct {
 	calls *[][]string // per call: "pon/ontid" of every target
@@ -39,7 +43,9 @@ func (d ldSNMP) LastDowns(ctx context.Context, _ olt.SNMPReader, targets []olt.D
 	for _, t := range targets {
 		seen = append(seen, fmt.Sprintf("%s/%d", t.PonPath, t.OntID))
 	}
+	ldCallsMu.Lock()
 	*d.calls = append(*d.calls, seen)
+	ldCallsMu.Unlock()
 	if d.hook != nil {
 		d.hook()
 	}
@@ -313,4 +319,22 @@ func TestLastDownShareTheDeviceLockWithTheCLIButNotItsPacing(t *testing.T) {
 	}
 	close(release)
 	h.o.ldWG.Wait()
+}
+
+func TestLastDownWaitsForTheAgentToSettleAfterTheCLISessionAndSpawnsOneRunPerSnapshot(t *testing.T) {
+	h := newLD(t, nil)
+	h.o.Sources[0].LastDown.Settle = 150 * time.Millisecond
+	if _, err := h.o.Collect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.o.Collect(context.Background()); err != nil { // another tick while it waits: no second run, no early read
+		t.Fatal(err)
+	}
+	if ldCalls(h) != 0 {
+		t.Fatal("nothing may be sent to the agent right after the CLI session")
+	}
+	h.o.ldWG.Wait()
+	if ldCalls(h) != 1 {
+		t.Fatalf("exactly one read after the wait: %d", ldCalls(h))
+	}
 }
