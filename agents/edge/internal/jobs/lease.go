@@ -38,6 +38,12 @@ type Lease struct {
 // LeaseHolder keeps the Cloud's latest signed lease in MEMORY ONLY: a restart starts without one. Expiry is measured on the local (monotonic)
 // clock from the moment of receipt, never from the Cloud's wall clock alone.
 type LeaseHolder struct {
+	// Schema is the lease family this holder accepts: "" = the bench lease; "olt-lease/1" = the ownership lease of the OLTs (ADR-0029). A lease of the
+	// other family does not parse here.
+	Schema string
+	// MaxSkew, when > 0, refuses a lease whose issued_at is further than this from the local clock: the Cloud waits LONGER than this after the last lease
+	// before moving the OLT, so a skew inside it cannot let the old owner outlive the transfer (ADR-0029 item 3).
+	MaxSkew  time.Duration
 	Pub      ed25519.PublicKey
 	EdgeID   string
 	TenantID string
@@ -100,7 +106,7 @@ func (h *LeaseHolder) parse(header string) (*Lease, error) {
 	var l Lease
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&l); err != nil || l.Schema != "bench-lease/1" {
+	if err := dec.Decode(&l); err != nil || l.Schema != h.schema() {
 		return nil, fmt.Errorf("%w: unknown or missing fields", ErrNoLease)
 	}
 	sig, err := base64.StdEncoding.DecodeString(l.Signature)
@@ -115,6 +121,9 @@ func (h *LeaseHolder) parse(header string) (*Lease, error) {
 	now := h.now()
 	if e1 != nil || e2 != nil || !exp.After(now) || iss.After(now.Add(clockSkew)) || exp.Sub(iss) > LeaseTTL+time.Second {
 		return nil, fmt.Errorf("%w: expired or not valid now", ErrNoLease)
+	}
+	if h.MaxSkew > 0 && (iss.Sub(now) > h.MaxSkew || now.Sub(iss) > h.MaxSkew) {
+		return nil, fmt.Errorf("%w: this clock and the Cloud's differ by more than %s", ErrNoLease, h.MaxSkew)
 	}
 	for _, t := range l.Targets {
 		if !targetRefRe.MatchString(t.TargetRef) || t.OwnerEpoch < 1 {
@@ -135,4 +144,50 @@ func (h *LeaseHolder) Check(targetRef string, epoch int) error {
 		return ErrLeaseTarget
 	}
 	return nil
+}
+
+func (h *LeaseHolder) schema() string {
+	if h.Schema != "" {
+		return h.Schema
+	}
+	return "bench-lease/1"
+}
+
+// Epoch returns the owner epoch the lease, valid right now, gives for this target.
+func (h *LeaseHolder) Epoch(targetRef string) (int, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.targets == nil || !h.now().Before(h.deadline) {
+		return 0, false
+	}
+	e, ok := h.targets[targetRef]
+	return e, ok
+}
+
+// Remaining is how long the lease, valid right now, still covers this target (local monotonic clock); 0 when it does not.
+func (h *LeaseHolder) Remaining(targetRef string) time.Duration {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if _, ok := h.targets[targetRef]; !ok || h.targets == nil {
+		return 0
+	}
+	if d := h.deadline.Sub(h.now()); d > 0 {
+		return d
+	}
+	return 0
+}
+
+// Grant atomically (one lock) checks that the lease valid right now names this target with exactly this epoch and returns how long it still covers it. The
+// caller derives the query's deadline from THIS answer: no renewal can slip a different generation between the check and the measurement.
+func (h *LeaseHolder) Grant(targetRef string, epoch int) (time.Duration, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	left := h.deadline.Sub(h.now())
+	if h.targets == nil || left <= 0 {
+		return 0, ErrNoLease
+	}
+	if e, ok := h.targets[targetRef]; !ok || e != epoch {
+		return 0, ErrLeaseTarget
+	}
+	return left, nil
 }

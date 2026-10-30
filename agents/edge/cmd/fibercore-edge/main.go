@@ -200,6 +200,7 @@ func main() {
 
 	var verifier *jobs.Verifier
 	var queryStore *oltquery.Store
+	var oltLease *jobs.LeaseHolder
 	var benchRunner *bench.Runner
 	if cfg.JobsEnabled {
 		pub, err := jobs.ParsePublicKey(cfg.JobPublicKey)
@@ -247,7 +248,8 @@ func main() {
 					known[o.CloudID] = true
 				}
 			}
-			oltCol.Queries = &collector.Queries{Store: qs, Run: olt.HuaweiR015{}.RunQueryInConfig}
+			oltLease = &jobs.LeaseHolder{Schema: "olt-lease/1", MaxSkew: 45 * time.Second, Pub: pub, EdgeID: cfg.EdgeID, TenantID: cfg.TenantID}
+			oltCol.Queries = &collector.Queries{Store: qs, Run: olt.HuaweiR015{}.RunQueryInConfig, Lease: oltLease}
 			verifier.QueryEnabled = true
 			verifier.QueryCheck = func(params map[string]any, targetID string) error {
 				in, err := olt.ParseIntent(params)
@@ -330,7 +332,7 @@ func main() {
 	}
 	ag := &agent.Agent{
 		EdgeID: cfg.EdgeID, TenantID: cfg.TenantID, Version: cfg.Version, GW: gw, Q: q, Collectors: collectors,
-		Jobs: verifier, Queries: queryStore, Refresher: refresher, Bench: benchRunner, JobPollEvery: 15 * time.Second, HeartbeatEvery: cfg.HeartbeatEvery(), CollectEvery: cfg.CollectEvery(), Log: log,
+		Jobs: verifier, Queries: queryStore, OLTLease: oltLease, Refresher: refresher, Bench: benchRunner, JobPollEvery: 15 * time.Second, HeartbeatEvery: cfg.HeartbeatEvery(), CollectEvery: cfg.CollectEvery(), Log: log,
 	}
 	log.Info("fibercore-edge starting", "version", cfg.Version, "edge_id", cfg.EdgeID, "collectors", len(collectors))
 	ag.Run(ctx)

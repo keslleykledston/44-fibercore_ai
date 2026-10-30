@@ -1,0 +1,34 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18eb3-8d80-7203-b11a-e907bf421425).
+[codex] Turn started (01a18eb3-8fe5-74a0-9def-6d0ed4a51d78).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de transferência, lease, permissões...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "GRANT .*olts|UPDATE olts|INSERT INTO olts|INSERT.*olt_snap|olt_snapshot...
+[codex] Command completed: /bin/bash -lc 'rg -n "GRANT .*olts|UPDATE olts|INSERT INTO olts|INSERT.*olt_snap|olt_snapshot... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/olt_ownership.py | sed -n '20,48p'; nl -ba apps/api/a...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/olt_ownership.py | sed -n '20,48p'; nl -ba apps/api/a... (exit 0)
+[codex] Assistant message captured: Já encontrei duas áreas que merecem atenção: sincronização da transferência com um despacho s...
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '105,165p'; nl -ba agents/edge/i...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '105,165p'; nl -ba agents/edge/i... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não deve ser enviado ainda: o limite de lease salvo n...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não deve ser enviado ainda: o limite de lease salvo no banco não acompanha a validade efetiva assinada, e o despacho pode cruzar o início da transferência antes de obter o lock da OLT.
+
+Findings:
+- [high] Transferência pode terminar enquanto a lease antiga ainda é válida (apps/api/app/core/olt_ownership.py:37-42)
+  `issue()` monta a lease com `expires_at` arredondado para segundos (`issued_at` também), mas persiste `lease_until` usando o horário original com microssegundos. Assim, o banco pode considerar a lease expirada até quase um segundo antes do Edge. Se `olt-transfer-finish` roda nesse intervalo, transfere a OLT e incrementa a época enquanto o Edge antigo ainda aceita a lease anterior e pode iniciar uma consulta. Some-se a isso a margem fixa de 60 s, que não é relacionada a um limite documentado de diferença de relógio entre Edge e Cloud. Persista um limite que seja pelo menos tão tarde quanto o `expires_at` realmente assinado, e defina/enforce um limite de clock skew compatível com a margem antes de permitir finish.
+  Recommendation: Calcule `expires_at` uma vez, sem truncamento que antecipe a validade, use esse mesmo instante no UPDATE e na assinatura, e só permita finish após esse instante mais uma margem derivada do limite de skew garantido.
+- [high] Despacho concorrente pode emitir query depois de iniciar transferência (apps/api/app/api/jobs.py:352-359)
+  O endpoint obtém `own` com `FOR SHARE` apenas durante o despacho, enquanto `olt-transfer-start` usa `FOR UPDATE` e cancela os jobs abertos. Se o despacho bloqueia no lock enquanto start atualiza/cancela e confirma a transação, ele pode então ler a linha já em transferência e cancelar corretamente; porém se o despacho obtém `FOR SHARE` primeiro, valida a OLT e mantém o lock até commit, start espera e só cancela jobs em estado aberto. O despacho pode confirmar primeiro e a query fica DISPATCHED; start então marca-a EXPIRED, mas o envelope já foi enviado e o Edge pode executá-lo. A espera pelo lease no finish protege transferência de dono, mas não impede consulta iniciada pelo Edge durante a janela da lease, o que contraria o objetivo declarado de parar dispatch na fase 1. O risco é query executada durante transferência após job marcado expired. Requer serialização/estado que impeça entrega após fase 1, ou tratar os já despachados como potencialmente executáveis e aguardar sua conclusão/lease.
+  Recommendation: Serializar seleção/validação do job com a transição de transferência e garantir que um job despachado concorrentemente não possa ser entregue/executado depois de start; modele jobs já entregues como em voo e inclua-os explicitamente na barreira da transferência.
+- [medium] Ingestão de snapshot pode sobrescrever o vínculo de propriedade recém-transferido (apps/api/app/api/inventory.py:117-130)
+  A migration permite que `fibercore_app` atualize `observed_at` e os campos de snapshot, mas não impede que um Edge antigo continue enviando snapshots após transferência. O endpoint verifica apenas que o `edge_id` informado no body corresponde ao token, e depois rejeita quando a OLT existente pertence a outro edge. Isso evita mudar `edge_id`, mas após a transferência o Edge antigo receberá 409 continuamente; mais criticamente, snapshot feito pelo novo dono pode seguir apenas se o nome da OLT corresponder, sem validação da geração. Essa é uma regressão operacional de ingestão no intervalo de troca: OLT permanece vinculada ao edge antigo até finish, então snapshots do novo dono não podem ingeri-la antes; após finish os antigos são rejeitados. Caso a fase 1 espere snapshots ou o CLI reutilize nomes, o fluxo de ingestão não está integrado à transferência. Não é perda permanente demonstrável, então limitar a recomendação a validar comportamento.
+  Recommendation: Defina explicitamente o comportamento de snapshots durante a transferência e faça a ingestão validar o proprietário atual/época, com uma resposta recuperável para o Edge novo após finish.

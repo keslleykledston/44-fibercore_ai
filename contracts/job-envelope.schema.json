@@ -13,7 +13,7 @@
     "target_ref": {"type": "string", "pattern": "^[A-Za-z0-9._%-]{3,200}$", "description": "refresh on a CPE only: the ACS device id the Edge may read (ADR-SD-002 item 4); covered by the signature"},
     "authorization_id": {"type": "string", "format": "uuid", "description": "bench writes only (ADR-0030): the single-use prior authorization consumed by this job; covered by the signature"},
     "authorization_ends_at": {"type": "string", "format": "date-time", "description": "bench writes only: end of the authorization window; expires_at is never later"},
-    "owner_epoch": {"type": "integer", "minimum": 1, "description": "bench writes only: generation of the target's ownership; the Edge rejects a lower one (ADR-0029/0030)"},
+    "owner_epoch": {"type": "integer", "minimum": 1, "description": "bench writes and olt_query: generation of the target's ownership; the Edge rejects a lower one (ADR-0029/0030)"},
     "params": {"description": "bench writes (ADR-0030) or olt_query (ADR-0029) only: the catalog-validated parameters of the operation; covered by the signature",
       "oneOf": [
         {"type": "object", "additionalProperties": false, "properties": {"ssid": {"type": "string", "pattern": "^BANCADA-[A-Z0-9]{1,16}$"}}},

@@ -25,7 +25,7 @@ from sqlalchemy import Connection, text
 
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import audit
-from app.core import bench, features, jobsign, olt_query
+from app.core import bench, features, jobsign, olt_ownership, olt_query
 from app.core.settings import Settings, get_settings
 from app.events import outbox
 
@@ -327,6 +327,9 @@ def next_job(
     lease = _bench_lease(conn, p, settings)  # on EVERY answer, job or not: this is how the Edge's bench lease is renewed or withdrawn
     if lease:
         response.headers["X-Bench-Lease"] = lease
+    olt_lease = olt_ownership.issue(conn, p.tenant_id, p.edge_id, settings)  # same for the OLTs this Edge may query (ADR-0029 item 3)
+    if olt_lease:
+        response.headers["X-OLT-Lease"] = olt_lease
     row = conn.execute(
         text(
             f"SELECT {COLS}, nonce FROM jobs WHERE edge_id = :e AND status = 'APPROVED' "  # noqa: S608
@@ -348,8 +351,11 @@ def next_job(
         return None
     if row.operation == "olt_query":  # defence in depth, like the write gate: the gates NOW, and the stored intent must still be the one that was hashed
         prm = _row_params(row)
-        if _query_gate(conn, p.tenant_id, prm) or _intent_hash(row.operation, row.target_type, row.target_id, prm) != row.intent_hash.strip() \
-                or prm.get("olt_ref") != str(row.target_id) or prm.get("catalog_version") != olt_query.catalog_version():
+        # the OLT must still belong to THIS Edge and not be mid-transfer; the epoch of the moment travels in the signed envelope
+        own = conn.execute(text("SELECT edge_id, owner_epoch, transfer_to FROM olts WHERE id = :i FOR SHARE"), {"i": row.target_id}).first()
+        if (_query_gate(conn, p.tenant_id, prm) or _intent_hash(row.operation, row.target_type, row.target_id, prm) != row.intent_hash.strip()
+                or prm.get("olt_ref") != str(row.target_id) or prm.get("catalog_version") != olt_query.catalog_version()
+                or own is None or own.edge_id != p.edge_id or own.transfer_to is not None):
             cas(conn, row.id, "CANCELLED")
             response.status_code = 204
             return None
@@ -379,6 +385,8 @@ def next_job(
         envelope["expires_at"] = min(row.expires_at, auth.window_end, issued + bench.ENVELOPE_TTL).isoformat()
     if row.operation == "olt_query":  # the exact closed intent travels inside the signature; the Edge validates it again against its own catalog
         envelope["params"] = _row_params(row)
+        envelope["owner_epoch"] = own.owner_epoch  # the generation of the OLT's ownership: an Edge that holds a higher one refuses this envelope
+        envelope["expires_at"] = min(row.expires_at, issued + olt_query.ENVELOPE_TTL).isoformat()
     if (row.operation == "refresh" or bench_job) and row.target_type == "cpe":
         # The ACS device id the Edge may ask about (ADR-SD-002 item 4), covered by the signature. A CPE without a TR-069 binding keeps the
         # old behaviour (a plain collection round); the Edge validates the value again and only acts when active reads are enabled.

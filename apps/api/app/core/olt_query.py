@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Literal
 from uuid import UUID
 
@@ -64,6 +65,9 @@ ROLLOUT: frozenset[str] = frozenset({"olt.version", "olt.board"})
 
 # the Edge side of the channel (queue, lease, parsers) does not exist yet: nothing is dispatched and the tenant flag cannot be turned on while False
 EDGE_SUPPORT = False
+
+# an olt_query envelope is short-lived on its own: a copy that waits in transit or in a queue dies in minutes
+ENVELOPE_TTL = timedelta(minutes=10)
 
 # quota (ADR-0029 item 5): requests per rolling hour. The Edge has its own, stricter, budget per OLT (5 per session, 20 per hour).
 USER_PER_HOUR = 10

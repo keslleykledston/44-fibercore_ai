@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18eb5-05bf-7653-8a7d-2331e153cb74).
+[codex] Turn started (01a18eb5-05f7-7c71-83d9-24ae065a902b).
+[codex] Assistant message captured: Vou comparar o branch com `main` e seguir os caminhos de lease/transferência e execução conco...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/olt_owner...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/olt_owner... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- agents/edge/internal/jobs/l...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- agents/edge/internal/jobs/l... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "olt_ownership.issue|OLT-Lease|transfer_started|lease_until|Epochs|stale...
+[codex] Command completed: /bin/bash -lc 'rg -n "olt_ownership.issue|OLT-Lease|transfer_started|lease_until|Epochs|stale... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt_queries.go | sed -n '105,190p'; nl -...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt_queries.go | sed -n '105,190p'; nl -... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: a transferência pode terminar enqua...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: a transferência pode terminar enquanto uma consulta já iniciada pelo Edge antigo ainda está em execução na OLT.
+
+Findings:
+- [high] A lease é verificada antes da consulta, mas não limita sua duração (agents/edge/internal/collector/olt_queries.go:126-155)
+  `Drain` valida a lease antes de chamar `q.Run`, mas a consulta pode continuar depois que ela expira. O contexto da sessão pode durar até três minutos, enquanto a lease dura dois; `olt-transfer-finish` espera apenas `lease_until + 60 s`. Assim, uma consulta iniciada perto do vencimento pode continuar após o novo Edge assumir a OLT, permitindo execução concorrente durante a transferência. Limite a duração da consulta ao tempo restante da lease e impeça a transferência de concluir até que uma consulta em andamento tenha terminado ou sido cancelada.
+  Recommendation: Propague um deadline de execução que não ultrapasse o vencimento local da lease; faça a fase 2 também aguardar uma margem que cubra a duração máxima de qualquer consulta iniciada sob a lease antiga.
+
+Next steps:
+- Cobrir com teste uma consulta que começa imediatamente antes do fim da lease e confirmar que a transferência não termina enquanto ela ainda pode executar comandos na OLT.

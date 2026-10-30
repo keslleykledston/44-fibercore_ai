@@ -27,10 +27,11 @@ type Agent struct {
 	GW                        *gateway.Client
 	Q                         *queue.Queue
 	Collectors                []collector.Collector
-	Jobs                      *jobs.Verifier  // nil => job polling disabled
-	Refresher                 RefreshFunc     // nil => refresh jobs that name a device fail closed
-	Queries                   *oltquery.Store // nil => olt_query jobs are refused (ADR-0029); the queries run in the OLT collector's own session
-	Bench                     *bench.Runner   // nil => bench writes are refused (ADR-0030); its Lease is fed from every poll answer
+	Jobs                      *jobs.Verifier    // nil => job polling disabled
+	Refresher                 RefreshFunc       // nil => refresh jobs that name a device fail closed
+	OLTLease                  *jobs.LeaseHolder // ownership lease of the OLTs (ADR-0029 item 3); nil => no olt_query can run
+	Queries                   *oltquery.Store   // nil => olt_query jobs are refused (ADR-0029); the queries run in the OLT collector's own session
+	Bench                     *bench.Runner     // nil => bench writes are refused (ADR-0030); its Lease is fed from every poll answer
 	JobPollEvery              time.Duration
 	HeartbeatEvery            time.Duration
 	CollectEvery              time.Duration
@@ -125,14 +126,19 @@ func (a *Agent) PollJob(ctx context.Context) {
 		return
 	}
 	a.reportQueries(ctx) // outcomes of queries that ran in a collection session, or that expired or lost their outcome, travel as they become known
-	raw, lease, err := a.GW.NextJob(ctx)
+	raw, leases, err := a.GW.NextJob(ctx)
 	if err != nil {
 		a.Log.Warn("job poll failed", "err", err) // the lease already held simply runs out on its own
 		return
 	}
 	if a.Bench != nil {
-		if lerr := a.Bench.Lease.Accept(lease); lerr != nil {
+		if lerr := a.Bench.Lease.Accept(leases.Bench); lerr != nil {
 			a.Log.Warn("bench lease rejected; bench writes unavailable until a valid one arrives", "err", lerr)
+		}
+	}
+	if a.OLTLease != nil { // every answer renews or withdraws the ownership lease of the OLTs (a failed poll above leaves it to run out by itself)
+		if lerr := a.OLTLease.Accept(leases.OLT); lerr != nil {
+			a.Log.Warn("olt lease rejected; olt queries wait for a valid one", "err", lerr)
 		}
 	}
 	if raw == nil {
@@ -314,11 +320,14 @@ func (a *Agent) queueQuery(ctx context.Context, env *jobs.Envelope) {
 		a.Flush(ctx)
 		return
 	}
-	if err := a.Queries.Enqueue(env.JobID, oltquery.Intent{QueryID: intent.Query.ID, OLTRef: intent.OLTRef, Slot: intent.Params.Slot, Port: intent.Params.Port, ONT: intent.Params.ONT}, exp); err != nil {
+	if err := a.Queries.Enqueue(env.JobID, oltquery.Intent{QueryID: intent.Query.ID, OLTRef: intent.OLTRef, Epoch: env.OwnerEpoch, Slot: intent.Params.Slot, Port: intent.Params.Port, ONT: intent.Params.ONT}, exp); err != nil {
 		a.Log.Warn("olt query not queued", "job_id", env.JobID, "err", err)
 		reason := "queue_error"
 		if errors.Is(err, oltquery.ErrQueueFull) {
 			reason = "queue_full"
+		}
+		if errors.Is(err, oltquery.ErrStaleOwner) {
+			reason = "stale_owner"
 		}
 		a.reportJob(ctx, env.JobID, "failed", reason, false)
 	}

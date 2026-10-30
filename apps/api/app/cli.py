@@ -68,6 +68,10 @@ def main(argv: list[str] | None = None) -> None:
     ba.add_argument("--first-run", action="store_true", help="ADR-0030 amendment: stands in for the missing `observed` registry entry (single use)")
     bu = sub.add_parser("bench-unlock", help="ADR-0030: clear the write lock of a bench target after a documented reconciliation")
     bu.add_argument("tenant_id"); bu.add_argument("cpe_id"); bu.add_argument("--reason", required=True)
+    ots = sub.add_parser("olt-transfer-start", help="ADR-0029: phase 1 of moving an OLT to another Edge: no lease, no dispatch, open queries cancelled (owner-only)")
+    ots.add_argument("tenant_id"); ots.add_argument("olt_id"); ots.add_argument("to_edge_id")
+    otf = sub.add_parser("olt-transfer-finish", help="ADR-0029: phase 2: the new Edge becomes the owner (epoch + 1) once the old Edge's last lease has run out")
+    otf.add_argument("tenant_id"); otf.add_argument("olt_id")
     fs = sub.add_parser("feature-set", help="turn a per-tenant feature flag on/off (owner-only; overrides the code default)")
     fs.add_argument("tenant_id"); fs.add_argument("feature"); fs.add_argument("state", choices=["on", "off", "default"])
     sp = sub.add_parser("set-password", help="set a user's password (owner-only); ends all their sessions")
@@ -221,6 +225,43 @@ def main(argv: list[str] | None = None) -> None:
                            "VALUES (:t,'bench_target',:i,'bench.unlocked','1',CAST(:p AS jsonb))"),
                       {"t": a.tenant_id, "i": n.id, "p": json.dumps({"reason": a.reason[:300]})})
             print("write lock cleared")
+        elif a.cmd == "olt-transfer-start":
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            o = c.execute(text("SELECT edge_id, transfer_to FROM olts WHERE id = :o FOR UPDATE"), {"o": a.olt_id}).first()
+            if o is None:
+                sys.exit("olt not found for this tenant")
+            if o.transfer_to is not None:
+                sys.exit("a transfer of this olt is already in progress")
+            if str(o.edge_id) == a.to_edge_id:
+                sys.exit("the olt already belongs to that edge")
+            if c.execute(text("SELECT 1 FROM edges WHERE id = :e"), {"e": a.to_edge_id}).first() is None:
+                sys.exit("edge not found for this tenant")
+            # one transaction: from here no lease is issued and nothing is dispatched for this OLT, and every query not yet concluded ends
+            c.execute(text("UPDATE olts SET transfer_to = :e, transfer_started_at = now() WHERE id = :o"), {"e": a.to_edge_id, "o": a.olt_id})
+            n = c.execute(text("UPDATE jobs SET status = CASE WHEN status = 'DISPATCHED' THEN 'EXPIRED' ELSE 'CANCELLED' END, updated_at = now() "
+                               "WHERE operation = 'olt_query' AND target_id = :o AND status IN ('PREVIEWED','PENDING_APPROVAL','APPROVED','DISPATCHED') RETURNING 1"),
+                          {"o": a.olt_id}).rowcount
+            c.execute(text("INSERT INTO events_outbox (tenant_id, aggregate_type, aggregate_id, event_type, schema_version, payload) "
+                           "VALUES (:t,'olt',:o,'olt.transfer_started','1',CAST(:p AS jsonb))"),
+                      {"t": a.tenant_id, "o": a.olt_id, "p": json.dumps({"to_edge": a.to_edge_id, "queries_ended": n})})
+            print(f"transfer started: {n} open queries ended; finish after the old edge's lease has run out")
+        elif a.cmd == "olt-transfer-finish":
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            from app.core import olt_ownership
+            o = c.execute(text("SELECT transfer_to, lease_until FROM olts WHERE id = :o FOR UPDATE"), {"o": a.olt_id}).first()
+            if o is None or o.transfer_to is None:
+                sys.exit("no transfer in progress for this olt")
+            wait = o.lease_until + olt_ownership.CLOCK_MARGIN if o.lease_until else None
+            left = c.execute(text("SELECT :w > clock_timestamp()"), {"w": wait}).scalar() if wait else False
+            if left:
+                sys.exit(f"refused: the old edge may still hold a lease (until {wait.isoformat()} incl. margin); try again after that")
+            c.execute(text("UPDATE olts SET edge_id = transfer_to, owner_epoch = owner_epoch + 1, transfer_to = NULL, transfer_started_at = NULL, lease_until = NULL "
+                           "WHERE id = :o"), {"o": a.olt_id})
+            ep = c.execute(text("SELECT owner_epoch FROM olts WHERE id = :o"), {"o": a.olt_id}).scalar()
+            c.execute(text("INSERT INTO events_outbox (tenant_id, aggregate_type, aggregate_id, event_type, schema_version, payload) "
+                           "VALUES (:t,'olt',:o,'olt.transfer_finished','1',CAST(:p AS jsonb))"),
+                      {"t": a.tenant_id, "o": a.olt_id, "p": json.dumps({"owner_epoch": ep})})
+            print(f"transfer finished: owner_epoch {ep}")
         elif a.cmd == "feature-set":
             from app.core.features import FEATURES
             if a.feature not in FEATURES:

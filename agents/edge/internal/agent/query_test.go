@@ -37,7 +37,7 @@ func queryEnvelope(t *testing.T, priv ed25519.PrivateKey, ref string) []byte {
 		"target_id": ref, "operation": "olt_query", "idempotency_key": "query-key-0001",
 		"issued_at": bNow.Format(time.RFC3339), "expires_at": bNow.Add(10 * time.Minute).Format(time.RFC3339),
 		"nonce": "abcdef0123456789abcdef0123456789", "intent_sha256": h, "policy_version": "p", "approval_ids": []string{},
-		"params": map[string]any(params),
+		"params": map[string]any(params), "owner_epoch": 2,
 	})
 }
 
@@ -196,7 +196,7 @@ func TestAResultIsReportedOnlyWhenTheCloudAnswersAndIsResentIfItDoesNot(t *testi
 		Jobs: &jobs.Verifier{Pub: pub, EdgeID: bEdge, TenantID: bTenant, Allowed: map[string]bool{}, Nonces: q, Now: func() time.Time { return bNow }},
 		Log:  slog.New(slog.NewTextHandler(io.Discard, nil))}
 	id := "11111111-1111-4111-8111-111111111111"
-	if err := store.Enqueue(id, oltquery.Intent{QueryID: "olt.version", OLTRef: qOLTID}, time.Now().Add(time.Hour)); err != nil {
+	if err := store.Enqueue(id, oltquery.Intent{QueryID: "olt.version", OLTRef: qOLTID, Epoch: 2}, time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.Claim(qOLTID, "s"); err != nil {
@@ -225,7 +225,7 @@ func TestAResultIsReportedOnlyWhenTheCloudAnswersAndIsResentIfItDoesNot(t *testi
 	}
 	// a result whose delivery-queue copy was lost is handed over again after queryResendAfter
 	id2 := "22222222-2222-4222-8222-222222222222"
-	_ = store.Enqueue(id2, oltquery.Intent{QueryID: "olt.version", OLTRef: qOLTID}, time.Now().Add(time.Hour))
+	_ = store.Enqueue(id2, oltquery.Intent{QueryID: "olt.version", OLTRef: qOLTID, Epoch: 2}, time.Now().Add(time.Hour))
 	_, _ = store.Claim(qOLTID, "s2")
 	_ = store.Complete(id2, json.RawMessage(`{"product":"MA5608T"}`))
 	store.Now = func() time.Time { return time.Now().Add(-queryResendAfter - time.Minute) }
@@ -243,7 +243,7 @@ func TestAHandOverIsRememberedAcrossARestart(t *testing.T) {
 	pub, _, _ := ed25519.GenerateKey(rand.Reader)
 	r := newQRig(t, nil, pub, true)
 	id := "11111111-1111-4111-8111-111111111111"
-	_ = r.store.Enqueue(id, oltquery.Intent{QueryID: "olt.version", OLTRef: qOLTID}, time.Now().Add(time.Hour))
+	_ = r.store.Enqueue(id, oltquery.Intent{QueryID: "olt.version", OLTRef: qOLTID, Epoch: 2}, time.Now().Add(time.Hour))
 	_, _ = r.store.Claim(qOLTID, "s")
 	_ = r.store.Complete(id, json.RawMessage(`{"product":"MA5608T"}`))
 	if err := r.store.MarkHanded(id); err != nil {
@@ -280,12 +280,28 @@ func TestAResultTheCloudRefusesForGoodIsMarkedRefusedNotAcknowledged(t *testing.
 		Jobs: &jobs.Verifier{Pub: pub, EdgeID: bEdge, TenantID: bTenant, Allowed: map[string]bool{}, Nonces: q, Now: func() time.Time { return bNow }},
 		Log:  slog.New(slog.NewTextHandler(io.Discard, nil))}
 	id := "11111111-1111-4111-8111-111111111111"
-	_ = store.Enqueue(id, oltquery.Intent{QueryID: "olt.version", OLTRef: qOLTID}, time.Now().Add(time.Hour))
+	_ = store.Enqueue(id, oltquery.Intent{QueryID: "olt.version", OLTRef: qOLTID, Epoch: 2}, time.Now().Add(time.Hour))
 	_, _ = store.Claim(qOLTID, "s")
 	_ = store.Complete(id, json.RawMessage(`{"product":"MA5608T"}`))
 	a.PollJob(context.Background())
 	e, _, _ := store.Get(id)
 	if e.State != oltquery.Reported || e.Reason != "cloud_rejected" || len(e.Result) == 0 {
 		t.Fatalf("kept, with its result, as refused: %+v", e)
+	}
+}
+
+func TestAnEnvelopeOfAReplacedOwnerIsRefusedAfterTheNewerOneWasSeen(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	r := newQRig(t, queryEnvelope(t, priv, qOLTID), pub, true) // epoch 2
+	if err := r.store.Enqueue("someone-else", oltquery.Intent{QueryID: "olt.version", OLTRef: qOLTID, Epoch: 3}, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	r.a.PollJob(context.Background())
+	got := r.results()
+	if len(got) != 2 || !strings.Contains(got[1], `"failed"`) || !strings.Contains(got[1], "stale_owner") {
+		t.Fatalf("an owner that was replaced must be told so: %v", got)
+	}
+	if _, ok, _ := r.store.Get("11111111-1111-4111-8111-111111111111"); ok {
+		t.Fatal("nothing may be queued for a replaced owner")
 	}
 }

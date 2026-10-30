@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18eb6-7b36-7723-8b2b-99bce9e6cd75).
+[codex] Turn started (01a18eb6-7dac-7690-b12a-94fbb93e757b).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main`, com foco na conversão de `Remaining` em deadline absolu...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=35 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=35 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: uma renovação concorrente pode tro...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: uma renovação concorrente pode trocar o epoch entre a validação e o início da consulta, permitindo executar sob um lease que já não autoriza aquela geração.
+
+Findings:
+- [high] A checagem do epoch e a fixação do deadline não são atômicas (agents/edge/internal/collector/olt_queries.go:130-139)
+  `Check` valida `e.Intent.Epoch`, mas libera o mutex do LeaseHolder antes de `Remaining` ler o estado novamente. Enquanto isso, `Accept` pode instalar um lease novo, com outro epoch para o mesmo OLT; `Remaining` então fornece um deadline válido para esse lease novo, e `q.Run` executa a consulta enfileirada para o epoch antigo. A renovação ocorre no loop de polling enquanto a coleta roda em goroutine, então essa intercalação é possível. Isso pode executar um comando OLT depois de a propriedade ter mudado, violando o limite de ownership mesmo que o contexto respeite o instante absoluto do lease lido. Obtenha epoch e deadline restante numa única operação sincronizada que confirme o epoch esperado, e use esse resultado para criar o deadline da consulta.
+  Recommendation: Adicione ao LeaseChecker uma operação atômica que, sob o mesmo mutex, valide o epoch esperado e retorne o instante absoluto de expiração; use esse instante diretamente no contexto da consulta.
