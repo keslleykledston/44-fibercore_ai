@@ -10,7 +10,7 @@ Escopo: SOMENTE a ONT de bancada. Nada aqui toca CPE/ONU de cliente. Sem credenc
 5. Responsável presente, com a ONT de bancada em condição de ser reiniciada (sem cliente dependendo dela).
 
 ## Execução
-1. Solicitante cria o job `reboot_cpe` (preview → submit); um `isp_admin` distinto aprova (a aprovação consome a autorização).
+1. Solicitante cria o job `reboot_cpe` (preview → submit); o próprio solicitante (com papel `isp_admin`) aprova (a aprovação consome a autorização; ver a emenda de aprovação do ADR-0030).
 2. O Edge confirma identidade no ACS, reserva o ritmo, grava o claim e envia UMA tarefa `reboot`. Aguarda até 4 min por novo `_lastBoot`.
 3. Resultado: `SUCCEEDED` (voltou) ou `UNKNOWN`/`FAILED` (alvo travado; ver abaixo).
 
