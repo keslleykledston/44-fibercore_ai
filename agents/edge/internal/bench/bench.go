@@ -53,6 +53,14 @@ func (r *Runner) now() time.Time {
 
 func fail(detail string) Result { return Result{State: "failed", Detail: detail} }
 
+// deny logs the exact local reason (never sent to the Cloud: only the category in `detail` travels) and refuses.
+func (r *Runner) deny(env *jobs.Envelope, detail string, err error) Result {
+	if r.Log != nil {
+		r.Log.Warn("bench maneuver refused", "job_id", env.JobID, "operation", env.Operation, "reason", detail, "err", err)
+	}
+	return fail(detail)
+}
+
 // Run executes one verified bench envelope. At most one runs at a time on this Edge.
 func (r *Runner) Run(ctx context.Context, env *jobs.Envelope) Result {
 	if !jobs.BenchWriteOps[env.Operation] || (env.Operation != "reboot_cpe" && env.Operation != "set_wifi_ssid") {
@@ -71,13 +79,13 @@ func (r *Runner) Run(ctx context.Context, env *jobs.Envelope) Result {
 		return fail("target is not on the local bench list")
 	}
 	if err := r.Lease.Check(env.TargetRef, env.OwnerEpoch); err != nil {
-		return fail("no valid Cloud lease for this target")
+		return r.deny(env, "no valid Cloud lease for this target", err)
 	}
 	if err := r.ACS.BenchIdentity(ctx, dev, r.now()); err != nil {
 		if errors.Is(err, nbi.ErrBenchOffline) {
-			return fail("device not recently online")
+			return r.deny(env, "device not recently online", err)
 		}
-		return fail("device identity not confirmed")
+		return r.deny(env, "device identity not confirmed", err)
 	}
 	// re-check the lease after the (network) identity read: it may have lapsed or moved while we waited
 	if err := r.Lease.Check(env.TargetRef, env.OwnerEpoch); err != nil {
@@ -87,7 +95,7 @@ func (r *Runner) Run(ctx context.Context, env *jobs.Envelope) Result {
 		return fail("envelope or authorization window already over")
 	}
 	if err := r.Guard.Reserve(env.TargetRef); err != nil {
-		return fail("pacing: too soon or state unavailable")
+		return r.deny(env, "pacing: too soon or state unavailable", err)
 	}
 	if err := r.Claims.Claim(env.AuthorizationID, env.JobID, env.TargetRef, env.OwnerEpoch); err != nil {
 		if errors.Is(err, jobs.ErrClaimTaken) {
@@ -103,6 +111,7 @@ func (r *Runner) Run(ctx context.Context, env *jobs.Envelope) Result {
 		return r.setSSID(ctx, env, dev, notAfter)
 	}
 	out, err := r.ACS.RebootBench(ctx, dev, notAfter, r.Wait, r.Poll, r.now)
+	r.logOutcome(env, out.Detail, err)
 	switch {
 	case err == nil && out.Accepted && out.PostcheckOK:
 		r.finish(env, jobs.ClaimDone)
@@ -122,6 +131,7 @@ func (r *Runner) Run(ctx context.Context, env *jobs.Envelope) Result {
 // setSSID is H3: the value was validated at the envelope; the ACS layer validates it again and restores the original before it reports.
 func (r *Runner) setSSID(ctx context.Context, env *jobs.Envelope, dev nbi.BenchDevice, notAfter time.Time) Result {
 	out, err := r.ACS.SetBenchSSID(ctx, dev, env.Params["ssid"], jobs.BenchSSIDRe.MatchString, notAfter, r.RestoreFile, r.now)
+	r.logOutcome(env, out.Detail, err)
 	switch {
 	case err == nil && out.Applied && out.Verified && out.Restored:
 		r.finish(env, jobs.ClaimDone)
@@ -152,6 +162,12 @@ func deadline(env *jobs.Envelope) (time.Time, error) {
 		return end, nil
 	}
 	return exp, nil
+}
+
+func (r *Runner) logOutcome(env *jobs.Envelope, detail string, err error) {
+	if err != nil && r.Log != nil {
+		r.Log.Warn("bench maneuver did not complete", "job_id", env.JobID, "operation", env.Operation, "detail", detail, "err", err)
+	}
 }
 
 func (r *Runner) finish(env *jobs.Envelope, state string) {
