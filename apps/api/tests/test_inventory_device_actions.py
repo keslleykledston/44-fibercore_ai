@@ -187,13 +187,55 @@ def test_simultaneous_requests_with_the_same_key_make_one_job_and_no_error(clien
     gate = threading.Barrier(6)
 
     def go():
-        c = TestClient(app)
+        c = TestClient(app, raise_server_exceptions=False)
         gate.wait()
         out.append(_post(c, h, cpe, key=key))
 
     ts = [threading.Thread(target=go) for _ in range(6)]
     [t.start() for t in ts]
     [t.join() for t in ts]
+    assert len(out) == 6, "a request died with an exception"
     assert sorted(r.status_code for r in out) == [200] * 6, [r.text for r in out if r.status_code != 200]
     assert sorted(r.json()["outcome"] for r in out) == ["existing"] * 5 + ["submitted"]
     assert len({r.json()["job"]["id"] for r in out}) == 1
+
+
+def test_the_job_screen_and_the_cpe_screen_racing_on_one_key_do_not_collide(client, seed, inv, migrated):
+    import threading
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    _flag(migrated, seed["A"])
+    cpe = _cpe(client, inv, seed)
+    _bench(migrated, seed, inv, cpe)
+    h = hdr(client, "alice", seed, "A")
+    for _round in range(8):   # a race is probabilistic: several fresh keys make a missing lock fail reliably
+        _race(h, cpe)
+
+
+def _race(h, cpe):
+    import threading
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    key = _key()
+    out: list = []
+    gate = threading.Barrier(6)
+
+    def via_action():
+        c = TestClient(app, raise_server_exceptions=False); gate.wait(); out.append(("action", _post(c, h, cpe, key=key)))
+
+    def via_jobs():
+        c = TestClient(app, raise_server_exceptions=False); gate.wait()
+        out.append(("jobs", c.post("/v1/jobs/preview", headers={**h, **key}, json={"operation": "reboot_cpe", "target_id": cpe, "params": {}})))
+
+    ts = [threading.Thread(target=via_action) for _ in range(3)] + [threading.Thread(target=via_jobs) for _ in range(3)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert len(out) == 6, "a request died with an exception"
+    assert [r.status_code for _, r in out if r.status_code >= 500] == [], [r.text for _, r in out]
+    assert all(r.status_code in (200, 201) for _, r in out), [(k, r.status_code, r.text) for k, r in out]
+    ids = {(r.json()["job"]["id"] if k == "action" else r.json()["id"]) for k, r in out}
+    assert len(ids) == 1, ids
