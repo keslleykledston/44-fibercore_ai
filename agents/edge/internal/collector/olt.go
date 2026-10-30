@@ -44,6 +44,9 @@ type OLTSource struct {
 // DownTimesSource configures the CLI read of the OLT's last down times.
 type DownTimesSource struct {
 	MaxPerRound int // register-info reads per collection (the session is already open; each is one short command)
+	// Report, when set, is told after every collection that picked ONUs: picked, read (answers that came back), found (with a time), and
+	// the reasons of the others with their counts. Operators need it: without it a parser that rejects every answer is invisible.
+	Report func(name string, picked, read, found int, why map[string]int)
 }
 
 func (s OLTSource) budget() time.Duration {
@@ -239,7 +242,18 @@ func (o *OLT) collectCLI(ctx context.Context, src OLTSource, observed string) ([
 	}
 	var snap olt.Snapshot
 	if dr, ok := src.Driver.(olt.DownReader); ok && src.DownTimes != nil {
-		snap, err = dr.SnapshotWithDownTimes(ctx, sess, src.Ports, o.downReads(src))
+		round := &DownTimesRound{why: map[string]int{}}
+		snap, err = dr.SnapshotWithDownTimes(ctx, sess, src.Ports, o.downReads(src, round))
+		if src.DownTimes.Report != nil && round.picked > 0 {
+			o.ldMu.Lock()
+			why := map[string]int{}
+			for k, v := range round.why {
+				why[k] = v
+			}
+			p, r, f := round.picked, round.read, round.found
+			o.ldMu.Unlock()
+			src.DownTimes.Report(src.Name, p, r, f, why)
+		}
 	} else {
 		snap, err = src.Driver.Snapshot(ctx, sess, src.Ports)
 	}

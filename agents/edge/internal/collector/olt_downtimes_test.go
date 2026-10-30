@@ -32,9 +32,9 @@ func (d dtDriver) SnapshotWithDownTimes(ctx context.Context, s olt.Session, port
 		*d.asked = append(*d.asked, u.Serial)
 		if t, ok := d.times[u.Serial]; ok && !d.nopeS[u.Serial] {
 			tt := t
-			r.Done(u.Serial, &tt)
+			r.Done(u.Serial, &tt, nil)
 		} else {
-			r.Done(u.Serial, nil)
+			r.Done(u.Serial, nil, olt.ErrNoDownRecord)
 		}
 	}
 	return snap, nil
@@ -161,5 +161,17 @@ func TestUnknownStateDoesNotForgetTheDownTime(t *testing.T) {
 	clock.add(16 * time.Minute)
 	if got := collectDT(t, o); got["HWTC00000001"] == "" || len(*asked) != 1 {
 		t.Fatalf("unknown says nothing about the outage: %v %v", got, *asked)
+	}
+}
+
+func TestDownTimesRoundIsReportedWithCountsAndReasonsOnly(t *testing.T) {
+	o, _, _, drv, _ := newDT(t, 3, 4)
+	drv.nopeS["HWTC00000002"] = true
+	var picked, read, found int
+	var why map[string]int
+	o.Sources[0].DownTimes.Report = func(_ string, p, r, f int, w map[string]int) { picked, read, found, why = p, r, f, w }
+	collectDT(t, o)
+	if picked != 3 || read != 3 || found != 2 || why[olt.ErrNoDownRecord.Error()] != 1 {
+		t.Fatalf("picked=%d read=%d found=%d why=%v", picked, read, found, why)
 	}
 }

@@ -124,7 +124,7 @@ func TestSnapshotWithDownTimesReadsOnlyThePickedOfflineONUsInTheSameSession(t *t
 			listing = l
 			return append([]ONU{{Serial: "X", PonPath: "0/0/14", Status: "online", OntID: 1, HasOntID: true}}, pick...)
 		},
-		Done: func(s string, at *time.Time) { done[s] = at },
+		Done: func(s string, at *time.Time, _ error) { done[s] = at },
 	})
 	if err != nil || len(snap.ONUs) != 12 || len(listing) != 12 {
 		t.Fatalf("snapshot: %v onus=%d listing=%d", err, len(snap.ONUs), len(listing))
@@ -153,7 +153,7 @@ func TestSnapshotWithDownTimesReadsOnlyThePickedOfflineONUsInTheSameSession(t *t
 func TestSnapshotWithDownTimesIsBestEffortAndOffByDefault(t *testing.T) {
 	off := offlineOf(t)
 	reads := func(done map[string]*time.Time) DownReads {
-		return DownReads{Pick: func([]ONU) []ONU { return off[:3] }, Done: func(s string, at *time.Time) { done[s] = at }}
+		return DownReads{Pick: func([]ONU) []ONU { return off[:3] }, Done: func(s string, at *time.Time, _ error) { done[s] = at }}
 	}
 	// a session error in the middle ends the reads but keeps the listing; the failed ONU is not reported (it is asked again later)
 	r := &regSession{t: t, reply: "x", fail: "display ont register-info 14 " + itoa(off[1].OntID)}

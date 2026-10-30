@@ -19,9 +19,10 @@ type DownReads struct {
 	// Pick is called once with the complete listing, after the tables were read, and returns the ONUs whose register-info should be read now.
 	// It must only return offline ONUs of that listing that have an ONT-ID; the driver ignores anything else.
 	Pick func(listing []ONU) []ONU
-	// Done reports the outcome for one ONU: at != nil = the OLT's last down time; at == nil = the OLT has no usable record for it.
-	// It is not called when the read itself failed (session error, device rejection): the ONU is simply picked again later.
-	Done func(serial string, at *time.Time)
+	// Done reports the outcome for one ONU: at != nil = the OLT's last down time; at == nil = the OLT has no usable record for it, and why
+	// (a fixed sentence of this package, never device text). It is not called when the read itself failed (session error, device rejection):
+	// the ONU is simply picked again later.
+	Done func(serial string, at *time.Time, why error)
 }
 
 // DownReader is implemented by drivers that can read last down times while taking a snapshot.
@@ -141,9 +142,9 @@ func (h HuaweiR015) SnapshotWithDownTimes(ctx context.Context, s Session, ports 
 			}
 			if t, err := ParseLastDown(out, u.Serial); err == nil {
 				tt := t
-				r.Done(u.Serial, &tt)
+				r.Done(u.Serial, &tt, nil)
 			} else {
-				r.Done(u.Serial, nil)
+				r.Done(u.Serial, nil, err)
 			}
 		}
 		if _, ok := run("quit"); !ok {
