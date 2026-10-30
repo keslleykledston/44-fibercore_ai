@@ -155,16 +155,26 @@ type fakeParams struct {
 	byID  map[string][]nbi.Metric
 	err   error
 	asked []string
+	calls int
 }
 
+// CachedParams answers for the ids it is asked about and, on the FIRST call only, also for ids nobody asked about (a reader must not be trusted
+// to stay inside the request).
 func (f *fakeParams) CachedParams(_ context.Context, ids []string) ([]nbi.DeviceParams, error) {
 	f.asked = append(f.asked, ids...)
+	f.calls++
 	if f.err != nil {
 		return nil, f.err
 	}
+	asked := map[string]bool{}
+	for _, id := range ids {
+		asked[id] = true
+	}
 	var out []nbi.DeviceParams
-	for id, ms := range f.byID { // includes ids that were NOT asked for, on purpose
-		out = append(out, nbi.DeviceParams{ID: id, Metrics: ms})
+	for id, ms := range f.byID {
+		if asked[id] || f.calls == 1 {
+			out = append(out, nbi.DeviceParams{ID: id, Metrics: ms})
+		}
 	}
 	return out, nil
 }
@@ -252,7 +262,7 @@ func TestStateWithNoMetricsOrFutureClockSendsNothingForThatDevice(t *testing.T) 
 
 func TestStateIsSplitIntoBoundedItems(t *testing.T) {
 	var devs []nbi.Device
-	p := &fakeParams{byID: map[string][]nbi.Metric{}}
+	p := &batchParams{byID: map[string][]nbi.Metric{}}
 	for i := 1; i <= 450; i++ {
 		d := dev(i, fmt.Sprintf("SER%05d", i))
 		devs = append(devs, d)
@@ -316,5 +326,47 @@ func TestCPEStatePayloadFromTheRealParserMatchesTheGoldenTheCloudAccepts(t *test
 	want, err := os.ReadFile(golden)
 	if err != nil || !bytes.Equal(want, pretty.Bytes()) {
 		t.Fatalf("golden payload differs (run with UPDATE_GOLDEN=1 after a deliberate change): err=%v\n%s", err, pretty.String())
+	}
+}
+
+type batchParams struct {
+	failFor string // any read whose ids include this one fails
+	sizes   []int
+	byID    map[string][]nbi.Metric
+}
+
+func (f *batchParams) CachedParams(_ context.Context, ids []string) ([]nbi.DeviceParams, error) {
+	f.sizes = append(f.sizes, len(ids))
+	var out []nbi.DeviceParams
+	for _, id := range ids {
+		if id == f.failFor {
+			return nil, errors.New("response too large")
+		}
+		out = append(out, nbi.DeviceParams{ID: id, Metrics: f.byID[id]})
+	}
+	return out, nil
+}
+
+// One failing read (an oversized ACS answer) costs only its own 25 devices; every other read is kept, and reads never exceed the NBI client's size.
+func TestStateReadsAreBatchedAndOneFailureOnlyCostsItsOwnBatch(t *testing.T) {
+	var devs []nbi.Device
+	p := &batchParams{failFor: "OUI-PC-30", byID: map[string][]nbi.Metric{}}
+	for i := 1; i <= 60; i++ {
+		d := dev(i, fmt.Sprintf("SER%05d", i))
+		devs = append(devs, d)
+		p.byID[d.ID] = []nbi.Metric{metric("wan_link_status", "link/1", "Up", "2026-10-29T11:59:00Z")}
+	}
+	skips := map[string]int{}
+	items, err := (&GenieACS{EdgeID: "e", ConnectorID: "c", Client: fakeLister{devs}, Params: p, Now: stateNow,
+		OnSkip: func(r string, n int) { skips[r] = n }}).Collect(context.Background())
+	if err != nil || len(items) != 2 || skips["state_read_failed"] != 1 {
+		t.Fatalf("%v items=%d skips=%v", err, len(items), skips)
+	}
+	if fmt.Sprint(p.sizes) != "[25 25 10]" {
+		t.Fatalf("reads must be batched by 25, got %v", p.sizes)
+	}
+	var s cpeStateSnapshot
+	if err := json.Unmarshal(items[1].Payload, &s); err != nil || len(s.States) != 35 { // 60 devices minus the failed batch of 25 (devices 26..50)
+		t.Fatalf("%v states=%d", err, len(s.States))
 	}
 }

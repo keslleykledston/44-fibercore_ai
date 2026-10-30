@@ -74,7 +74,10 @@ type cpeSnapshot struct {
 	CPEs       []cpeIn `json:"cpes"`
 }
 
-const maxPerSnapshot = 5000      // keep in sync with the Cloud limit
+const maxPerSnapshot = 5000 // keep in sync with the Cloud limit
+// stateReadBatch is how many devices one cache read covers (the NBI client's own per-request size): a failed read costs only its own devices,
+// never the rest of the round, and never trips the client's ceiling per call.
+const stateReadBatch = 25
 const maxStatesPerItem = 200     // Cloud accepts 500 per call; smaller items keep one bad batch from costing many CPEs
 const maxStateSkew = time.Minute // a timestamp further ahead than this (the Cloud allows 5 min) is dropped here so one clock cannot poison a batch
 
@@ -176,41 +179,43 @@ func (g *GenieACS) Collect(ctx context.Context) ([]Item, error) {
 	// State goes AFTER the inventory items of the same round (the Cloud resolves the CPE through the binding the snapshot just created).
 	// Failing to read it never costs the inventory.
 	if g.Params != nil && len(kept) > 0 {
-		st, err := g.stateItems(ctx, kept, observed, now(), skipped)
-		if err != nil {
-			skipped["state_read_failed"]++
-		}
-		items = append(items, st...)
+		items = append(items, g.stateItems(ctx, kept, observed, now(), skipped)...)
 	}
 	return items, nil
 }
 
-func (g *GenieACS) stateItems(ctx context.Context, kept []nbi.Device, observed string, now time.Time, skipped map[string]int) ([]Item, error) {
-	ids := make([]string, len(kept))
-	for i, d := range kept {
-		ids[i] = d.ID
-	}
-	res, err := g.Params.CachedParams(ctx, ids)
-	if err != nil {
-		return nil, err
+func (g *GenieACS) stateItems(ctx context.Context, kept []nbi.Device, observed string, now time.Time, skipped map[string]int) []Item {
+	known := map[string]bool{}
+	var res []nbi.DeviceParams
+	for i := 0; i < len(kept); i += stateReadBatch {
+		end := min(i+stateReadBatch, len(kept))
+		ids := make([]string, 0, end-i)
+		for _, d := range kept[i:end] {
+			ids = append(ids, d.ID)
+			known[d.ID] = true
+		}
+		r, err := g.Params.CachedParams(ctx, ids)
+		if err != nil {
+			skipped["state_read_failed"]++ // counted per failed read; what the other reads returned is kept, and the Cloud keeps the older state
+			if ctx.Err() != nil {
+				break
+			}
+			continue
+		}
+		res = append(res, r...)
 	}
 	var items []Item
 	var batch []cpeStateIn
-	flush := func() error {
+	flush := func() {
 		if len(batch) == 0 {
-			return nil
+			return
 		}
-		b, err := json.Marshal(cpeStateSnapshot{EdgeID: g.EdgeID, ObservedAt: observed, States: batch})
-		if err != nil {
-			return err
+		if b, err := json.Marshal(cpeStateSnapshot{EdgeID: g.EdgeID, ObservedAt: observed, States: batch}); err != nil {
+			skipped["state_read_failed"]++ // cannot happen with these plain types; if it ever does it is counted, not silent
+		} else {
+			items = append(items, Item{Kind: "cpe_state", Key: "cpe_state:" + g.ConnectorID, Payload: b})
 		}
-		items = append(items, Item{Kind: "cpe_state", Key: "cpe_state:" + g.ConnectorID, Payload: b})
 		batch = nil
-		return nil
-	}
-	known := map[string]bool{}
-	for _, d := range kept {
-		known[d.ID] = true
 	}
 	for _, r := range res {
 		if !known[r.ID] { // only what was asked for, and only devices that are in this round's inventory
@@ -229,10 +234,9 @@ func (g *GenieACS) stateItems(ctx context.Context, kept []nbi.Device, observed s
 		}
 		batch = append(batch, cpeStateIn{Binding: cpeBinding{Protocol: "tr069", ExternalID: r.ID, ConnectorID: g.ConnectorID}, Metrics: ms})
 		if len(batch) == maxStatesPerItem {
-			if err := flush(); err != nil {
-				return nil, err
-			}
+			flush()
 		}
 	}
-	return items, flush()
+	flush()
+	return items
 }
