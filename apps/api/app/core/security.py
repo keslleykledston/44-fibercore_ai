@@ -8,6 +8,7 @@ import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
 
+from app.core.permissions import check_catalog
 from app.core.settings import Settings
 
 _hasher = PasswordHasher()
@@ -34,6 +35,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "platform_support": frozenset({"tenant:read"}),  # only via delegated membership
     "edge_agent": frozenset({"edge:heartbeat", "inventory:write", "jobs:execute"}),  # service accounts of Edge agents: nothing else
 }
+check_catalog(ROLE_PERMISSIONS)  # every permission a role grants must be in the catalog (ADR-0031)
 
 
 def hash_secret(secret: str) -> str:

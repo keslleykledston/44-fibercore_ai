@@ -9,6 +9,7 @@ from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy import Connection, text
 
 from app.core.db import get_engine, scoped_connection
+from app.core.permissions import require_known
 from app.core.security import ROLE_PERMISSIONS, decode_token
 from app.core.settings import Settings, get_settings, required_mfa_roles
 
@@ -108,11 +109,14 @@ def get_principal(
 
 
 def require(perm: str):
+    require_known(perm)  # a permission outside the catalog is a programming error: the app does not even import
+
     def dep(p: Principal = Depends(get_principal)) -> Principal:
         if not p.can(perm):
             raise HTTPException(403, "forbidden")
         return p
 
+    dep.rbac_permission = perm  # type: ignore[attr-defined]  # read by the route inventory test and the generated matrix
     return dep
 
 

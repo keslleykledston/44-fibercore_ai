@@ -4,7 +4,7 @@ PY := $(VENV)/bin/python
 COMPOSE := docker compose --env-file .env.dev -f infra/compose/compose.yaml
 TEST_PG_PORT ?= 55432
 
-.PHONY: env-prod up-prod down-prod venv env-dev validate validate-help lint test-api compose-config up down logs
+.PHONY: rbac-matrix env-prod up-prod down-prod venv env-dev validate validate-help lint test-api compose-config up down logs
 venv:
 	test -d $(VENV) || python3 -m venv $(VENV)
 	$(VENV)/bin/pip install -q -e 'apps/api[dev]'
@@ -38,6 +38,9 @@ test-api: venv  ## sobe Postgres descartável, roda pytest, remove container
 	@until docker exec fc-test-pg pg_isready -U fibercore >/dev/null 2>&1; do sleep 1; done; sleep 2
 	cd apps/api && TEST_NATS_URL=nats://127.0.0.1:54222 TEST_ADMIN_DATABASE_URL=postgresql://fibercore:test_admin_pw_only@127.0.0.1:$(TEST_PG_PORT)/fibercore_test \
 	  ../../$(PY) -m pytest -q; rc=$$?; docker rm -f fc-test-pg fc-test-nats >/dev/null; exit $$rc
+
+rbac-matrix: venv  ## regenera docs/security/RBAC_MATRIX.md a partir do código (ADR-0031)
+	$(PY) scripts/gen_rbac_matrix.py
 
 compose-config: env-dev
 	$(COMPOSE) config --quiet
