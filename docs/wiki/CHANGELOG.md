@@ -135,5 +135,5 @@
 - Edge: o coletor do GenieACS envia `cpe_state` depois do inventário (só dispositivos do inventário; falha de leitura não derruba o inventário); gateway ganhou o endpoint.
 
 ## Unreleased — PR 54 (R-D002 v1: WAN do CPE, ADR-0027)
-- Regra pura `R-D002` v1 sobre o `cpe_state` (sem leitura/leitura velha = `unknown`; todas as conexões não estabelecidas = hipótese `inferred` com confirmação humana; a ONU só dá contexto). `POST /diagnostics/runs` aceita `cpe_id`/`onu_id` para regras de CPE, somente leitura, mesma flag.
+- Regra pura `R-D002` v1 sobre o `cpe_state` (frescor POR LEITURA; sem leitura ou leitura antiga que possa esconder uma conexão estabelecida = `unknown`; todas as conexões recentes e não estabelecidas = hipótese `inferred` com confirmação humana; o enlace só é Up/Down se todas as leituras são recentes e concordam; a ONU só dá contexto observado). `POST /diagnostics/runs` aceita `cpe_id`/`onu_id` para regras de CPE, somente leitura, mesma flag.
 
