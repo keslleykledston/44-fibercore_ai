@@ -170,11 +170,15 @@ func TestRefreshGroupsAreSubsetsOfTheAllowlist(t *testing.T) {
 	}
 }
 
+// igdGroups: how many tasks one refresh creates on a TR-098 CPE. A literal on purpose: raising the load on the ACS must be a deliberate edit
+// of this number (and of the ADR), not a side effect.
+const igdGroups = 11
+
 func TestRefreshOnlyPostsGetParameterValuesOfAllowlistedLeaves(t *testing.T) {
 	f := &fakeACS{devices: igd, taskCode: 200}
 	c := newACS(t, f)
 	rep, err := c.RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-	if err != nil || rep.DataModel != "InternetGatewayDevice" || rep.Groups != 5 || rep.Completed != 5 || rep.Queued+rep.Faulted+rep.Cleaned != 0 {
+	if err != nil || rep.DataModel != "InternetGatewayDevice" || rep.Groups != igdGroups || rep.Completed != igdGroups || rep.Queued+rep.Faulted+rep.Cleaned != 0 {
 		t.Fatalf("%+v %v", rep, err)
 	}
 	if len(f.deleted) != 0 || f.listCalls != 1 { // only the pre-flight check
@@ -224,7 +228,7 @@ func TestRefreshLeavesNoTaskBehindWhateverTheOutcome(t *testing.T) {
 		"unparsable body":      {devices: igd, taskCode: 202, taskBody: `not json`},
 	} {
 		rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-		if err != nil || rep.Cleaned != 5 || rep.Uncleaned != 0 || len(f.db) != 0 {
+		if err != nil || rep.Cleaned != igdGroups || rep.Uncleaned != 0 || len(f.db) != 0 {
 			t.Fatalf("%s: %+v %v left=%d", name, rep, err, len(f.db))
 		}
 		for _, id := range f.deleted {
@@ -262,7 +266,7 @@ func TestRefreshOnlyDeletesTasksThisCallCreated(t *testing.T) {
 		other("othername01", "AAAA00-ONT-SN1", "reboot", nil, time.Now().UTC().Format(time.RFC3339)),                      // other task kind
 	}}
 	rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-	if err != nil || rep.Cleaned != 5 {
+	if err != nil || rep.Cleaned != igdGroups {
 		t.Fatalf("%+v %v", rep, err)
 	}
 	if len(f.db) != 3 {
@@ -580,7 +584,7 @@ func TestRefreshWaitIsBoundedAndHonoursCancellation(t *testing.T) {
 func TestRefreshKnownIDVisibleOnlyOnALaterLook(t *testing.T) {
 	f := &fakeACS{devices: igd, taskCode: 202, lateAfter: 2}
 	rep, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1")
-	if err != nil || rep.Cleaned != 5 || len(f.db) != 0 {
+	if err != nil || rep.Cleaned != igdGroups || len(f.db) != 0 {
 		t.Fatalf("%+v %v left=%d: an id that is listed a moment later is still ours", rep, err, len(f.db))
 	}
 	f = &fakeACS{devices: igd, taskCode: 202, omitFromList: true}
@@ -605,7 +609,7 @@ func TestRefreshPreflightRefusesWhileAnAllowlistedTaskIsPending(t *testing.T) {
 		mk("other0000001", []string{"Device.DeviceInfo.SerialNumber"}, "getParameterValues"),
 		mk("other0000002", names, "reboot"),
 		mk("other0000003", nil, "getParameterValues")}}
-	if _, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1"); err != nil || len(f.deleted) != 0 || len(f.posted) != 5 {
+	if _, err := newACS(t, f).RefreshParams(context.Background(), "AAAA00-ONT-SN1"); err != nil || len(f.deleted) != 0 || len(f.posted) != igdGroups {
 		t.Fatalf("%v deleted=%v posted=%d", err, f.deleted, len(f.posted))
 	}
 	// the check itself failing is not "no pending": nothing is created
@@ -640,7 +644,63 @@ func TestRefreshCallsThroughOneClientNeverInterleave(t *testing.T) {
 		go func() { defer wg.Done(); _, _ = c.RefreshParams(context.Background(), "AAAA00-ONT-SN1") }()
 	}
 	wg.Wait()
-	if maxInflight != 1 || len(f.posted) != 20 {
+	if maxInflight != 1 || len(f.posted) != 4*igdGroups {
 		t.Fatalf("max concurrent POSTs=%d posted=%d (calls must be serialised)", maxInflight, len(f.posted))
+	}
+}
+
+// The WANConnectionDevice instance of the PPP/IP connection is firmware specific (observed: 3 on a real EG8145V5), so every instance up to
+// the bound is asked for, and nothing beyond it. The exact composition is pinned: link, PPP+IP for instances 1..4, two Wi-Fi radios.
+func TestRefreshGroupsAreExactlyTheDocumentedOnes(t *testing.T) {
+	const w = "InternetGatewayDevice.WANDevice.1."
+	want := [][]string{
+		{w + "WANCommonInterfaceConfig.PhysicalLinkStatus"},
+		{w + "WANConnectionDevice.1.WANPPPConnection.1.ConnectionStatus", w + "WANConnectionDevice.1.WANPPPConnection.1.Uptime"},
+		{w + "WANConnectionDevice.1.WANIPConnection.1.ConnectionStatus", w + "WANConnectionDevice.1.WANIPConnection.1.Uptime"},
+		{w + "WANConnectionDevice.2.WANPPPConnection.1.ConnectionStatus", w + "WANConnectionDevice.2.WANPPPConnection.1.Uptime"},
+		{w + "WANConnectionDevice.2.WANIPConnection.1.ConnectionStatus", w + "WANConnectionDevice.2.WANIPConnection.1.Uptime"},
+		{w + "WANConnectionDevice.3.WANPPPConnection.1.ConnectionStatus", w + "WANConnectionDevice.3.WANPPPConnection.1.Uptime"},
+		{w + "WANConnectionDevice.3.WANIPConnection.1.ConnectionStatus", w + "WANConnectionDevice.3.WANIPConnection.1.Uptime"},
+		{w + "WANConnectionDevice.4.WANPPPConnection.1.ConnectionStatus", w + "WANConnectionDevice.4.WANPPPConnection.1.Uptime"},
+		{w + "WANConnectionDevice.4.WANIPConnection.1.ConnectionStatus", w + "WANConnectionDevice.4.WANIPConnection.1.Uptime"},
+		{"InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Enable", "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Channel"},
+		{"InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.Enable", "InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.Channel"},
+	}
+	got := refreshGroups["InternetGatewayDevice"]
+	if len(got) != igdGroups || len(want) != igdGroups || len(got) > maxGroups {
+		t.Fatalf("groups=%d want=%d max=%d", len(got), len(want), maxGroups)
+	}
+	for i := range want {
+		if fmt.Sprint(got[i]) != fmt.Sprint(want[i]) {
+			t.Fatalf("group %d: got %v want %v", i, got[i], want[i])
+		}
+		for _, p := range got[i] {
+			if _, ok := allowlist[p]; !ok {
+				t.Fatalf("%s is not allowlisted", p)
+			}
+		}
+	}
+	beyond := w + "WANConnectionDevice.5.WANPPPConnection.1.ConnectionStatus"
+	if _, ok := allowlist[beyond]; ok {
+		t.Fatalf("%s must stay outside the allowlist", beyond)
+	}
+}
+
+func TestRefreshHoldPolicy(t *testing.T) {
+	for name, tc := range map[string]struct {
+		rep  RefreshReport
+		err  error
+		want time.Duration
+	}{
+		"clean":                  {RefreshReport{Groups: igdGroups, Completed: igdGroups}, nil, 0},
+		"queued and cleaned":     {RefreshReport{Groups: igdGroups, Queued: igdGroups, Cleaned: igdGroups}, nil, 0},
+		"any fault holds a day":  {RefreshReport{Groups: igdGroups, Completed: igdGroups - 1, Faulted: 1}, nil, 24 * time.Hour},
+		"uncleaned holds a day":  {RefreshReport{Uncleaned: 1}, ErrRefreshUncleaned, 24 * time.Hour},
+		"unproven holds an hour": {RefreshReport{}, fmt.Errorf("%w: %w", ErrRefreshUncleaned, ErrRefreshUnproven), time.Hour},
+		"unrelated error":        {RefreshReport{}, ErrRefreshPending, 0},
+	} {
+		if got := RefreshHold(tc.rep, tc.err); got != tc.want {
+			t.Fatalf("%s: got %s want %s", name, got, tc.want)
+		}
 	}
 }

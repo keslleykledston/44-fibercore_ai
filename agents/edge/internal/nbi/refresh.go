@@ -26,7 +26,7 @@ import (
 const (
 	taskTimeoutMS = 5000
 	maxTaskBody   = 1 << 20
-	maxGroups     = 8
+	maxGroups     = 12
 )
 
 var (
@@ -51,13 +51,7 @@ var (
 // refreshGroups are the objects asked for, one task each, instance 1 (and the 5 GHz radio). A task that targets an object the CPE does not
 // have faults on its own without affecting the others. Every leaf must be in the allowlist (checked on every call and by the tests).
 var refreshGroups = map[string][][]string{
-	"InternetGatewayDevice": {
-		{"InternetGatewayDevice.WANDevice.1.WANCommonInterfaceConfig.PhysicalLinkStatus"},
-		groupOf("InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.", "ConnectionStatus", "Uptime"),
-		groupOf("InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.", "ConnectionStatus", "Uptime"),
-		groupOf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.", "Enable", "Channel"),
-		groupOf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.", "Enable", "Channel"),
-	},
+	"InternetGatewayDevice": tr098Groups(),
 	"Device": {
 		{"Device.PPP.Interface.1.Status"},
 		groupOf("Device.WiFi.Radio.1.", "Enable", "Channel"),
@@ -66,12 +60,40 @@ var refreshGroups = map[string][][]string{
 	},
 }
 
+// tr098Groups: the link, one PPP and one IP connection per WANConnectionDevice instance (1..maxWANConnDevices) and the two Wi-Fi radios.
+func tr098Groups() [][]string {
+	g := [][]string{{"InternetGatewayDevice.WANDevice.1.WANCommonInterfaceConfig.PhysicalLinkStatus"}}
+	for cd := 1; cd <= maxWANConnDevices; cd++ {
+		for _, node := range []string{"WANPPPConnection", "WANIPConnection"} {
+			g = append(g, groupOf(fmt.Sprintf("InternetGatewayDevice.WANDevice.1.WANConnectionDevice.%d.%s.1.", cd, node), "ConnectionStatus", "Uptime"))
+		}
+	}
+	return append(g,
+		groupOf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.", "Enable", "Channel"),
+		groupOf("InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.", "Enable", "Channel"))
+}
+
 func groupOf(prefix string, leaves ...string) []string {
 	out := make([]string, len(leaves))
 	for i, l := range leaves {
 		out[i] = prefix + l
 	}
 	return out
+}
+
+// RefreshHold is how long a device stays out of refresh after an attempt. Unclean outcomes keep their holds; a refresh that made the CPE fault
+// on ANY requested object also holds the device for a day: the instance range is only validated on the firmware measured so far (ADR-SD-002),
+// so an unknown firmware that faults on absent instances costs at most one round of faults per day instead of one per refresh.
+func RefreshHold(rep RefreshReport, err error) time.Duration {
+	switch {
+	case errors.Is(err, ErrRefreshUnproven):
+		return time.Hour // absence could not be proven after an ambiguous request
+	case errors.Is(err, ErrRefreshUncleaned):
+		return 24 * time.Hour // a task we know is there and could not remove
+	case rep.Faulted > 0:
+		return 24 * time.Hour
+	}
+	return 0
 }
 
 // RefreshReport says what happened, in counts only (no device data).

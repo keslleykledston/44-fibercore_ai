@@ -1,0 +1,5 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), PR 52, round 4
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: needs-attention
+- [high] O hold não limita faults entre instâncias Edge (main.go:90-99): estados distintos não se coordenam; impor coordenação por ACS ou trava exclusiva.

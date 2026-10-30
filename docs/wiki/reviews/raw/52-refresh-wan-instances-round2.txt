@@ -1,0 +1,5 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), PR 52, round 2
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: needs-attention
+- [high] A expansão para instâncias 1-4 ainda não tem resultado de medição de faults (refresh.go:66-69): registrar no ADR o ensaio real com faults antes/depois e critério de aceitação.

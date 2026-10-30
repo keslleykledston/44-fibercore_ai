@@ -1,0 +1,6 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), PR 52, round 1
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: needs-attention
+- [medium] A contagem de tarefas esperada deixou de ser verificada (refresh_test.go): igdGroups derivado da própria tabela; fixar 11 e validar a composição.
+- [medium] O refresh aumenta em 2,2x a carga máxima de tarefas no ACS (refresh.go:29): até 220 tarefas/h por Edge; confirmar capacidade/retenção do ACS ou consultar só instâncias existentes.

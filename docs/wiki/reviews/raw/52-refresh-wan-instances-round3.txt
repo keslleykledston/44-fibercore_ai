@@ -1,0 +1,5 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), PR 52, round 3
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: needs-attention
+- [high] A medição de um firmware não valida a faixa para todos os CPEs TR-098 (ADR-SD-002): medir modelos representativos ou restringir a faixa a modelo/firmware validado, com fallback seguro.
