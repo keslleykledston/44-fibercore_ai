@@ -169,3 +169,49 @@ def test_without_the_channel_an_approved_query_is_never_dispatched(client, seed,
     assert _ask(client, h, olt).status_code == 200
     monkeypatch.setattr(olt_query, "EDGE_SUPPORT", False)
     assert client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1")).status_code == 204
+
+
+def test_a_failed_submit_leaves_no_job_behind(client, seed, inv, olt, on, migrated, monkeypatch):
+    from fastapi import HTTPException
+
+    from app.api import jobs as jobs_mod
+
+    def boom(*a, **k):
+        raise HTTPException(409, "boom")
+    h = hdr(client, "alice", seed, "A")
+    k = _key()
+    with monkeypatch.context() as m:
+        m.setattr(jobs_mod, "submit", boom)
+        assert _ask(client, h, olt, key=k).status_code == 409
+    with migrated.connect() as c:    # preview and submit are one transaction: the preview did not survive the refusal, so a retry starts clean
+        assert c.execute(text("SELECT count(*) FROM jobs WHERE operation = 'olt_query'")).scalar_one() == 0
+    assert _ask(client, h, olt, key=k).json()["outcome"] == "submitted"
+
+
+def test_the_gates_are_asked_again_at_dispatch(client, seed, inv, olt, on, migrated):
+    h = hdr(client, "alice", seed, "A")
+    a = agent(client, inv, "a1")
+    # the flag is turned off after the query was approved: it is cancelled, never sent
+    jid = _ask(client, h, olt).json()["job"]["id"]
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE tenant_features SET enabled = false WHERE feature = 'olt_query'"))
+    assert client.get("/v1/edge/jobs/next", headers=a).status_code == 204
+    assert client.get(f"/v1/jobs/{jid}", headers=h).json()["status"] == "CANCELLED"
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE tenant_features SET enabled = true WHERE feature = 'olt_query'"))
+    # the stored intent no longer matches what was hashed (someone with database access edited it): never sent either
+    jid = _ask(client, h, olt).json()["job"]["id"]
+    with migrated.begin() as c:
+        c.execute(text("UPDATE jobs SET params = jsonb_set(params, '{query_id}', '\"olt.version\"') WHERE id = :j AND params->>'query_id' = 'olt.board'"), {"j": jid})
+        c.execute(text("UPDATE jobs SET params = jsonb_set(params, '{slot}', '1') WHERE id = :j"), {"j": jid})
+    assert client.get("/v1/edge/jobs/next", headers=a).status_code == 204
+    assert client.get(f"/v1/jobs/{jid}", headers=h).json()["status"] == "CANCELLED"
+
+
+def test_quota_per_olt(client, seed, inv, olt, on, monkeypatch):
+    h = hdr(client, "alice", seed, "A")
+    monkeypatch.setattr(olt_query, "OLT_PER_HOUR", 2)
+    assert [_ask(client, h, olt).status_code for _ in range(2)] == [200, 200]
+    assert _ask(client, h, olt).status_code == 429

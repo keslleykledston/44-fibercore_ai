@@ -89,6 +89,20 @@ def _write_gate(conn: Connection, tenant_id: UUID, row, mode: str, by: UUID | No
     return "operation_not_homologated" if refusal in ("bench_writes_disabled", "edge_support_missing") else refusal
 
 
+def _query_gate(conn: Connection, tenant_id: UUID, params: dict) -> str | None:
+    """The conditions of an `olt_query`, asked at preview, again at submit and again at dispatch (a flag turned off, a rollout step withdrawn or a missing
+    channel stops a query that was created earlier). One answer for "flag off" and "no Edge channel yet": the feature is not there."""
+    if params.get("query_id") not in olt_query.ROLLOUT:
+        return "query_not_enabled"
+    if not olt_query.EDGE_SUPPORT or not features.enabled(conn, tenant_id, "olt_query"):
+        return "olt_query_disabled"
+    return None
+
+
+def _row_params(row) -> dict:
+    return json.loads(row.params) if isinstance(row.params, str) else (row.params or {})
+
+
 def cas(conn: Connection, job_id: UUID, to: str, *, extra: str = "", params: dict | None = None) -> bool:
     """Atomic transition guarded by the legal-source set; returns False if the job is not in a legal source state."""
     sources = [s for s, tos in TRANSITIONS.items() if to in tos]
@@ -144,10 +158,9 @@ def preview(
             params = olt_query.build_intent(body.target_id, body.params)  # the closed intent: query + exactly its scope's integers + OLT + catalog version
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
-        if params["query_id"] not in olt_query.ROLLOUT:
-            raise HTTPException(409, "query_not_enabled")
-        if not olt_query.EDGE_SUPPORT or not features.enabled(conn, p.tenant_id, "olt_query"):
-            raise HTTPException(409, "olt_query_disabled")  # one answer for "flag off" and "no Edge channel yet": the feature is not there
+        reason = _query_gate(conn, p.tenant_id, params)
+        if reason:
+            raise HTTPException(409, reason)
     elif body.params:
         raise HTTPException(422, "this operation accepts no parameters yet")  # strict: nothing free-form reaches an Edge
     table = {"olt": "olts", "cpe": "cpes"}[op.target]
@@ -169,9 +182,9 @@ def preview(
         # quota on the rolling hour, counted under a per-tenant lock so a burst of requests cannot all see room that only one of them has
         conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"olt-query-quota|{p.tenant_id}"})
         used = conn.execute(
-            text("SELECT count(*) AS by_tenant, count(*) FILTER (WHERE requested_by = :u) AS by_user FROM jobs "
-                 "WHERE operation = 'olt_query' AND created_at > now() - interval '1 hour'"), {"u": p.id}).one()
-        if used.by_user >= olt_query.USER_PER_HOUR or used.by_tenant >= olt_query.TENANT_PER_HOUR:
+            text("SELECT count(*) AS by_tenant, count(*) FILTER (WHERE requested_by = :u) AS by_user, count(*) FILTER (WHERE target_id = :o) AS by_olt FROM jobs "
+                 "WHERE operation = 'olt_query' AND created_at > now() - interval '1 hour'"), {"u": p.id, "o": body.target_id}).one()
+        if used.by_user >= olt_query.USER_PER_HOUR or used.by_tenant >= olt_query.TENANT_PER_HOUR or used.by_olt >= olt_query.OLT_PER_HOUR:
             raise HTTPException(429, "olt_query_quota")
     row = conn.execute(
         text(
@@ -208,6 +221,8 @@ def submit(job_id: UUID, p: Principal = Depends(require("jobs:request")), conn: 
     if row.status != "PREVIEWED":
         raise HTTPException(409, f"job is {row.status}")
     reason = _write_gate(conn, p.tenant_id, row, "submit", p.id)
+    if reason is None and row.operation == "olt_query":
+        reason = _query_gate(conn, p.tenant_id, _row_params(row))
     if reason:
         raise HTTPException(409, reason)  # write gate: never leaves PREVIEWED
     to = "PENDING_APPROVAL" if row.required_approvals > 0 else "APPROVED"
@@ -328,6 +343,13 @@ def next_job(
         cas(conn, row.id, "CANCELLED")
         response.status_code = 204
         return None
+    if row.operation == "olt_query":  # defence in depth, like the write gate: the gates NOW, and the stored intent must still be the one that was hashed
+        prm = _row_params(row)
+        if _query_gate(conn, p.tenant_id, prm) or _intent_hash(row.operation, row.target_type, row.target_id, prm) != row.intent_hash.strip() \
+                or prm.get("olt_ref") != str(row.target_id) or prm.get("catalog_version") != olt_query.catalog_version():
+            cas(conn, row.id, "CANCELLED")
+            response.status_code = 204
+            return None
     approvals = [str(r.id) for r in conn.execute(text("SELECT id FROM job_approvals WHERE job_id = :j"), {"j": row.id})]
     issued = datetime.now(UTC)
     envelope = {
@@ -353,7 +375,7 @@ def next_job(
         # the envelope is also short-lived on its own (bench.ENVELOPE_TTL), so a copy that waits in transit or in a queue dies in minutes
         envelope["expires_at"] = min(row.expires_at, auth.window_end, issued + bench.ENVELOPE_TTL).isoformat()
     if row.operation == "olt_query":  # the exact closed intent travels inside the signature; the Edge validates it again against its own catalog
-        envelope["params"] = json.loads(row.params) if isinstance(row.params, str) else (row.params or {})
+        envelope["params"] = _row_params(row)
     if (row.operation == "refresh" or bench_job) and row.target_type == "cpe":
         # The ACS device id the Edge may ask about (ADR-SD-002 item 4), covered by the signature. A CPE without a TR-069 binding keeps the
         # old behaviour (a plain collection round); the Edge validates the value again and only acts when active reads are enabled.

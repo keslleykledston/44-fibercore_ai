@@ -67,6 +67,7 @@ EDGE_SUPPORT = False
 # quota (ADR-0029 item 5): requests per rolling hour. The Edge has its own, stricter, budget per OLT (5 per session, 20 per hour).
 USER_PER_HOUR = 10
 TENANT_PER_HOUR = 60
+OLT_PER_HOUR = 20   # the same hourly budget the Edge keeps per OLT: asking for more here would only queue what the Edge will expire
 
 
 def catalog_version() -> str:

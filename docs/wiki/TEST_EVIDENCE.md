@@ -366,5 +366,5 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - No LAB, a baseline da migração deve ter 1 linha por ONU, com `at` = instante da migração (conferido no deploy).
 
 ## olt_query — metade da nuvem (PR 86)
-- `make test-api` 522 passed (9 novos em `tests/test_olt_query.py`: catálogo nuvem = Edge, escopo fechado, nada oferecido nem criado sem canal, flag sozinha não basta e a CLI recusa, intenção assinada e válida no schema do envelope, portões antes do job, idempotência e auditoria, cota por usuário e por provedor, nada despachado sem canal); `go test ./...` do Edge PASS; `make validate` PASS.
+- `make test-api` 525 passed (12 novos em `tests/test_olt_query.py`: catálogo nuvem = Edge, escopo fechado, nada oferecido nem criado sem canal, flag sozinha não basta e a CLI recusa, intenção assinada e válida no schema do envelope, portões antes do job, idempotência e auditoria, cota por usuário, provedor e OLT, falha no submit não deixa job, portões refeitos no submit e no despacho, nada despachado sem canal); `go test ./...` do Edge PASS; `make validate` PASS.
 - Nenhum equipamento tocado; a OLT real não foi consultada.
