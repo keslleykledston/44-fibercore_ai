@@ -149,7 +149,10 @@ def change_member_role(user_id: UUID, body: RoleChangeIn, p: Principal = Depends
     reason = body.reason.strip()
     if len(reason) < 3:
         raise HTTPException(422, "a reason is required")
-    # ONE lock per workspace first, then the account lock shared with every membership writer (add-member, MFA reset): fixed order, no deadlock
+    # Lock order, the same everywhere: 1) the member's ACCOUNT ROW (an account deactivation takes it first too), 2) the workspace lock, 3) the account
+    # advisory lock shared with every membership writer (add-member, MFA reset). The opposite order between this and a deactivation deadlocked.
+    if conn.execute(text("SELECT 1 FROM users_global WHERE id = :u FOR UPDATE"), {"u": user_id}).first() is None:
+        raise HTTPException(404, "member not found")
     conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"tenant-roles:{p.tenant_id}"})
     conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{user_id}"})
     # no FOR UPDATE here: the runtime role has no UPDATE privilege (that is the point); the advisory locks above serialise our writers and the
@@ -176,8 +179,11 @@ def change_member_role(user_id: UUID, body: RoleChangeIn, p: Principal = Depends
         with conn.begin_nested():
             conn.execute(text("SELECT app_change_member_role(:u, :r)"), {"u": user_id, "r": body.role})
     except DBAPIError as exc:
-        if getattr(getattr(exc.orig, "sqlstate", None), "__str__", lambda: "")() == "42501":
+        state = str(getattr(exc.orig, "sqlstate", "") or "")
+        if state == "42501":
             raise HTTPException(403, "role_change_refused") from exc
+        if state in ("40P01", "40001"):   # a deadlock/serialisation loser changed nothing: tell the caller to try again
+            raise HTTPException(409, "conflict_retry") from exc
         raise
     # the member's old tokens stop working now (they carry the old role's power) and their refresh tokens end; they sign in again with the new role.
     # Sessions belong to the ACCOUNT, not to a workspace: this signs the member out of every workspace they belong to (declared effect, tested).

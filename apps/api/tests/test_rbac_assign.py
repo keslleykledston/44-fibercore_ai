@@ -343,3 +343,39 @@ def test_direct_concurrent_calls_to_the_function_cannot_leave_a_workspace_withou
     with migrated.begin() as c:
         admins = c.execute(text("SELECT count(*) FROM tenant_memberships WHERE tenant_id=:t AND role='isp_admin'"), {"t": t}).scalar()
     assert admins == 1 and sorted(res.values()) == ["ok", "refused"], (res, admins)
+
+
+def test_a_role_change_and_an_account_deactivation_at_the_same_time_do_not_deadlock(client, migrated, new_tenant, make, monkeypatch):
+    import time
+
+    from app.api import members
+
+    real = role_policy.check_change
+
+    def slow(*a, **k):   # keeps the role change inside its lock while the deactivation arrives
+        time.sleep(0.8)
+        return real(*a, **k)
+
+    monkeypatch.setattr(members.role_policy, "check_change", slow)
+    t = new_tenant()
+    a, b = make(t, "isp_admin"), make(t, "isp_admin")
+    ha = _h(client, a)
+    out: dict = {}
+
+    def change():
+        out["change"] = _put(client, ha, b["id"], "engineer").status_code
+
+    def deactivate():
+        time.sleep(0.3)   # arrives after the role change started
+        try:
+            with migrated.begin() as c:
+                c.execute(text("SET LOCAL lock_timeout = '10s'"))
+                c.execute(text("UPDATE users_global SET is_active=false WHERE id=:u"), {"u": b["id"]})
+            out["deactivate"] = "ok"
+        except DBAPIError as exc:
+            out["deactivate"] = f"error {getattr(exc.orig, 'sqlstate', '?')}"
+
+    ts = [threading.Thread(target=change), threading.Thread(target=deactivate)]
+    [x.start() for x in ts]
+    [x.join() for x in ts]
+    assert out == {"change": 200, "deactivate": "ok"}, out   # no deadlock (40P01) on either side
