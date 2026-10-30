@@ -9,6 +9,7 @@ Safety properties (each covered by tests):
 - SUCCEEDED requires the Edge to report a post-check; otherwise the outcome is UNKNOWN (never assumed)."""
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import re
@@ -236,6 +237,20 @@ def get_job(job_id: UUID, p: Principal = Depends(require("jobs:read")), conn: Co
 
 
 # ---- Edge side --------------------------------------------------------------------------------
+def _bench_lease(conn: Connection, p: Principal, settings: Settings) -> str | None:
+    """Signed, short-lived statement of which bench targets (and owner epochs) this Edge may act on now; None = none (the Edge then drops
+    any lease it holds). Same key as the envelopes. It authorizes nothing by itself: a write still needs its own signed envelope."""
+    targets = bench.lease_targets(conn, p.tenant_id, p.edge_id)
+    if not targets:
+        return None
+    issued = datetime.now(UTC)
+    body = {"schema": "bench-lease/1", "tenant_id": str(p.tenant_id), "edge_id": str(p.edge_id),
+            "issued_at": issued.replace(microsecond=0).isoformat(), "expires_at": (issued + bench.LEASE_TTL).replace(microsecond=0).isoformat(),
+            "targets": targets}
+    body["signature"] = jobsign.sign(jobsign.load_private(settings.job_signing_key), body)
+    return base64.b64encode(json.dumps(body, separators=(",", ":")).encode()).decode()
+
+
 @router.get("/v1/edge/jobs/next")
 def next_job(
     response: Response,
@@ -256,6 +271,9 @@ def next_job(
     for s_ in swept:  # a bench write that was sent and never reported may have been applied: lock the target (ADR-0030 item 6)
         if s_.operation in bench.BENCH_OPS and _blocked_reason(s_.operation):
             bench.lock_target(conn, s_.target_id, "bench write dispatched and never reported")
+    lease = _bench_lease(conn, p, settings)  # on EVERY answer, job or not: this is how the Edge's bench lease is renewed or withdrawn
+    if lease:
+        response.headers["X-Bench-Lease"] = lease
     row = conn.execute(
         text(
             f"SELECT {COLS}, nonce FROM jobs WHERE edge_id = :e AND status = 'APPROVED' "  # noqa: S608

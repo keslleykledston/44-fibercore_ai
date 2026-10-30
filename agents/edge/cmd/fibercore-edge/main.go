@@ -15,6 +15,7 @@ import (
 
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/agent"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/allowlist"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/bench"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/collector"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/config"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/gateway"
@@ -73,6 +74,7 @@ func main() {
 
 	var collectors []collector.Collector
 	var refresher agent.RefreshFunc
+	var benchACS bench.ACS
 	if cfg.NBIURL != "" {
 		nbiAuth := ""
 		if cfg.NBISecretFile != "" {
@@ -86,6 +88,7 @@ func main() {
 			log.Error("nbi", "err", err)
 			os.Exit(2)
 		}
+		benchACS = nbiClient
 		if cfg.RefreshTasks {
 			guard := &nbi.RefreshGuard{Path: config.RefreshGuardFile(cfg.QueuePath), MinPerDevice: 10 * time.Minute, MaxPerHour: 20}
 			refresher = func(ctx context.Context, ref string) (string, error) {
@@ -171,6 +174,7 @@ func main() {
 	}
 
 	var verifier *jobs.Verifier
+	var benchRunner *bench.Runner
 	if cfg.JobsEnabled {
 		pub, err := jobs.ParsePublicKey(cfg.JobPublicKey)
 		if err != nil {
@@ -182,21 +186,44 @@ func main() {
 		if len(ops) == 0 {
 			ops = []string{"collect", "refresh"}
 		}
+		benchOn := cfg.Bench != nil && cfg.Bench.Enabled
 		for _, o := range ops {
+			if jobs.BenchWriteOps[o] && benchOn { // a bench write is only ever allowed through the explicit bench section (ADR-0030)
+				allowed[o] = true
+				continue
+			}
 			if !jobs.ReadOnlyOps[o] { // config can narrow the read-only set, never widen it
 				log.Error("operation not allowed on this Edge build", "operation", o)
 				os.Exit(2)
 			}
 			allowed[o] = true
 		}
-		verifier = &jobs.Verifier{Pub: pub, EdgeID: cfg.EdgeID, TenantID: cfg.TenantID, Allowed: allowed, Nonces: q, Now: time.Now}
+		verifier = &jobs.Verifier{Pub: pub, EdgeID: cfg.EdgeID, TenantID: cfg.TenantID, Allowed: allowed, BenchEnabled: benchOn, Nonces: q, Now: time.Now}
+		if benchOn {
+			claims, err := jobs.OpenClaims(config.BenchClaimsFile(cfg.QueuePath))
+			if err != nil || benchACS == nil {
+				log.Error("bench writes enabled but their state cannot be opened; refusing to start", "err", err)
+				os.Exit(2)
+			}
+			devs := map[string]nbi.BenchDevice{}
+			for _, d := range cfg.Bench.Devices {
+				devs[d.ID()] = nbi.BenchDevice{DeviceID: d.ID(), OUI: d.OUI, ProductClass: d.ProductClass, Serial: d.Serial}
+			}
+			benchRunner = &bench.Runner{
+				Devices: devs, Claims: claims, ACS: benchACS, Wait: 4 * time.Minute, Poll: 10 * time.Second, Log: log,
+				Lease: &jobs.LeaseHolder{Pub: pub, EdgeID: cfg.EdgeID, TenantID: cfg.TenantID},
+				// at most one reboot per device per 30 min, 2 per hour; reservation persisted before anything is sent
+				Guard: &nbi.RefreshGuard{Path: config.BenchGuardFile(cfg.QueuePath), MinPerDevice: 30 * time.Minute, MaxPerHour: 2},
+			}
+			log.Warn("bench writes ENABLED for a closed list of devices", "devices", len(devs))
+		}
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	ag := &agent.Agent{
 		EdgeID: cfg.EdgeID, TenantID: cfg.TenantID, Version: cfg.Version, GW: gw, Q: q, Collectors: collectors,
-		Jobs: verifier, Refresher: refresher, JobPollEvery: 15 * time.Second, HeartbeatEvery: cfg.HeartbeatEvery(), CollectEvery: cfg.CollectEvery(), Log: log,
+		Jobs: verifier, Refresher: refresher, Bench: benchRunner, JobPollEvery: 15 * time.Second, HeartbeatEvery: cfg.HeartbeatEvery(), CollectEvery: cfg.CollectEvery(), Log: log,
 	}
 	log.Info("fibercore-edge starting", "version", cfg.Version, "edge_id", cfg.EdgeID, "collectors", len(collectors))
 	ag.Run(ctx)

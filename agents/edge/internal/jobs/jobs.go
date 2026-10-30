@@ -18,6 +18,13 @@ import (
 // ReadOnlyOps is the compile-time ceiling: a config file can narrow it, never widen it.
 var ReadOnlyOps = map[string]bool{"collect": true, "refresh": true}
 
+// BenchWriteOps (ADR-0030) is a SEPARATE compile-time set: the only writes this Edge can ever run, and only on the configured bench devices,
+// with a single-use prior authorization, a durable claim, a valid lease and the device confirmed against the ACS. ReadOnlyOps never grows.
+var BenchWriteOps = map[string]bool{"reboot_cpe": true}
+
+// BenchEnvelopeTTL bounds how long a bench envelope may live (the Cloud issues it for at most this long).
+const BenchEnvelopeTTL = 2 * time.Minute
+
 var (
 	ErrSignature = errors.New("invalid signature")
 	ErrExpired   = errors.New("envelope expired or not yet valid")
@@ -28,6 +35,7 @@ var (
 )
 
 var targetRefRe = regexp.MustCompile(`^[A-Za-z0-9._%-]{3,200}$`)
+var authIDRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 const (
 	maxLifetime = time.Hour
@@ -40,7 +48,7 @@ type Envelope struct {
 	TenantID       string   `json:"tenant_id"`
 	EdgeID         string   `json:"edge_id"`
 	TargetID       string   `json:"target_id"`
-	TargetRef      string   `json:"target_ref,omitempty"` // refresh only: the ACS device id the Cloud signed for this job
+	TargetRef      string   `json:"target_ref,omitempty"` // refresh and bench writes: the ACS device id the Cloud signed for this job
 	Operation      string   `json:"operation"`
 	IdempotencyKey string   `json:"idempotency_key"`
 	IssuedAt       string   `json:"issued_at"`
@@ -49,7 +57,11 @@ type Envelope struct {
 	IntentSHA256   string   `json:"intent_sha256"`
 	PolicyVersion  string   `json:"policy_version"`
 	ApprovalIDs    []string `json:"approval_ids"`
-	Signature      string   `json:"signature"`
+	// Bench writes only (ADR-0030); all covered by the signature, all absent on every other operation.
+	AuthorizationID     string `json:"authorization_id,omitempty"`
+	AuthorizationEndsAt string `json:"authorization_ends_at,omitempty"`
+	OwnerEpoch          int    `json:"owner_epoch,omitempty"`
+	Signature           string `json:"signature"`
 }
 
 // NonceStore remembers nonces until they expire (persisted: a restart must not reopen the replay window).
@@ -80,9 +92,11 @@ type Verifier struct {
 	Pub      ed25519.PublicKey
 	EdgeID   string
 	TenantID string
-	Allowed  map[string]bool // local allowlist (subset of ReadOnlyOps)
-	Nonces   NonceStore
-	Now      func() time.Time
+	Allowed  map[string]bool // local allowlist (subset of ReadOnlyOps, plus BenchWriteOps when BenchEnabled)
+	// BenchEnabled is the local `bench_writes_enabled` switch (ADR-0030 item 3): without it a bench operation is refused here, whatever the Cloud signs.
+	BenchEnabled bool
+	Nonces       NonceStore
+	Now          func() time.Time
 }
 
 func ParsePublicKey(b64 string) (ed25519.PublicKey, error) {
@@ -118,14 +132,22 @@ func (v *Verifier) Verify(ctx context.Context, raw []byte) (*Envelope, error) {
 	if e1 != nil || e2 != nil || !exp.After(now) || iss.After(now.Add(clockSkew)) || exp.Sub(iss) > maxLifetime {
 		return nil, ErrExpired
 	}
-	if !ReadOnlyOps[env.Operation] || !v.Allowed[env.Operation] {
+	bench := BenchWriteOps[env.Operation]
+	if !(ReadOnlyOps[env.Operation] || (bench && v.BenchEnabled)) || !v.Allowed[env.Operation] {
 		return nil, fmt.Errorf("%w: %s", ErrOperation, env.Operation)
 	}
 	if env.Operation == "refresh" && env.TargetRef != "" && !targetRefRe.MatchString(env.TargetRef) {
 		return nil, fmt.Errorf("%w: invalid target_ref", ErrFormat)
 	}
-	if env.Operation != "refresh" && env.TargetRef != "" {
-		return nil, fmt.Errorf("%w: target_ref only exists on refresh", ErrFormat)
+	if env.Operation != "refresh" && !bench && env.TargetRef != "" {
+		return nil, fmt.Errorf("%w: target_ref only exists on refresh and bench writes", ErrFormat)
+	}
+	if bench {
+		if err := checkBench(&env, iss, exp, now); err != nil {
+			return nil, err
+		}
+	} else if env.AuthorizationID != "" || env.AuthorizationEndsAt != "" || env.OwnerEpoch != 0 {
+		return nil, fmt.Errorf("%w: authorization fields only exist on bench writes", ErrFormat)
 	}
 	if len(env.Nonce) < 16 {
 		return nil, fmt.Errorf("%w: nonce too short", ErrFormat)
@@ -138,4 +160,23 @@ func (v *Verifier) Verify(ctx context.Context, raw []byte) (*Envelope, error) {
 		return nil, ErrReplay
 	}
 	return &env, nil
+}
+
+// checkBench is the envelope-level half of the bench gate: everything a bench write must carry, bounded in time. The other half (device
+// identity against the ACS, durable claim, lease, epoch) runs at execution, immediately before anything is sent.
+func checkBench(env *Envelope, iss, exp, now time.Time) error {
+	if !targetRefRe.MatchString(env.TargetRef) {
+		return fmt.Errorf("%w: a bench write names its target device", ErrFormat)
+	}
+	if !authIDRe.MatchString(env.AuthorizationID) || env.OwnerEpoch < 1 {
+		return fmt.Errorf("%w: a bench write carries its authorization and owner epoch", ErrFormat)
+	}
+	end, err := time.Parse(time.RFC3339, env.AuthorizationEndsAt)
+	if err != nil || !end.After(now) || exp.After(end) {
+		return fmt.Errorf("%w: authorization window closed or shorter than the envelope", ErrExpired)
+	}
+	if exp.Sub(iss) > BenchEnvelopeTTL+time.Second {
+		return fmt.Errorf("%w: a bench envelope lives at most %s", ErrExpired, BenchEnvelopeTTL)
+	}
+	return nil
 }

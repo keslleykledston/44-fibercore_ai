@@ -143,15 +143,19 @@ func (c *Client) Deliver(ctx context.Context, kind string, payload []byte) (Outc
 	return o, err
 }
 
-// NextJob polls for one approved job. Returns (nil, nil) when none is available.
-func (c *Client) NextJob(ctx context.Context) ([]byte, error) {
+// LeaseHeader carries the Cloud's signed bench lease (ADR-0030) on every poll answer, with or without a job.
+const LeaseHeader = "X-Bench-Lease"
+
+// NextJob polls for one approved job. Returns a nil body when none is available. The second value is the raw bench lease header
+// (empty when the Cloud sent none); the caller verifies it, nothing is trusted here.
+func (c *Client) NextJob(ctx context.Context) ([]byte, string, error) {
 	for attempt := 0; attempt < 2; attempt++ {
 		c.mu.Lock()
 		tok := c.token
 		c.mu.Unlock()
 		if tok == "" {
 			if err := c.login(ctx); err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			c.mu.Lock()
 			tok = c.token
@@ -161,22 +165,26 @@ func (c *Client) NextJob(ctx context.Context) ([]byte, error) {
 		req.Header.Set("Authorization", "Bearer "+tok)
 		resp, err := c.http.Do(req)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
 		resp.Body.Close()
+		lease := resp.Header.Get(LeaseHeader)
+		if len(lease) > 1<<15 {
+			lease = "!oversize" // never parses: the caller withdraws the lease
+		}
 		switch resp.StatusCode {
 		case http.StatusOK:
-			return body, nil
+			return body, lease, nil
 		case http.StatusNoContent:
-			return nil, nil
+			return nil, lease, nil
 		case http.StatusUnauthorized:
 			c.mu.Lock()
 			c.token = ""
 			c.mu.Unlock()
 		default:
-			return nil, fmt.Errorf("next job: status %d", resp.StatusCode)
+			return nil, "", fmt.Errorf("next job: status %d", resp.StatusCode)
 		}
 	}
-	return nil, errors.New("next job: auth retry exhausted")
+	return nil, "", errors.New("next job: auth retry exhausted")
 }
