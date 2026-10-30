@@ -1,0 +1,6 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), PR 53, round 3
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: needs-attention
+- [high] Estado de CPEs acima de 5.000 desaparece silenciosamente (collector.go): CachedParams recusa >5000 ids; dividir em lotes.
+- [medium] Resposta NBI grande descarta estado de todo o lote (params.go): lotes menores, reter resultados anteriores, reportar parcial.
