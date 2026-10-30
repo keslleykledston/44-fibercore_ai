@@ -99,11 +99,12 @@ def r_d002_v1(i: dict) -> RuleResult:
         return unknown("the newest WAN observation of this CPE is too old") if not link_fresh else observed(
             "only the WAN link was read: not enough for a claim about the connection")
     if all(c["state"] in DOWN for c in conns):
-        link_known = i["wan_link"] is not None and link_fresh
-        cause = "wan_link_down" if link_known and i["wan_link"] == "Down" else ("wan_session_down" if link_known else "wan_connection_down")
+        # only a RECENT Up or Down says something about the link; Initializing/Unavailable, not read or old claim nothing about it
+        link = i["wan_link"] if link_fresh else None
+        cause = {"Down": "wan_link_down", "Up": "wan_session_down"}.get(link, "wan_connection_down")
         what = {"wan_link_down": "the CPE reports no WAN link",
                 "wan_session_down": "the CPE reports its WAN link without an established connection (session or provisioning)",
-                "wan_connection_down": "the CPE reports no established WAN connection (its link was not read recently)"}[cause]
+                "wan_connection_down": "the CPE reports no established WAN connection (its link state says nothing about the link)"}[cause]
         if i["onu_link"] == "confirmed" and onu["fresh"]:
             context = ("the linked ONU is online on the OLT: the access layer is up" if i["onu_status"] == "online"
                        else "the linked ONU is not online on the OLT: the CPE state can be a consequence")

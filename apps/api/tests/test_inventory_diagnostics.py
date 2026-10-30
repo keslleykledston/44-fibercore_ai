@@ -282,6 +282,9 @@ def test_r_d002_down_needs_every_reported_connection_down_and_is_only_a_hypothes
     assert _verdict(connections=[_c("Down")], wan_link=None, wan_link_fresh=False)["suspected_cause"] == "wan_connection_down"
     assert _verdict(connections=[_c("Down")], wan_link="Up", wan_link_fresh=False)["suspected_cause"] == "wan_connection_down"
     assert _verdict(connections=[_c("Down")], wan_link="Down", wan_link_fresh=False)["suspected_cause"] == "wan_connection_down"
+    for link in ("Initializing", "Unavailable"):  # a recent link reading that is neither Up nor Down says nothing about the session
+        v = _verdict(connections=[_c("Disconnected")], wan_link=link)
+        assert v["status"] == "inferred" and v["suspected_cause"] == "wan_connection_down" and "session" not in v["hypothesis"], link
     # anything established wins; transitional/unknown states never become a claim
     assert _verdict(connections=[_c("Connected"), _c("Disconnected")])["status"] == "observed"
     assert _verdict(connections=[_c("Up")])["status"] == "observed"
