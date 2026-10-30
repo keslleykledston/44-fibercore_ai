@@ -91,8 +91,13 @@ def _request(operation: str):
         if bench.BENCH_OPS[operation].params and not bench.params_valid(operation, body.params):
             raise HTTPException(422, "parameters outside the bench catalog")
         view = jobs.preview(jobs.PreviewIn(operation=operation, target_id=cpe_id, params=body.params), idempotency_key, p, conn)
-        if view["status"] != "PREVIEWED":
-            return {"outcome": "existing", "reason": None, "job": view}  # the same request again: nothing new is created
+        if view["status"] != "PREVIEWED":  # the same request again (retry after a lost answer, double click): nothing new is created
+            if view["status"] in ("CANCELLED", "EXPIRED"):  # it ended without running: say so, with the reason recorded when it was blocked
+                why = conn.execute(
+                    text("SELECT evidence_redacted->>'reason' FROM audit_log WHERE action = 'device.action_blocked' AND target_id = :c "
+                         "AND evidence_redacted->>'job_id' = :j ORDER BY created_at DESC LIMIT 1"), {"c": str(cpe_id), "j": view["id"]}).scalar()
+                return {"outcome": "blocked", "reason": why or "cancelled", "job": view}
+            return {"outcome": "existing", "reason": None, "job": view}
         try:
             view = jobs.submit(UUID(view["id"]), p, conn)
         except HTTPException as exc:  # the write gate (or anything the engine refuses): the request ends here, visibly, and leaves no live job

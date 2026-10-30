@@ -25,7 +25,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string; op
   const r = await apiPost(`/v1/cpes/${id}/actions/${op}`, JSON.stringify({ params }), { "content-type": "application/json", "Idempotency-Key": body.key });
   if (r.status === 200) {
     const j = r.json as { outcome?: string; reason?: string | null; job?: { id?: string; status?: string } } | null;
-    return reply({ ok: true, outcome: j?.outcome ?? "submitted", reason: j?.reason ?? null, job_id: j?.job?.id ?? null, job_status: j?.job?.status ?? null });
+    return reply({ ok: true, outcome: ["submitted", "blocked", "existing"].includes(j?.outcome ?? "") ? j?.outcome : "failed", reason: j?.reason ?? null, job_id: j?.job?.id ?? null, job_status: j?.job?.status ?? null });
   }
   const detail = String((r.json as { detail?: string } | null)?.detail ?? "");
   if (r.status === 409 && (detail === "capability_not_observed" || detail === "not_permitted")) return reply({ error: detail }, 409);

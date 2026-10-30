@@ -6,7 +6,7 @@ import { EntityDetailDrawer } from "@/components/EntityDetailDrawer";
 import { ACTION_BLOCKED, ACTION_ERROR, ACTION_UNAVAILABLE } from "@/lib/devices";
 import type { CpeAction } from "@/lib/types";
 
-type Result = { kind: "submitted" | "blocked"; reason: string | null; jobId: string | null };
+type Result = { kind: "submitted" | "blocked" | "existing"; reason: string | null; jobId: string | null };
 
 /** Uma ação do CPE: pedir cria um pedido de operação (nada é executado aqui); a aprovação e a execução seguem em Operações. */
 function ActionRow({ cpeId, a }: { cpeId: string; a: CpeAction }) {
@@ -27,7 +27,7 @@ function ActionRow({ cpeId, a }: { cpeId: string; a: CpeAction }) {
         method: "POST", headers: { "content-type": "application/json" }, cache: "no-store", body: JSON.stringify({ key: key.current, ssid }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string; outcome?: string; reason?: string | null; job_id?: string | null };
-      if (res.ok) { setResult({ kind: j.outcome === "blocked" ? "blocked" : "submitted", reason: j.reason ?? null, jobId: j.job_id ?? null }); key.current = `ui-${crypto.randomUUID()}`; return; }
+      if (res.ok) { setResult({ kind: j.outcome === "blocked" ? "blocked" : j.outcome === "existing" ? "existing" : "submitted", reason: j.reason ?? null, jobId: j.job_id ?? null }); key.current = `ui-${crypto.randomUUID()}`; return; }
       setError(ACTION_ERROR[j.error ?? "failed"] ?? ACTION_ERROR.failed);
     } catch { setError(ACTION_ERROR.failed); } finally { setBusy(false); }
   }
@@ -45,7 +45,9 @@ function ActionRow({ cpeId, a }: { cpeId: string; a: CpeAction }) {
       <EntityDetailDrawer open={open} onClose={close} title={a.label}>
         {result ? (
           <div className="grid gap-3 text-sm" data-testid="action-result" role="status">
-            {result.kind === "submitted"
+            {result.kind === "existing"
+              ? <p><strong>Este pedido já existe.</strong> Acompanhe e aprove em Operações. Nada novo foi criado.</p>
+              : result.kind === "submitted"
               ? <p><strong>Pedido criado.</strong> Ele aguarda a aprovação em Operações, pelas regras de lá. Nada foi executado no equipamento.</p>
               : <p><strong>O pedido não seguiu.</strong> {ACTION_BLOCKED[result.reason ?? ""] ?? "O motor de operações recusou. Nada foi enviado."}</p>}
             {result.jobId && <Link href="/operacoes" className="inline-flex min-h-touch items-center text-accent hover:underline">Ver em Operações</Link>}

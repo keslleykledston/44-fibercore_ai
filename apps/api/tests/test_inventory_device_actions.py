@@ -157,3 +157,16 @@ def test_the_idempotency_key_is_required_and_cannot_change_the_intent(client, se
                        "SELECT tenant_id, vendor, model, firmware, protocol, 'set_wifi_ssid', status, certification, verified_at, evidence_ref FROM device_capabilities "
                        "WHERE operation = 'reboot_cpe'"))
     assert _post(client, h, cpe, "set_wifi_ssid", SSID, key=k).status_code == 409   # same key, other operation
+
+
+def test_repeating_a_blocked_request_still_says_blocked_with_the_reason(client, seed, inv, migrated):
+    cpe = _cpe(client, inv, seed)
+    _bench(migrated, seed, inv, cpe)   # flag off: the first answer is blocked
+    h = hdr(client, "alice", seed, "A")
+    key = _key()
+    first = _post(client, h, cpe, key=key).json()
+    again = _post(client, h, cpe, key=key).json()          # the answer was lost; the screen asks again with the same key
+    assert (first["outcome"], first["reason"]) == ("blocked", "operation_not_homologated")
+    assert (again["outcome"], again["reason"], again["job"]["id"], again["job"]["status"]) == ("blocked", "operation_not_homologated", first["job"]["id"], "CANCELLED")
+    with migrated.connect() as c:
+        assert c.execute(text("SELECT count(*) FROM jobs WHERE target_id = :c"), {"c": cpe}).scalar_one() == 1   # still ONE job for this CPE

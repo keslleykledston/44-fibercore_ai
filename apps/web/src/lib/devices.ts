@@ -60,6 +60,7 @@ export const ACTION_BLOCKED: Record<string, string> = {
   authorization_missing: "Falta a autorização prévia do responsável pela bancada. Nada foi enviado.",
   authorization_expired: "A autorização do responsável venceu. Nada foi enviado.",
   capability_not_observed: "A capacidade ainda não foi observada neste modelo e firmware. Nada foi enviado.",
+  cancelled: "O pedido foi cancelado antes de seguir. Nada foi enviado.",
 };
 export const ACTION_ERROR: Record<string, string> = {
   ...ACTION_BLOCKED,
