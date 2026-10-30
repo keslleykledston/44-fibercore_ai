@@ -187,6 +187,9 @@ func RunBenchManeuver(ctx context.Context, raw Session, onu BenchONU, op string,
 	if err := beforeSend(); err != nil {
 		return ManeuverOutcome{}, fmt.Errorf("%w: %v", ErrBenchOLTBefore, err)
 	}
+	if !now().Before(notAfter) { // the durable writes of beforeSend may have taken long: the window is checked once more, right before the send
+		return ManeuverOutcome{}, fmt.Errorf("%w: window over after the claim; nothing was sent", ErrBenchOLTBefore)
+	}
 	info := func() (ONTInfo, error) {
 		o, err := s.Run(ctx, c.Info)
 		if err != nil {

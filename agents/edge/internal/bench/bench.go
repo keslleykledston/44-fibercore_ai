@@ -213,7 +213,7 @@ func (r *Runner) oltOp(ctx context.Context, env *jobs.Envelope, notAfter time.Ti
 		return Result{State: "failed", Detail: "the ONU may be left deactivated; operator must run ont activate on the OLT"}
 	case !out.Sent:
 		r.finish(env, jobs.ClaimFailed)
-		return fail("olt refused the command; nothing changed")
+		return fail("olt command not sent or refused; nothing changed")
 	default:
 		r.finish(env, jobs.ClaimUnknown)
 		return Result{State: "failed", Detail: "outcome unknown; operator check required"}

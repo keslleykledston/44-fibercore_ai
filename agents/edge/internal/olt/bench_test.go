@@ -214,6 +214,17 @@ func TestIdentityIsReadAgainRightBeforeTheMutationAndTheClaimStaysUnspent(t *tes
 	}
 }
 
+func TestTheWindowIsCheckedAgainAfterTheClaimWrites(t *testing.T) {
+	f := newFake()
+	clock := time.Now()
+	claimed := false
+	_, err := RunBenchManeuver(context.Background(), f, onu14, "onu_reset", clock.Add(time.Minute),
+		func() error { claimed = true; clock = clock.Add(2 * time.Minute); return nil }, time.Second, time.Millisecond, func() time.Time { return clock })
+	if err == nil || !claimed || len(f.changing()) != 0 {
+		t.Fatalf("a window that closes while the claim is written sends nothing: err=%v claimed=%v sent=%v", err, claimed, f.changing())
+	}
+}
+
 func TestBeforeSendFailureAndExpiryStopEverything(t *testing.T) {
 	f := newFake()
 	_, err := run(t, f, "onu_reset", func() error { return errors.New("pacing") })
