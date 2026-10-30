@@ -6,9 +6,11 @@ import { SourceChip } from "@/components/SourceChip";
 import { DataFreshness, ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
 import { CapabilityGate } from "@/components/CapabilityGate";
-import type { Capability, Onu360, OnuCustomer } from "@/lib/types";
+import { humanHours } from "@/lib/offline";
+import type { Capability, Onu360, OnuCustomer, OnuHistory } from "@/lib/types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const STATE: Record<string, string> = { online: "online", offline: "fora do ar", los: "sem sinal (LOS)", dying_gasp: "falta de energia", unknown: "desconhecido" };
 const cause: Record<string, string> = { fiber_or_los: "Suspeita: perda de sinal / fibra", power: "Suspeita: falta de energia", unknown: "Causa não determinada" };
 const contract: Record<string, string> = { active: "Contrato ativo", suspended: "Contrato suspenso", cancelled: "Contrato cancelado", unknown: "Contrato não informado" };
 const when = (iso: string | null) => (iso ? <span data-testid="volatile">{new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span> : "—");
@@ -28,6 +30,7 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
   const customerFailed = cu.status !== 200 && cu.status !== 403; // só 403 (papel sem acesso) omite o bloco; o resto é falha e aparece
   if (!o) return <AppShell active="/rede" user="1"><ErrorState title="Falha ao carregar a ONU" hint="Tente novamente em instantes." /></AppShell>;
   const caps = await apiSafe<Capability[]>(`/v1/olts/${o.olt.id}/capabilities`);  // perfil da OLT da ONU (registro de capacidades)
+  const hist = await apiSafe<OnuHistory>(`/v1/onus/${id}/history?days=30&limit=12`);
   return (
     <AppShell active="/rede" user="1">
       <PageHeader title={`ONU ${o.serial}`} subtitle="Visão completa de uma ONU, com a origem de cada dado" helpSlug="rede/onu-360">
@@ -53,6 +56,26 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
             {o.pon && <Row k="ONUs na PON"><span>{o.pon.online} online de {o.pon.onus}</span> {o.provenance.pon && <SourceChip p={o.provenance.pon} />}{o.pon.freshness === "stale" && <span className="block text-xs text-warn">Último estado conhecido, não o atual.</span>}</Row>}
             <Row k="Coleta da OLT"><SourceChip p={o.provenance.olt} /></Row>
           </dl>
+        </Card>
+        <Card title="Histórico (30 dias)" testid="onu360-history">
+          {hist.data === null ? <p className="text-sm text-muted">O histórico não está disponível agora.</p> : (
+            <div className="grid gap-3 text-sm">
+              <dl>
+                <Row k="Quedas">{hist.data.summary.drops}</Row>
+                <Row k="Tempo fora do ar">{humanHours(hist.data.summary.offline_hours)}</Row>
+                <Row k="Disponibilidade">{hist.data.summary.availability_pct === null ? "—" : `${hist.data.summary.availability_pct.toLocaleString("pt-BR")}%`}</Row>
+              </dl>
+              <ol className="divide-y divide-line" aria-label="Mudanças de estado, da mais recente para a mais antiga">
+                {hist.data.events.map((e) => (
+                  <li key={e.id} className="py-1.5">
+                    <span className="font-medium">{e.baseline ? `Primeira observação: ${STATE[e.to] ?? e.to}` : e.to === "online" ? "Voltou a ficar online" : e.to === "unknown" ? "Estado deixou de ser conhecido" : "Ficou fora do ar"}</span>
+                    <span className="block text-xs text-muted">{when(e.at)}</span>
+                  </li>
+                ))}
+              </ol>
+              <p className="text-xs text-muted">Conta o que o Edge observou: uma queda e a volta entre duas coletas não aparecem. {hist.data.truncated ? "Mostrando as mais recentes." : ""}</p>
+            </div>
+          )}
         </Card>
         <Card title="Incidente" testid="onu360-incident">
           {o.incident ? (

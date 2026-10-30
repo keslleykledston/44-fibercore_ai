@@ -132,8 +132,10 @@
 | POST | `/v1/onu-cpe-links/{link_id}/reject` | `associations:review` |
 | GET | `/v1/onus` | `inventory:read` |
 | GET | `/v1/onus/offline` | `inventory:read` |
+| GET | `/v1/onus/unstable` | `inventory:read` |
 | GET | `/v1/onus/{onu_id}` | `inventory:read` |
 | GET | `/v1/onus/{onu_id}/customer` | `customers:read` |
+| GET | `/v1/onus/{onu_id}/history` | `inventory:read` |
 | GET | `/v1/platform-delegations` | `members:read` |
 | POST | `/v1/platform-delegations` | `platform:delegate` |
 | DELETE | `/v1/platform-delegations/{delegation_id}` | `platform:delegate` |

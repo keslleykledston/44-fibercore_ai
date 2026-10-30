@@ -30,6 +30,10 @@ ui_route: "/rede/offline"
 | Informado pela OLT | Horário de queda que a própria OLT informa; o relógio da OLT pode divergir alguns minutos. |
 | No máximo | A ONU foi vista online pela última vez nesse horário: a queda dura **no máximo** isso (aparece como “até X”). |
 
+## Últimos 30 dias
+
+A coluna **Últimos 30 dias** mostra quantas vezes a ONU **caiu** (estava online e passou a fora do ar) e quantas horas passou fora do ar nesse período. Vem do histórico de mudanças de estado que o painel guarda a cada coleta. Na página da ONU (**Rede → ONU**) o cartão **Histórico (30 dias)** lista as mudanças, as quedas e a disponibilidade. Só conta o que foi **observado**: uma queda e a volta entre duas coletas não aparecem, e a primeira linha de cada ONU é só a primeira observação.
+
 ## Contagens acima da lista
 
 - **Sem horário de início:** ONUs fora do ar sem nenhuma queda registrada nem horário da OLT (ex.: nunca vistas online). Não entram na lista porque não há início a mostrar.
