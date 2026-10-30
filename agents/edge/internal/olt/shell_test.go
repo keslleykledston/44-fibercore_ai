@@ -672,3 +672,15 @@ func TestShellRunConfirmAnswersOnlyTheExpectedQuestionOnce(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestStaleAfterAnswerIsOnlyTheQuestionPlusOurEcho(t *testing.T) {
+	q := "Are you sure to reset the ONT(s)? (y/n)[n]:"
+	for line, want := range map[string]bool{
+		q: true, q + " y": true, q + "y": true, "  " + q + " y  ": true,
+		q + " y and delete the data? (y/n)": false, q + " yes": false, q + " n": false, "Another question? (y/n)": false, q + " y y": false,
+	} {
+		if got := staleAfterAnswer(line, q, "y"); got != want {
+			t.Errorf("%q: got %v want %v", line, got, want)
+		}
+	}
+}

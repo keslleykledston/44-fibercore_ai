@@ -221,6 +221,12 @@ func (s *shell) RunConfirm(ctx context.Context, cmd string, expect *regexp.Regex
 	return s.run(ctx, cmd, expect, answer)
 }
 
+// staleAfterAnswer: the line is exactly the question we answered, or that question plus the echo of our own answer (nothing else).
+func staleAfterAnswer(line, asked, answer string) bool {
+	line, asked, answer = strings.TrimSpace(line), strings.TrimSpace(asked), strings.TrimSpace(answer)
+	return line == asked || line == asked+" "+answer || line == asked+answer
+}
+
 // questionError keeps the text the CLI asked (a prompt, no secrets) so the operator can see what it wanted.
 func questionError(line string) error {
 	line = strings.TrimSpace(line)
@@ -275,7 +281,7 @@ func (s *shell) run(ctx context.Context, cmd string, expect *regexp.Regexp, answ
 		}
 		if questionRe.MatchString(lastLine(c)) {
 			ll := strings.TrimSpace(lastLine(c))
-			if answered && strings.HasPrefix(ll, askedLine) {
+			if answered && staleAfterAnswer(ll, askedLine, answer) {
 				return false, nil // still the question we answered, now with the echo of our own answer on the line: wait for the device
 			}
 			if !answered && expect != nil && expect.MatchString(lastLine(c)) {
