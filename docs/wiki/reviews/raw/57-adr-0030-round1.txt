@@ -1,0 +1,9 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), ADR-0030, round 1
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: needs-attention
+- [high] O alvo CPE não tem conferência física definida antes da escrita.
+- [high] A autorização operacional não delimita comandos nem manobras autorizadas.
+- [high] O gate depende de integrações que ADR-0019 declara inexistentes (HOMOLOGATED_WRITES vazio).
+- [high] Retorno ao estado seguro não define rollback verificável nem tratamento de resultado incerto.
+- [medium] A evidência não é um gate de execução suficientemente definido.

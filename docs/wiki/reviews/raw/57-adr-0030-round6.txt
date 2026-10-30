@@ -1,0 +1,5 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), ADR-0030, round 6
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: approve
+No new blocking gap is supported by the provided diff. It binds each authorization to one job and Edge, and requires lease-based two-phase ownership transfer. No material findings.

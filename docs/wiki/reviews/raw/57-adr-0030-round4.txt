@@ -1,0 +1,5 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), ADR-0030, round 4
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: needs-attention
+- [high] Claim permite reutilizar a autorização com outro job_id (unicidade por authorization_id).

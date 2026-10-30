@@ -144,3 +144,6 @@
 ## Unreleased — ADR-0029 (Proposed): canal de execução das consultas da OLT
 - Só documento (Codex approve em 5 rodadas): operação `olt_query` R0 sobre o catálogo do ADR-0026, intenção assinada estrita por consulta, sessão única do guard, estados duráveis com no máximo uma execução, instância única como pré-condição bloqueante, fencing e arrendamento em memória. Nenhum código, nenhuma execução na OLT; aguarda o aceite do responsável.
 
+## Unreleased — ADR-0030 (Proposed): homologação em bancada
+- Só documento (Codex approve em 6 rodadas): escopo restrito à ONT de bancada em três lugares independentes, conferência física antes de cada manobra, catálogo de manobras (H2 reboot, H3 SSID, H4 ONU na OLT), gate com seis condições (inclui autorização prévia de uso único), claim durável, trava de escrita e evidência verificável. Nenhum código, nenhuma escrita em equipamento.
+
