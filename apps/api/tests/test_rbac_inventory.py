@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[3]
 EXPECTED = {
     "isp_admin": {"customers:read", "customers:import", "associations:review", "incidents:read", "incidents:ack", "jobs:read", "jobs:request",
                   "jobs:approve", "inventory:read", "tenant:read", "audit:read", "members:read", "edge:read", "members:mfa_reset", "diagnostics:run",
-                  "members:manage", "roles:read"},
+                  "members:manage", "roles:read", "platform:delegate"},
     "access_manager": {"tenant:read", "members:read", "members:manage", "roles:read", "audit:read"},
     "engineer": {"customers:read", "associations:review", "incidents:read", "incidents:ack", "jobs:read", "jobs:request", "inventory:read",
                  "tenant:read", "edge:read", "diagnostics:run"},
@@ -37,7 +37,7 @@ PUBLIC = {  # no credentials at all
 }
 SELF_AUTH = {  # authenticate the caller's OWN account (token read inside the handler); they act on that account only, never on another member
     ("GET", "/v1/auth/workspaces"), ("GET", "/v1/auth/mfa/status"), ("POST", "/v1/auth/mfa/enroll"), ("POST", "/v1/auth/mfa/activate"),
-    ("POST", "/v1/auth/mfa/disable"), ("POST", "/v1/auth/mfa/recovery-codes"),
+    ("POST", "/v1/auth/mfa/disable"), ("POST", "/v1/auth/mfa/recovery-codes"), ("POST", "/v1/auth/mfa/step-up"),
 }
 SESSION_ONLY = {  # any valid session of the provider; no permission needed (the caller's own identity and platform metadata)
     ("GET", "/v1/auth/me"), ("GET", "/v1/platform/modules"), ("GET", "/v1/platform/versions"),
@@ -91,7 +91,7 @@ def test_session_only_routes_are_read_only_platform_and_identity_metadata():
     assert SESSION_ONLY == {("GET", "/v1/auth/me"), ("GET", "/v1/platform/modules"), ("GET", "/v1/platform/versions")}
 
 
-BODY = {"password": "x", "code": "000000"}   # satisfies every request model of the own-account routes, so only the missing credential can fail
+BODY = {"password": "x", "code": "000000", "refresh_token": "x" * 30}   # satisfies every request model of the own-account routes, so only the missing credential can fail
 
 
 @pytest.mark.parametrize("method,path", sorted(SELF_AUTH | SESSION_ONLY))

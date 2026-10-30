@@ -1,17 +1,19 @@
 import { AdminTabs } from "@/components/AdminTabs";
 import { AppShell } from "@/components/AppShell";
 import { MemberRoleChange } from "@/components/MemberRoleChange";
+import { PlatformDelegations, RevokeDelegation } from "@/components/PlatformDelegations";
 import { EmptyState, ErrorState, PageHeader } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
 import { RISK, roleLabel } from "@/lib/roles";
-import type { MeInfo, MemberList, PermissionInfo, RoleHistory, RoleList } from "@/lib/types";
+import type { MeInfo, MemberList, PermissionInfo, PlatformDelegationList, RoleHistory, RoleList } from "@/lib/types";
 
 const when = (iso: string) => new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" });
 const who = (p: { name: string | null; email: string | null; id: string | null }) => p.name ?? (p.id ? `conta ${p.id.slice(0, 8)}… (já não é membro)` : "—");
 
 export default async function Papeis() {
-  const [me, roles, members, history] = await Promise.all([
+  const [me, roles, members, history, deleg] = await Promise.all([
     apiSafe<MeInfo>("/v1/auth/me"), apiSafe<RoleList>("/v1/roles"), apiSafe<MemberList>("/v1/members"), apiSafe<RoleHistory>("/v1/members/role-history?limit=50"),
+    apiSafe<PlatformDelegationList>("/v1/platform-delegations?limit=30"),
   ]);
   const mine = me.data?.permissions ?? [];
   const byRisk = (["R3", "R2", "R1", "R0"] as const).map((k) => [k, mine.filter((p) => p.risk === k)] as const).filter(([, l]) => l.length > 0);
@@ -61,6 +63,35 @@ export default async function Papeis() {
             </div>
           )}
           {members.data && !members.data.can_manage_roles && <p className="mt-2 text-xs text-muted">Só o Administrador do provedor e o Gestor de Acesso alteram papéis.</p>}
+        </section>
+
+        <section aria-labelledby="h-deleg">
+          <h2 id="h-deleg" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Acesso temporário do suporte da plataforma</h2>
+          {deleg.status === 403 ? <p className="panel p-4 text-sm text-muted">Seu papel não permite ver os acessos do suporte da plataforma.</p> : deleg.data === null ? <ErrorState title="Falha ao carregar os acessos temporários" /> : (
+            <div className="grid gap-3">
+              <PlatformDelegations canDelegate={deleg.data.can_delegate} maxHours={deleg.data.max_hours} />
+              {deleg.data.items.length === 0 ? <EmptyState title="Nenhum acesso temporário concedido" /> : (
+                <div className="panel overflow-x-auto" data-testid="delegations">
+                  <table className="w-full min-w-[720px] text-sm">
+                    <caption className="sr-only">Acessos temporários do suporte da plataforma, do mais recente ao mais antigo</caption>
+                    <thead className="text-left text-muted"><tr><th scope="col" className="p-3 font-medium">Operador</th><th scope="col" className="p-3 font-medium">Concedido por</th><th scope="col" className="p-3 font-medium">Motivo</th><th scope="col" className="p-3 font-medium">Até</th><th scope="col" className="p-3 font-medium">Situação</th><th scope="col" className="p-3 font-medium"><span className="sr-only">Ação</span></th></tr></thead>
+                    <tbody className="divide-y divide-line">
+                      {deleg.data.items.map((d) => (
+                        <tr key={d.id}>
+                          <td className="p-3"><div className="font-medium">{d.delegate_name}</div><div className="text-muted">{d.delegate_email}</div></td>
+                          <td className="p-3">{d.granted_by_email}</td>
+                          <td className="p-3">{d.reason}</td>
+                          <td className="tabular p-3">{when(d.expires_at)}</td>
+                          <td className="p-3">{d.status === "active" ? "Ativo" : d.status === "revoked" ? `Encerrado${d.revoked_at ? ` em ${when(d.revoked_at)}` : ""}` : "Vencido"}</td>
+                          <td className="p-3 text-right">{d.status === "active" && deleg.data!.can_delegate ? <RevokeDelegation id={d.id} who={d.delegate_email} /> : null}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         <section aria-labelledby="h-matrix">

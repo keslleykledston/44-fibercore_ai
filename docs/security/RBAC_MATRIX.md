@@ -21,6 +21,7 @@
 | `diagnostics:run` | R0 | não | sim | Rodar diagnósticos (somente leitura) |
 | `members:read` | R1 | não | não | Ver os membros do provedor e o estado do MFA de cada um |
 | `members:manage` | R3 | sim | não | Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite) |
+| `platform:delegate` | R3 | sim | não | Conceder e revogar o acesso temporário (até 8 h, com motivo) do suporte da plataforma a este provedor |
 | `roles:read` | R0 | não | não | Ver os papéis do sistema e as permissões de cada um |
 | `members:mfa_reset` | R3 | sim | não | Redefinir o MFA de outro membro |
 | `edge:read` | R0 | não | não | Ver os Edges do provedor |
@@ -46,6 +47,7 @@
 | `diagnostics:run` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `members:read` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `members:manage` | ✔ |  |  |  |  |  |  |  | ✔ |
+| `platform:delegate` | ✔ |  |  |  |  |  |  |  |  |
 | `roles:read` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `members:mfa_reset` | ✔ |  |  |  |  |  |  |  |  |
 | `edge:read` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
@@ -69,6 +71,7 @@
 | POST | `/v1/auth/mfa/enroll` | (autentica o token da própria conta) |
 | POST | `/v1/auth/mfa/recovery-codes` | (autentica o token da própria conta) |
 | GET | `/v1/auth/mfa/status` | (autentica o token da própria conta) |
+| POST | `/v1/auth/mfa/step-up` | (autentica o token da própria conta) |
 | POST | `/v1/auth/mfa/verify` | (pública ou usa credencial no corpo) |
 | POST | `/v1/auth/refresh` | (pública ou usa credencial no corpo) |
 | POST | `/v1/auth/service-token` | (pública ou usa credencial no corpo) |
@@ -116,6 +119,9 @@
 | GET | `/v1/onus/offline` | `inventory:read` |
 | GET | `/v1/onus/{onu_id}` | `inventory:read` |
 | GET | `/v1/onus/{onu_id}/customer` | `customers:read` |
+| GET | `/v1/platform-delegations` | `members:read` |
+| POST | `/v1/platform-delegations` | `platform:delegate` |
+| DELETE | `/v1/platform-delegations/{delegation_id}` | `platform:delegate` |
 | GET | `/v1/platform/modules` | (sessão válida, sem permissão) |
 | GET | `/v1/platform/versions` | (sessão válida, sem permissão) |
 | GET | `/v1/roles` | `roles:read` |

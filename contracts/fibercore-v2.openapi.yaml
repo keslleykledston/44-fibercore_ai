@@ -136,6 +136,18 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '409': {description: MFA não está ativo}
         '429': {description: Bloqueio temporário por tentativas falhas}
+  /auth/mfa/step-up:
+    post:
+      tags: [Platform]
+      operationId: mfaStepUp
+      summary: Prova o segundo fator de novo dentro de uma sessão viva (ADR-0031, MFA recente de 10 min). Exige o bearer e o refresh token da MESMA sessão; a prova fica gravada na sessão (o refresh a mantém dentro da janela, nunca a renova) e o access token devolvido a carrega. Mesmo limite de tentativas e mesma proteção contra repetição do login
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [refresh_token, code], properties: {refresh_token: {type: string}, code: {type: string, description: TOTP ou código de recuperação}}}}}}
+      responses:
+        '200':
+          description: "{access_token, token_type, expires_in, mfa_recent_seconds}"
+        '401': {description: Bearer ou sessão inválidos, ou código errado}
+        '409': {description: MFA não está ativo nesta conta (mfa_not_enrolled)}
+        '429': {description: Bloqueio temporário por tentativas falhas}
   /auth/mfa/disable:
     post:
       tags: [Platform]
@@ -174,6 +186,7 @@ paths:
     get:
       tags: [Platform]
       operationId: whoAmI
+      summary: Quem é o chamador, o papel, as permissões do próprio papel e o estado do MFA recente ({enforced, window_seconds, satisfied}). Em um provedor delegado o papel é platform_support (só enquanto a delegação vive)
       parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}]
       responses:
         '200': {description: Principal resolvido por membership, content: {application/json: {schema: {$ref: '#/components/schemas/Principal'}}}}
@@ -411,6 +424,44 @@ paths:
           description: "{truncated, items[{id, at, from, to, reason, revoked_sessions, actor{id,name,email}, target{id,name,email}}]}"
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /platform-delegations:
+    get:
+      tags: [Platform]
+      operationId: listPlatformDelegations
+      summary: Acessos temporários concedidos ao suporte da plataforma, do mais recente ao mais antigo (members:read) — quem, por quê, até quando e em que estado (active|expired|revoked)
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 30}}]
+      responses:
+        '200':
+          description: "{can_delegate, max_hours, items[{id, delegate_email, delegate_name, granted_by_email, reason, created_at, expires_at, revoked_at, status}]}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [Platform]
+      operationId: grantPlatformDelegation
+      summary: Concede ao suporte da plataforma acesso de leitura (papel platform_support, só tenant:read) por até 8 h, com motivo (platform:delegate; MFA recente quando exigido). Só para contas que a própria plataforma marcou como operadoras; recusas com código estável (404 operator_not_found — o mesmo para conta inexistente, inativa ou não operadora | 409 already_member | 422 cannot_delegate_to_self). Renovar = nova concessão com novo motivo; a anterior termina no mesmo instante. A validade é conferida no banco em CADA requisição
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [email, reason], properties: {email: {type: string, format: email}, reason: {type: string, minLength: 10, maxLength: 300}, hours: {type: integer, minimum: 1, maximum: 8, default: 8}}}}}}
+      responses:
+        '201':
+          description: "{id, expires_at, replaced}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: operator_not_found}
+        '409': {description: already_member}
+        '422': {description: Motivo curto, prazo fora de 1..8 h ou autodelegação}
+  /platform-delegations/{delegation_id}:
+    delete:
+      tags: [Platform]
+      operationId: revokePlatformDelegation
+      summary: Revoga o acesso temporário (platform:delegate). Termina na hora e encerra todas as concessões vivas da mesma pessoa neste provedor. Auditado
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: delegation_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200':
+          description: "{status: revoked, revoked}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Concessão inexistente neste provedor}
+        '409': {description: delegation_not_active (já revogada ou vencida)}
   /members/{user_id}/role:
     put:
       tags: [Platform]
@@ -871,7 +922,7 @@ components:
     Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000, default: 100}}
   responses:
     Unauthorized: {description: Autenticação exigida}
-    Forbidden: {description: "Usuário sem permissão sobre tenant ou capacidade; detail=mfa_enrolment_required quando o papel exige MFA e o usuário ainda não o ativou (MFA_REQUIRED_ROLES)"}
+    Forbidden: {description: "Usuário sem permissão sobre tenant ou capacidade; detail=mfa_enrolment_required quando o papel exige MFA e o usuário ainda não o ativou (MFA_REQUIRED_ROLES); detail=mfa_recent_required quando a permissão exige segundo fator recente (MFA_RECENT_ENFORCE, janela MFA_RECENT_SECONDS) — responder com POST /auth/mfa/step-up e repetir a chamada"}
     Conflict: {description: Operação concorrente ou estado incompatível}
   schemas:
     CpeSnapshotAck:

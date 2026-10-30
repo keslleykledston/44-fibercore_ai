@@ -12,8 +12,9 @@ from app.api.deps import authenticated_user_id
 from app.api.routes import _client_ip, _gate, _record, _throttled
 from app.core import mfa
 from app.core.db import get_engine, scoped_connection
-from app.core.security import decode_mfa_challenge, verify_secret
-from app.core.sessions import hash_refresh, issue_session
+from app.core.memberships import active_roles
+from app.core.security import decode_mfa_challenge, issue_token, verify_secret
+from app.core.sessions import hash_refresh, issue_session, mfa_enabled
 from app.core.settings import Settings, get_settings, required_mfa_roles
 
 router = APIRouter()
@@ -85,7 +86,9 @@ def refresh(body: RefreshIn, settings: Settings = Depends(get_settings)) -> Sess
                 conn.execute(text("UPDATE refresh_tokens SET used_at = now() WHERE id = :i"), {"i": row.id})
             else:  # a legitimate concurrent request (two tabs) within the grace window gets exactly one sibling; nothing is revoked
                 conn.execute(text("UPDATE refresh_tokens SET grace_used_at = now() WHERE id = :i"), {"i": row.id})
-            sess = issue_session(conn, settings, row.user_id, family_id=row.family_id, family_expires_at=row.family_expires_at)
+            family_mfa_at = conn.execute(text("SELECT max(mfa_at) FROM refresh_tokens WHERE family_id = :f"), {"f": row.family_id}).scalar()
+            sess = issue_session(conn, settings, row.user_id, family_id=row.family_id, family_expires_at=row.family_expires_at,
+                                 mfa_at=family_mfa_at)  # carried, never renewed: only a step-up (a fresh code) renews it
     if sess is None:
         raise _unauth()
     return SessionOut(access_token=sess.access_token, refresh_token=sess.refresh_token, expires_in=sess.expires_in)
@@ -149,12 +152,63 @@ def mfa_verify(body: MfaVerifyIn, request: Request, settings: Settings = Depends
             ok = bool(active) and _check_second_factor(conn, settings, user_id, body.code)
             _record(conn, key, ip, ok)
             if ok:
-                sess, outcome = issue_session(conn, settings, user_id), "ok"
+                sess, outcome = issue_session(conn, settings, user_id, mfa_at=datetime.now(UTC)), "ok"
     if outcome == "locked":
         raise _throttled()
     if sess is None:
         raise HTTPException(401, "invalid credentials")
     return SessionOut(access_token=sess.access_token, refresh_token=sess.refresh_token, expires_in=sess.expires_in)
+
+
+class StepUpIn(BaseModel):
+    refresh_token: str = Field(min_length=20, max_length=200)  # the caller's own session: the proof is recorded on it, so a refresh keeps it
+    code: str = Field(min_length=6, max_length=32)  # 6-digit TOTP or a recovery code
+
+
+class StepUpOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"  # noqa: S105
+    expires_in: int
+    mfa_recent_seconds: int
+
+
+@router.post("/v1/auth/mfa/step-up", response_model=StepUpOut)
+def mfa_step_up(body: StepUpIn, request: Request, authorization: str | None = Header(default=None),
+                settings: Settings = Depends(get_settings)) -> StepUpOut:
+    """Prove the second factor again inside a live session (ADR-0031, "MFA recente"). Same throttle and replay protection as the login step.
+    Records the proof on the session family (so refreshing keeps it for its window, never renews it) and returns an access token carrying it."""
+    uid = _user_id(authorization, settings)
+    key, ip = f"mfa:{uid}", _client_ip(request, settings)
+    out, now = "bad", datetime.now(UTC)
+    with scoped_connection(get_engine()) as conn:
+        conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{uid}"})
+        _lock_family(conn, body.refresh_token)
+        fam = conn.execute(
+            text("SELECT family_id, user_id, revoked_at, expires_at, family_expires_at FROM refresh_tokens WHERE token_hash = :h"),
+            {"h": hash_refresh(body.refresh_token)},
+        ).first()
+        if fam is None or fam.user_id != uid or fam.revoked_at is not None or fam.expires_at <= now or fam.family_expires_at <= now:
+            out = "session"
+        elif not mfa_enabled(conn, uid):
+            out = "not_enrolled"
+        elif _gate(conn, key, ip):
+            out = "locked"
+        else:
+            ok = _check_second_factor(conn, settings, uid, body.code)
+            _record(conn, key, ip, ok)
+            if ok:
+                conn.execute(text("UPDATE refresh_tokens SET mfa_at = :m WHERE family_id = :f AND revoked_at IS NULL"), {"m": now, "f": fam.family_id})
+                out = "ok"
+    if out == "locked":
+        raise _throttled()
+    if out == "not_enrolled":
+        raise HTTPException(409, "mfa_not_enrolled")
+    if out == "session":
+        raise _unauth()
+    if out != "ok":
+        raise HTTPException(401, "invalid credentials")
+    return StepUpOut(access_token=issue_token(settings, sub=uid, kind="user", mfa_at=now.timestamp()), expires_in=settings.jwt_ttl_seconds,
+                     mfa_recent_seconds=settings.mfa_recent_seconds)
 
 
 # ---- MFA: enrolment (authenticated user, re-authenticated with the password) -------------------
@@ -179,8 +233,7 @@ def _mfa_required(conn, settings: Settings, user_id: UUID) -> bool:
     roles = required_mfa_roles(settings)
     if not roles:
         return False
-    mine = {r.role for r in conn.execute(text("SELECT role FROM tenant_memberships WHERE user_id = :u"), {"u": user_id})}
-    return bool(roles & mine)
+    return bool(roles & set(active_roles(conn, user_id).values()))
 
 
 class PasswordIn(BaseModel):

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { EntityDetailDrawer } from "@/components/EntityDetailDrawer";
+import { MfaStepUp } from "@/components/MfaStepUp";
 import { ROLE_CHANGE_ERROR, roleLabel } from "@/lib/roles";
 
 /** Troca do papel de OUTRA pessoa: só os papéis que o seu papel pode atribuir; a API revalida tudo. */
@@ -10,24 +11,31 @@ export function MemberRoleChange({ userId, name, current, options }: { userId: s
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needStepUp, setNeedStepUp] = useState(false);
+  const last = useRef<{ role: string; reason: string } | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const router = useRouter();
   const choices = options.filter((r) => r !== current);
-  const close = () => { setOpen(false); setError(null); trigger.current?.focus(); };
+  const close = () => { setOpen(false); setError(null); setNeedStepUp(false); trigger.current?.focus(); };
 
-  async function submit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
+  async function send(payload: { role: string; reason: string }) {
     setBusy(true); setError(null);
     try {
       const res = await fetch(`/bff/members/${userId}/role`, {
-        method: "POST", headers: { "content-type": "application/json" }, cache: "no-store",
-        body: JSON.stringify({ role: fd.get("role"), reason: String(fd.get("reason") ?? "").trim() }),
+        method: "POST", headers: { "content-type": "application/json" }, cache: "no-store", body: JSON.stringify(payload),
       });
       const j = await res.json().catch(() => ({}));
-      if (res.ok) { setOpen(false); router.refresh(); return; }
+      if (res.ok) { setOpen(false); setNeedStepUp(false); router.refresh(); return; }
+      if ((j as { error?: string }).error === "mfa_recent_required") { setNeedStepUp(true); return; }
       setError(ROLE_CHANGE_ERROR[(j as { error?: string }).error ?? "failed"] ?? ROLE_CHANGE_ERROR.failed);
     } catch { setError(ROLE_CHANGE_ERROR.failed); } finally { setBusy(false); }
+  }
+
+  function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    last.current = { role: String(fd.get("role") ?? ""), reason: String(fd.get("reason") ?? "").trim() };
+    void send(last.current);
   }
 
   return (
@@ -60,6 +68,7 @@ export function MemberRoleChange({ userId, name, current, options }: { userId: s
             </>
           )}
         </form>
+        {needStepUp && <div className="mt-4"><MfaStepUp onDone={() => last.current && void send(last.current)} /></div>}
       </EntityDetailDrawer>
     </>
   );

@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     # Comma-separated tenant roles that MUST have MFA enabled (e.g. "isp_admin"). A user with such a role in ANY tenant gets
     # 403 mfa_enrolment_required on every tenant-scoped route until MFA is on, and cannot switch it off. Empty = policy off.
     mfa_required_roles: str = ""
+    # ADR-0031: permissions marked `mfa_recent` in the catalog need a second factor proved in the last `mfa_recent_seconds` (login with MFA or a
+    # step-up). Enforcement is a rollout switch: while off, nothing changes for accounts that have not enrolled MFA yet.
+    mfa_recent_enforce: bool = False
+    mfa_recent_seconds: int = Field(default=600, ge=60, le=3600)
     trusted_proxy: bool = False  # trust X-Forwarded-For (set only behind our own reverse proxy)
     job_signing_key: str = Field(default="", repr=False)  # base64 Ed25519 seed; empty => dispatch disabled (fail closed)
     pii_hmac_key: str = Field(default="", repr=False)  # HMAC key for customer documents; import fails closed without it
@@ -53,7 +57,7 @@ def get_settings() -> Settings:
     return Settings()
 
 
-ALWAYS_MFA_ROLES = frozenset({"access_manager"})  # whoever can grant roles always needs a second factor, whatever MFA_REQUIRED_ROLES says (ADR-0031)
+ALWAYS_MFA_ROLES = frozenset({"access_manager", "platform_support"})  # whoever can grant roles, and every platform delegate, always needs a second factor, whatever MFA_REQUIRED_ROLES says (ADR-0031)
 
 
 def required_mfa_roles(settings: Settings) -> frozenset[str]:

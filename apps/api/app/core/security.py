@@ -19,7 +19,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "isp_admin": frozenset({
         "customers:read", "customers:import", "associations:review", "incidents:read", "incidents:ack",
         "jobs:read", "jobs:request", "jobs:approve", "inventory:read", "tenant:read", "audit:read", "members:read", "edge:read",
-        "members:mfa_reset", "diagnostics:run", "members:manage", "roles:read",
+        "members:mfa_reset", "diagnostics:run", "members:manage", "roles:read", "platform:delegate",
     }),
     # ADR-0031: grants roles, has NO operational power at all (cannot see customers, jobs, incidents or the network)
     "access_manager": frozenset({"tenant:read", "members:read", "members:manage", "roles:read", "audit:read"}),
@@ -57,9 +57,10 @@ class TokenClaims:
     kind: str  # "user" | "service"
     tenant_id: UUID | None  # set only for service accounts
     iat: float = 0.0  # issue time (epoch s, fractional): compared with users_global.tokens_valid_after to honour revocations
+    mfa_at: float | None = None  # when the session last proved a second factor (epoch s); None = never in this session family
 
 
-def issue_token(settings: Settings, *, sub: UUID, kind: str, tenant_id: UUID | None = None) -> str:
+def issue_token(settings: Settings, *, sub: UUID, kind: str, tenant_id: UUID | None = None, mfa_at: float | None = None) -> str:
     if not settings.jwt_secret:
         raise RuntimeError("JWT_SECRET not configured")
     now = time.time()  # fractional: revocation (users_global.tokens_valid_after) is compared at sub-second precision
@@ -73,6 +74,8 @@ def issue_token(settings: Settings, *, sub: UUID, kind: str, tenant_id: UUID | N
     }
     if tenant_id:
         claims["tid"] = str(tenant_id)
+    if mfa_at is not None:
+        claims["mfa_at"] = mfa_at
     return jwt.encode(claims, settings.jwt_secret, algorithm="HS256", headers={"kid": settings.jwt_kid})
 
 
@@ -135,4 +138,8 @@ def decode_token(settings: Settings, token: str) -> TokenClaims:
     tid = UUID(data["tid"]) if data.get("tid") else None
     if kind == "service" and tid is None:
         raise ValueError("service token without tenant")
-    return TokenClaims(sub=UUID(data["sub"]), kind=kind, tenant_id=tid, iat=float(data["iat"]))
+    mfa_at = data.get("mfa_at")
+    if mfa_at is not None and (isinstance(mfa_at, bool) or not isinstance(mfa_at, (int, float))):
+        raise ValueError("bad mfa_at")
+    return TokenClaims(sub=UUID(data["sub"]), kind=kind, tenant_id=tid, iat=float(data["iat"]),
+                       mfa_at=float(mfa_at) if mfa_at is not None else None)

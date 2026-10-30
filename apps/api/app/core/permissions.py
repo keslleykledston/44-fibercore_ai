@@ -38,6 +38,7 @@ CATALOG: dict[str, Permission] = dict([
     _p("diagnostics:run", "Rodar diagnósticos (somente leitura)", "R0", scopable=True),
     _p("members:read", "Ver os membros do provedor e o estado do MFA de cada um", "R1"),
     _p("members:manage", "Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite)", "R3", mfa_recent=True),
+    _p("platform:delegate", "Conceder e revogar o acesso temporário (até 8 h, com motivo) do suporte da plataforma a este provedor", "R3", mfa_recent=True),
     _p("roles:read", "Ver os papéis do sistema e as permissões de cada um", "R0"),
     _p("members:mfa_reset", "Redefinir o MFA de outro membro", "R3", mfa_recent=True),
     _p("edge:read", "Ver os Edges do provedor", "R0"),

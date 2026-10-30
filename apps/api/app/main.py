@@ -14,6 +14,7 @@ from app.api.diagnostics import router as diagnostics_router
 from app.api.erp import router as erp_router
 from app.api.inventory import router as inventory_router
 from app.api.jobs import router as jobs_router
+from app.api.delegations import router as delegations_router
 from app.api.members import router as members_router
 from app.api.noc import router as noc_router
 from app.api.routes import router
@@ -54,6 +55,7 @@ app.include_router(erp_router)
 app.include_router(noc_router)
 app.include_router(jobs_router)
 app.include_router(members_router)
+app.include_router(delegations_router)
 app.include_router(context_router)
 app.include_router(diagnostics_router)
 app.include_router(diagnostic_jobs_router)

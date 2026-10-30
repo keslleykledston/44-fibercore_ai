@@ -66,9 +66,15 @@ export type EdgeRow = { id: string; name: string; site_name: string | null; vers
 export type PermissionInfo = { name: string; risk: "R0" | "R1" | "R2" | "R3"; description: string };
 export type RoleInfo = { role: string; label: string; assignable_by_me: boolean; permissions: PermissionInfo[] };
 export type RoleList = { roles: RoleInfo[] };
-export type MeInfo = { id: string; kind: string; tenant_id: string; role: string; permissions: PermissionInfo[] };
+export type MeInfo = { id: string; kind: string; tenant_id: string; role: string; mfa_recent?: { enforced: boolean; window_seconds: number; satisfied: boolean }; permissions: PermissionInfo[] };
 export type RoleChange = {
   id: string; at: string; from: string | null; to: string | null; reason: string | null; revoked_sessions: number | null;
   actor: { id: string | null; name: string | null; email: string | null }; target: { id: string; name: string | null; email: string | null };
 };
 export type RoleHistory = { truncated: boolean; items: RoleChange[] };
+
+export type PlatformDelegation = {
+  id: string; delegate_email: string; delegate_name: string; granted_by_email: string; reason: string;
+  created_at: string; expires_at: string; revoked_at: string | null; status: "active" | "expired" | "revoked";
+};
+export type PlatformDelegationList = { can_delegate: boolean; max_hours: number; items: PlatformDelegation[] };
