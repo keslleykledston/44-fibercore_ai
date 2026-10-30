@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/AppShell";
 import { DataFreshness, EmptyState, ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { DevicesTabs } from "@/components/DevicesTabs";
+import { OltQueries } from "@/components/OltQueries";
 import { OnuTable } from "@/components/OnuTable";
 import { apiSafe } from "@/lib/api";
 import type { Olt, Onu } from "@/lib/types";
@@ -24,6 +25,7 @@ export default async function Rede({ searchParams }: { searchParams: Promise<{ s
                   <div className="font-medium">{o.name}</div>
                   <div className="text-sm text-muted">{o.vendor} {o.model ?? ""} · {o.onu_count} ONUs</div>
                   <div className="mt-1 flex items-center gap-3"><StatusPill value={o.support_level} /><DataFreshness freshness={o.freshness} observedAt={o.observed_at} /></div>
+                  <OltQueries oltId={o.id} oltName={o.name} />
                 </li>
               ))}
             </ul>

@@ -20,5 +20,6 @@ export default defineConfig({
     { name: "funcional", testMatch: /app\.spec\.ts/, dependencies: ["capturas"], use: { browserName: "chromium" } },
     // Por último: reconhecer o incidente demo muda o estado que os testes acima assumem (não reconhecido).
     { name: "posteriores", testMatch: /noc-ack-and-search\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
+    { name: "consultas", testMatch: /olt-queries\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
   ],
 });

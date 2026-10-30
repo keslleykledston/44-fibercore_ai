@@ -23,4 +23,4 @@ WEB_PID=$!
 for _ in $(seq 40); do curl -fs "http://127.0.0.1:$WEB_PORT/login" >/dev/null 2>&1 && break; sleep 1; done
 export WEB_URL="http://127.0.0.1:$WEB_PORT"
 export E2E_API_URL="http://127.0.0.1:${FIBERCORE_API_PORT:-18420}"
-if [[ "${1:-}" == "--no-screenshots" ]]; then npx playwright test --project=funcional --project=posteriores --no-deps; else npx playwright test; fi
+if [[ "${1:-}" == "--no-screenshots" ]]; then npx playwright test --project=funcional --project=posteriores --project=consultas --no-deps; else npx playwright test; fi

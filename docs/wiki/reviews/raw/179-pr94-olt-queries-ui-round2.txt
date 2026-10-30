@@ -1,0 +1,31 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18f1b-0027-7891-9187-17225f46ee7a).
+[codex] Turn started (01a18f1b-005f-75a2-8dbc-aa4b2c777c14).
+[codex] Assistant message captured: Vou revisar o diff real contra `main`, seguindo o fluxo de envio, polling, retomada e leitura...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Olt...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Olt... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"function apiSafe|export .*apiSafe|/v1/jobs/|olt_query|Idempotency-Key\...
+[codex] Command completed: /bin/bash -lc "rg -n \"function apiSafe|export .*apiSafe|/v1/jobs/|olt_query|Idempotency-Key\... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,100p' apps/web/src/lib/api.ts; sed -n '1,130p' apps/web/src/componen...
+[codex] Command completed: /bin/bash -lc "sed -n '1,100p' apps/web/src/lib/api.ts; sed -n '1,130p' apps/web/src/componen... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"def get_job|@router.get\\(\\\"/v1/jobs|result.*detail|claim_abandoned\...
+[codex] Command completed: /bin/bash -lc "rg -n \"def get_job|@router.get\\(\\\"/v1/jobs|result.*detail|claim_abandoned\... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '287,310p' apps/api/app/api/jobs.py; git diff --no-ext-diff --unified=1...
+[codex] Command completed: /bin/bash -lc "sed -n '287,310p' apps/api/app/api/jobs.py; git diff --no-ext-diff --unified=1... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'jobs:read|olt_query:run|jobs:request' apps/api/app | head -60; rg -n 'j...
+[codex] Command completed: /bin/bash -lc "rg -n 'jobs:read|olt_query:run|jobs:request' apps/api/app | head -60; rg -n 'j... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'def _view' apps/api/app/api/jobs.py; sed -n '120,140p' apps/api/app/api...
+[codex] Command failed: /bin/bash -lc "rg -n 'def _view' apps/api/app/api/jobs.py; sed -n '120,140p' apps/api/app/api... (exit 1)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviaria ainda: o catálogo pode oferecer consulta...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviaria ainda: o catálogo pode oferecer consultas a usuários que não conseguem acompanhar o job criado.
+
+Findings:
+- [medium] Catálogo não exige a permissão usada para ler o job (apps/api/app/api/olt_queries.py:34)
+  O catálogo oferece a consulta quando o usuário tem `olt_query:run` e `jobs:request`, mas o polling usa `/v1/jobs/{id}`, que exige `jobs:read`. Se um papel personalizado tiver as duas permissões de envio, mas não `jobs:read`, o POST cria o job e cada polling retorna 403; a interface permanece em “Aguardando” até desistir, sem mostrar o resultado. Inclua `jobs:read` na condição de oferta ou ajuste a leitura do job para permitir ao solicitante acompanhar seus próprios jobs de consulta.
+  Recommendation: Exija `jobs:read` ao marcar consultas como oferecidas e cubra um papel sem essa permissão; alternativamente, implemente uma rota de acompanhamento que autorize o solicitante do job.

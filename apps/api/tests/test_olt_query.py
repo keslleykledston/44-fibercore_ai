@@ -429,3 +429,15 @@ def test_a_query_lives_long_enough_for_the_worst_collection_wait(client, seed, i
     j2 = client.post(f"/v1/jobs/{other}/submit", headers=h).json()
     assert datetime.fromisoformat(j2["expires_at"]) - datetime.now(datetime.fromisoformat(j2["expires_at"]).tzinfo) <= timedelta(minutes=15)   # other operations keep 15 min
     assert client.post(f"/v1/jobs/{other}/cancel", headers=h).status_code == 200     # leave nothing behind for the other modules
+
+
+def test_a_role_that_cannot_follow_the_job_is_not_offered_the_query(client, seed, inv, olt, on, monkeypatch):
+    from app.core import security
+    base = security.ROLE_PERMISSIONS["noc_n1"]
+    monkeypatch.setitem(security.ROLE_PERMISSIONS, "noc_n1", frozenset(base | {"olt_query:run", "jobs:request"}))   # can ask, cannot read jobs
+    h = hdr(client, "dave", seed, "A")
+    cat = {i["id"]: i for i in client.get(f"/v1/olts/{olt}/queries", headers=h).json()["items"]}
+    assert cat["olt.version"]["offered"] is False and cat["olt.version"]["reason"] == "not_permitted"
+    assert _ask(client, h, olt).status_code == 403
+    monkeypatch.setitem(security.ROLE_PERMISSIONS, "noc_n1", frozenset(base | {"olt_query:run", "jobs:request", "jobs:read"}))
+    assert _ask(client, h, olt).status_code == 200
