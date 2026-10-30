@@ -27,6 +27,9 @@ type fakeOLT struct {
 	resetOut             string
 	pendingUp            bool
 	noDown               bool // a deactivate does not show in the state
+	flipAfter            int  // after this many display calls the ONU on that position becomes a different one
+	displays             int
+	onDisplay            func(n int)
 }
 
 func newFake() *fakeOLT {
@@ -50,6 +53,13 @@ func (f *fakeOLT) Run(_ context.Context, cmd string) (string, error) {
 	}
 	switch {
 	case strings.HasPrefix(cmd, "display ont info"):
+		f.displays++
+		if f.onDisplay != nil {
+			f.onDisplay(f.displays)
+		}
+		if f.flipAfter > 0 && f.displays > f.flipAfter {
+			f.sn = "48575443BBBBBBBB"
+		}
 		if f.pendingUp {
 			f.infoCallsAfterChange++
 			if !f.neverReturn && f.infoCallsAfterChange >= f.returnAfter {
@@ -176,6 +186,31 @@ func TestNothingIsSentWhenTheIdentityDoesNotMatch(t *testing.T) {
 				t.Errorf("%s/%s: err=%v called=%v sent=%v", name, op, err, called, f.changing())
 			}
 		}
+	}
+}
+
+func TestIdentityIsReadAgainRightBeforeTheMutationAndTheClaimStaysUnspent(t *testing.T) {
+	for _, op := range []string{"onu_reset", "onu_deactivate"} {
+		f := newFake()
+		f.flipAfter = 1 // the first read (by-sn) is right; the second one (in the interface mode) shows another ONU
+		called := false
+		_, err := run(t, f, op, func() error { called = true; return nil })
+		if !errors.Is(err, ErrBenchOLTIdentity) || called || len(f.changing()) != 0 {
+			t.Fatalf("%s: err=%v called=%v sent=%v", op, err, called, f.changing())
+		}
+	}
+	// and the window may close during the second read: nothing is claimed or sent
+	f := newFake()
+	clock := time.Now()
+	f.onDisplay = func(n int) {
+		if n == 2 {
+			clock = clock.Add(2 * time.Hour)
+		}
+	}
+	called := false
+	_, err := RunBenchManeuver(context.Background(), f, onu14, "onu_reset", clock.Add(time.Hour), func() error { called = true; return nil }, time.Second, time.Millisecond, func() time.Time { return clock })
+	if err == nil || called || len(f.changing()) != 0 {
+		t.Fatalf("expiry during the checks: err=%v called=%v sent=%v", err, called, f.changing())
 	}
 }
 

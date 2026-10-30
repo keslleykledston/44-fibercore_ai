@@ -169,6 +169,18 @@ func RunBenchManeuver(ctx context.Context, raw Session, onu BenchONU, op string,
 	if _, err := step(c.Iface); err != nil {
 		return ManeuverOutcome{}, err
 	}
+	// the last read before the mutation, in the very mode the command will be typed in: same ONU, same state, nothing changed since the first read
+	chk, err := s.Run(ctx, c.Info)
+	if err != nil {
+		return ManeuverOutcome{}, err
+	}
+	again, err := ParseONTInfo(chk)
+	if err != nil {
+		return ManeuverOutcome{}, err
+	}
+	if !onu.identityOK(again) || again.LastUp != before.LastUp {
+		return ManeuverOutcome{}, ErrBenchOLTIdentity
+	}
 	if !now().Before(notAfter) {
 		return ManeuverOutcome{}, fmt.Errorf("%w: envelope or authorization window over", ErrBenchOLTBefore)
 	}
