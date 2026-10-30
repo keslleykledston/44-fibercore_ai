@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -29,6 +30,7 @@ type shellServer struct {
 	crs           int
 	exec          int
 	spaces, stray int // keys received while the device sat at its pager
+	answers       []string
 }
 
 func startShellSSH(t *testing.T, legacyOnly bool) *shellServer {
@@ -236,6 +238,27 @@ func (srv *shellServer) cli(ch ssh.Channel) {
 			ch.Write([]byte("\r\n  part two\r\n" + testPrompt))
 		case line == "display suffix": // a line merely ending with the prompt text is ordinary output
 			ch.Write([]byte("  see " + testPrompt + "\r\n  rest\r\n" + testPrompt))
+		case line == "ont reset 14 10": // asks one confirmation; only "y" runs it
+			ch.Write([]byte("  Are you sure to reset the ONT(s)? (y/n)[n]:"))
+			ans, ok := readLine()
+			if !ok {
+				return
+			}
+			srv.mu.Lock()
+			srv.answers = append(srv.answers, ans)
+			srv.mu.Unlock()
+			if ans == "y" {
+				ch.Write([]byte("\r\n  ONT reset done\r\n\r\n" + pr()))
+			} else {
+				ch.Write([]byte("\r\n  cancelled\r\n\r\n" + pr()))
+			}
+		case line == "ont reset 14 11": // asks, then asks AGAIN
+			ch.Write([]byte("  Are you sure to reset the ONT(s)? (y/n)[n]:"))
+			if _, ok := readLine(); !ok {
+				return
+			}
+			ch.Write([]byte("\r\n  Really? (y/n)[n]:"))
+			select {}
 		case line == "display risky":
 			ch.Write([]byte("Are you sure to continue? (y/n)[n]:"))
 			select {}
@@ -595,5 +618,55 @@ func TestCloseReleasesARunBlockedWaitingForTheLoginPrompt(t *testing.T) {
 	}
 	if time.Since(start) > 3*time.Second {
 		t.Fatal("Close was held behind the command timeout")
+	}
+}
+
+func TestShellRunConfirmAnswersOnlyTheExpectedQuestionOnce(t *testing.T) {
+	srv := startShellSSH(t, false)
+	s, err := DialSSH(context.Background(), shellCfg(srv, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	cr, ok := Session(s).(ConfirmRunner)
+	if !ok {
+		t.Fatal("the shell session must implement ConfirmRunner")
+	}
+	expect := regexp.MustCompile(`Are you sure to reset the ONT\(s\)\? \(y/n\)\[n\]:\s*$`)
+	// no expectation: the question fails closed, nothing is answered, and the error carries the question text
+	_, err = s.Run(context.Background(), "ont reset 14 10")
+	if !errors.Is(err, ErrInteractive) || !strings.Contains(err.Error(), "Are you sure to reset") {
+		t.Fatalf("got %v", err)
+	}
+	srv.mu.Lock()
+	if len(srv.answers) != 0 {
+		t.Fatalf("answered without an expectation: %v", srv.answers)
+	}
+	srv.mu.Unlock()
+	s2, err := DialSSH(context.Background(), shellCfg(srv, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s2.Close()
+	cr2 := Session(s2).(ConfirmRunner)
+	out, err := cr2.RunConfirm(context.Background(), "ont reset 14 10", expect, "y")
+	if err != nil || !strings.Contains(out, "ONT reset done") {
+		t.Fatalf("out=%q err=%v", out, err)
+	}
+	srv.mu.Lock()
+	if len(srv.answers) != 1 || srv.answers[0] != "y" {
+		t.Fatalf("exactly one 'y': %v", srv.answers)
+	}
+	srv.mu.Unlock()
+	_ = cr
+	// a second question after the answer fails closed and says the command may have run
+	s3, err := DialSSH(context.Background(), shellCfg(srv, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s3.Close()
+	_, err = Session(s3).(ConfirmRunner).RunConfirm(context.Background(), "ont reset 14 11", expect, "y")
+	if !errors.Is(err, ErrInteractive) || !errors.Is(err, ErrAfterAnswer) {
+		t.Fatalf("got %v", err)
 	}
 }

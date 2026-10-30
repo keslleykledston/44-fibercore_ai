@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"regexp"
 	"sync"
 	"time"
 
@@ -97,6 +98,18 @@ func (s *SSHSession) Close() error {
 }
 
 func (s *SSHSession) Run(ctx context.Context, cmd string) (string, error) {
+	return s.run(ctx, cmd, nil, "")
+}
+
+// RunConfirm answers ONE expected confirmation question of a command (interactive shell mode only); see shell.RunConfirm.
+func (s *SSHSession) RunConfirm(ctx context.Context, cmd string, expect *regexp.Regexp, answer string) (string, error) {
+	if !s.cfg.Shell {
+		return "", errors.New("ssh: a confirmation can only be answered in the interactive shell mode")
+	}
+	return s.run(ctx, cmd, expect, answer)
+}
+
+func (s *SSHSession) run(ctx context.Context, cmd string, expect *regexp.Regexp, answer string) (string, error) {
 	if s.cfg.Shell {
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -107,7 +120,7 @@ func (s *SSHSession) Run(ctx context.Context, cmd string) (string, error) {
 			}
 			s.sh = sh
 		}
-		return s.sh.Run(ctx, cmd)
+		return s.sh.run(ctx, cmd, expect, answer)
 	}
 	sess, err := s.client.NewSession()
 	if err != nil {
