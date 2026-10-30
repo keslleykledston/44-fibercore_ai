@@ -13,7 +13,7 @@ from app.api.routes import _client_ip, _gate, _record, _throttled
 from app.core import mfa
 from app.core.db import get_engine, scoped_connection
 from app.core.memberships import active_roles
-from app.core.security import decode_mfa_challenge, issue_token, verify_secret
+from app.core.security import decode_mfa_challenge, hash_secret, issue_token, verify_secret
 from app.core.sessions import hash_refresh, issue_session, mfa_enabled
 from app.core.settings import Settings, get_settings, required_mfa_roles
 
@@ -405,3 +405,29 @@ def mfa_regenerate_recovery_codes(
         raise HTTPException(401, "invalid credentials")
     return {"recovery_codes": codes}  # shown once; only hashes are stored
 
+
+
+# ---- a person changes THEIR OWN password -----------------------------------------------------------
+class PasswordChangeIn(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=1, max_length=256)
+
+
+@router.post("/v1/auth/password")
+def change_password(body: PasswordChangeIn, request: Request, authorization: str | None = Header(default=None), settings: Settings = Depends(get_settings)) -> dict:
+    """Needs the current password (throttled like a login). Ends every session of the account, this one included: the person signs in again."""
+    from app.api.team import _call, check_password   # local: team imports the same helpers as this module
+    uid = _user_id(authorization, settings)
+    with scoped_connection(get_engine()) as conn:
+        conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"account:{uid}"})
+        email = _reauth(conn, request, settings, uid, body.current_password)
+        name = conn.execute(text("SELECT display_name FROM users_global WHERE id = :u"), {"u": uid}).scalar()
+    if email is None:
+        raise HTTPException(401, "invalid credentials")
+    if body.new_password == body.current_password:
+        raise HTTPException(422, "password_same")
+    reason = check_password(body.new_password, email, name)
+    if reason:
+        raise HTTPException(422, reason)
+    res = _call("SELECT app_password_change(:u, :h)", {"u": uid, "h": hash_secret(body.new_password)})
+    return {"status": "changed", "revoked_sessions": res["revoked_sessions"]}

@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/AppShell";
+import { ChangePassword } from "@/components/ChangePassword";
 import { MfaPanel } from "@/components/MfaPanel";
 import { ErrorState, PageHeader } from "@/components/ui";
 import { apiMfaStatus } from "@/lib/api";
@@ -16,6 +17,7 @@ export default async function Seguranca({ searchParams }: { searchParams: Promis
             </div>
           )}
           <MfaPanel enabled={st.enabled} recoveryLeft={st.recovery_codes_left} required={st.required} available={st.enrolment_available} />
+          <ChangePassword />
         </div>
       )}
     </AppShell>

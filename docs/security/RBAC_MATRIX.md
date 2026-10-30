@@ -79,6 +79,7 @@
 | GET | `/v1/auth/mfa/status` | (autentica o token da própria conta) |
 | POST | `/v1/auth/mfa/step-up` | (autentica o token da própria conta) |
 | POST | `/v1/auth/mfa/verify` | (pública ou usa credencial no corpo) |
+| POST | `/v1/auth/password` | (autentica o token da própria conta) |
 | POST | `/v1/auth/refresh` | (pública ou usa credencial no corpo) |
 | POST | `/v1/auth/service-token` | (pública ou usa credencial no corpo) |
 | POST | `/v1/auth/token` | (pública ou usa credencial no corpo) |
@@ -111,6 +112,8 @@
 | GET | `/v1/incidents` | `incidents:read` |
 | GET | `/v1/incidents/{incident_id}` | `incidents:read` |
 | POST | `/v1/incidents/{incident_id}/ack` | `incidents:ack` |
+| GET | `/v1/invites/{token}` | (pública ou usa credencial no corpo) |
+| POST | `/v1/invites/{token}/accept` | (pública ou usa credencial no corpo) |
 | GET | `/v1/jobs` | `jobs:read` |
 | POST | `/v1/jobs/preview` | `jobs:request` |
 | GET | `/v1/jobs/{job_id}` | `jobs:read` |
@@ -137,6 +140,13 @@
 | GET | `/v1/platform/modules` | (sessão válida, sem permissão) |
 | GET | `/v1/platform/versions` | (sessão válida, sem permissão) |
 | GET | `/v1/roles` | `roles:read` |
+| GET | `/v1/team` | `members:read` |
+| GET | `/v1/team/activity` | `audit:read` |
+| POST | `/v1/team/invites` | `members:manage` |
+| DELETE | `/v1/team/invites/{invite_id}` | `members:manage` |
+| POST | `/v1/team/invites/{invite_id}/renew` | `members:manage` |
+| POST | `/v1/team/members/{user_id}/password-reset` | `members:manage` |
+| POST | `/v1/team/members/{user_id}/remove` | `members:manage` |
 | GET | `/v1/tenant` | `tenant:read` |
 | GET | `/v1/tenant/features` | `tenant:read` |
 | GET | `/version` | (pública ou usa credencial no corpo) |

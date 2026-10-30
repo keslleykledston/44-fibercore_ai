@@ -31,8 +31,11 @@ articles:
 - slug: rede/capacidades
   ui_route: /dispositivos/capacidades
   status: draft
+- slug: administracao/equipe-e-acessos
+  ui_route: /administracao/equipe
+  status: draft
 - slug: administracao/papeis-e-permissoes
-  ui_route: /administracao/papeis
+  ui_route: /administracao/equipe?aba=funcoes
   status: draft
 - slug: rede/onu-360
   ui_route: /rede/onu/[id]
@@ -76,7 +79,7 @@ articles:
   e2e_test: help-screenshots.spec.ts › administracao/saude-modulos
   last_verified: '2026-10-28'
 - slug: administracao/membros-e-mfa
-  ui_route: /administracao/membros
+  ui_route: /administracao/equipe
   status: published
   images:
   - assets/administracao/membros-e-mfa/desktop.png

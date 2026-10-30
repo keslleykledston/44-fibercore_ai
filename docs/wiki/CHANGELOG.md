@@ -203,3 +203,7 @@
 ## Unreleased — PR 83
 - API: migração 0026. `POST/GET /v1/bench/authorizations`, `DELETE /v1/bench/authorizations/{id}`; permissão `bench:authorize` (noc_n2, engineer, isp_admin; OLT-side só engineer/isp_admin); funções SQL `app_bench_authorize`/`app_bench_revoke` (conexão dedicada). O motor de jobs recusa (`authorizer_not_independent`) autorização da API em job cujo solicitante/aprovador é o autorizador.
 - Web: card **Autorização de bancada** no CPE de bancada.
+
+## Unreleased — PR 84
+- API: migração 0027. `GET /v1/team`, `GET /v1/team/activity`, convites por link (`POST /v1/team/invites`, `.../renew`, `DELETE`), `POST /v1/team/members/{id}/password-reset` e `/remove`, páginas públicas da API `GET|POST /v1/invites/{token}[/accept]`, `POST /v1/auth/password`. Funções SQL `app_invite_*`, `app_reset_create`, `app_member_remove`, `app_password_change` (conexão dedicada).
+- Web: **Administração → Equipe e acessos** substitui Membros e Papéis (as URLs antigas redirecionam); página pública `/convite/[token]`; trocar a senha em Conta → Segurança da conta. Funções e permissões em linguagem de capacidade.

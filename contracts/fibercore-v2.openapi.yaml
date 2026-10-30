@@ -413,6 +413,169 @@ paths:
           description: "{roles[{role, label, assignable_by_me, permissions[{name, risk R0..R3, description}]}]}"
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /team:
+    get:
+      tags: [Platform]
+      operationId: getTeam
+      summary: Dados da tela Equipe e acessos (members:read) — pessoas com função em linguagem simples, convites pendentes, resumo, funções com o que podem e não podem, e a matriz por capacidade (nunca nomes técnicos de permissão). can_change_role/can_remove/can_reset_password dizem o que o chamador pode fazer com cada pessoa
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}]
+      responses:
+        '200':
+          description: "{me, summary{active, pending_invites, without_mfa}, members[], invites[], roles[], capabilities{groups[], matrix}}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /team/activity:
+    get:
+      tags: [Platform]
+      operationId: getTeamActivity
+      summary: O que aconteceu com os acessos, do mais recente ao mais antigo (audit:read), como fatos estruturados que a tela transforma em frases. E-mail só com members:read
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}]
+      responses:
+        '200':
+          description: "{truncated, items[{id, kind, at, actor, target, email, from, to, from_label, to_label, reason, hours, operation}]}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /team/invites:
+    post:
+      tags: [Platform]
+      operationId: createInvite
+      summary: Convida uma pessoa (members:manage; MFA recente quando exigido). Devolve o token UMA vez (a tela monta o link); só o SHA-256 fica guardado; nada é enviado por e-mail; vale 72 h e uma vez. A pessoa escolhe a própria senha. Um convite novo para o mesmo e-mail substitui o anterior. Recusas 403 role_not_assignable (Gestor de acesso não convida Administrador), 409 already_member, 422 email_invalid, 503 rbac_unavailable
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: {type: string, format: email}
+                name: {type: string, maxLength: 100}
+                role: {type: string}
+      responses:
+        '201':
+          description: "{id, email, role, role_label, expires_at, token}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: already_member}
+        '422': {description: Dados inválidos}
+  /team/invites/{inviteId}/renew:
+    post:
+      tags: [Platform]
+      operationId: renewInvite
+      summary: Novo link para um convite pendente (o anterior deixa de valer). Os dados vêm do convite guardado, nunca do chamador
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: inviteId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '201':
+          description: "{id, email, role, role_label, expires_at, token}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: invite_not_found}
+  /team/invites/{inviteId}:
+    delete:
+      tags: [Platform]
+      operationId: cancelInvite
+      summary: Cancela um convite pendente (members:manage)
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: inviteId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200':
+          description: "{status: cancelled}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: invite_not_found}
+        '409': {description: invite_not_open}
+  /team/members/{userId}/password-reset:
+    post:
+      tags: [Platform]
+      operationId: createPasswordResetLink
+      summary: Link de 24 h, uso único, para a pessoa escolher uma nova senha (members:manage). Recusa 409 account_shared quando a conta também pertence a outro provedor, 403 target_role_protected (Gestor de acesso não mexe em Administrador) e 403 use_change_password para si mesmo. A senha nunca é vista por quem gera o link
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: userId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '201':
+          description: "{id, expires_at, token}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: member_not_found}
+        '409': {description: account_shared}
+  /team/members/{userId}/remove:
+    post:
+      tags: [Platform]
+      operationId: removeMember
+      summary: Remove a pessoa da equipe deste provedor (members:manage) com motivo (3 a 200). A conta continua se existir em outro provedor. O último Administrador não sai (409 last_isp_admin); ninguém remove a si mesmo; Gestor de acesso não remove Administrador. Auditado
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: userId, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string, minLength: 3, maxLength: 200}
+      responses:
+        '200':
+          description: "{status: removed, previous_role}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: member_not_found}
+        '409': {description: last_isp_admin}
+  /invites/{token}:
+    get:
+      tags: [Platform]
+      operationId: previewInvite
+      summary: PÚBLICO. O que a página do convite mostra antes de qualquer digitação. O link é a credencial; consulta limitada por origem. state = valid|used|revoked|expired|invalid; só no valid vêm provedor, e-mail, função, quem convidou e se a conta já existe
+      parameters: [{name: token, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200':
+          description: "{state, purpose, tenant_name, email, name, role_label, inviter, expires_at, account_exists}"
+        '404': {description: Link com formato inválido}
+        '429': {description: Muitas consultas}
+  /invites/{token}/accept:
+    post:
+      tags: [Platform]
+      operationId: acceptInvite
+      summary: PÚBLICO. Pessoa nova escolhe nome e senha (mínimo 12 caracteres; recusas password_short/password_weak); conta já existente prova a SENHA ATUAL (ninguém entra em um provedor só por um convite); link de redefinição só define a nova senha e encerra as sessões. Tentativas erradas limitadas por link e por origem (429); 409 invite_used/already_member, 410 invite_expired
+      parameters: [{name: token, in: path, required: true, schema: {type: string}}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                name: {type: string, maxLength: 100}
+                password: {type: string}
+      responses:
+        '200':
+          description: "{status: accepted, purpose: invite|reset}"
+        '401': {description: Senha atual não confere}
+        '404': {description: invite_invalid}
+        '409': {description: Convite já usado, cancelado ou a pessoa já é membro}
+        '410': {description: invite_expired}
+        '422': {description: Senha curta ou fraca}
+        '429': {description: Muitas tentativas}
+  /auth/password:
+    post:
+      tags: [Platform]
+      operationId: changePassword
+      summary: Troca a PRÓPRIA senha (exige a atual; mesmo limite de tentativas do login). Encerra todas as sessões da conta. 422 password_short/password_weak/password_same
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: {type: string}
+                new_password: {type: string}
+      responses:
+        '200':
+          description: "{status: changed, revoked_sessions}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {description: Senha nova curta, fraca ou igual à atual}
+        '429': {description: Muitas tentativas}
   /members/role-history:
     get:
       tags: [Platform]
