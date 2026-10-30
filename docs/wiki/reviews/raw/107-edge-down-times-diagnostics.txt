@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18d18-e9a7-7613-a9fb-536f7378fcf5).
+[codex] Turn started (01a18d18-e9e3-7342-b23e-82adb09ec010).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de `Done`, `Report` e sincronização...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=15 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=15 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '238,260p'; nl -ba agent...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '238,260p'; nl -ba agent... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não recomendo embarcar: `Report` é executado sincrona...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não recomendo embarcar: `Report` é executado sincronamente no caminho da coleta e pode bloquear ou propagar um panic.
+
+Findings:
+- [high] `Report` pode bloquear ou derrubar a coleta (agents/edge/internal/collector/olt.go:255)
+  A coleta chama `Report` diretamente antes de continuar para aplicar os down times e montar os itens. Se o callback bloquear (por exemplo, durante a escrita do log) ou entrar em deadlock, a coleta fica parada; se entrar em panic, o panic escapa deste caminho. Isso contraria o requisito de que `Report` não interrompa nem bloqueie a coleta. O teste novo cobre contagens, mas não esses modos de falha.
+  Recommendation: Desacople a publicação da coleta com uma estratégia limitada e não bloqueante; isole panics do callback. Acrescente testes que demonstrem que callback bloqueado ou em panic não impede a coleta nem derruba o processo.

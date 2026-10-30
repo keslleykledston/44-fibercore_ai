@@ -93,3 +93,16 @@ func (o *OLT) applyDownTimes(src OLTSource, snap *olt.Snapshot) {
 		}
 	}
 }
+
+// report hands the round's counts to DownTimesSource.Report without ever making the collection wait for it: the callback runs on its own
+// goroutine, a panic in it is contained, and while a previous call has not returned a new one is dropped (diagnostics, not data).
+func (o *OLT) report(src OLTSource, picked, read, found int, why map[string]int) {
+	if !o.rep.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer o.rep.Store(false)
+		defer func() { _ = recover() }()
+		src.DownTimes.Report(src.Name, picked, read, found, why)
+	}()
+}

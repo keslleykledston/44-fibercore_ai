@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/olt"
@@ -114,6 +115,7 @@ type OLT struct {
 	ldMu sync.Mutex
 	ld   map[string]*lastDownState // OLT name -> what the last-down side channel remembers
 	dt   map[string]*dtState       // OLT name -> the last down times read over the CLI (guarded by ldMu)
+	rep  atomic.Bool               // a DownTimesSource.Report call is in flight
 	ldWG sync.WaitGroup            // background last-down reads in flight (tests wait on it)
 }
 
@@ -252,7 +254,7 @@ func (o *OLT) collectCLI(ctx context.Context, src OLTSource, observed string) ([
 			}
 			p, r, f := round.picked, round.read, round.found
 			o.ldMu.Unlock()
-			src.DownTimes.Report(src.Name, p, r, f, why)
+			o.report(src, p, r, f, why)
 		}
 	} else {
 		snap, err = src.Driver.Snapshot(ctx, sess, src.Ports)
