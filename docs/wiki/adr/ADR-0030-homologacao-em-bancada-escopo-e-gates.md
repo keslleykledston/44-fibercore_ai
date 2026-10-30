@@ -1,0 +1,30 @@
+# ADR-0030: Homologação do modelo em bancada — escopo restrito à ONT de bancada e gates por fase
+
+Status: Proposed (aguarda Codex gate) | Data: 2026-10-30 | Owner: equipe | Origem: autorização do responsável em 2026-10-30: validar primeiro só a ONT de bancada, "como se fosse produção", com manobras na OLT e na ONU **restritas ao contexto dessa ONT**, sem afetar nenhuma ONT de produção; homologar o modelo por completo antes de qualquer extensão.
+
+## Contexto
+Até aqui o projeto é somente leitura em equipamento real e `HOMOLOGATED_WRITES` está vazio. A política (CLAUDE.md, `DEVICE_CATALOG.md`) exige, para qualquer escrita, homologação por modelo/firmware e autorização operacional separada. O responsável deu agora essa autorização, com um escopo estreito: a ONT de bancada (Huawei EG8145V5, firmware V5R019C10S350, ligada à OLT real em uma PON que também atende clientes). O risco dominante não é a manobra em si, e sim errar o alvo: a OLT é compartilhada com ONTs de produção.
+
+## Decisão
+1. **"Bancada" é uma lista fechada de identidades, não um padrão.** Duas entradas ligadas entre si: o CPE (id do dispositivo no ACS) e a ONU (serial; frame/slot/porta/ONT-ID na OLT). Ela existe em TRÊS lugares independentes, todos precisando concordar: (a) na nuvem, tabela `bench_targets` (migração; só o owner CLI insere/remove, nenhuma API de escrita); (b) no Edge, configuração local `bench` com as mesmas identidades; (c) no próprio equipamento, a conferência de identidade imediatamente antes de cada comando (item 4). Qualquer operação que não seja de leitura (R1 ou maior) cujo alvo não esteja nos três é recusada, e a recusa não depende de a nuvem estar certa.
+2. **A escrita abre pelo registro de capacidades, só para bancada.** `HOMOLOGATED_WRITES` continua VAZIO. Uma operação de escrita só é liberada se o registro (`device_capabilities`, ADR-0019) tem entrada `supported` com `certification = observed`, `evidence_ref` e `verified_at` para o perfil exato (vendor, modelo, firmware, protocolo, operação) E o alvo está em `bench_targets` E a flag `bench_writes` do tenant está ligada. `observed` vale só para bancada; `certified` (qualquer alvo do perfil) NÃO é concedido por este ADR e exige outro, depois da fase final.
+3. **No Edge o teto é em tempo de compilação e separado do teto de leitura:** `ReadOnlyOps` permanece intacto; as operações de escrita ficam num conjunto próprio (`BenchWriteOps`) que só existe com `bench_writes_enabled` na configuração local, a operação em `allowed_operations`, e `target_ref`/destino igual a uma identidade de `bench`. O Edge não aceita destino vindo da nuvem para a OLT: o equipamento, o frame/slot/porta e o ONT-ID de qualquer comando de OLT vêm só da configuração local.
+4. **Conferência de identidade antes de cada comando de OLT, na mesma sessão:** o Edge lê o serial do ONT-ID alvo (consulta somente leitura) e só segue se for exatamente o serial de bancada; qualquer divergência, saída inesperada ou erro aborta sem enviar o comando. Os comandos de escrita são modelos fixos de UM ONT (nunca de PON, porta, placa ou OLT), sem `undo`, `delete`, `reboot`/`reset` de placa/OLT, nem `save`/`config` fora do que a manobra precisa; raio de impacto máximo = 1 ONT. Uma manobra por sessão e o guard (intervalo, cooldown, reserva persistida, uma por vez) continua valendo.
+5. **Cada manobra tem preview, pré-checagem, pós-checagem e retorno ao estado seguro** definidos antes de rodar, e o resultado só é `SUCCEEDED` com a pós-checagem confirmada (senão `UNKNOWN`). Manobras de CPE seguem o mesmo contrato de jobs (preview → aprovação conforme o risco → envelope assinado → Edge verifica → resultado).
+6. **Fases com porta de saída (nada avança sem a evidência da anterior em `TEST_EVIDENCE`):**
+   - **H0** escopo: `bench_targets`, configuração do Edge, gate na nuvem e no Edge, com testes de recusa para qualquer alvo fora da bancada.
+   - **H1** caracterização somente leitura da ONU de bancada na OLT real (consultas do catálogo com os parâmetros da bancada; capturas sanitizadas; parsers) e do CPE (árvore e leituras da bancada).
+   - **H2** CPE via TR-069: reinício (`reboot_cpe`, R1), pós-checagem por novo bootstrap no ACS.
+   - **H3** CPE via TR-069: alteração do SSID da bancada e restauração (R2), leitura de volta e retorno ao valor original.
+   - **H4** OLT, somente a ONU de bancada: manobras de um ONT (por exemplo reinício do ONT e desativação/reativação) com a conferência do item 4, pós-checagem por `display` e retorno ao estado de partida.
+   - **H5** repetição (mínimo de 3 execuções limpas de cada manobra em dias diferentes), revisão do Codex e aceite do responsável; só então se discute `certified` e extensão a outros alvos, em outro ADR.
+7. **Proteção de produção como invariante testado:** testes simulam uma OLT com a ONU de bancada e ONUs de produção na mesma PON e provam que nenhum comando de escrita é emitido para outro ONT-ID, que divergência de serial aborta, e que alvo vindo da nuvem fora da bancada é recusado nas duas pontas.
+8. **Auditoria e transparência:** cada manobra real é registrada (quem autorizou, o quê, quando, resultado, retorno ao estado de partida) em `TEST_EVIDENCE`; o registro de capacidade guarda a referência. O responsável acompanha a primeira execução de cada fase.
+
+## Consequências
+- O mesmo modelo se estende depois sem reescrever o gate: ampliar o escopo é inserir identidades em `bench_targets` e na configuração do Edge, e promover a `certified` é decisão e ADR à parte.
+- Há custo de tempo: nada avança de fase sem evidência; o ritmo do guard (15 min por sessão de OLT) vale também para as manobras.
+- Fora de escopo: qualquer ONT/CPE que não seja o de bancada, configuração de serviço (perfis, VLANs, service-port) de clientes, comandos de PON/porta/placa/OLT, firmware upgrade, fábrica.
+
+## Alternativas descartadas
+Liberar a escrita por padrão de modelo (um CPE igual de cliente passaria no gate); lista de alvos só na nuvem (um erro da nuvem viraria uma manobra em produção); alvo por padrão/regex (o ONT-ID errado casaria).
