@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18acc-2ba7-72e3-a324-2d82857776f8).
+[codex] Turn started (01a18acc-2be1-7872-b646-e632604e01be).
+[codex] Assistant message captured: I’ll inspect the branch diff against `main` and trace the firmware filtering path, focusing o...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/nbi/nbi.go | sed -n '45,100p'; git status --short;...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/nbi/nbi.go | sed -n '45,100p'; git status --short;... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship: the dotted-version regex still accepts s...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship: the dotted-version regex still accepts suffixes, contrary to the round 3 requirement.
+
+Findings:
+- [medium] Dotted versions still accept suffixes (agents/edge/internal/nbi/nbi.go:73)
+  `Firmware` accepts values such as `1.2.3-Secret12` and `1.2.3_Abc` because the regex retains an optional suffix. These device-controlled values are then included in the CPE snapshot, despite round 3 requiring dotted versions to contain only digits and dots (with an optional leading `V`). The regex also permits a lowercase `v`.
+  Recommendation: Remove the suffix group and restrict the optional prefix to uppercase `V`; add rejection cases for suffixed versions and lowercase `v`.

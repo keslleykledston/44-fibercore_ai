@@ -70,7 +70,7 @@ type deviceInfoRoot struct {
 // carry a password-like string; the registry still matches the exact value, so an odd one only fails to match.
 var (
 	firmwareToken   = regexp.MustCompile(`^[A-Z][A-Z0-9]{3,31}$`)
-	firmwareVersion = regexp.MustCompile(`^[Vv]?[0-9]{1,4}(\.[0-9]{1,4}){1,5}([-_][A-Za-z0-9]{1,12})?$`)
+	firmwareVersion = regexp.MustCompile(`^V?[0-9]{1,4}(\.[0-9]{1,4}){1,5}$`)
 	hasDigit        = regexp.MustCompile(`[0-9]`)
 	hasLetter       = regexp.MustCompile(`[A-Z]`)
 )
