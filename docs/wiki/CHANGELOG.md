@@ -137,3 +137,7 @@
 ## Unreleased — PR 54 (R-D002 v1: WAN do CPE, ADR-0027)
 - Regra pura `R-D002` v1 sobre o `cpe_state` (frescor POR LEITURA; sem leitura ou leitura antiga que possa esconder uma conexão estabelecida = `unknown`; todas as conexões recentes e não estabelecidas = hipótese `inferred` com confirmação humana; o enlace só é Up/Down se todas as leituras são recentes e concordam; a ONU só dá contexto observado). `POST /diagnostics/runs` aceita `cpe_id`/`onu_id` para regras de CPE, somente leitura, mesma flag.
 
+## Unreleased — PR 55 (SD-PR-03: diagnostic_jobs passivos, ADR-0028)
+- Migração 0020 `diagnostic_jobs` (imutável, RLS forçada, idempotência). `POST /v1/diagnostics/jobs` e `GET /v1/diagnostics/jobs/{id}` (flags `smart_diagnostics_jobs` + `diagnostic_engine`, desligadas por padrão): evidências do que já está retido (ONU e `cpe_state`), regras R-D001/R-D002 com entradas gravadas e replay, achados que citam evidência; dado antigo/ausente = `insufficient_evidence`. Operações movidas do overlay SD-001 para o contrato canônico.
+- Correção de teste: a verificação "nenhuma rota do SD-001 existe" lia `app.routes` (neste FastAPI só mostra `/openapi.json`) e era vazia; agora usa o esquema OpenAPI gerado pela aplicação.
+

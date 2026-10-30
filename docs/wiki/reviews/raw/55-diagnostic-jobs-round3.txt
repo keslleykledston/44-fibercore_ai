@@ -1,0 +1,5 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), PR 55, round 3
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: needs-attention
+- [medium] A PON e a janela continuam sem suporte verificável na evidência citada: o texto declarava, mas os envelopes não carregavam pon/janela; incluir em campos do contrato ou reduzir o texto.

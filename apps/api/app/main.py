@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from app import __version__
 from app.api.context import router as context_router
 from app.api.cpe_state import router as cpe_state_router
+from app.api.diagnostic_jobs import router as diagnostic_jobs_router
 from app.api.diagnostics import router as diagnostics_router
 from app.api.erp import router as erp_router
 from app.api.inventory import router as inventory_router
@@ -55,4 +56,5 @@ app.include_router(jobs_router)
 app.include_router(members_router)
 app.include_router(context_router)
 app.include_router(diagnostics_router)
+app.include_router(diagnostic_jobs_router)
 app.include_router(cpe_state_router)

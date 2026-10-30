@@ -76,7 +76,9 @@
             "lan_port_status",
             "latency_rtt",
             "packet_loss",
-            "uptime_seconds"
+            "uptime_seconds",
+            "pon_onus_online",
+            "pon_onus_recent_drops"
           ]
         },
         "value": {

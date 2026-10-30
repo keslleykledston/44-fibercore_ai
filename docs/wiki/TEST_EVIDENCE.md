@@ -210,3 +210,8 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - `make test-api` 316 passed (testes unitários da regra, propriedade com 800 casos e API: leitura somente leitura sem incidente/estado/evento, replay reproduzível, entradas sem serial nem texto livre, isolamento entre tenants, escopos exclusivos, vínculo ONU↔CPE só confirmado). ruff só os 5 E501 antigos; validate_addendum_v22 PASS; secrets-scan sem vazamento.
 - NOT_RUN: execução na LAB (a flag `diagnostic_engine` segue desligada; ligar é decisão do responsável) e tela de troubleshooting para a R-D002.
 
+## 2026-10-30 — diagnostic_jobs passivos (SD-PR-03, PR 55, ADR-0028)
+- `make test-api` 328 passed (job completo com evidência e achados validados contra o esquema do contrato; só leitura: sem incidente, estado, evento nem `diagnostic_runs`; nada de serial/nome/documento gravado; idempotência e 409; dado antigo/ausente = `insufficient_evidence`; queda coletiva com o agregado citado e a PON/janela no envelope; propriedade com 600 casos; replay; isolamento entre tenants; append-only no banco; pureza por AST). `validate_addendum_v22` PASS (contrato canônico reconciliado com a API). ruff só os 5 E501 antigos; secrets-scan sem vazamento.
+- Conserto de teste: a verificação "nenhuma rota do SD-001 existe" lia `app.routes` (só `/openapi.json` neste FastAPI) e era vazia; agora usa o OpenAPI gerado.
+- NOT_RUN: execução na LAB com as flags ligadas (seguem desligadas; decisão do responsável) e tela de troubleshooting que consuma o job.
+
