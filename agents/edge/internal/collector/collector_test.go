@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -144,5 +145,124 @@ func TestConflictAcrossTheChunkBoundaryIsStillDropped(t *testing.T) {
 	}
 	if total != maxPerSnapshot+3-2 {
 		t.Fatalf("total cpes %d", total)
+	}
+}
+
+type fakeParams struct {
+	byID  map[string][]nbi.Metric
+	err   error
+	asked []string
+}
+
+func (f *fakeParams) CachedParams(_ context.Context, ids []string) ([]nbi.DeviceParams, error) {
+	f.asked = append(f.asked, ids...)
+	if f.err != nil {
+		return nil, f.err
+	}
+	var out []nbi.DeviceParams
+	for id, ms := range f.byID { // includes ids that were NOT asked for, on purpose
+		out = append(out, nbi.DeviceParams{ID: id, Metrics: ms})
+	}
+	return out, nil
+}
+
+func stateNow() time.Time { return time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC) }
+
+func metric(name, scope string, v any, at string) nbi.Metric {
+	return nbi.Metric{Name: name, Scope: scope, Value: v, CapturedAt: at}
+}
+
+func TestStateFollowsInventoryAndOnlyCarriesKeptDevices(t *testing.T) {
+	ok := dev(1, "SER00001")
+	placeholder := nbi.Device{ID: "DISCOVERYSERVICE-DISCOVERYSERVICE-x", DeviceID: nbi.DeviceID{OUI: "DISCOVERYSERVICE", Manufacturer: "DISCOVERYSERVICE", ProductClass: "DISCOVERYSERVICE", SerialNumber: "x1234"}}
+	noSerial := dev(3, "")
+	p := &fakeParams{byID: map[string][]nbi.Metric{
+		ok.ID:          {metric("wan_link_status", "link/1", "Up", "2026-10-29T11:59:00Z"), metric("wifi_channel", "radio/5", 36.0, "2026-10-29T11:59:01Z")},
+		placeholder.ID: {metric("wan_link_status", "link/1", "Up", "2026-10-29T11:59:00Z")}, // a reader that answers for a device never asked about
+		"OUI-PC-999":   {metric("wan_link_status", "link/1", "Up", "2026-10-29T11:59:00Z")},
+	}}
+	g := &GenieACS{EdgeID: "e1", ConnectorID: "genieacs-lab", Client: fakeLister{[]nbi.Device{ok, placeholder, noSerial}}, Params: p, Now: stateNow}
+	items, err := g.Collect(context.Background())
+	if err != nil || len(items) != 2 || items[0].Kind != "cpe_snapshot" || items[1].Kind != "cpe_state" || items[1].Key != "cpe_state:genieacs-lab" {
+		t.Fatalf("%v %+v", err, items)
+	}
+	if len(p.asked) != 1 || p.asked[0] != ok.ID {
+		t.Fatalf("state may only be requested for devices kept in the inventory, asked %v", p.asked)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(items[1].Payload, &got); err != nil {
+		t.Fatal(err)
+	}
+	states := got["states"].([]any)
+	if got["edge_id"] != "e1" || got["observed_at"] != "2026-10-29T12:00:00Z" || len(states) != 1 {
+		t.Fatalf("%v", got)
+	}
+	st := states[0].(map[string]any)
+	b := st["binding"].(map[string]any)
+	if b["protocol"] != "tr069" || b["external_id"] != ok.ID || b["connector_id"] != "genieacs-lab" || len(st["metrics"].([]any)) != 2 {
+		t.Fatalf("%v", st)
+	}
+	m0 := st["metrics"].([]any)[0].(map[string]any)
+	for _, k := range []string{"name", "scope", "value", "captured_at"} {
+		if _, has := m0[k]; !has || len(m0) != 4 {
+			t.Fatalf("metric must have exactly name/scope/value/captured_at, got %v", m0)
+		}
+	}
+}
+
+func TestStateReadFailureNeverCostsTheInventory(t *testing.T) {
+	skips := map[string]int{}
+	g := &GenieACS{EdgeID: "e1", ConnectorID: "c", Client: fakeLister{[]nbi.Device{dev(1, "SER00001")}},
+		Params: &fakeParams{err: errors.New("acs down")}, Now: stateNow, OnSkip: func(r string, n int) { skips[r] = n }}
+	items, err := g.Collect(context.Background())
+	if err != nil || len(items) != 1 || items[0].Kind != "cpe_snapshot" || skips["state_read_failed"] != 1 {
+		t.Fatalf("%v %+v %v", err, items, skips)
+	}
+}
+
+func TestStateWithNoMetricsOrFutureClockSendsNothingForThatDevice(t *testing.T) {
+	a, b, c := dev(1, "SER00001"), dev(2, "SER00002"), dev(3, "SER00003")
+	skips := map[string]int{}
+	p := &fakeParams{byID: map[string][]nbi.Metric{
+		a.ID: nil,                                                                                                                       // nothing cached yet
+		b.ID: {metric("wan_link_status", "link/1", "Up", "2026-10-29T12:30:00Z")},                                                       // 30 min ahead: dropped
+		c.ID: {metric("wan_link_status", "link/1", "Up", "not a time"), metric("wifi_channel", "radio/1", 6.0, "2026-10-29T12:00:30Z")}, // 30 s ahead is within skew
+	}}
+	g := &GenieACS{EdgeID: "e", ConnectorID: "c", Client: fakeLister{[]nbi.Device{a, b, c}}, Params: p, Now: stateNow, OnSkip: func(r string, n int) { skips[r] = n }}
+	items, err := g.Collect(context.Background())
+	if err != nil || len(items) != 2 {
+		t.Fatalf("%v %+v", err, items)
+	}
+	var got cpeStateSnapshot
+	if err := json.Unmarshal(items[1].Payload, &got); err != nil || len(got.States) != 1 || got.States[0].Binding.ExternalID != c.ID || len(got.States[0].Metrics) != 1 || got.States[0].Metrics[0].Name != "wifi_channel" {
+		t.Fatalf("%v %+v", err, got)
+	}
+	if skips["state_future_timestamp"] != 2 {
+		t.Fatalf("future/invalid timestamps must be counted, got %v", skips)
+	}
+	// nothing at all to send: no empty cpe_state item
+	g.Params = &fakeParams{byID: map[string][]nbi.Metric{}}
+	if items, _ := g.Collect(context.Background()); len(items) != 1 {
+		t.Fatalf("an empty state round must not produce an item: %+v", items)
+	}
+}
+
+func TestStateIsSplitIntoBoundedItems(t *testing.T) {
+	var devs []nbi.Device
+	p := &fakeParams{byID: map[string][]nbi.Metric{}}
+	for i := 1; i <= 450; i++ {
+		d := dev(i, fmt.Sprintf("SER%05d", i))
+		devs = append(devs, d)
+		p.byID[d.ID] = []nbi.Metric{metric("wan_link_status", "link/1", "Up", "2026-10-29T11:59:00Z")}
+	}
+	items, err := (&GenieACS{EdgeID: "e", ConnectorID: "c", Client: fakeLister{devs}, Params: p, Now: stateNow}).Collect(context.Background())
+	if err != nil || len(items) != 1+3 { // one inventory snapshot + 200 + 200 + 50
+		t.Fatalf("%v items=%d", err, len(items))
+	}
+	for _, it := range items[1:] {
+		var s cpeStateSnapshot
+		if json.Unmarshal(it.Payload, &s) != nil || len(s.States) > maxStatesPerItem || it.Kind != "cpe_state" {
+			t.Fatalf("%+v", it)
+		}
 	}
 }

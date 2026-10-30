@@ -130,3 +130,7 @@
 - Edge: o refresh lê PPP e IP (instância 1) de `WANConnectionDevice` 1..4 (a EG8145V5 real tinha a conexão PPP na instância 3); 11 tarefas por refresh em TR-098, `maxGroups` 12, conjunto exato fixado por teste. Freio: `nbi.RefreshHold` segura o dispositivo 24 h após qualquer refresh com fault.
 - Medição real na LAB (ONT de bancada): `completed=11 faulted=0 readable_metrics=7`, 0 faults novos e 0 tarefas residuais no ACS. ADR-SD-002 atualizado (validade da faixa, carga, freio).
 
+## Unreleased — PR 53 (`cpe_state`: estado WAN/Wi-Fi do CPE até a nuvem)
+- Migração 0019 `cpe_state` (RLS forçada, CHECKs de métrica/escopo/tipo). `POST /v1/edge/cpe-state` (Edge → nuvem) e `GET /v1/cpes/{id}/state`; contrato OpenAPI atualizado.
+- Edge: o coletor do GenieACS envia `cpe_state` depois do inventário (só dispositivos do inventário; falha de leitura não derruba o inventário); gateway ganhou o endpoint.
+

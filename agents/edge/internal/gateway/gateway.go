@@ -135,7 +135,7 @@ func (c *Client) Deliver(ctx context.Context, kind string, payload []byte) (Outc
 		o, _, err := c.post(ctx, "/v1/edge/jobs/"+id+"/result", b)
 		return o, err
 	}
-	path, ok := map[string]string{"olt_snapshot": "/v1/edge/olt-snapshots", "cpe_snapshot": "/v1/edge/cpe-snapshots"}[kind]
+	path, ok := map[string]string{"olt_snapshot": "/v1/edge/olt-snapshots", "cpe_snapshot": "/v1/edge/cpe-snapshots", "cpe_state": "/v1/edge/cpe-state"}[kind]
 	if !ok {
 		return Rejected, fmt.Errorf("unknown kind %q", kind)
 	}
