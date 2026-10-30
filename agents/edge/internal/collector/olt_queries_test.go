@@ -135,7 +135,7 @@ func TestNothingRunsWithoutACloudIDOrOnAnUnreadableQueue(t *testing.T) {
 	if items, err := o2.Collect(context.Background()); err != nil || len(items) != 1 {
 		t.Fatalf("an unreadable queue must not break the collection: %v", err)
 	}
-	if strings.Contains(strings.Join(sess.sent, "|"), "display board") || strings.Count(strings.Join(sess.sent, "|"), "display version") != 1 {
+	if strings.Contains(strings.Join(sess.sent, "|"), "display board") || sess.sent[len(sess.sent)-1] != "quit" { // the collection's own last command
 		t.Fatalf("nothing is claimed from an unreadable queue: %v", sess.sent)
 	}
 }
