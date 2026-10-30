@@ -90,6 +90,7 @@ type OLT struct {
 
 	ldMu sync.Mutex
 	ld   map[string]*lastDownState // OLT name -> what the last-down side channel remembers
+	ldWG sync.WaitGroup            // background last-down reads in flight (tests wait on it)
 }
 
 // ErrOLTNotDue: the shared OLT guard says the last session on this device is too recent for another one now.
@@ -178,7 +179,7 @@ func (o *OLT) Collect(ctx context.Context) ([]Item, error) {
 	var errs []error
 	for _, src := range o.Sources {
 		its, err := o.collectOne(ctx, src, now().UTC().Format(time.RFC3339))
-		o.refreshLastDown(ctx, src) // after the CLI read (it never delays it); what it reads travels with the next snapshot
+		o.refreshLastDown(ctx, src) // background, after the CLI read; what it reads travels with the next snapshot
 		if err != nil {
 			errs = append(errs, fmt.Errorf("olt %s: %w", src.Name, err))
 			continue

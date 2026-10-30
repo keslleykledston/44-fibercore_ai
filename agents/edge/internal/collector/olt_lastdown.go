@@ -27,6 +27,12 @@ const (
 type lastDownState struct {
 	offlinePons map[string]bool      // PONs that had a non-online ONU in the last CLI snapshot: the only ones worth reading
 	at          map[string]time.Time // serial -> the OLT's "last down time" (only for ONUs still offline)
+	// gen counts the CLI snapshots applied. A run starts from one generation and its answers are kept only if no newer CLI snapshot was
+	// applied meanwhile: a late answer must never put back a time that a newer snapshot (ONU seen online) has just cleared.
+	gen uint64
+	// attemptGen is the generation of the last run that was started: a run is started once per CLI snapshot, right after it, so that it ends
+	// long before the next CLI snapshot.
+	attemptGen uint64
 }
 
 func (o *OLT) ldState(name string) *lastDownState {
@@ -64,30 +70,46 @@ func (o *OLT) applyLastDown(src OLTSource, snap *olt.Snapshot) {
 		}
 	}
 	st.offlinePons, st.at = pons, at
+	st.gen++
 }
 
-// refreshLastDown reads the OLT's last down time of the ONUs that the last CLI snapshot showed offline. Paced by its own guard entry (at most one
-// run per Every, a cooldown after a failure), best effort: whatever it cannot read stays "not reported".
+// refreshLastDown reads the OLT's last down time of the ONUs that the last CLI snapshot showed offline. It never blocks the collection round:
+// the read runs in the background with its OWN budget (the round's cancellation does not cut it), at most once per CLI snapshot, paced by its
+// own guard entry (at most one run per Every, a cooldown after a failure). Best effort: whatever it cannot read stays "not reported".
 func (o *OLT) refreshLastDown(ctx context.Context, src OLTSource) {
 	ld := src.LastDown
 	if ld == nil {
 		return
 	}
 	o.ldMu.Lock()
-	var ports []string
-	for p := range o.ldState(src.Name).offlinePons {
-		ports = append(ports, p)
-	}
-	o.ldMu.Unlock()
-	if len(ports) == 0 {
+	st := o.ldState(src.Name)
+	if st.gen == 0 || st.gen == st.attemptGen || len(st.offlinePons) == 0 {
+		o.ldMu.Unlock()
 		return
 	}
-	sort.Strings(ports)
-	syn := OLTSource{Name: src.Name + "/last-down", SNMPKey: ld.Key, Interval: ld.Every, OpenSNMP: ld.Open}
-	_, _ = o.guarded(ctx, syn, func() ([]Item, error) { return nil, o.readLastDown(ctx, src, ports) })
+	o.ldMu.Unlock()
+	bg := context.WithoutCancel(ctx)
+	o.ldWG.Add(1)
+	go func() {
+		defer o.ldWG.Done()
+		syn := OLTSource{Name: src.Name + "/last-down", SNMPKey: ld.Key, Interval: ld.Every, OpenSNMP: ld.Open}
+		_, _ = o.guarded(bg, syn, func() ([]Item, error) {
+			o.ldMu.Lock()
+			st := o.ldState(src.Name)
+			st.attemptGen = st.gen // this snapshot has its run, whatever its outcome
+			gen := st.gen
+			var ports []string
+			for p := range st.offlinePons {
+				ports = append(ports, p)
+			}
+			o.ldMu.Unlock()
+			sort.Strings(ports)
+			return nil, o.readLastDown(bg, src, ports, gen)
+		})
+	}()
 }
 
-func (o *OLT) readLastDown(ctx context.Context, src OLTSource, ports []string) error {
+func (o *OLT) readLastDown(ctx context.Context, src OLTSource, ports []string, gen uint64) error {
 	ld := src.LastDown
 	budget := ld.Timeout
 	if budget <= 0 {
@@ -100,16 +122,18 @@ func (o *OLT) readLastDown(ctx context.Context, src OLTSource, ports []string) e
 		return err
 	}
 	defer closeFn()
-	var firstErr error
 	for len(ports) > 0 {
 		n := min(lastDownChunk, len(ports))
 		snap, err := ld.Driver.Snapshot(ctx, r, ports[:n])
 		if err != nil {
-			firstErr = err // a failed chunk keeps what earlier chunks gave; the guard cools the agent down
-			break
+			return err // a failed chunk keeps what earlier chunks gave; the guard cools the agent down
 		}
 		o.ldMu.Lock()
 		st := o.ldState(src.Name)
+		if st.gen != gen { // a newer CLI snapshot arrived: what was read may predate a bounce it has seen
+			o.ldMu.Unlock()
+			return nil
+		}
 		for _, u := range snap.ONUs {
 			if u.LastDownAt != nil && u.Status != "online" && u.Status != "unknown" {
 				st.at[u.Serial] = *u.LastDownAt
@@ -118,5 +142,5 @@ func (o *OLT) readLastDown(ctx context.Context, src OLTSource, ports []string) e
 		o.ldMu.Unlock()
 		ports = ports[n:]
 	}
-	return firstErr
+	return nil
 }
