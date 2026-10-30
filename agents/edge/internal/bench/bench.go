@@ -17,7 +17,7 @@ import (
 
 type ACS interface {
 	BenchIdentity(ctx context.Context, d nbi.BenchDevice, now time.Time) error
-	RebootBench(ctx context.Context, d nbi.BenchDevice, wait, poll time.Duration, now func() time.Time) (nbi.BenchOutcome, error)
+	RebootBench(ctx context.Context, d nbi.BenchDevice, notAfter time.Time, wait, poll time.Duration, now func() time.Time) (nbi.BenchOutcome, error)
 }
 
 type Guard interface{ Reserve(deviceID string) error }
@@ -60,6 +60,10 @@ func (r *Runner) Run(ctx context.Context, env *jobs.Envelope) Result {
 		return fail("another bench operation is running")
 	}
 	defer r.busy.Store(false)
+	notAfter, err := deadline(env)
+	if err != nil || !r.now().Before(notAfter) {
+		return fail("envelope or authorization window already over")
+	}
 	dev, ok := r.Devices[env.TargetRef]
 	if !ok {
 		return fail("target is not on the local bench list")
@@ -77,6 +81,9 @@ func (r *Runner) Run(ctx context.Context, env *jobs.Envelope) Result {
 	if err := r.Lease.Check(env.TargetRef, env.OwnerEpoch); err != nil {
 		return fail("no valid Cloud lease for this target")
 	}
+	if !r.now().Before(notAfter) { // identity read took too long: do not spend the pacing slot nor the authorization
+		return fail("envelope or authorization window already over")
+	}
 	if err := r.Guard.Reserve(env.TargetRef); err != nil {
 		return fail("pacing: too soon or state unavailable")
 	}
@@ -90,7 +97,7 @@ func (r *Runner) Run(ctx context.Context, env *jobs.Envelope) Result {
 		return fail("claim state unavailable")
 	}
 	// From here the authorization is spent.
-	out, err := r.ACS.RebootBench(ctx, dev, r.Wait, r.Poll, r.now)
+	out, err := r.ACS.RebootBench(ctx, dev, notAfter, r.Wait, r.Poll, r.now)
 	switch {
 	case err == nil && out.Accepted && out.PostcheckOK:
 		r.finish(env, jobs.ClaimDone)
@@ -105,6 +112,19 @@ func (r *Runner) Run(ctx context.Context, env *jobs.Envelope) Result {
 		r.finish(env, jobs.ClaimUnknown)
 		return Result{State: "failed", Detail: "outcome unknown; operator check required"}
 	}
+}
+
+// deadline is the last instant a command may be sent: the earlier of the envelope's expiry and the end of the authorization window.
+func deadline(env *jobs.Envelope) (time.Time, error) {
+	exp, e1 := time.Parse(time.RFC3339, env.ExpiresAt)
+	end, e2 := time.Parse(time.RFC3339, env.AuthorizationEndsAt)
+	if e1 != nil || e2 != nil {
+		return time.Time{}, errors.New("unreadable validity")
+	}
+	if end.Before(exp) {
+		return end, nil
+	}
+	return exp, nil
 }
 
 func (r *Runner) finish(env *jobs.Envelope, state string) {

@@ -24,6 +24,7 @@ const (
 var (
 	ErrBenchIdentity  = errors.New("nbi bench: ACS device does not match the configured bench identity")
 	ErrBenchOffline   = errors.New("nbi bench: device has not informed the ACS recently")
+	ErrBenchExpired   = errors.New("nbi bench: envelope or authorization expired before the command could be sent")
 	ErrBenchPending   = errors.New("nbi bench: a reboot task is already pending on this device")
 	ErrBenchUncleaned = errors.New("nbi bench: an unfinished reboot task could not be removed from the ACS")
 )
@@ -103,9 +104,14 @@ func informFresh(g benchDoc, now time.Time) error {
 
 // RebootBench asks the ACS to reboot the bench device `d` (already identified) and checks, within `wait`, that the CPE booted again.
 // The caller has already durably claimed the authorization and reserved the pacing slot: this function never retries a reboot.
-func (c *Client) RebootBench(ctx context.Context, d BenchDevice, wait, poll time.Duration, now func() time.Time) (BenchOutcome, error) {
+//
+// notAfter is the last instant at which the command may still be sent (the earlier of the envelope's expiry and the authorization window's
+// end): every request before the send is bounded by it, and it is checked once more immediately before the POST. After it, nothing is sent.
+func (c *Client) RebootBench(parent context.Context, d BenchDevice, notAfter time.Time, wait, poll time.Duration, now func() time.Time) (BenchOutcome, error) {
 	c.refreshMu.Lock() // never interleaves with an active read of the same ACS client
 	defer c.refreshMu.Unlock()
+	ctx, cancel := context.WithDeadline(parent, notAfter) // pre-send phase only; cleanup and post-check use `parent`
+	defer cancel()
 	g, err := c.benchDevice(ctx, d)
 	if err != nil {
 		return BenchOutcome{}, err
@@ -124,8 +130,12 @@ func (c *Client) RebootBench(ctx context.Context, d BenchDevice, wait, poll time
 	}
 	before, _ := time.Parse(time.RFC3339, g.LastBoot)
 	since := now()
+	if !since.Before(notAfter) {
+		return BenchOutcome{}, ErrBenchExpired // the signed envelope / authorization ran out while we were checking: nothing is sent
+	}
 	status, taskID, err := c.postReboot(ctx, d.DeviceID)
 	attempted := true
+	ctx = parent
 	switch {
 	case err == nil && status == http.StatusOK:
 		// the CPE acknowledged the RPC; the task is gone from the ACS

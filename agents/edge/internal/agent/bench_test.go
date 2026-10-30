@@ -64,7 +64,7 @@ type recACS struct {
 }
 
 func (r *recACS) BenchIdentity(context.Context, nbi.BenchDevice, time.Time) error { return nil }
-func (r *recACS) RebootBench(_ context.Context, d nbi.BenchDevice, _, _ time.Duration, _ func() time.Time) (nbi.BenchOutcome, error) {
+func (r *recACS) RebootBench(_ context.Context, d nbi.BenchDevice, _ time.Time, _, _ time.Duration, _ func() time.Time) (nbi.BenchOutcome, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.reboots = append(r.reboots, d.DeviceID)

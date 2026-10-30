@@ -122,6 +122,8 @@ func (f *benchACS) setup(t *testing.T) *Client {
 	return c
 }
 
+var farFuture = time.Now().Add(24 * time.Hour)
+
 var benchDev = BenchDevice{DeviceID: benchID, OUI: "00259E", ProductClass: "EG8145V5", Serial: "48575443E2247AA5"}
 
 func fixedNow() time.Time { t, _ := time.Parse(time.RFC3339, benchTime); return t }
@@ -142,7 +144,7 @@ func TestBenchRebootHappy(t *testing.T) {
 	c := f.setup(t)
 	now := func() time.Time { return time.Now().UTC().Add(-time.Second) }
 	f.informAt = now().Format(time.RFC3339)
-	out, err := c.RebootBench(context.Background(), benchDev, 3*time.Second, 50*time.Millisecond, now)
+	out, err := c.RebootBench(context.Background(), benchDev, farFuture, 3*time.Second, 50*time.Millisecond, now)
 	if err != nil || !out.Accepted || !out.PostcheckOK {
 		t.Fatalf("out=%+v err=%v", out, err)
 	}
@@ -164,7 +166,7 @@ func TestBenchNeverTouchesOtherDevice(t *testing.T) {
 		{DeviceID: "", OUI: "00259E", ProductClass: "EG8145V5", Serial: "48575443E2247AA5"},
 		{DeviceID: benchID, OUI: "", ProductClass: "EG8145V5", Serial: "48575443E2247AA5"},
 	} {
-		if _, err := c.RebootBench(context.Background(), bad, time.Second, 10*time.Millisecond, fixedNow); err == nil {
+		if _, err := c.RebootBench(context.Background(), bad, farFuture, time.Second, 10*time.Millisecond, fixedNow); err == nil {
 			t.Fatalf("%+v: must be refused", bad)
 		}
 	}
@@ -177,7 +179,7 @@ func TestBenchRefusals(t *testing.T) {
 	t.Run("duplicate ACS match", func(t *testing.T) {
 		f := &benchACS{informAt: benchTime, dup: true}
 		c := f.setup(t)
-		if _, err := c.RebootBench(context.Background(), benchDev, time.Second, 10*time.Millisecond, fixedNow); !errors.Is(err, ErrBenchIdentity) {
+		if _, err := c.RebootBench(context.Background(), benchDev, farFuture, time.Second, 10*time.Millisecond, fixedNow); !errors.Is(err, ErrBenchIdentity) {
 			t.Fatalf("got %v", err)
 		}
 		if len(f.wrote()) != 0 {
@@ -187,7 +189,7 @@ func TestBenchRefusals(t *testing.T) {
 	t.Run("offline", func(t *testing.T) {
 		f := &benchACS{informAt: "2026-10-30T09:00:00Z"}
 		c := f.setup(t)
-		if _, err := c.RebootBench(context.Background(), benchDev, time.Second, 10*time.Millisecond, fixedNow); !errors.Is(err, ErrBenchOffline) {
+		if _, err := c.RebootBench(context.Background(), benchDev, farFuture, time.Second, 10*time.Millisecond, fixedNow); !errors.Is(err, ErrBenchOffline) {
 			t.Fatalf("got %v", err)
 		}
 		if len(f.wrote()) != 0 {
@@ -197,7 +199,7 @@ func TestBenchRefusals(t *testing.T) {
 	t.Run("reboot already pending", func(t *testing.T) {
 		f := &benchACS{informAt: benchTime, tasks: []map[string]any{{"_id": "old000001", "name": "reboot", "device": benchID, "timestamp": benchTime}}}
 		c := f.setup(t)
-		if _, err := c.RebootBench(context.Background(), benchDev, time.Second, 10*time.Millisecond, fixedNow); !errors.Is(err, ErrBenchPending) {
+		if _, err := c.RebootBench(context.Background(), benchDev, farFuture, time.Second, 10*time.Millisecond, fixedNow); !errors.Is(err, ErrBenchPending) {
 			t.Fatalf("got %v", err)
 		}
 		if len(f.wrote()) != 0 {
@@ -209,7 +211,7 @@ func TestBenchRefusals(t *testing.T) {
 func TestBenchQueuedIsRemoved(t *testing.T) {
 	f := &benchACS{informAt: benchTime, postCode: 202}
 	c := f.setup(t)
-	_, err := c.RebootBench(context.Background(), benchDev, time.Second, 10*time.Millisecond, fixedNow)
+	_, err := c.RebootBench(context.Background(), benchDev, farFuture, time.Second, 10*time.Millisecond, fixedNow)
 	if !IsNotDelivered(err) {
 		t.Fatalf("got %v", err)
 	}
@@ -221,7 +223,7 @@ func TestBenchQueuedIsRemoved(t *testing.T) {
 func TestBenchQueuedAndCannotRemove(t *testing.T) {
 	f := &benchACS{informAt: benchTime, postCode: 202, delCode: 500}
 	c := f.setup(t)
-	_, err := c.RebootBench(context.Background(), benchDev, time.Second, 10*time.Millisecond, fixedNow)
+	_, err := c.RebootBench(context.Background(), benchDev, farFuture, time.Second, 10*time.Millisecond, fixedNow)
 	if !errors.Is(err, ErrBenchUncleaned) {
 		t.Fatalf("got %v", err)
 	}
@@ -232,7 +234,7 @@ func TestBenchAmbiguousIsNotRetried(t *testing.T) {
 	c := f.setup(t)
 	real := func() time.Time { return time.Now().UTC().Add(-time.Second) }
 	f.informAt = real().Format(time.RFC3339)
-	out, err := c.RebootBench(context.Background(), benchDev, time.Second, 10*time.Millisecond, real)
+	out, err := c.RebootBench(context.Background(), benchDev, farFuture, time.Second, 10*time.Millisecond, real)
 	if err == nil || out.Accepted || IsNotDelivered(err) {
 		t.Fatalf("ambiguous: out=%+v err=%v", out, err)
 	}
@@ -253,7 +255,7 @@ func TestBenchAmbiguousIsNotRetried(t *testing.T) {
 func TestBenchNoNewBootIsNotConfirmed(t *testing.T) {
 	f := &benchACS{informAt: benchTime} // delivered but _lastBoot never advances
 	c := f.setup(t)
-	out, err := c.RebootBench(context.Background(), benchDev, 200*time.Millisecond, 50*time.Millisecond, fixedNow)
+	out, err := c.RebootBench(context.Background(), benchDev, farFuture, 200*time.Millisecond, 50*time.Millisecond, fixedNow)
 	if err != nil || !out.Accepted || out.PostcheckOK {
 		t.Fatalf("out=%+v err=%v", out, err)
 	}
@@ -262,7 +264,7 @@ func TestBenchNoNewBootIsNotConfirmed(t *testing.T) {
 func TestBenchRejected(t *testing.T) {
 	f := &benchACS{informAt: benchTime, postCode: 403}
 	c := f.setup(t)
-	if _, err := c.RebootBench(context.Background(), benchDev, time.Second, 10*time.Millisecond, fixedNow); !IsNotDelivered(err) {
+	if _, err := c.RebootBench(context.Background(), benchDev, farFuture, time.Second, 10*time.Millisecond, fixedNow); !IsNotDelivered(err) {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -280,5 +282,18 @@ func TestBenchSourceHasNoOtherWrites(t *testing.T) {
 	}
 	if strings.Count(s, `"name": "reboot"`) != 1 {
 		t.Error("exactly one reboot task body")
+	}
+}
+
+func TestBenchNothingIsSentAfterTheDeadline(t *testing.T) {
+	f := &benchACS{informAt: benchTime, reboots: true}
+	c := f.setup(t)
+	// deadline already in the past relative to the injected clock: identity passes, the last check before the POST refuses
+	past := fixedNow().Add(-time.Second)
+	if _, err := c.RebootBench(context.Background(), benchDev, past.Add(24*time.Hour), time.Second, 10*time.Millisecond, func() time.Time { return past.Add(25 * time.Hour) }); err == nil {
+		t.Fatal("must refuse")
+	}
+	if len(f.wrote()) != 0 {
+		t.Fatalf("no write after the deadline: %v", f.wrote())
 	}
 }

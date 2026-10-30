@@ -32,7 +32,7 @@ func (f *fakeACS) BenchIdentity(_ context.Context, d nbi.BenchDevice, _ time.Tim
 	f.identityCalls++
 	return f.idErr
 }
-func (f *fakeACS) RebootBench(_ context.Context, d nbi.BenchDevice, _, _ time.Duration, _ func() time.Time) (nbi.BenchOutcome, error) {
+func (f *fakeACS) RebootBench(_ context.Context, d nbi.BenchDevice, _ time.Time, _, _ time.Duration, _ func() time.Time) (nbi.BenchOutcome, error) {
 	f.rebootCalls = append(f.rebootCalls, d.DeviceID)
 	return f.out, f.rebootErr
 }
@@ -77,7 +77,8 @@ func (e *env) lease(t *testing.T, targets ...jobs.LeaseTarget) {
 }
 
 func envelope(ref string) *jobs.Envelope {
-	return &jobs.Envelope{JobID: "job-1", Operation: "reboot_cpe", TargetRef: ref, AuthorizationID: authID, OwnerEpoch: 2}
+	return &jobs.Envelope{JobID: "job-1", Operation: "reboot_cpe", TargetRef: ref, AuthorizationID: authID, OwnerEpoch: 2,
+		ExpiresAt: "2026-10-30T12:02:00Z", AuthorizationEndsAt: "2026-10-30T12:10:00Z"}
 }
 
 func TestRunHappy(t *testing.T) {
@@ -170,6 +171,30 @@ type laps struct {
 func (l *laps) BenchIdentity(ctx context.Context, d nbi.BenchDevice, n time.Time) error {
 	l.advance()
 	return l.fakeACS.BenchIdentity(ctx, d, n)
+}
+
+func TestRunRefusesAnExpiredEnvelopeOrWindowAndSpendsNothing(t *testing.T) {
+	for name, mut := range map[string]func(*jobs.Envelope){
+		"envelope expired":  func(x *jobs.Envelope) { x.ExpiresAt = "2026-10-30T11:59:59Z" },
+		"window ended":      func(x *jobs.Envelope) { x.AuthorizationEndsAt = "2026-10-30T12:00:00Z" },
+		"unreadable expiry": func(x *jobs.Envelope) { x.ExpiresAt = "soon" },
+	} {
+		e := setup(t)
+		e.lease(t, jobs.LeaseTarget{TargetRef: benchRef, OwnerEpoch: 2})
+		x := envelope(benchRef)
+		mut(x)
+		if res := e.r.Run(context.Background(), x); res.State != "failed" || len(e.acs.rebootCalls) != 0 || e.cl.State(authID) != "" {
+			t.Errorf("%s: %+v calls=%v claim=%q", name, res, e.acs.rebootCalls, e.cl.State(authID))
+		}
+	}
+	// the envelope runs out WHILE the identity is being read: neither the pacing slot nor the authorization is spent
+	e := setup(t)
+	e.lease(t, jobs.LeaseTarget{TargetRef: benchRef, OwnerEpoch: 2})
+	e.r.ACS = &laps{fakeACS: e.acs, advance: func() { e.now = e.now.Add(3 * time.Minute) }}
+	e.r.Lease.Now = func() time.Time { return e.now.Add(-3 * time.Minute) } // keep the lease alive: only the envelope is expired
+	if res := e.r.Run(context.Background(), envelope(benchRef)); res.State != "failed" || len(e.acs.rebootCalls) != 0 || e.cl.State(authID) != "" {
+		t.Fatalf("%+v calls=%v claim=%q", res, e.acs.rebootCalls, e.cl.State(authID))
+	}
 }
 
 func TestRunOutcomes(t *testing.T) {
