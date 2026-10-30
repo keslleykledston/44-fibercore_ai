@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { API_URL, EMAIL, PASSWORD, login, totp } from "./helpers";
 import { humanHours, offlineQuery, parseOfflineFilters } from "../src/lib/offline";
 
-const routes = ["/", "/rede", "/rede/offline", "/dispositivos", "/dispositivos/edges", "/dispositivos/capacidades", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/administracao/membros", "/administracao/papeis", "/conta/seguranca", "/ajuda", "/ajuda/rede/consultar-onu"];
+const routes = ["/", "/rede", "/rede/offline", "/dispositivos", "/dispositivos/edges", "/dispositivos/capacidades", "/assinantes", "/noc", "/operacoes", "/administracao/modulos", "/administracao/equipe", "/administracao/equipe?aba=funcoes", "/administracao/equipe?aba=atividade", "/conta/seguranca", "/ajuda", "/ajuda/rede/consultar-onu"];
 
 test("login inválido mostra erro e não cria sessão", async ({ page, context }) => {
   await page.goto("/login");
@@ -440,7 +440,7 @@ test("Segurança da conta: ativa o MFA pela tela, mostra os códigos uma única 
 });
 
 
-test("Membros: administrador redefine o MFA de outra pessoa com senha + segundo fator, e a ação tem efeito", async ({ page, request }) => {
+test("Equipe: administrador redefine a verificação em 2 etapas de outra pessoa com senha + segundo fator, e a ação tem efeito", async ({ page, request }) => {
   const AGENT = "agente@demo.example.com";
   const tokenOf = async (email: string) => (await (await request.post(`${API_URL}/v1/auth/token`, { data: { email, password: PASSWORD } })).json()).access_token as string;
   const enable = async (email: string) => {
@@ -461,22 +461,24 @@ test("Membros: administrador redefine o MFA de outra pessoa com senha + segundo 
     await page.getByRole("button", { name: "Verificar" }).click();
     await expect(page.getByRole("heading", { name: "Visão Geral" })).toBeVisible();
 
-    await page.goto("/administracao/membros");
-    const row = page.getByTestId(`member-${AGENT}`);
-    await expect(row).toContainText("Ativo");
-    await expect(page.getByTestId(`member-${EMAIL}`).getByTestId("mfa-reset-open")).toHaveCount(0); // ninguém redefine o próprio por aqui
-    await row.getByTestId("mfa-reset-open").click();
-    await expect(page.getByTestId("mfa-reset-form")).toContainText("As sessões abertas");
-    await page.getByLabel("Sua senha").fill("senha-errada");
-    await page.getByLabel(/Seu código/).fill(admin.recovery[0]);
-    await page.getByRole("button", { name: "Redefinir MFA" }).last().click();
-    await expect(page.getByTestId("mfa-reset-error")).toContainText("incorretos");
-    await page.getByLabel("Sua senha").fill(PASSWORD);
-    await page.getByLabel(/Seu código/).fill(admin.recovery[1]);
-    await page.getByRole("button", { name: "Redefinir MFA" }).last().click();
-    await expect(page.getByTestId("entity-drawer")).toBeHidden();
-    await expect(row).toContainText("Desativado");
-    await expect(row.getByTestId("mfa-reset-open")).toHaveCount(0);
+    await page.goto("/administracao/equipe");
+    const row = page.getByTestId(`person-${AGENT}`);
+    await expect(row).toContainText("2 etapas ligada");
+    await expect(page.getByTestId(`person-${EMAIL}`).getByTestId("person-open")).toHaveCount(0); // ninguém gerencia a si mesmo por aqui
+    await row.getByTestId("person-open").click();
+    const dlg = page.locator("dialog[open]");
+    await dlg.getByText("Redefinir a verificação em duas etapas").click();
+    await expect(dlg.getByTestId("mfa-form")).toContainText("encerra as sessões");
+    await dlg.getByLabel("Sua senha").fill("senha-errada");
+    await dlg.getByLabel(/Seu código/).fill(admin.recovery[0]);
+    await dlg.getByRole("button", { name: "Redefinir verificação" }).click();
+    await expect(dlg.getByTestId("person-error")).toContainText("incorretos");
+    await dlg.getByLabel("Sua senha").fill(PASSWORD);
+    await dlg.getByLabel(/Seu código/).fill(admin.recovery[1]);
+    await dlg.getByRole("button", { name: "Redefinir verificação" }).click();
+    await expect(dlg.getByTestId("person-notice")).toContainText("redefinida");
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId(`person-${AGENT}`)).toContainText("2 etapas desligada");
     expect((await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: AGENT, password: PASSWORD } })).json()).mfa_required).toBe(false);
     const axe = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
     expect(axe.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(" | ")}`)).toEqual([]);
@@ -539,43 +541,121 @@ test("Dispositivos: lista de CPEs, detalhe, Edges e capacidades abrem com dado r
   await expect(page.getByTestId("capabilities-ready")).toBeVisible();
 });
 
-test("Papéis e permissões: o administrador vê a matriz, troca o papel de outra pessoa com motivo e a mudança entra no histórico", async ({ page }) => {
+test("Equipe: o administrador troca a função de outra pessoa com motivo e a mudança entra na atividade; a aba Funções fala em capacidades", async ({ page }) => {
   await login(page);
-  await page.goto("/administracao/papeis");
-  await expect(page.getByTestId("roles-ready")).toBeVisible();
-  await expect(page.getByTestId("my-role")).toContainText("Administrador do provedor");
-  await expect(page.getByTestId("role-matrix")).toBeVisible();
-  const row = page.getByTestId("rolemember-agente@demo.example.com");   // a pessoa do seed (Engenheiro)
-  await expect(row.locator("td").nth(1)).toHaveText("Engenheiro");
-  await expect(page.getByTestId("rolemember-admin@demo.example.com").getByTestId("role-change-open")).toHaveCount(0);   // nunca o próprio papel
-  await row.getByTestId("role-change-open").click();
-  const dlg = page.locator("dialog[open]");   // cada pessoa tem o seu painel; só o aberto interessa
-  await dlg.getByLabel("Novo papel").selectOption({ label: "NOC nível 1" });
-  await dlg.getByLabel(/Motivo/).fill("teste de papel pela tela");
-  await dlg.getByRole("button", { name: "Alterar papel" }).click();
-  await expect(page.getByTestId("rolemember-agente@demo.example.com").locator("td").nth(1)).toHaveText("NOC nível 1");   // a coluna Papel (não o painel escondido)
-  await expect(page.getByTestId("role-history")).toContainText("teste de papel pela tela");
-  await expect(page.getByTestId("role-history")).toContainText("Engenheiro → NOC nível 1");
+  await page.goto("/administracao/equipe");
+  await expect(page.getByTestId("team-ready")).toBeVisible();
+  await expect(page.getByTestId("team-summary")).toContainText("Pessoas ativas");
+  const row = page.getByTestId("person-agente@demo.example.com");   // a pessoa do seed (Engenheiro)
+  const before = (await row.getByTestId("person-role").innerText()).trim();
+  const target = before === "Engenheiro" ? "Operador NOC (nível 1)" : "Engenheiro";   // roda de novo sem estado limpo
+  await row.getByTestId("person-open").click();
+  const dlg = page.locator("dialog[open]");
+  await dlg.getByLabel("Nova função").selectOption({ label: target });
+  await expect(dlg.getByTestId("role-diff")).toContainText("O que muda");
+  await dlg.getByTestId("role-form").getByLabel(/Motivo/).fill("teste de função pela tela");
+  await dlg.getByRole("button", { name: "Mudar a função" }).click();
+  await expect(page.getByTestId("person-agente@demo.example.com").getByTestId("person-role")).toHaveText(target);
+  await page.getByTestId("team-tab-atividade").click();
+  await expect(page.getByTestId("activity-list")).toContainText("mudou a função de");
+  await expect(page.getByTestId("activity-list")).toContainText("teste de função pela tela");
+  await page.getByTestId("team-tab-funcoes").click();
+  await expect(page.getByTestId("role-cards")).toContainText("Gestor de acesso");
+  await expect(page.getByTestId("role-matrix")).toContainText("Aprovar mudanças");
+  await expect(page.getByTestId("role-matrix")).not.toContainText("members:manage");   // jargão técnico fica recolhido
+  await expect(page.getByTestId("technical-details")).not.toHaveAttribute("open", "");
 });
 
-test("Papéis e permissões: o administrador concede acesso temporário ao suporte da plataforma e o encerra", async ({ page }) => {
+test("Equipe: convidar, aceitar pelo link, entrar, trocar a própria senha; reemitir e cancelar convites", async ({ page, browser }) => {
+  const email = `novo${Date.now()}@demo.example.com`;
   await login(page);
-  await page.goto("/administracao/papeis");
-  await expect(page.getByTestId("roles-ready")).toBeVisible();
+  await page.goto("/administracao/equipe");
+  await page.getByTestId("invite-open").click();
+  const dlg = page.locator("dialog[open]");
+  await dlg.getByLabel("E-mail da pessoa").fill(email);
+  await dlg.getByLabel(/^Nome/).fill("Pessoa Convidada");
+  await dlg.getByText("Engenheiro", { exact: true }).click();
+  await expect(dlg).toContainText("Pode:");
+  await dlg.getByRole("button", { name: "Criar convite" }).click();
+  const link = await dlg.getByTestId("secret-link-url").inputValue();
+  expect(link).toMatch(/\/convite\/[A-Za-z0-9_-]{40,}$/);
+  await dlg.getByRole("button", { name: "Concluir" }).click();
+  await expect(page.getByTestId(`invite-${email}`)).toContainText("Convite pendente");
+  // a pessoa abre o link SEM sessão
+  const ctx = await browser.newContext();
+  const guest = await ctx.newPage();
+  await guest.goto(link);
+  await expect(guest.getByRole("heading", { level: 1 })).toContainText("Entrar na equipe");
+  await guest.getByLabel("Senha", { exact: true }).fill("curta");
+  await guest.getByLabel("Repita a senha").fill("curta");
+  await guest.getByRole("button", { name: "Criar minha conta" }).click();
+  await expect(guest.getByTestId("accept-error")).toContainText("12 caracteres");
+  await guest.getByLabel("Senha", { exact: true }).fill("uma senha longa de teste 2026");
+  await guest.getByLabel("Repita a senha").fill("uma senha longa de teste 2026");
+  await guest.getByRole("button", { name: "Criar minha conta" }).click();
+  await expect(guest.getByTestId("accept-done")).toBeVisible();
+  await guest.goto(link);
+  await expect(guest.getByTestId("invite-problem")).toContainText("já foi usado");
+  await guest.goto("/login");
+  await guest.getByLabel("E-mail").fill(email);
+  await guest.getByLabel("Senha").fill("uma senha longa de teste 2026");
+  await guest.getByRole("button", { name: "Entrar" }).click();
+  await expect(guest.getByRole("heading", { name: "Visão Geral" })).toBeVisible();
+  // trocar a própria senha: todas as sessões acabam
+  await guest.goto("/conta/seguranca");
+  await guest.getByLabel("Senha atual").fill("uma senha longa de teste 2026");
+  await guest.getByLabel("Nova senha", { exact: true }).fill("outra senha longa de teste 2026");
+  await guest.getByLabel("Repita a nova senha").fill("outra senha longa de teste 2026");
+  await guest.getByRole("button", { name: "Trocar a senha" }).click();
+  await expect(guest.getByTestId("password-done")).toBeVisible();
+  await ctx.close();
+  // no painel do administrador: a pessoa agora está ativa, e um convite novo pode ser reemitido e cancelado
+  await page.reload();
+  await expect(page.getByTestId(`person-${email}`)).toContainText("Ativo");
+  const other = `outro${Date.now()}@demo.example.com`;
+  await page.getByTestId("invite-open").click();
+  const d2 = page.locator("dialog[open]");
+  await d2.getByLabel("E-mail da pessoa").fill(other);
+  await d2.getByText("Auditor", { exact: true }).click();
+  await d2.getByRole("button", { name: "Criar convite" }).click();
+  const first = await d2.getByTestId("secret-link-url").inputValue();
+  await d2.getByRole("button", { name: "Concluir" }).click();
+  await page.getByTestId(`invite-${other}`).getByTestId("invite-renew").click();
+  const second = await page.locator("dialog[open]").getByTestId("secret-link-url").inputValue();
+  expect(second).not.toBe(first);
+  await page.locator("dialog[open]").getByRole("button", { name: "Fechar" }).last().click();
+  await page.getByTestId(`invite-${other}`).getByTestId("invite-cancel").click();
+  await expect(page.getByTestId(`invite-${other}`)).toHaveCount(0);
+  const probe = await browser.newContext();
+  const g2 = await probe.newPage();
+  await g2.goto(first);
+  await expect(g2.getByTestId("invite-problem")).toContainText("cancelado");
+  await probe.close();
+  // remover a pessoa que aceitou
+  await page.getByTestId(`person-${email}`).getByTestId("person-open").click();
+  const d3 = page.locator("dialog[open]");
+  await d3.getByText("Remover da equipe").click();
+  await d3.getByTestId("remove-form").getByLabel(/Motivo/).fill("fim do teste");
+  await d3.getByTestId("remove-submit").click();
+  await expect(page.getByTestId(`person-${email}`)).toHaveCount(0);
+});
+
+test("Equipe: o administrador concede acesso temporário ao suporte da plataforma e o encerra", async ({ page }) => {
+  await login(page);
+  await page.goto("/administracao/equipe");
+  await page.getByTestId("platform-access").getByText("Suporte da plataforma (acesso temporário)").click();
   const form = page.getByTestId("delegation-form");
   await form.getByLabel(/E-mail do operador/).fill("suporte@plataforma.example.com");
   await form.getByLabel(/Motivo/).fill("chamado 4711: diagnóstico acompanhado");
   await form.getByLabel("Prazo").selectOption("2");
   await form.getByRole("button", { name: "Conceder acesso" }).click();
   await expect(page.getByTestId("delegation-done")).toHaveText("Acesso concedido.");
-  const table = page.getByTestId("delegations");
-  await expect(table).toContainText("suporte@plataforma.example.com");
-  await expect(table).toContainText("chamado 4711");
-  await expect(table.getByText("Ativo")).toBeVisible();
-  await table.getByTestId("delegation-revoke").click();
-  await expect(table.getByText(/Encerrado em/)).toBeVisible();
-  await expect(table.getByTestId("delegation-revoke")).toHaveCount(0);
-  // um e-mail que não é de operador recebe a mesma resposta que um inexistente
+  const list = page.getByTestId("delegations");
+  await expect(list).toContainText("suporte@plataforma.example.com");
+  await expect(list).toContainText("chamado 4711");
+  await list.getByTestId("delegation-revoke").click();
+  await expect(list.getByText(/encerrado/).first()).toBeVisible();
+  await expect(list.getByTestId("delegation-revoke")).toHaveCount(0);
   await form.getByLabel(/E-mail do operador/).fill("agente@demo.example.com");
   await form.getByLabel(/Motivo/).fill("tentativa com conta que não é operadora");
   await form.getByRole("button", { name: "Conceder acesso" }).click();

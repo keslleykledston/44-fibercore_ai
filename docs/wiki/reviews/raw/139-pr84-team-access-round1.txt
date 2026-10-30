@@ -1,0 +1,31 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18e4c-8a61-79b1-b7e2-ba7ddbae6e6c).
+[codex] Turn started (01a18e4c-8d97-7000-92e1-eec9f7b34c67).
+[codex] Assistant message captured: Vou revisar o diff real contra `main`, priorizando as rotas de convite/senha, isolamento por ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=12 main...HEAD -- apps/api/app/api/team.py ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=12 main...HEAD -- apps/api/app/api/team.py ap... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"CREATE FUNCTION app_|GRANT EXECUTE|REVOKE ALL ON FUNCTION|team_actor_r...
+[codex] Command completed: /bin/bash -lc "rg -n \"CREATE FUNCTION app_|GRANT EXECUTE|REVOKE ALL ON FUNCTION|team_actor_r... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/routes.py | sed -n '55,95p'; rg -n \"audit_log.*tenant...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/routes.py | sed -n '55,95p'; rg -n \"audit_log.*tenant... (exit 0)
+[codex] Running command: /bin/bash -lc "cat apps/web/src/lib/csrf.ts; cat apps/web/src/lib/mfa-bff.ts; nl -ba apps/web...
+[codex] Command completed: /bin/bash -lc "cat apps/web/src/lib/csrf.ts; cat apps/web/src/lib/mfa-bff.ts; nl -ba apps/web... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "function clientIp|const clientIp" apps/web/src/lib/bff.ts; nl -ba apps/...
+[codex] Command completed: /bin/bash -lc 'rg -n "function clientIp|const clientIp" apps/web/src/lib/bff.ts; nl -ba apps/... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/team.py | sed -n '238,275p';"
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/team.py | sed -n '238,275p';" (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: há uma corrida na troca da própria...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: há uma corrida na troca da própria senha que permite uma verificação de senha atual ficar obsoleta antes da gravação e sobrescrever uma troca concorrente.
+
+Findings:
+- [medium] A verificação da senha atual não fica serializada com a gravação (apps/api/app/api/session.py:421-432)
+  A rota verifica a senha atual sob o lock `account:<uid>`, mas encerra essa transação antes de chamar `app_password_change`, que só então adquire o mesmo lock. Duas requisições concorrentes podem validar a mesma senha antiga; uma grava a nova senha e a outra, usando a verificação já obsoleta, grava depois outra senha e encerra as sessões. Isso pode deixar a pessoa sem a senha que acabou de escolher e permite que uma requisição atrasada prevaleça. Mantenha a verificação e a atualização sob o mesmo lock/transação, ou revalide a senha atual dentro da operação SQL que grava a nova senha.
+  Recommendation: Unifique reautenticação, verificação da política e atualização da senha em uma operação serializada por conta; não libere o lock entre validar a senha atual e gravar a nova.

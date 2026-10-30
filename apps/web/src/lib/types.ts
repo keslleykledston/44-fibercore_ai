@@ -90,3 +90,24 @@ export type BenchAuthorization = {
   window_start: string; window_end: string; via: "owner_cli" | "api"; mine: boolean; by: string | null;
 };
 export type BenchAuthorizations = { can_authorize: boolean; operations: string[]; items: BenchAuthorization[] };
+
+export type TeamMember = {
+  user_id: string; email: string; name: string; role: string; role_label: string; role_summary: string; mfa_enabled: boolean; is_self: boolean;
+  can_change_role: boolean; can_remove: boolean; can_reset_password: boolean;
+};
+export type TeamInvite = { id: string; email: string; name: string | null; role: string; role_label: string; created_at: string; expires_at: string; by: string | null; expired: boolean };
+export type TeamRole = { role: string; label: string; summary: string; can: string[]; cannot: string[]; assignable_by_me: boolean };
+export type Team = {
+  me: { id: string; role: string; role_label: string; can_manage: boolean; assignable_roles: string[] };
+  summary: { active: number; pending_invites: number; without_mfa: number };
+  members: TeamMember[]; invites: TeamInvite[]; roles: TeamRole[];
+  capabilities: { groups: { id: string; label: string }[]; matrix: Record<string, Record<string, "all" | "some" | "none">> };
+};
+export type TeamActivityItem = {
+  id: string; kind: string; at: string; actor: string | null; target: string | null; email: string | null; from: string | null; to: string | null;
+  reason: string | null; hours: number | null; operation: string | null; from_label: string | null; to_label: string | null;
+};
+export type TeamActivity = { truncated: boolean; items: TeamActivityItem[] };
+export type InvitePreview =
+  | { state: "invalid" | "used" | "revoked" | "expired" }
+  | { state: "valid"; purpose: "invite" | "reset"; tenant_name: string; email: string; name: string | null; role_label: string | null; inviter: string | null; expires_at: string; account_exists: boolean };

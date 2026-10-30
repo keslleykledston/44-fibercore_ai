@@ -6,7 +6,7 @@ status: draft
 product_version: "0.1.0"
 last_verified: "2026-10-30"
 help_owner: "Plataforma FiberCore"
-ui_route: "/administracao/papeis"
+ui_route: "/administracao/equipe?aba=funcoes"
 ---
 
 # Como ver e alterar papéis e permissões
@@ -17,7 +17,7 @@ ui_route: "/administracao/papeis"
 
 ## Passo a passo
 
-1. Acesse **Administração** e abra a aba **Papéis e permissões**.
+1. Acesse **Administração › Equipe e acessos** e abra a aba **Funções** (para convidar e gerenciar pessoas, veja “Como convidar, gerenciar e remover pessoas da equipe”).
 2. **O que eu posso fazer** mostra o seu papel e as suas permissões, agrupadas por risco.
 3. Em **Membros e papéis**, clique em **Alterar papel** na pessoa, escolha o novo papel e escreva o motivo (3 a 200 caracteres).
 4. Em **Papéis do sistema** veja a matriz de permissões de cada papel. Em **Histórico de mudanças de papel** veja quem alterou o papel de quem, de qual para qual e por quê.

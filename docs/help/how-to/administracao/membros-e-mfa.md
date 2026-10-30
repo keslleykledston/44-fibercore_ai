@@ -6,7 +6,7 @@ status: published
 product_version: "0.1.0"
 last_verified: "2026-10-29"
 help_owner: "Plataforma FiberCore"
-ui_route: "/administracao/membros"
+ui_route: "/administracao/equipe"
 ---
 
 # Como ver os membros e redefinir o MFA de alguém
@@ -17,10 +17,10 @@ ui_route: "/administracao/membros"
 
 ## Passo a passo
 
-1. Acesse **Administração › Membros**. A coluna **MFA** mostra Ativo ou Desativado para cada pessoa.
-2. Na linha da pessoa, clique em **Redefinir MFA** (só aparece para quem tem MFA ativo e não é você).
+1. Acesse **Administração › Equipe e acessos**. Cada pessoa mostra **2 etapas ligada** ou **desligada**.
+2. Na linha da pessoa, clique em **Gerenciar** e abra **Redefinir a verificação em duas etapas** (só para quem tem a verificação ligada e não é você).
 3. Leia o aviso e digite **sua senha** e **seu código** (do autenticador ou um código de recuperação seu).
-4. Confirme em **Redefinir MFA**. A pessoa volta a **Desativado**; peça que ela cadastre o MFA de novo em Conta › Segurança da conta.
+4. Confirme em **Redefinir verificação**. A pessoa volta a **2 etapas desligada**; peça que ela cadastre o MFA de novo em Conta › Segurança da conta.
 
 ![Tela em desktop 1440×900 — Como ver os membros e redefinir o MFA](../../assets/administracao/membros-e-mfa/desktop.png)
 

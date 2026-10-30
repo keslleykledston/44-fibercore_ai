@@ -34,10 +34,11 @@ PUBLIC = {  # no credentials at all
     ("GET", "/livez"), ("GET", "/readyz"), ("GET", "/version"),
     ("POST", "/v1/auth/token"), ("POST", "/v1/auth/service-token"), ("POST", "/v1/auth/refresh"), ("POST", "/v1/auth/logout"),
     ("POST", "/v1/auth/mfa/verify"),  # takes the short-lived mfa_token it was handed at login
+    ("GET", "/v1/invites/{token}"), ("POST", "/v1/invites/{token}/accept"),  # the link itself is the credential (SHA-256 looked up, throttled, single use)
 }
 SELF_AUTH = {  # authenticate the caller's OWN account (token read inside the handler); they act on that account only, never on another member
     ("GET", "/v1/auth/workspaces"), ("GET", "/v1/auth/mfa/status"), ("POST", "/v1/auth/mfa/enroll"), ("POST", "/v1/auth/mfa/activate"),
-    ("POST", "/v1/auth/mfa/disable"), ("POST", "/v1/auth/mfa/recovery-codes"), ("POST", "/v1/auth/mfa/step-up"),
+    ("POST", "/v1/auth/mfa/disable"), ("POST", "/v1/auth/mfa/recovery-codes"), ("POST", "/v1/auth/mfa/step-up"), ("POST", "/v1/auth/password"),
 }
 SESSION_ONLY = {  # any valid session of the provider; no permission needed (the caller's own identity and platform metadata)
     ("GET", "/v1/auth/me"), ("GET", "/v1/platform/modules"), ("GET", "/v1/platform/versions"),
@@ -91,7 +92,7 @@ def test_session_only_routes_are_read_only_platform_and_identity_metadata():
     assert SESSION_ONLY == {("GET", "/v1/auth/me"), ("GET", "/v1/platform/modules"), ("GET", "/v1/platform/versions")}
 
 
-BODY = {"password": "x", "code": "000000", "refresh_token": "x" * 30}   # satisfies every request model of the own-account routes, so only the missing credential can fail
+BODY = {"password": "x", "code": "000000", "refresh_token": "x" * 30, "current_password": "x", "new_password": "y" * 14}   # satisfies every request model of the own-account routes, so only the missing credential can fail
 
 
 @pytest.mark.parametrize("method,path", sorted(SELF_AUTH | SESSION_ONLY))
