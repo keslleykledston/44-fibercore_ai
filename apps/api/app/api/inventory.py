@@ -3,6 +3,7 @@ sends anything to a device. Freshness is computed at read time so Edge/OLT silen
 never as a fabricated ONU `offline`."""
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 from uuid import UUID
@@ -380,6 +381,15 @@ def list_onus(
 
 
 OFFLINE_STATES = ("offline", "los", "dying_gasp")
+_FORMULA_LEAD = re.compile(r"^[\s\x00-\x1f\x7f\u00a0\u2000-\u200f\u2028\u2029\ufeff]*[=+\-@]")
+
+
+def _csv_cell(v):
+    """A spreadsheet runs a cell whose first meaningful character is = + - @ (blanks and control characters before it do not hide it, and a
+    leading tab or CR is itself a formula starter in some readers): such free text gets a leading apostrophe."""
+    return ("'" + v) if isinstance(v, str) and v and (v[0] in "\t\r" or _FORMULA_LEAD.match(v)) else v
+
+
 OFFLINE_CSV_COLUMNS = ("serial", "olt", "pon_path", "status", "offline_since", "offline_hours", "basis", "last_online_at", "observed_at", "olt_observed_at", "freshness")
 
 
@@ -441,7 +451,7 @@ def list_offline_onus(
         w.writerow(OFFLINE_CSV_COLUMNS)
         for i in items:
             # a spreadsheet would run a cell that starts with = + - @: the free-text columns are neutralised
-            w.writerow([("'" + i[c]) if isinstance(i[c], str) and i[c] and i[c][0] in "=+-@" else i[c] for c in OFFLINE_CSV_COLUMNS])
+            w.writerow([_csv_cell(i[c]) for c in OFFLINE_CSV_COLUMNS])
         return Response(content=buf.getvalue(), media_type="text/csv; charset=utf-8",
                         headers={"Content-Disposition": 'attachment; filename="onus-offline.csv"',
                                  "X-Excluded-Stale": str(stale), "X-Excluded-Unknown-Start": str(unknown), "X-Truncated": str(truncated).lower()})

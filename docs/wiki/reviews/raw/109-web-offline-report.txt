@@ -1,0 +1,31 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18d2e-6321-74a0-b90a-44fa9404496f).
+[codex] Turn started (01a18d2e-65a2-7d81-ab18-771a4dc194f0).
+[codex] Assistant message captured: Vou comparar o branch com `main` e seguir os fluxos da tela, BFF, validação e testes E2E para...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/app/bff/onus/o...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/app/bff/onus/o... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "onus/offline|offline.*csv|offline_since|x-excluded" apps/api apps/web/src'
+[codex] Command completed: /bin/bash -lc 'rg -n "onus/offline|offline.*csv|offline_since|x-excluded" apps/api apps/web/src' (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '370,465p' apps/api/app/api/inventory.py && rg -n \"function getSession...
+[codex] Command completed: /bin/bash -lc "sed -n '370,465p' apps/api/app/api/inventory.py && rg -n \"function getSession... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/app/rede/offline/page.tsx | sed -n '48,65p'; nl -ba apps/a...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/app/rede/offline/page.tsx | sed -n '48,65p'; nl -ba apps/a... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: a tela rotula como exato um horário q...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: a tela rotula como exato um horário que, para a base “No máximo”, é apenas a última vez vista online; a neutralização de fórmulas CSV também não cobre valores com prefixos de controle/espaço.
+
+Findings:
+- [medium] A coluna “Desde” exibe como exato o último horário online (apps/web/src/app/rede/offline/page.tsx:58-60)
+  Para `since_last_online`, `offline_since` é a última observação online, não o início da queda. A duração recebe o prefixo “até”, mas a coluna “Desde” renderiza o mesmo timestamp sem ressalva. Isso contradiz a promessa da tela de não apresentar início estimado como exato e pode levar operadores a agir com base em uma hora de queda incorreta. O texto “No máximo” na coluna de base não corrige a apresentação isolada do horário.
+  Recommendation: Quando `basis === "since_last_online"`, rotule o timestamp como “Visto online pela última vez” ou omita a coluna “Desde” para essa base; cubra a apresentação com um teste de UI.
+- [medium] Neutralização de fórmulas CSV só trata o primeiro caractere (apps/api/app/api/inventory.py:442-444)
+  O CSV adiciona apóstrofo apenas quando o primeiro caractere do valor é `=`, `+`, `-` ou `@`. Valores livres como serial ou nome de OLT que comecem com tabulação, quebra de linha ou espaço antes de um operador podem contornar esse teste e ser interpretados como fórmula por planilhas compatíveis. Como o endpoint exporta esses valores diretamente, um valor de inventário controlável pode causar execução de fórmula ao abrir o arquivo.
+  Recommendation: Neutralize fórmulas segundo as regras dos leitores de planilha suportados, tratando prefixos de whitespace e caracteres de controle antes de verificar o operador; adicione casos adversariais para tab, CR/LF e espaços no teste CSV.
+- [low] O E2E não comprova a revalidação dos filtros no BFF (apps/web/e2e/app.spec.ts:494-498)
+  O teste envia um `olt_id` inválido e um `pon_path` malicioso, mas só verifica status 200 e o cabeçalho CSV. Isso continua passando se os valores forem encaminhados sem validação e a API ignorar/aceitar os filtros, então não prova a propriedade de segurança que o comentário do BFF e o foco do review afirmam.
+  Recommendation: Verifique no teste, com stub/interceptação da chamada à API ou evidência equivalente, que os valores inválidos são removidos/substituídos antes do request upstream; inclua filtros válidos e limites fora de faixa.

@@ -47,7 +47,7 @@ export default async function OnusOffline({ searchParams }: { searchParams: Prom
                 <caption className="sr-only">ONUs fora do ar, as mais antigas primeiro</caption>
                 <thead className="text-left text-muted"><tr>
                   <th scope="col" className="p-3 font-medium">Serial</th><th scope="col" className="p-3 font-medium">OLT / PON</th><th scope="col" className="p-3 font-medium">Estado</th>
-                  <th scope="col" className="p-3 font-medium">Fora do ar há</th><th scope="col" className="p-3 font-medium">Desde</th><th scope="col" className="p-3 font-medium">Base do horário</th><th scope="col" className="p-3 font-medium">Dado</th>
+                  <th scope="col" className="p-3 font-medium">Fora do ar há</th><th scope="col" className="p-3 font-medium">Desde / visto online</th><th scope="col" className="p-3 font-medium">Base do horário</th><th scope="col" className="p-3 font-medium">Dado</th>
                 </tr></thead>
                 <tbody className="divide-y divide-line">
                   {rep.data.items.map((i) => (
@@ -56,7 +56,7 @@ export default async function OnusOffline({ searchParams }: { searchParams: Prom
                       <td className="p-3">{i.olt} · {i.pon_path ?? "—"}</td>
                       <td className="p-3"><StatusPill value={i.status} /></td>
                       <td className="tabular p-3 font-medium">{i.basis === "since_last_online" ? "até " : ""}{humanHours(i.offline_hours)}</td>
-                      <td className="tabular p-3"><time dateTime={i.offline_since}>{new Date(i.offline_since).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</time></td>
+                      <td className="tabular p-3" data-testid="offline-since">{i.basis === "since_last_online" && <span className="text-muted">Visto online em </span>}<time dateTime={i.offline_since}>{new Date(i.offline_since).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</time></td>
                       <td className="p-3" title={BASIS[i.basis].hint}>{BASIS[i.basis].label}<span className="sr-only">. {BASIS[i.basis].hint}</span></td>
                       <td className="p-3"><DataFreshness freshness={i.freshness} observedAt={i.observed_at} /></td>
                     </tr>
