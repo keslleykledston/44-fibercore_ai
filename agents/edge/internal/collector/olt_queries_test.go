@@ -225,3 +225,28 @@ func TestTheWindowIsAskedBeforeEveryClaim(t *testing.T) {
 		t.Fatalf("the others wait for the next window, unclaimed: %d", waiting)
 	}
 }
+
+func TestAClaimThatEatsTheWindowSendsNothing(t *testing.T) {
+	sess := &qSession{inner: r015Session{}}
+	o, store := queryRig(t, sess)
+	enqueue(t, store, "job-v", "olt.version")
+	// 31 s left when the claim starts; the store's clock makes writing it "take" the rest (the deadline passes during the claim)
+	ctx, cancel := context.WithTimeout(context.Background(), 31*time.Second)
+	defer cancel()
+	calls := 0
+	store.Now = func() time.Time { // ExpireDue reads the clock first, the claim second: the collection's time is gone right at the claim
+		if calls++; calls >= 2 {
+			cancel()
+		}
+		return time.Now()
+	}
+	if n := o.Queries.Drain(ctx, o.Sources[0], sess, qCloud, "s"); n != 1 {
+		t.Fatalf("claimed %d", n)
+	}
+	if len(sess.sent) != 0 {
+		t.Fatalf("nothing may reach the device once the window closed: %v", sess.sent)
+	}
+	if e, _, _ := store.Get("job-v"); e.State != oltquery.Failed || e.Reason != "window_closed" {
+		t.Fatalf("%+v", e)
+	}
+}

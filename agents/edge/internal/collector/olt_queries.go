@@ -35,6 +35,15 @@ func (q *Queries) timeout() time.Duration {
 	return 3 * time.Minute
 }
 
+// windowLeft: the collection's time box is still open and holds at least minQueryWindow.
+func windowLeft(ctx context.Context) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	dl, ok := ctx.Deadline()
+	return !ok || time.Until(dl) >= minQueryWindow
+}
+
 // failureReason is the CATEGORY that may be recorded and reported; device text and error strings never are.
 func failureReason(err error) string {
 	switch {
@@ -75,7 +84,7 @@ func (q *Queries) Drain(ctx context.Context, src OLTSource, raw olt.Session, clo
 	sess := olt.NewBudget(olt.ReadOnlySession{Inner: raw, Allowed: src.Driver.Allowed}, queryCommandsEach*oltquery.PerSession, queryMaxBytes)
 	for {
 		// asked before EVERY claim, not once: whatever the previous query used, a new one starts only with the minimum window left
-		if dl, ok := ctx.Deadline(); ctx.Err() != nil || (ok && time.Until(dl) < minQueryWindow) {
+		if !windowLeft(ctx) {
 			return ran
 		}
 		e, err := q.Store.Claim(cloudID, session) // CLAIMED is on disk before anything is sent
@@ -83,6 +92,10 @@ func (q *Queries) Drain(ctx context.Context, src OLTSource, raw olt.Session, clo
 			return ran
 		}
 		ran++
+		if !windowLeft(ctx) { // writing the claim took the time that was left: nothing was sent, and the query ends honestly instead of starting half-way
+			_ = q.Store.Fail(e.JobID, "window_closed")
+			return ran
+		}
 		fail := func(err error) int {
 			_ = q.Store.Fail(e.JobID, failureReason(err))
 			if !errors.Is(err, olt.ErrNoParser) { // a query that has nothing to run ends alone; any failure of the device or the session ends the batch
