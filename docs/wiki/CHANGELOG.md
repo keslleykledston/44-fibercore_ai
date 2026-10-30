@@ -180,3 +180,6 @@
 ## Unreleased — PR 67 (Edge: cooldown pós-falha da bancada configurável)
 - `bench.olt.cooldown_seconds` (0 = 900; 60..900): quanto tempo a OLT fica em paz depois de uma sessão de manobra que FALHOU. O padrão continua 15 min; fica no guard compartilhado com as coletas. Antes, uma parada na confirmação ou numa checagem cobrava 15 min de espera a cada tentativa da homologação.
 
+## Unreleased — PR 68 (relatório de ONUs offline há mais de X horas)
+- `GET /v1/onus/offline?min_hours=24&olt_id=&pon_path=&include_stale=&format=json|csv&limit=` (inventory:read, somente leitura, sem migração): as ONUs fora do ar há pelo menos X horas, as mais antigas primeiro, por OLT/PON, com exportação CSV. O início da queda traz a BASE (`transition_observed` exato; `since_last_online` = no máximo isso); ONU nunca vista online só é contada em `excluded.unknown_start`; dado de OLT sem coleta recente fica fora (`excluded.stale`) salvo `include_stale=true`. Sem dado pessoal (serial, OLT, PON). CSV neutraliza fórmulas de planilha.
+

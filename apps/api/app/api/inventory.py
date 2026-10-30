@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import Connection, text
 
@@ -360,6 +360,71 @@ def list_onus(
          "observed_at": r.observed_at.isoformat() if r.observed_at else None, "freshness": _fresh(r.observed_at)}
         for r in rows
     ]
+
+
+OFFLINE_STATES = ("offline", "los", "dying_gasp")
+OFFLINE_CSV_COLUMNS = ("serial", "olt", "pon_path", "status", "offline_since", "offline_hours", "basis", "last_online_at", "observed_at", "freshness")
+
+
+@router.get("/v1/onus/offline")
+def list_offline_onus(
+    min_hours: float = Query(24, ge=0, le=24 * 365),
+    olt_id: UUID | None = None,
+    pon_path: str | None = Query(None, max_length=32, pattern=r"^[0-9/]{1,32}$"),
+    include_stale: bool = False,
+    format: str = Query("json", pattern="^(json|csv)$"),
+    limit: int = Query(500, ge=1, le=5000),
+    p: Principal = Depends(require("inventory:read")),
+    conn: Connection = TENANT_CONN,
+):
+    """ONUs that have been offline for at least `min_hours`, longest first (to schedule a pickup or to contact the customer).
+
+    The start of the outage is stated with its BASIS, never invented: `transition_observed` (the Edge saw it online and then down: exact),
+    `since_last_online` (no transition was seen, so it is when the ONU was last seen online: the outage is AT MOST that long), and an ONU that
+    was never seen online has no known start and is only counted in `excluded.unknown_start`. Rows whose OLT snapshot is stale are left out
+    (counted in `excluded.stale`) unless `include_stale=true`, so an OLT the Edge stopped collecting cannot pass for a long outage."""
+    ref = "COALESCE(u.down_since, u.last_online_at)"
+    base = (f"FROM onus u JOIN olts o ON o.id = u.olt_id AND o.tenant_id = u.tenant_id "  # noqa: S608
+            "LEFT JOIN pon_ports pp ON pp.id = u.pon_id AND pp.tenant_id = u.tenant_id "
+            "WHERE u.status IN ('offline','los','dying_gasp') AND (CAST(:o AS uuid) IS NULL OR u.olt_id = :o) "
+            "AND (CAST(:pp AS text) IS NULL OR pp.pon_path = :pp)")
+    args = {"o": olt_id, "pp": pon_path}
+    unknown = conn.execute(text(f"SELECT count(*) {base} AND {ref} IS NULL"), args).scalar_one()  # noqa: S608
+    rows = conn.execute(
+        text(f"SELECT u.id, u.serial, o.name AS olt, pp.pon_path, u.status, u.down_since, u.last_online_at, u.observed_at, "  # noqa: S608
+             f"{ref} AS since {base} AND {ref} IS NOT NULL AND {ref} <= now() - make_interval(secs => :s) ORDER BY {ref} ASC LIMIT :l"),
+        {**args, "s": int(min_hours * 3600), "l": limit + 1}).all()
+    truncated = len(rows) > limit
+    items, stale = [], 0
+    now = datetime.now(UTC)
+    for r in rows[:limit]:
+        fresh = _fresh(r.observed_at)
+        if fresh != "fresh" and not include_stale:
+            stale += 1
+            continue
+        items.append({
+            "onu_id": str(r.id), "serial": r.serial, "olt": r.olt, "pon_path": r.pon_path, "status": r.status,
+            "offline_since": r.since.isoformat(), "offline_hours": round((now - r.since).total_seconds() / 3600, 1),
+            "basis": "transition_observed" if r.down_since is not None else "since_last_online",
+            "last_online_at": r.last_online_at.isoformat() if r.last_online_at else None,
+            "observed_at": r.observed_at.isoformat() if r.observed_at else None, "freshness": fresh,
+        })
+    if format == "csv":
+        import csv
+        import io
+
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(OFFLINE_CSV_COLUMNS)
+        for i in items:
+            # a spreadsheet would run a cell that starts with = + - @: the free-text columns are neutralised
+            w.writerow([("'" + i[c]) if isinstance(i[c], str) and i[c] and i[c][0] in "=+-@" else i[c] for c in OFFLINE_CSV_COLUMNS])
+        return Response(content=buf.getvalue(), media_type="text/csv; charset=utf-8",
+                        headers={"Content-Disposition": 'attachment; filename="onus-offline.csv"',
+                                 "X-Excluded-Stale": str(stale), "X-Excluded-Unknown-Start": str(unknown), "X-Truncated": str(truncated).lower()})
+    return {"generated_at": now.isoformat(), "criteria": {"min_hours": min_hours, "olt_id": str(olt_id) if olt_id else None, "pon_path": pon_path,
+                                                          "include_stale": include_stale},
+            "excluded": {"stale": stale, "unknown_start": unknown}, "truncated": truncated, "count": len(items), "items": items}
 
 
 @router.get("/v1/onus/{onu_id}")
