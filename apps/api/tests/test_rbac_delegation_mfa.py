@@ -386,8 +386,15 @@ def test_delegation_grant_asks_for_a_recent_second_factor_when_enforced(client, 
     assert client.delete(f"/v1/platform-delegations/{uuid4()}", headers=_h(tok, tenant)).json()["detail"] == "mfa_recent_required"
 
 
-def test_the_default_is_on_and_turning_it_off_is_explicit(monkeypatch):
+def test_the_second_factor_is_asked_at_login_only_by_default(monkeypatch, client, make, tenant):
     monkeypatch.delenv("MFA_RECENT_ENFORCE", raising=False)
+    assert settings.Settings().mfa_recent_enforce is False          # owner decision 2026-10-30; MFA_RECENT_ENFORCE=true brings the per-action ask back
+    monkeypatch.setenv("MFA_RECENT_ENFORCE", "true")
     assert settings.Settings().mfa_recent_enforce is True
     monkeypatch.setenv("MFA_RECENT_ENFORCE", "false")
-    assert settings.Settings().mfa_recent_enforce is False
+    # an administrator with NO second factor can invite, change roles and approve: nothing asks for a code (only login does, when MFA is on)
+    admin = make("isp_admin", tenant)
+    h = _h(_login(client, admin)["access_token"], tenant)
+    r = client.post("/v1/team/invites", headers=h, json={"email": f"x{uuid4().hex[:6]}@example.com", "role": "support"})
+    assert r.status_code == 201, r.text
+    assert client.get("/v1/auth/me", headers=h).json()["mfa_recent"]["enforced"] is False

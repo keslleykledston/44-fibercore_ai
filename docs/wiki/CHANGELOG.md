@@ -207,3 +207,6 @@
 ## Unreleased — PR 84
 - API: migração 0027. `GET /v1/team`, `GET /v1/team/activity`, convites por link (`POST /v1/team/invites`, `.../renew`, `DELETE`), `POST /v1/team/members/{id}/password-reset` e `/remove`, páginas públicas da API `GET|POST /v1/invites/{token}[/accept]`, `POST /v1/auth/password`. Funções SQL `app_invite_*`, `app_reset_create`, `app_member_remove`, `app_password_change` (conexão dedicada).
 - Web: **Administração → Equipe e acessos** substitui Membros e Papéis (as URLs antigas redirecionam); página pública `/convite/[token]`; trocar a senha em Conta → Segurança da conta. Funções e permissões em linguagem de capacidade.
+
+## Unreleased — fix MFA só no login
+- `MFA_RECENT_ENFORCE` passa a vir desligada (decisão do responsável): o código do segundo fator é pedido ao entrar, não a cada ação. O mecanismo de step-up continua disponível por chave. Equipe e acessos: atalho "Minha segurança" e aviso para ativar o MFA.

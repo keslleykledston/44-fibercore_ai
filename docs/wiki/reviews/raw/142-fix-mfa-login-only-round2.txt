@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18e57-ce35-7700-9a63-d1d204bae5e1).
+[codex] Turn started (01a18e57-ce70-7c71-a4e0-3244a78f45fd).
+[codex] Assistant message captured: Vou conferir o diff completo contra `main` e rastrear de onde vem `mfa_recent.enforced`, espe...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/app/administra...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/app/administra... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/web/src/app/administra...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/web/src/app/administra... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "mfa_recent|MFA_RECENT_ENFORCE|class Me|auth/me" apps/api/app apps/web/s...
+[codex] Command completed: /bin/bash -lc 'rg -n "mfa_recent|MFA_RECENT_ENFORCE|class Me|auth/me" apps/api/app apps/web/s... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/routes.py | sed -n '184,210p'; rg -n \"type MeInfo|fun...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/routes.py | sed -n '184,210p'; rg -n \"type MeInfo|fun... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Ainda não aprovar: se `/v1/auth/me` falhar ou não tro...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Ainda não aprovar: se `/v1/auth/me` falhar ou não trouxer `mfa_recent`, a tela afirma que o código é pedido só ao entrar sem confirmar a configuração.
+
+Findings:
+- [medium] Falha ao carregar a configuração é apresentada como MFA só no login (apps/web/src/app/administracao/equipe/page.tsx:246)
+  `me.data?.mfa_recent?.enforced` é falsy quando a chamada falha ou o campo está ausente, então o aviso mostra “o código é pedido só ao entrar”. Isso pode contradizer a trava ativa e induzir a equipe a esperar que ações sensíveis não exijam step-up. A falha é plausível porque `/v1/auth/me` é buscado separadamente de `/v1/team` e seu resultado não controla a exibição do aviso.
+  Recommendation: Trate estado ausente ou erro como configuração desconhecida: não afirme que a trava está desligada; mostre uma mensagem neutra ou um erro de carregamento até obter `mfa_recent.enforced`.
+
+Next steps:
+- Ajustar o texto para distinguir configuração desligada de configuração desconhecida e cobrir o caso em que `/v1/auth/me` falha.
