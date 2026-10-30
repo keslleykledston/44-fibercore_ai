@@ -34,6 +34,9 @@ const (
 	PerHour         = 20
 	MaxQueuedPerOLT = 50
 	KeepReported    = 24 * time.Hour
+	// StaleClaim: a CLAIMED entry older than this belongs to a session that cannot still be running (a session lives at most ~12 minutes), so its outcome
+	// is unknown and it becomes UNKNOWN without waiting for a restart.
+	StaleClaim = 15 * time.Minute
 	// MaxResultBytes bounds a typed result kept on disk (the parsers produce small closed objects; ADR-0029 item 5 caps what leaves the Edge).
 	MaxResultBytes = 64 << 10
 )
@@ -325,14 +328,18 @@ func (s *Store) Recover() (unknown, expired int, err error) {
 	return
 }
 
-// ExpireDue ends waiting queries whose deadline passed (the window did not open in time).
+// ExpireDue ends waiting queries whose deadline passed (the window did not open in time) and turns long-abandoned claims into UNKNOWN (never run again).
 func (s *Store) ExpireDue() (int, error) {
 	n := 0
 	err := s.update(func(f *file) error {
 		now := s.now()
 		for _, e := range f.Entries {
-			if e.State == Queued && !e.ExpiresAt.After(now) {
+			switch {
+			case e.State == Queued && !e.ExpiresAt.After(now):
 				e.State, e.Reason, e.FinishedAt = Expired, "expired", now
+				n++
+			case e.State == Claimed && now.Sub(e.ClaimedAt) > StaleClaim:
+				e.State, e.Reason, e.FinishedAt = Unknown, "claim_abandoned", now
 				n++
 			}
 		}

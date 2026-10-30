@@ -2,6 +2,7 @@ package collector
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -33,6 +34,20 @@ func (q *Queries) timeout() time.Duration {
 		return q.SessionTimeout
 	}
 	return 3 * time.Minute
+}
+
+// persistResult writes the typed result, retrying a transient disk error a few times, and if it still cannot, ends the entry as FAILED(persist_error) so it
+// is reported instead of staying CLAIMED. If even that fails the entry is turned UNKNOWN by Store.ExpireDue once the claim is stale; it never runs again.
+func (q *Queries) persistResult(jobID string, typed json.RawMessage) error {
+	var err error
+	for i := 0; i < 3; i++ {
+		if err = q.Store.Complete(jobID, typed); err == nil {
+			return nil
+		}
+		time.Sleep(time.Duration(i+1) * 50 * time.Millisecond)
+	}
+	_ = q.Store.Fail(jobID, "persist_error")
+	return err
 }
 
 // windowLeft: the collection's time box is still open and holds at least minQueryWindow.
@@ -126,7 +141,7 @@ func (q *Queries) Drain(ctx context.Context, src OLTSource, raw olt.Session, clo
 			fail(err)
 			return ran
 		}
-		if err := q.Store.Complete(e.JobID, typed); err != nil {
+		if err := q.persistResult(e.JobID, typed); err != nil {
 			_, _ = q.Store.AbortBatch(cloudID, "olt_busy")
 			return ran
 		}

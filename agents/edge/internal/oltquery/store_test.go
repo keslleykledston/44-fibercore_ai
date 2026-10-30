@@ -316,3 +316,25 @@ func TestTwoStoresOnTheSameFileNeverGiveTheSameQueryTwice(t *testing.T) {
 		}
 	}
 }
+
+func TestAnAbandonedClaimBecomesUnknownWithoutARestart(t *testing.T) {
+	s, c := newStore(t)
+	enq(t, s, c, "j1", olt1)
+	if _, err := s.Claim(olt1, "s"); err != nil {
+		t.Fatal(err)
+	}
+	c.t = c.t.Add(10 * time.Minute)
+	if n, _ := s.ExpireDue(); n != 0 {
+		t.Fatalf("a claim that may still be running is left alone: %d", n)
+	}
+	c.t = c.t.Add(10 * time.Minute)
+	if n, _ := s.ExpireDue(); n != 1 {
+		t.Fatalf("expired %d", n)
+	}
+	if e, _, _ := s.Get("j1"); e.State != Unknown || e.Reason != "claim_abandoned" {
+		t.Fatalf("%+v", e)
+	}
+	if _, err := s.Claim(olt1, "s2"); !errors.Is(err, ErrNothingToDo) {
+		t.Fatal("never claimed again")
+	}
+}

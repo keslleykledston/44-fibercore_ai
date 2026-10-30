@@ -325,6 +325,7 @@ func (a *Agent) reportQueries(ctx context.Context) {
 	if a.Queries == nil {
 		return
 	}
+	_, _ = a.Queries.ExpireDue() // waiting queries past their deadline end, and a claim nobody finished becomes UNKNOWN (no restart needed)
 	pending, err := a.Queries.PendingReports()
 	if err != nil {
 		a.Log.Warn("olt query queue unreadable; nothing reported", "err", err)
