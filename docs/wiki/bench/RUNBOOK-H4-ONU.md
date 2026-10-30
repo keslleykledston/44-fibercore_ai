@@ -10,7 +10,7 @@ Escopo: SOMENTE a ONU de bancada (`0/0/14`, ONT-ID `10`, ver `H1-olt-caracteriza
 
 ## Pré-condições
 - Edge com `onu_reset`/`onu_deactivate` em `allowed_operations` e `bench.olt` (nome da OLT = uma das `olts` em CLI, `frame/slot/port/ont_id`, `gpon_serial` igual ao serial do dispositivo de bancada; `min_gap_seconds` ≥ 60 durante a homologação).
-- Registro (por operação): `capability-set <tenant> Huawei MA5608T MA5600V800R015 olt <operação> supported identified --evidence <arquivo> --verified-at <agora>` (o perfil é o da OLT).
+- Registro (por operação): `capability-set <tenant> huawei MA5608T MA5600V800R015C00 olt <operação> supported identified --evidence <arquivo> --verified-at <agora>` (o perfil é o da OLT).
 - Migrações até a 0022 e API com o PR do H4. ONU e CPE com vínculo `confirmed`.
 - Autorização: `bench-authorize <tenant> <operação> <cpe da bancada> --from ... --to ... --by "Seu Nome" [--first-run]`.
 
