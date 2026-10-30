@@ -111,3 +111,8 @@
 ## Atualização 2026-10-30 (backlog)
 - Feito: cooldown pós-falha da bancada configurável (PR 67) e relatório `GET /v1/onus/offline` (PR 68; JSON/CSV; sem tela ainda). Próximos: tela do relatório (Next.js, com Lovable só para o visual), histórico de transições online/offline (`onu_state_events`, migração) para tempo acumulado, 2º modelo de ONU, `olt_query` (ADR-0029).
 
+
+## Atualização 2026-10-30 (Last down time da OLT)
+- Feito: PR 69 (API: `onus.olt_down_at`, migração 0023, ingest `last_down_at`, base `olt_reported` no relatório) e PR 70 (Edge: bloco opcional `last_down` na entrada CLI Huawei R015; leitura SNMP focada em segundo plano, 1×/h, após a coleta CLI, mesmo travamento do dispositivo; ~1 requisição por 5 ONUs offline). LAB: API em 0023; Edge `0.8.0-lab-7c61592` com `last_down` ligado (community em arquivo 0600 do host; config anterior em `config.json.pre-lastdown`). Primeira leitura real: acompanhar `olt collected ... /last-down` no `edge.log`, depois conferir `GET /v1/onus/offline` (base `olt_reported`).
+- Operacional: não autorizar manobra da bancada nos ~3 min após uma coleta CLI em que a leitura SNMP rode (no máximo 1×/h); a OLT aparece ocupada nesse intervalo.
+- Próximos: tela do relatório (Next.js), `onu_state_events`, 2º modelo de ONU, `olt_query` (ADR-0029).
