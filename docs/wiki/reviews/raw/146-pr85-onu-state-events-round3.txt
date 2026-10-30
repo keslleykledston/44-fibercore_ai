@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18e81-608f-7613-bcdd-a1e5c8ea870e).
+[codex] Turn started (01a18e81-6305-7d72-bb1c-74f06a3e1304).
+[codex] Assistant message captured: Vou comparar a branch com `main` e rastrear os pontos de migração, retenção e consulta de dis...
+[codex] Running command: /bin/bash -lc 'git status --short && git diff --stat main...HEAD && git diff --find-renames -...
+[codex] Command completed: /bin/bash -lc 'git status --short && git diff --stat main...HEAD && git diff --find-renames -... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --unified=60 main...HEAD -- apps/web/src/app/rede/onu/'[id]'/page.tsx...
+[codex] Command completed: /bin/bash -lc "git diff --unified=60 main...HEAD -- apps/web/src/app/rede/onu/'[id]'/page.tsx... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,155p' apps/api/alembic/versions/0005_inventory.py; rg -n \"SET.*ROLE...
+[codex] Command failed: /bin/bash -lc "sed -n '1,155p' apps/api/alembic/versions/0005_inventory.py; rg -n \"SET.*ROLE... (exit 2)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/alembic/versions/0028_onu_state_events.py | sed -n '38,85p'; s...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/alembic/versions/0028_onu_state_events.py | sed -n '38,85p'; s... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: a retenção pode virar uma operação se...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: a retenção pode virar uma operação sem efeito com a conexão de owner prevista, por causa do RLS forçado.
+
+Findings:
+- [high] A retenção do owner fica limitada pelo RLS forçado (apps/api/alembic/versions/0028_onu_state_events.py:43-76)
+  A tabela usa `FORCE ROW LEVEL SECURITY` e a política só permite linhas cujo `tenant_id` corresponda a `app.tenant_id` (linhas 43–45). `onu_state_events_prune` é SECURITY INVOKER; portanto, chamar a função com a conexão de owner descrita aqui não ignora a política. Sem contexto de tenant, o `DELETE` não alcança eventos; com contexto, só poda um tenant por chamada. Isso pode deixar o histórico crescer indefinidamente se a rotina operacional esperada for uma chamada única global. Faça a poda percorrer os tenants explicitamente com contexto seguro, ou use uma rotina privilegiada restrita e auditável que contorne RLS.
+  Recommendation: Defina e implemente poda para todos os tenants sob RLS, ou conceda bypass somente a uma função/role de manutenção dedicada e restrita; inclua verificação de que a chamada remove linhas em mais de um tenant.

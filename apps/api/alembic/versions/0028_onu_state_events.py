@@ -70,6 +70,10 @@ def upgrade() -> None:
         CREATE FUNCTION onu_state_events_prune(keep_days int) RETURNS bigint LANGUAGE plpgsql SET search_path = public, pg_temp AS $$
         DECLARE n bigint;
         BEGIN
+          -- under forced RLS a caller without BYPASSRLS would delete nothing (or one tenant): refuse instead of pretending to have pruned
+          IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_user AND (rolsuper OR rolbypassrls)) THEN
+            RAISE EXCEPTION 'onu_state_events_prune must run as the database owner (RLS bypass)';
+          END IF;
           IF keep_days IS NULL OR keep_days < 370 THEN RAISE EXCEPTION 'keep_days must cover the longest query window (365 days)'; END IF;
           WITH keep AS (SELECT DISTINCT ON (tenant_id, onu_id) seq FROM onu_state_events WHERE at < now() - make_interval(days => keep_days)
                          ORDER BY tenant_id, onu_id, seq DESC)
