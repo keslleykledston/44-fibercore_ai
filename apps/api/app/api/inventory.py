@@ -363,7 +363,7 @@ def list_onus(
 
 
 OFFLINE_STATES = ("offline", "los", "dying_gasp")
-OFFLINE_CSV_COLUMNS = ("serial", "olt", "pon_path", "status", "offline_since", "offline_hours", "basis", "last_online_at", "observed_at", "freshness")
+OFFLINE_CSV_COLUMNS = ("serial", "olt", "pon_path", "status", "offline_since", "offline_hours", "basis", "last_online_at", "observed_at", "olt_observed_at", "freshness")
 
 
 @router.get("/v1/onus/offline")
@@ -384,30 +384,33 @@ def list_offline_onus(
     was never seen online has no known start and is only counted in `excluded.unknown_start`. Rows whose OLT snapshot is stale are left out
     (counted in `excluded.stale`) unless `include_stale=true`, so an OLT the Edge stopped collecting cannot pass for a long outage."""
     ref = "COALESCE(u.down_since, u.last_online_at)"
+    # fresh = the ONU AND its OLT's snapshot were both observed recently; decided in SQL so that the limit and the counts see the same candidates
+    fresh = "(u.observed_at >= now() - make_interval(secs => :fs) AND o.observed_at >= now() - make_interval(secs => :fs))"
     base = (f"FROM onus u JOIN olts o ON o.id = u.olt_id AND o.tenant_id = u.tenant_id "  # noqa: S608
             "LEFT JOIN pon_ports pp ON pp.id = u.pon_id AND pp.tenant_id = u.tenant_id "
             "WHERE u.status IN ('offline','los','dying_gasp') AND (CAST(:o AS uuid) IS NULL OR u.olt_id = :o) "
             "AND (CAST(:pp AS text) IS NULL OR pp.pon_path = :pp)")
-    args = {"o": olt_id, "pp": pon_path}
+    args = {"o": olt_id, "pp": pon_path, "fs": FRESH_FOR.total_seconds()}
+    due = f"{ref} IS NOT NULL AND {ref} <= now() - make_interval(secs => :s)"
     unknown = conn.execute(text(f"SELECT count(*) {base} AND {ref} IS NULL"), args).scalar_one()  # noqa: S608
+    stale = 0 if include_stale else conn.execute(text(f"SELECT count(*) {base} AND {due} AND NOT {fresh}"), {**args, "s": int(min_hours * 3600)}).scalar_one()  # noqa: S608
     rows = conn.execute(
         text(f"SELECT u.id, u.serial, o.name AS olt, pp.pon_path, u.status, u.down_since, u.last_online_at, u.observed_at, "  # noqa: S608
-             f"{ref} AS since {base} AND {ref} IS NOT NULL AND {ref} <= now() - make_interval(secs => :s) ORDER BY {ref} ASC LIMIT :l"),
+             f"o.observed_at AS olt_observed_at, {ref} AS since {base} AND {due} {'' if include_stale else 'AND ' + fresh} "
+             f"ORDER BY {ref} ASC LIMIT :l"),
         {**args, "s": int(min_hours * 3600), "l": limit + 1}).all()
     truncated = len(rows) > limit
-    items, stale = [], 0
     now = datetime.now(UTC)
+    items = []
     for r in rows[:limit]:
-        fresh = _fresh(r.observed_at)
-        if fresh != "fresh" and not include_stale:
-            stale += 1
-            continue
+        oldest = min(t for t in (r.observed_at, r.olt_observed_at) if t is not None) if (r.observed_at or r.olt_observed_at) else None
         items.append({
             "onu_id": str(r.id), "serial": r.serial, "olt": r.olt, "pon_path": r.pon_path, "status": r.status,
             "offline_since": r.since.isoformat(), "offline_hours": round((now - r.since).total_seconds() / 3600, 1),
             "basis": "transition_observed" if r.down_since is not None else "since_last_online",
             "last_online_at": r.last_online_at.isoformat() if r.last_online_at else None,
-            "observed_at": r.observed_at.isoformat() if r.observed_at else None, "freshness": fresh,
+            "observed_at": r.observed_at.isoformat() if r.observed_at else None,
+            "olt_observed_at": r.olt_observed_at.isoformat() if r.olt_observed_at else None, "freshness": _fresh(oldest),
         })
     if format == "csv":
         import csv

@@ -458,5 +458,24 @@ def test_offline_report_csv_neutralises_formulas_and_carries_the_exclusions(clie
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
     assert int(r.headers["X-Excluded-Unknown-Start"]) >= 1 and r.headers["X-Excluded-Stale"] == "0" and r.headers["X-Truncated"] == "false"
     lines = r.text.strip().splitlines()
-    assert lines[0] == "serial,olt,pon_path,status,offline_since,offline_hours,basis,last_online_at,observed_at,freshness"
+    assert lines[0] == "serial,olt,pon_path,status,offline_since,offline_hours,basis,last_online_at,observed_at,olt_observed_at,freshness"
     assert len(lines) == 4 and any(l.startswith("'=OFF-FORMULA-1,") for l in lines)   # a leading = would run as a formula in a spreadsheet
+
+
+def test_offline_report_decides_staleness_on_the_onu_and_on_its_olt_before_limiting(client, seed, inv, migrated):
+    h = _offline_setup(client, seed, inv, migrated)
+    # the ONUs were observed recently but their OLT snapshot is old: the OLT stopped being collected, so none of them may pass for a long outage
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE olts SET observed_at = now() - interval '48 hours' WHERE id IN (SELECT olt_id FROM onus WHERE serial = 'OFF-LONG-0001')"))
+    d = client.get("/v1/onus/offline?min_hours=24", headers=h).json()
+    assert "OFF-LONG-0001" not in [i["serial"] for i in d["items"]] and d["excluded"]["stale"] >= 3
+    assert next(i for i in client.get("/v1/onus/offline?min_hours=24&include_stale=true", headers=h).json()["items"]
+                if i["serial"] == "OFF-LONG-0001")["freshness"] == "stale"
+    # stale rows never take a place in the page: with limit=1 the oldest FRESH eligible ONU still comes back
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE olts SET observed_at = now() WHERE id IN (SELECT olt_id FROM onus WHERE serial = 'OFF-LONG-0001')"))
+        c.execute(text("UPDATE onus SET observed_at = now() - interval '72 hours' WHERE serial = 'OFF-LASTON-01'"))
+    one = client.get("/v1/onus/offline?min_hours=24&limit=1", headers=h).json()
+    assert [i["serial"] for i in one["items"]] == ["OFF-LONG-0001"] and one["truncated"] is True and one["excluded"]["stale"] >= 1
