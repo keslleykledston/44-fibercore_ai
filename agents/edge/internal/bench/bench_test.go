@@ -236,7 +236,7 @@ func TestRunOutcomes(t *testing.T) {
 
 func ssidEnvelope(ref string) *jobs.Envelope {
 	x := envelope(ref)
-	x.Operation, x.Params = "set_wifi_ssid", map[string]string{"ssid": "BANCADA-H3"}
+	x.Operation, x.Params = "set_wifi_ssid", jobs.Params{"ssid": "BANCADA-H3"}
 	return x
 }
 

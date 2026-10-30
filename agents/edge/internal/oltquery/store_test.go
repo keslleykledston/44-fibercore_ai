@@ -1,0 +1,275 @@
+package oltquery
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
+	"testing"
+	"time"
+)
+
+const olt1, olt2 = "8f14e45f-ceea-467a-9a36-4a1b5c3d2e10", "9a14e45f-ceea-467a-9a36-4a1b5c3d2e11"
+
+type clock struct{ t time.Time }
+
+func (c *clock) now() time.Time { return c.t }
+
+func newStore(t *testing.T) (*Store, *clock) {
+	t.Helper()
+	c := &clock{t: time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)}
+	return &Store{Path: filepath.Join(t.TempDir(), "oltquery.json"), Now: c.now}, c
+}
+
+func in(ref string) Intent { return Intent{QueryID: "olt.version", OLTRef: ref} }
+
+func enq(t *testing.T, s *Store, c *clock, id, ref string) {
+	t.Helper()
+	if err := s.Enqueue(id, in(ref), c.t.Add(15*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	c.t = c.t.Add(time.Second) // distinct enqueue instants: the order is the order of arrival
+}
+
+func TestLifecycleAndPersistenceAcrossRestarts(t *testing.T) {
+	s, c := newStore(t)
+	enq(t, s, c, "j1", olt1)
+	s2 := &Store{Path: s.Path, Now: c.now} // a restart: a new process reads the same file
+	e, err := s2.Claim(olt1, "sess-1")
+	if err != nil || e.JobID != "j1" || e.State != Claimed {
+		t.Fatalf("claim: %+v %v", e, err)
+	}
+	if err := s2.Complete("j1", json.RawMessage(`{"version":"R015"}`)); err != nil {
+		t.Fatal(err)
+	}
+	p, _ := s.PendingReports()
+	if len(p) != 1 || p[0].State != Executed || string(p[0].Result) != `{"version":"R015"}` {
+		t.Fatalf("pending: %+v", p)
+	}
+	if err := s.MarkReported("j1"); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := s.PendingReports(); len(p) != 0 {
+		t.Fatalf("reported entries are not pending: %+v", p)
+	}
+	if err := s.Complete("j1", json.RawMessage(`{}`)); !errors.Is(err, ErrBadState) {
+		t.Fatalf("a finished query cannot be completed again: %v", err)
+	}
+	if fi, _ := os.Stat(s.Path); fi.Mode().Perm() != 0o600 {
+		t.Fatalf("state file mode %v", fi.Mode().Perm())
+	}
+}
+
+func TestEnqueueIsIdempotentAndBounded(t *testing.T) {
+	s, c := newStore(t)
+	enq(t, s, c, "j1", olt1)
+	enq(t, s, c, "j1", olt1)
+	e1, _ := s.Claim(olt1, "s")
+	if _, err := s.Claim(olt1, "s"); !errors.Is(err, ErrNothingToDo) {
+		t.Fatalf("one entry, one claim: %v %v", e1, err)
+	}
+	for i := 0; i < MaxQueuedPerOLT; i++ {
+		enq(t, s, c, fmt.Sprintf("q%d", i), olt2)
+	}
+	if err := s.Enqueue("overflow", in(olt2), c.t.Add(time.Minute)); !errors.Is(err, ErrQueueFull) {
+		t.Fatalf("queue must be bounded per OLT: %v", err)
+	}
+	if err := s.Enqueue("other-olt", in(olt1), c.t.Add(time.Minute)); err != nil {
+		t.Fatalf("another OLT is not affected: %v", err)
+	}
+}
+
+func TestAClaimedQueryNeverRunsAgainAfterARestart(t *testing.T) {
+	s, c := newStore(t)
+	enq(t, s, c, "j1", olt1)
+	enq(t, s, c, "j2", olt1)
+	if _, err := s.Claim(olt1, "s"); err != nil { // j1 claimed, then the process dies before any result
+		t.Fatal(err)
+	}
+	s2 := &Store{Path: s.Path, Now: c.now}
+	u, x, err := s2.Recover()
+	if err != nil || u != 1 || x != 0 {
+		t.Fatalf("recover: %d %d %v", u, x, err)
+	}
+	if e, _, _ := s2.Get("j1"); e.State != Unknown || e.Reason != "restart_after_claim" {
+		t.Fatalf("j1: %+v", e)
+	}
+	got, err := s2.Claim(olt1, "s2")
+	if err != nil || got.JobID != "j2" {
+		t.Fatalf("only the waiting one may run: %+v %v", got, err)
+	}
+	if _, err := s2.Claim(olt1, "s3"); !errors.Is(err, ErrNothingToDo) {
+		t.Fatalf("UNKNOWN must never be claimed: %v", err)
+	}
+	if p, _ := s2.PendingReports(); len(p) != 1 || p[0].JobID != "j1" {
+		t.Fatalf("the unknown outcome is reported: %+v", p)
+	}
+}
+
+func TestBudgetPerSessionAndPerHour(t *testing.T) {
+	s, c := newStore(t)
+	for i := 0; i < 8; i++ {
+		enq(t, s, c, fmt.Sprintf("a%d", i), olt1)
+	}
+	n := 0
+	for {
+		e, err := s.Claim(olt1, "sess-A")
+		if err != nil {
+			break
+		}
+		_ = s.Complete(e.JobID, json.RawMessage(`{}`))
+		n++
+	}
+	if n != PerSession {
+		t.Fatalf("a session may run %d queries, ran %d", PerSession, n)
+	}
+	// next sessions: the hourly budget (20) caps the total on this OLT
+	total := n
+	for sess := 0; sess < 10; sess++ {
+		for i := 0; i < 8; i++ {
+			enq(t, s, c, fmt.Sprintf("b%d-%d", sess, i), olt1)
+		}
+		for {
+			e, err := s.Claim(olt1, fmt.Sprintf("sess-%d", sess))
+			if err != nil {
+				break
+			}
+			_ = s.Complete(e.JobID, json.RawMessage(`{}`))
+			total++
+		}
+		_, _ = s.AbortBatch(olt1, "olt_busy") // what the session does when the budget stops it: the rest ends, nothing is retried inside the window
+	}
+	if total != PerHour {
+		t.Fatalf("an OLT may run %d queries in an hour, ran %d", PerHour, total)
+	}
+	c.t = c.t.Add(61 * time.Minute) // the window rolls
+	enq(t, s, c, "late", olt1)
+	if e, err := s.Claim(olt1, "sess-late"); err != nil || e.JobID == "" {
+		t.Fatalf("budget must come back after the hour: %v", err)
+	}
+	other := &Store{Path: s.Path, Now: c.now}
+	enq(t, other, c, "x", olt2)
+	if _, err := other.Claim(olt2, "s"); err != nil {
+		t.Fatalf("the budget is per OLT: %v", err)
+	}
+}
+
+func TestExpiryAndBatchAbort(t *testing.T) {
+	s, c := newStore(t)
+	enq(t, s, c, "old", olt1)
+	c.t = c.t.Add(16 * time.Minute)
+	if _, err := s.Claim(olt1, "s"); !errors.Is(err, ErrNothingToDo) {
+		t.Fatalf("a query past its deadline is not run: %v", err)
+	}
+	if n, _ := s.ExpireDue(); n != 1 {
+		t.Fatalf("expired %d", n)
+	}
+	enq(t, s, c, "a", olt1)
+	enq(t, s, c, "b", olt1)
+	enq(t, s, c, "c", olt2)
+	n, err := s.AbortBatch(olt1, "olt_busy")
+	if err != nil || n != 2 {
+		t.Fatalf("abort: %d %v", n, err)
+	}
+	if e, _, _ := s.Get("a"); e.State != Failed || e.Reason != "olt_busy" {
+		t.Fatalf("a: %+v", e)
+	}
+	if e, _, _ := s.Get("c"); e.State != Queued {
+		t.Fatalf("another OLT untouched: %+v", e)
+	}
+}
+
+func TestACorruptFileSpendsTheBudget(t *testing.T) {
+	s, c := newStore(t)
+	enq(t, s, c, "j1", olt1)
+	for _, junk := range []string{"not json", "null", `{"entries":null}`, ""} {
+		if err := os.WriteFile(s.Path, []byte(junk), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.Claim(olt1, "s"); !errors.Is(err, ErrCorrupt) {
+			t.Errorf("%q: claim must refuse: %v", junk, err)
+		}
+		if err := s.Enqueue("j2", in(olt1), c.t.Add(time.Minute)); !errors.Is(err, ErrCorrupt) {
+			t.Errorf("%q: enqueue must refuse: %v", junk, err)
+		}
+	}
+}
+
+func TestOnlyClaimedQueriesTakeResultsAndTheyAreBounded(t *testing.T) {
+	s, c := newStore(t)
+	enq(t, s, c, "j1", olt1)
+	if err := s.Complete("j1", json.RawMessage(`{}`)); !errors.Is(err, ErrBadState) {
+		t.Fatalf("a query nobody claimed has no result: %v", err)
+	}
+	if err := s.Fail("nope", "x"); !errors.Is(err, ErrBadState) {
+		t.Fatalf("unknown job: %v", err)
+	}
+	if _, err := s.Claim(olt1, "s"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Complete("j1", make([]byte, MaxResultBytes+1)); !errors.Is(err, ErrResultSize) {
+		t.Fatalf("oversized result: %v", err)
+	}
+	if err := s.Fail("j1", "device_rejected"); err != nil {
+		t.Fatal(err)
+	}
+	if e, _, _ := s.Get("j1"); e.State != Failed || len(e.Result) != 0 {
+		t.Fatalf("%+v", e)
+	}
+}
+
+func TestConcurrentClaimsGiveEachQueryToExactlyOne(t *testing.T) {
+	s, c := newStore(t)
+	for i := 0; i < PerSession; i++ {
+		enq(t, s, c, fmt.Sprintf("j%d", i), olt1)
+	}
+	var mu sync.Mutex
+	got := map[string]int{}
+	var wg sync.WaitGroup
+	for g := 0; g < 8; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				e, err := s.Claim(olt1, "s")
+				if err != nil {
+					return
+				}
+				mu.Lock()
+				got[e.JobID]++
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	if len(got) != PerSession {
+		t.Fatalf("claimed %v", got)
+	}
+	for id, n := range got {
+		if n != 1 {
+			t.Fatalf("%s claimed %d times", id, n)
+		}
+	}
+}
+
+func TestReportedEntriesAreDroppedAfterADay(t *testing.T) {
+	s, c := newStore(t)
+	enq(t, s, c, "j1", olt1)
+	enq(t, s, c, "j2", olt1)
+	for _, id := range []string{"j1", "j2"} {
+		e, _ := s.Claim(olt1, "s")
+		_ = s.Complete(e.JobID, json.RawMessage(`{}`))
+		_ = id
+	}
+	_ = s.MarkReported("j1")
+	c.t = c.t.Add(25 * time.Hour)
+	_ = s.MarkReported("j2")
+	if _, ok, _ := s.Get("j1"); ok {
+		t.Fatal("j1 reported over a day ago must be gone")
+	}
+	if e, ok, _ := s.Get("j2"); !ok || e.State != Reported {
+		t.Fatalf("j2 just reported stays: %+v %v", e, ok)
+	}
+}

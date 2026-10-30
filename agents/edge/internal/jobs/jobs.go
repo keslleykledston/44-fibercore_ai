@@ -8,6 +8,8 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +23,13 @@ var ReadOnlyOps = map[string]bool{"collect": true, "refresh": true}
 // BenchWriteOps (ADR-0030) is a SEPARATE compile-time set: the only writes this Edge can ever run, and only on the configured bench devices,
 // with a single-use prior authorization, a durable claim, a valid lease and the device confirmed against the ACS. ReadOnlyOps never grows.
 var BenchWriteOps = map[string]bool{"reboot_cpe": true, "set_wifi_ssid": true, "onu_reset": true, "onu_deactivate": true}
+
+// QueryOps (ADR-0029) is a THIRD compile-time set: read-only queries of the OLT's CLI. It runs only when the local switch is on and a checker for the
+// intent is wired in; whatever the Cloud signs, an unknown or unwired query operation is refused here. ReadOnlyOps and BenchWriteOps never grow.
+var QueryOps = map[string]bool{"olt_query": true}
+
+// QueryEnvelopeTTL bounds how long an olt_query envelope may live (the Cloud's job window is 15 minutes).
+const QueryEnvelopeTTL = 20 * time.Minute
 
 // BenchSSIDRe is the ONLY SSID the bench may ever set (ADR-0030 H3). Checked here, again at the Cloud and again right before the task is sent.
 var BenchSSIDRe = regexp.MustCompile(`^BANCADA-[A-Z0-9]{1,16}$`)
@@ -64,10 +73,16 @@ type Envelope struct {
 	AuthorizationID     string `json:"authorization_id,omitempty"`
 	AuthorizationEndsAt string `json:"authorization_ends_at,omitempty"`
 	OwnerEpoch          int    `json:"owner_epoch,omitempty"`
-	// Bench writes with a parameter (set_wifi_ssid): the catalog-validated value, covered by the signature; absent everywhere else.
-	Params    map[string]string `json:"params,omitempty"`
-	Signature string            `json:"signature"`
+	// Parameters covered by the signature: bench set_wifi_ssid (one string) and olt_query (the closed intent, integers as json.Number); absent everywhere else.
+	Params    Params `json:"params,omitempty"`
+	Signature string `json:"signature"`
 }
+
+// Params are the signed parameters of an envelope. Values keep their JSON type (strings, json.Number) so each operation's checker can be strict.
+type Params map[string]any
+
+// String returns the value of k when it is a string, else "".
+func (p Params) String(k string) string { s, _ := p[k].(string); return s }
 
 // NonceStore remembers nonces until they expire (persisted: a restart must not reopen the replay window).
 type NonceStore interface {
@@ -100,6 +115,10 @@ type Verifier struct {
 	Allowed  map[string]bool // local allowlist (subset of ReadOnlyOps, plus BenchWriteOps when BenchEnabled)
 	// BenchEnabled is the local `bench_writes_enabled` switch (ADR-0030 item 3): without it a bench operation is refused here, whatever the Cloud signs.
 	BenchEnabled bool
+	// QueryEnabled is the local `olt_query_enabled` switch (ADR-0029) and QueryCheck validates the closed intent against the Edge's own catalog and
+	// OLT identity. Without both, an olt_query envelope is refused here, whatever the Cloud signs.
+	QueryEnabled bool
+	QueryCheck   func(params map[string]any, targetID string) error
 	Nonces       NonceStore
 	Now          func() time.Time
 }
@@ -121,6 +140,7 @@ func (v *Verifier) Verify(ctx context.Context, raw []byte) (*Envelope, error) {
 	var env Envelope
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
+	dec.UseNumber()
 	if err := dec.Decode(&env); err != nil || env.SchemaVersion != "1.0" {
 		return nil, fmt.Errorf("%w: unknown or missing fields", ErrFormat)
 	}
@@ -138,16 +158,28 @@ func (v *Verifier) Verify(ctx context.Context, raw []byte) (*Envelope, error) {
 		return nil, ErrExpired
 	}
 	bench := BenchWriteOps[env.Operation]
-	if !(ReadOnlyOps[env.Operation] || (bench && v.BenchEnabled)) || !v.Allowed[env.Operation] {
+	query := QueryOps[env.Operation]
+	if !(ReadOnlyOps[env.Operation] || (bench && v.BenchEnabled) || (query && v.QueryEnabled && v.QueryCheck != nil)) || !v.Allowed[env.Operation] {
 		return nil, fmt.Errorf("%w: %s", ErrOperation, env.Operation)
 	}
 	if env.Operation == "refresh" && env.TargetRef != "" && !targetRefRe.MatchString(env.TargetRef) {
 		return nil, fmt.Errorf("%w: invalid target_ref", ErrFormat)
 	}
-	if env.Operation != "refresh" && !bench && env.TargetRef != "" {
+	if env.Operation != "refresh" && !bench && env.TargetRef != "" { // (olt_query has no target_ref either)
 		return nil, fmt.Errorf("%w: target_ref only exists on refresh and bench writes", ErrFormat)
 	}
-	if bench {
+	if query {
+		if env.AuthorizationID != "" || env.AuthorizationEndsAt != "" || env.OwnerEpoch != 0 || exp.Sub(iss) > QueryEnvelopeTTL+time.Second {
+			return nil, fmt.Errorf("%w: a query carries no authorization and lives at most %s", ErrFormat, QueryEnvelopeTTL)
+		}
+		// the signed hash must be the hash of the intent actually carried: an envelope whose params were swapped under a reused hash is refused
+		if h, err := IntentHash(env.Operation, "olt", env.TargetID, env.Params); err != nil || h != env.IntentSHA256 {
+			return nil, fmt.Errorf("%w: intent hash does not cover the parameters", ErrFormat)
+		}
+		if err := v.QueryCheck(env.Params, env.TargetID); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrFormat, err)
+		}
+	} else if bench {
 		if err := checkBench(&env, iss, exp, now); err != nil {
 			return nil, err
 		}
@@ -185,7 +217,7 @@ func checkBench(env *Envelope, iss, exp, now time.Time) error {
 	}
 	switch env.Operation {
 	case "set_wifi_ssid":
-		if len(env.Params) != 1 || !BenchSSIDRe.MatchString(env.Params["ssid"]) {
+		if len(env.Params) != 1 || !BenchSSIDRe.MatchString(env.Params.String("ssid")) {
 			return fmt.Errorf("%w: set_wifi_ssid takes exactly one ssid parameter of the bench shape", ErrFormat)
 		}
 	default:
@@ -194,4 +226,16 @@ func checkBench(env *Envelope, iss, exp, now time.Time) error {
 		}
 	}
 	return nil
+}
+
+// IntentHash reproduces the Cloud's intent hash: SHA-256 of the compact JSON of {operation, target_type, target_id, params} with sorted keys.
+func IntentHash(operation, targetType, targetID string, params Params) (string, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(map[string]any{"operation": operation, "target_type": targetType, "target_id": targetID, "params": map[string]any(params)}); err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(bytes.TrimRight(buf.Bytes(), "\n"))
+	return hex.EncodeToString(sum[:]), nil
 }
