@@ -34,8 +34,13 @@ ui_route: "/dispositivos"
 2. Clique em **Pedir…**, leia o aviso e, no Wi-Fi, informe o nome (na bancada, começa com `BANCADA-`). Clique em **Criar pedido**.
 3. O pedido segue o fluxo de sempre e é aprovado em **Operações**, pelas regras de lá (na bancada, a decisão é a autorização prévia do responsável, e quem pediu pode aprovar). Hoje nenhuma escrita está homologada, então só o equipamento de bancada, com autorização prévia do responsável, chega a seguir; nos demais casos o pedido é cancelado na hora e a tela diz o motivo (“Nada foi enviado”).
 
+## Autorizar uma manobra de bancada
+
+No CPE que é **alvo de bancada** aparece o card **Autorização de bancada**. Quem é operador (NOC nível 2), Engenheiro ou Administrador pode autorizar **uma** manobra: escolha a operação, o tempo (15 a 120 minutos) e, no Wi-Fi, o nome `BANCADA-…`. A autorização vale uma vez, não executa nada por si e some quando vence. **Quem autorizou não pode pedir nem aprovar essa manobra**: peça a outra pessoa. As manobras do lado da OLT (reiniciar ou ciclar a ONU) só o Engenheiro e o Administrador autorizam. Para desfazer antes de usar, clique em **Encerrar**.
+
 ## Se algo não funcionar
 
 - **Lista vazia:** aguarde a primeira coleta do GenieACS pelo Edge ou limpe os filtros.
 - **Sem permissão:** seu papel não permite ver o inventário.
+- **“authorizer_not_independent” / pedido não segue:** a autorização foi dada por quem pediu ou aprova a manobra; outra pessoa precisa autorizar.
 - **“O pedido não seguiu”:** o motor de operações recusou (por exemplo, escrita não homologada ou falta de autorização do responsável). Nada foi enviado ao equipamento.

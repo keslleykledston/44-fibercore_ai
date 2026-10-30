@@ -20,6 +20,7 @@
 | `jobs:execute` | R3 | não | não | Executar operações aprovadas (somente contas de serviço do Edge) |
 | `devices:act:reboot_cpe` | R2 | não | sim | Pedir, pela tela do CPE, o reinício do equipamento do assinante (nasce bloqueado até a homologação) |
 | `devices:act:set_wifi_ssid` | R2 | não | sim | Pedir, pela tela do CPE, a troca do nome do Wi-Fi (nasce bloqueado até a homologação) |
+| `bench:authorize` | R3 | sim | não | Autorizar UMA manobra de bancada (uso único, janela curta, só o alvo de bancada); o autorizador não pode ser quem pede nem quem aprova |
 | `diagnostics:run` | R0 | não | sim | Rodar diagnósticos (somente leitura) |
 | `members:read` | R1 | não | não | Ver os membros do provedor e o estado do MFA de cada um |
 | `members:manage` | R3 | sim | não | Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite) |
@@ -48,6 +49,7 @@
 | `jobs:execute` |  |  |  |  |  |  |  | ✔ |  |
 | `devices:act:reboot_cpe` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `devices:act:set_wifi_ssid` | ✔ | ✔ |  |  |  |  |  |  |  |
+| `bench:authorize` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `diagnostics:run` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `members:read` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `members:manage` | ✔ |  |  |  |  |  |  |  | ✔ |
@@ -81,6 +83,9 @@
 | POST | `/v1/auth/service-token` | (pública ou usa credencial no corpo) |
 | POST | `/v1/auth/token` | (pública ou usa credencial no corpo) |
 | GET | `/v1/auth/workspaces` | (autentica o token da própria conta) |
+| GET | `/v1/bench/authorizations` | `jobs:read` |
+| POST | `/v1/bench/authorizations` | `bench:authorize` |
+| DELETE | `/v1/bench/authorizations/{authorization_id}` | `bench:authorize` |
 | GET | `/v1/cpes` | `inventory:read` |
 | GET | `/v1/cpes/{cpe_id}` | `inventory:read` |
 | GET | `/v1/cpes/{cpe_id}/actions` | `inventory:read` |

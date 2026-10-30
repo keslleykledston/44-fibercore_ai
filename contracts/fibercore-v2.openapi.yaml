@@ -672,6 +672,55 @@ paths:
         '404': {description: CPE inexistente ou de outro provedor}
         '409': {description: capability_not_observed ou not_permitted}
         '422': {description: Parâmetros fora do catálogo}
+  /bench/authorizations:
+    get:
+      tags: [CPE]
+      operationId: listBenchAuthorizations
+      summary: Autorizações de bancada (jobs:read), da mais recente à mais antiga; can_authorize e operations dizem o que o chamador pode autorizar. O e-mail de quem autorizou só aparece com members:read
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: cpe_id, in: query, required: false, schema: {type: string, format: uuid}}, {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}]
+      responses:
+        '200':
+          description: "{can_authorize, operations[], items[{id, operation, cpe_id, state open|consumed|revoked, live, window_start, window_end, via owner_cli|api, mine, by}]}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [CPE]
+      operationId: authorizeBenchManeuver
+      summary: Autoriza UMA manobra de bancada (bench:authorize, a partir do papel de operador; MFA recente quando exigido). Uso único, 5 a 120 min, vinculada a operação + alvo de bancada + hash dos parâmetros. NÃO executa nada, pois o job ainda é pedido e aprovado, e o motor recusa o uso (authorizer_not_independent) por quem pediu ou aprovou o job. As manobras do lado da OLT (onu_reset, onu_deactivate) são só de engineer e isp_admin. Gravada pela função SQL app_bench_authorize (conexão dedicada). Recusas com código estável (403 role_cannot_authorize; 409 target_not_bench | target_write_locked | bench_writes_disabled | authorization_already_open | edge_support_missing; 422 janela/parâmetros; 503 rbac_unavailable)
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cpe_id, operation]
+              properties:
+                cpe_id: {type: string, format: uuid}
+                operation: {type: string, enum: [reboot_cpe, set_wifi_ssid, onu_reset, onu_deactivate]}
+                params: {type: object, description: "set_wifi_ssid: {ssid: BANCADA-...}; as demais, vazio"}
+                minutes: {type: integer, minimum: 5, maximum: 120, default: 30}
+      responses:
+        '201':
+          description: "{id, window_end, operation, minutes}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Pré-condição do alvo ou autorização já aberta}
+        '422': {description: Parâmetros ou janela fora do catálogo}
+        '503': {description: rbac_unavailable (sem a conexão dedicada)}
+  /bench/authorizations/{authorizationId}:
+    delete:
+      tags: [CPE]
+      operationId: revokeBenchAuthorization
+      summary: Encerra uma autorização dada pela API e ainda aberta (bench:authorize; quem tem o papel para a operação). A gravada pelo responsável no servidor não se remove por aqui (403 owner_authorization)
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: authorizationId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200':
+          description: "{status: revoked}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Autorização inexistente neste provedor}
+        '409': {description: authorization_not_open}
   /cpes/{cpeId}/capabilities:
     get:
       tags: [CPE]

@@ -84,3 +84,9 @@ export type CpeAction = {
   certification: string; status: string; homologated: boolean; bench_target: boolean;
 };
 export type CpeActions = { cpe_id: string; items: CpeAction[] };
+
+export type BenchAuthorization = {
+  id: string; operation: string; cpe_id: string; state: "open" | "consumed" | "revoked"; live: boolean;
+  window_start: string; window_end: string; via: "owner_cli" | "api"; mine: boolean; by: string | null;
+};
+export type BenchAuthorizations = { can_authorize: boolean; operations: string[]; items: BenchAuthorization[] };

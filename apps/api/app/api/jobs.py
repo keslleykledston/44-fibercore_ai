@@ -77,12 +77,12 @@ def _blocked_reason(op_name: str) -> str | None:
     return None
 
 
-def _write_gate(conn: Connection, tenant_id: UUID, row, mode: str) -> str | None:
+def _write_gate(conn: Connection, tenant_id: UUID, row, mode: str, by: UUID | None = None) -> str | None:
     """The global gate first (HOMOLOGATED_WRITES, empty); a write it blocks can still pass ONLY through the bench gate (ADR-0030)."""
     reason = _blocked_reason(row.operation)
     if reason is None or row.operation not in bench.BENCH_OPS:
         return reason
-    refusal = bench.gate(conn, tenant_id, row, mode=mode)
+    refusal = bench.gate(conn, tenant_id, row, mode=mode, by=by)
     # flag off, or no Edge support yet: the bench path is not visible, the global reason stays
     return "operation_not_homologated" if refusal in ("bench_writes_disabled", "edge_support_missing") else refusal
 
@@ -182,7 +182,7 @@ def submit(job_id: UUID, p: Principal = Depends(require("jobs:request")), conn: 
         raise HTTPException(403, "only the requester can submit")
     if row.status != "PREVIEWED":
         raise HTTPException(409, f"job is {row.status}")
-    reason = _write_gate(conn, p.tenant_id, row, "submit")
+    reason = _write_gate(conn, p.tenant_id, row, "submit", p.id)
     if reason:
         raise HTTPException(409, reason)  # write gate: never leaves PREVIEWED
     to = "PENDING_APPROVAL" if row.required_approvals > 0 else "APPROVED"
@@ -202,7 +202,7 @@ def approve(job_id: UUID, p: Principal = Depends(require("jobs:approve")), conn:
     # A bench write (ADR-0030) is decided by the owner's prior single-use authorization; its one approval may come from the requester.
     if row.requested_by == p.id and row.operation not in bench.BENCH_OPS:
         raise HTTPException(403, "requester cannot approve their own job")
-    reason = _write_gate(conn, p.tenant_id, row, "approve")
+    reason = _write_gate(conn, p.tenant_id, row, "approve", p.id)
     if reason:
         raise HTTPException(409, reason)
     dup = conn.execute(
@@ -215,7 +215,7 @@ def approve(job_id: UUID, p: Principal = Depends(require("jobs:approve")), conn:
     audit(conn, p, "job.approve", "job", str(job_id), {"approvals": n, "required": row.required_approvals})
     if n >= row.required_approvals:
         if _blocked_reason(row.operation):  # a bench write: the prior authorization is consumed atomically with the approval
-            reason = bench.gate(conn, p.tenant_id, row, mode="consume")
+            reason = bench.gate(conn, p.tenant_id, row, mode="consume", by=p.id)
             if reason:
                 raise HTTPException(409, reason)  # nothing is committed: no approval row, no consumed authorization
         cas(conn, job_id, "APPROVED")

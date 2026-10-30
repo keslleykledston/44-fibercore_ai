@@ -572,7 +572,7 @@ def test_the_gate_scopes_every_lookup_to_the_tenant_it_is_given(client, seed, in
     jid = _preview(client, h, cpe).json()["id"]
     with migrated.begin() as c:
         c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
-        job = c.execute(text("SELECT id, operation, target_id, target_type, edge_id, params FROM jobs WHERE id = :j"), {"j": jid}).one()
+        job = c.execute(text("SELECT id, operation, target_id, target_type, edge_id, params, requested_by FROM jobs WHERE id = :j"), {"j": jid}).one()
         assert bench.gate(c, seed["A"], job, mode="submit") is None
         # the same rows, visible through the session (RLS is set to A), are NOT usable under another tenant id: every lookup names the tenant
         for mode in ("submit", "consume", "dispatch"):
