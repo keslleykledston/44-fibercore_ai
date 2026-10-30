@@ -36,7 +36,12 @@ func (b BenchONU) valid() bool {
 
 // BenchConfirm holds, per command, the exact question the OLT asks before running it (captured on this OLT, see the H4 evidence). A nil entry means
 // no confirmation is expected: any question then fails closed.
-var BenchConfirm = map[string]*regexp.Regexp{}
+//
+// Observed on the bench OLT on 2026-10-30 (docs/wiki/bench/H1-olt-caracterizacao-2026-10-30.md): `ont reset` asks exactly the question below;
+// `ont deactivate` and `ont activate` ask NOTHING (a question there still fails closed).
+var BenchConfirm = map[string]*regexp.Regexp{
+	"reset": regexp.MustCompile(`^\s*Are you sure to reset the ONT\(s\)\? \(y/n\)\[n\]:\s*$`),
+}
 
 var gponSerialRe = regexp.MustCompile(`^[0-9A-F]{16}$`)
 

@@ -356,3 +356,19 @@ func TestTheConfirmationIsAnsweredOnlyWhenItWasObservedAndConfigured(t *testing.
 		t.Fatalf("out=%+v err=%v", out, err)
 	}
 }
+
+func TestTheObservedResetQuestionIsTheOnlyOneConfigured(t *testing.T) {
+	re := BenchConfirm["reset"]
+	if re == nil || len(BenchConfirm) != 1 {
+		t.Fatalf("only the reset confirmation is configured: %v", BenchConfirm)
+	}
+	if !re.MatchString("  Are you sure to reset the ONT(s)? (y/n)[n]:") {
+		t.Fatal("the observed question must match")
+	}
+	for _, other := range []string{"Are you sure to reset all ONTs? (y/n)[n]:", "Are you sure to delete the ONT(s)? (y/n)[n]:",
+		"Are you sure to reset the ONT(s)? (y/n)[n]: and then Password:", "Are you sure to deactivate the ONT(s)? (y/n)[n]:", "Password:"} {
+		if re.MatchString(other) {
+			t.Errorf("must not match %q", other)
+		}
+	}
+}
