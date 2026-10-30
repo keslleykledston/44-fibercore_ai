@@ -1,6 +1,6 @@
 # ADR-0032: Captura supervisionada das demais consultas da OLT e banco de dados local (cache + rotinas) para não repetir consultas caras
 
-Status: Proposed (revisado após a rodada 1 do Codex) | Data: 2026-10-30 | Owner: equipe | Origem: pedido do responsável ("planeje e organize a captura das demais consultas, coletando os dados num banco local para não precisar de consultas caras e pesadas") + ADR-0026/0029.
+Status: Accepted (Codex approve em 4 rodadas; aceite do responsável pela mensagem de 2026-10-30; implementação por PRs, ordem abaixo) | Data: 2026-10-30 | Owner: equipe | Origem: pedido do responsável ("planeje e organize a captura das demais consultas, coletando os dados num banco local para não precisar de consultas caras e pesadas") + ADR-0026/0029.
 
 ## Autorização (ADR-0029 item 6: cada ensaio na OLT real exige autorização operacional)
 Registrada em 2026-10-30, mensagem do responsável: "3. autorizado pra prosseguir" (promoção das demais consultas por captura supervisionada). Escopo: os lotes 1 a 5 abaixo, UM lote por janela, em ordem; o responsável pode revogar a qualquer momento (retirar `olt_capture` do Edge e reiniciá-lo). Cada lote é anunciado antes e relatado depois; um lote só começa depois de a captura anterior ter sido sanitizada e seu arquivo bruto removido (item 3). Nada além do catálogo fechado e somente leitura é possível por este caminho.
