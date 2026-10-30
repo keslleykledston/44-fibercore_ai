@@ -13,7 +13,7 @@ ui_route: "/administracao/equipe"
 
 **Objetivo:** colocar uma pessoa na equipe, escolher o que ela pode fazer, e depois mudar a função, redefinir a senha ou remover.
 
-**Antes de começar:** só o Administrador do provedor e o Gestor de acesso gerenciam pessoas. Se o seu provedor exige confirmação em duas etapas, o painel pede o código do autenticador no meio da ação.
+**Antes de começar:** só o Administrador do provedor e o Gestor de acesso gerenciam pessoas. O código da verificação em duas etapas é pedido ao **entrar** na plataforma, não a cada ação. (Se o seu provedor ligou a confirmação por ação, o painel pede o código no meio da ação.)
 
 ## Convidar uma pessoa
 

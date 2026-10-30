@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18e57-6754-79c2-930e-9810f54a0d4d).
+[codex] Turn started (01a18e57-69ce-7601-ab6b-73bc9a299a0b).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os fluxos de login/MFA, papéis exigidos e a tel...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/settings....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/settings.... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- apps/web/src/app/administra...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- apps/web/src/app/administra... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/routes.py | sed -n '125,215p'; nl -ba apps/api/app/api...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/routes.py | sed -n '125,215p'; nl -ba apps/api/app/api... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o aviso da Equipe promete MFA só n...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o aviso da Equipe promete MFA só no login mesmo quando a configuração reativa a exigência por ação.
+
+Findings:
+- [medium] Aviso da Equipe contradiz a configuração de MFA recente (apps/web/src/app/administracao/equipe/page.tsx:246)
+  Quando `MFA_RECENT_ENFORCE=true`, ações marcadas como sensíveis voltam a exigir prova recente, mas o banner continua afirmando que o código é pedido só ao entrar. Isso pode levar administradores a esperar que convites e outras ações funcionem sem step-up. Condicionalmente ao valor configurável documentado, a mensagem está incorreta.
+  Recommendation: Exiba a mensagem de MFA só no login quando a trava estiver desligada; quando estiver ligada, informe que algumas ações também podem pedir o código.
