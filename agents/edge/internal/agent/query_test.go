@@ -228,11 +228,31 @@ func TestAResultIsReportedOnlyWhenTheCloudAnswersAndIsResentIfItDoesNot(t *testi
 	_ = store.Enqueue(id2, oltquery.Intent{QueryID: "olt.version", OLTRef: qOLTID}, time.Now().Add(time.Hour))
 	_, _ = store.Claim(qOLTID, "s2")
 	_ = store.Complete(id2, json.RawMessage(`{"product":"MA5608T"}`))
-	a.qmu.Lock()
-	a.qInflight = map[string]time.Time{id2: time.Now().Add(-queryResendAfter - time.Minute)}
-	a.qmu.Unlock()
+	store.Now = func() time.Time { return time.Now().Add(-queryResendAfter - time.Minute) }
+	if err := store.MarkHanded(id2); err != nil { // handed over a long time ago (recorded on disk) and never answered
+		t.Fatal(err)
+	}
+	store.Now = nil
 	a.PollJob(context.Background())
 	if e, _, _ := store.Get(id2); e.State != oltquery.Reported {
 		t.Fatalf("resent and acknowledged: %+v", e)
+	}
+}
+
+func TestAHandOverIsRememberedAcrossARestart(t *testing.T) {
+	pub, _, _ := ed25519.GenerateKey(rand.Reader)
+	r := newQRig(t, nil, pub, true)
+	id := "11111111-1111-4111-8111-111111111111"
+	_ = r.store.Enqueue(id, oltquery.Intent{QueryID: "olt.version", OLTRef: qOLTID}, time.Now().Add(time.Hour))
+	_, _ = r.store.Claim(qOLTID, "s")
+	_ = r.store.Complete(id, json.RawMessage(`{"product":"MA5608T"}`))
+	if err := r.store.MarkHanded(id); err != nil {
+		t.Fatal(err)
+	}
+	restarted := &oltquery.Store{Path: r.store.Path} // a new process reads the same file
+	r.a.Queries = restarted
+	r.a.reportQueries(context.Background())
+	if n, _, _ := r.a.Q.Counts(context.Background()); n != 0 {
+		t.Fatalf("a result handed over before the restart is not queued again: %d waiting", n)
 	}
 }

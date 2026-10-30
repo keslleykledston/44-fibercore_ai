@@ -70,6 +70,7 @@ type Entry struct {
 	Result     json.RawMessage `json:"result,omitempty"` // typed object produced by the query's parser; never raw device output
 	Reason     string          `json:"reason,omitempty"` // category of a failure (olt_busy, device_rejected, expired, restart...), never device text
 	FinishedAt time.Time       `json:"finished_at,omitempty"`
+	HandedAt   time.Time       `json:"handed_at,omitempty"` // when the outcome was last handed to the delivery queue and is waiting for the Cloud's answer (durable: survives a restart)
 }
 
 type file struct {
@@ -371,6 +372,18 @@ func (s *Store) PendingReports() ([]Entry, error) {
 		return out[i].FinishedAt.Before(out[j].FinishedAt) || (out[i].FinishedAt.Equal(out[j].FinishedAt) && out[i].JobID < out[j].JobID)
 	})
 	return out, nil
+}
+
+// MarkHanded records, durably, that the outcome of a finished query was handed to the delivery queue now.
+func (s *Store) MarkHanded(jobID string) error {
+	return s.update(func(f *file) error {
+		e, ok := f.Entries[jobID]
+		if !ok || e.State == Queued || e.State == Claimed || e.State == Reported {
+			return fmt.Errorf("%w: not waiting for a report", ErrBadState)
+		}
+		e.HandedAt = s.now()
+		return nil
+	})
 }
 
 // MarkReported records the Cloud's acknowledgement and drops reported entries older than KeepReported (the file stays small).

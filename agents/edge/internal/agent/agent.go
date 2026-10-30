@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -36,9 +35,6 @@ type Agent struct {
 	HeartbeatEvery            time.Duration
 	CollectEvery              time.Duration
 	Log                       *slog.Logger
-
-	qmu       sync.Mutex
-	qInflight map[string]time.Time // olt_query job id -> when its result was handed to the delivery queue and is waiting for the Cloud's answer
 }
 
 // queryResendAfter: a result handed to the delivery queue that is still not acknowledged after this long is handed over again (the delivery queue may have
@@ -345,11 +341,8 @@ func (a *Agent) reportQueries(ctx context.Context) {
 	now := time.Now()
 	sent := 0
 	for _, e := range pending {
-		a.qmu.Lock()
-		at, inflight := a.qInflight[e.JobID]
-		a.qmu.Unlock()
-		if inflight && now.Sub(at) < queryResendAfter {
-			continue // already handed over; REPORTED only when the Cloud answers (resultSettled)
+		if !e.HandedAt.IsZero() && now.Sub(e.HandedAt) < queryResendAfter {
+			continue // already handed over (recorded on disk, so a restart does not hand it over again): REPORTED only when the Cloud answers (resultSettled)
 		}
 		m := map[string]any{"job_id": e.JobID}
 		switch e.State {
@@ -365,12 +358,9 @@ func (a *Agent) reportQueries(ctx context.Context) {
 			a.Log.Error("could not persist olt query result", "job_id", e.JobID, "err", err)
 			return
 		}
-		a.qmu.Lock()
-		if a.qInflight == nil {
-			a.qInflight = map[string]time.Time{}
+		if err := a.Queries.MarkHanded(e.JobID); err != nil {
+			a.Log.Warn("could not record the hand-over of an olt query result", "job_id", e.JobID, "err", err)
 		}
-		a.qInflight[e.JobID] = now
-		a.qmu.Unlock()
 		sent++
 	}
 	if sent > 0 {
@@ -391,9 +381,6 @@ func (a *Agent) resultSettled(kind string, payload []byte) {
 	if json.Unmarshal(payload, &m) != nil || m.JobID == "" || m.State == "accepted" { // the acceptance is not the outcome
 		return
 	}
-	a.qmu.Lock()
-	delete(a.qInflight, m.JobID)
-	a.qmu.Unlock()
 	if err := a.Queries.MarkReported(m.JobID); err != nil && !errors.Is(err, oltquery.ErrBadState) { // ErrBadState = not an olt_query (a collect/bench result)
 		a.Log.Error("could not mark olt query reported", "job_id", m.JobID, "err", err)
 	}
