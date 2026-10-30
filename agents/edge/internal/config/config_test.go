@@ -299,3 +299,30 @@ func TestRefreshTasksNeedsNBIAndSignedJobsAndIsOffByDefault(t *testing.T) {
 		t.Fatalf("%s", got)
 	}
 }
+
+func TestBenchConfigValidation(t *testing.T) {
+	base := `,"nbi_url":"http://127.0.0.1:7557","jobs_enabled":true,"job_public_key":"k","allowed_operations":["collect","reboot_cpe"]`
+	dev := `{"oui":"00259E","product_class":"EG8145V5","serial":"48575443E2247AA5"}`
+	ok := base + `,"bench":{"bench_writes_enabled":true,"devices":[` + dev + `]}`
+	if _, err := Load(write(t, 0o600, good(ok)), "v"); err != nil {
+		t.Fatalf("valid bench config: %v", err)
+	}
+	bad := map[string]string{
+		"no devices":    base + `,"bench":{"bench_writes_enabled":true,"devices":[]}`,
+		"duplicate":     base + `,"bench":{"bench_writes_enabled":true,"devices":[` + dev + `,` + dev + `]}`,
+		"empty serial":  base + `,"bench":{"bench_writes_enabled":true,"devices":[{"oui":"00259E","product_class":"EG8145V5","serial":""}]}`,
+		"op not listed": strings.Replace(ok, `,"reboot_cpe"`, ``, 1),
+		"no jobs":       strings.Replace(ok, `"jobs_enabled":true`, `"jobs_enabled":false`, 1),
+		"too many":      base + `,"bench":{"bench_writes_enabled":true,"devices":[` + strings.Repeat(dev[:len(dev)-3]+`1"},`, 0) + `]}`,
+	}
+	delete(bad, "too many")
+	for name, extra := range bad {
+		if _, err := Load(write(t, 0o600, good(extra)), "v"); err == nil {
+			t.Errorf("%s: must be refused", name)
+		}
+	}
+	// disabled bench section needs nothing
+	if _, err := Load(write(t, 0o600, good(`,"bench":{"bench_writes_enabled":false,"devices":[]}`)), "v"); err != nil {
+		t.Fatalf("disabled: %v", err)
+	}
+}

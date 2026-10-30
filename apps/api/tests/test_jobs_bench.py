@@ -368,7 +368,80 @@ def test_nothing_can_be_enabled_or_dispatched_while_the_edge_support_is_missing(
     assert bench.EDGE_SUPPORT is False
 
 
-def test_the_shipped_default_keeps_the_edge_support_off():
+def test_the_shipped_default_has_the_edge_support_but_every_other_condition_stays_closed(client, seed, inv):
     import importlib
 
-    assert importlib.reload(bench).EDGE_SUPPORT is False  # flipped only by the PR that implements and tests the Edge side
+    assert importlib.reload(bench).EDGE_SUPPORT is True   # flipped by the PR that implements and tests the Edge side
+    assert bench.BENCH_OPS.keys() == {"reboot_cpe"}       # still one operation; H3/H4 need an ADR amendment
+    assert features_default("bench_writes") is False      # the tenant flag still defaults off
+
+
+# ---- bench lease (ADR-0030 item 4): renewed on every poll, withdrawn as soon as the target stops being eligible --------------------------
+def _lease(resp):
+    import base64
+    h = resp.headers.get("X-Bench-Lease")
+    return None if h is None else json.loads(base64.b64decode(h))
+
+
+def test_the_lease_rides_every_poll_answer_is_signed_and_short_lived(client, seed, inv, migrated):
+    cpe, h = _full(client, seed, inv, migrated)
+    r = client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1"))
+    assert r.status_code == 204                                                # no job, and still a lease
+    lease = _lease(r)
+    assert lease["schema"] == "bench-lease/1" and lease["edge_id"] == str(inv["a1"]["edge"]) and lease["tenant_id"] == str(seed["A"])
+    assert lease["targets"] == [{"target_ref": EXT, "owner_epoch": 3}]
+    assert jobsign.verify(_pub_b64(), lease)
+    assert datetime.fromisoformat(lease["expires_at"]) - datetime.fromisoformat(lease["issued_at"]) <= bench.LEASE_TTL
+    assert not jobsign.verify(_pub_b64(), {**lease, "targets": [{"target_ref": "other-device", "owner_epoch": 3}]})
+    # a poll of ANOTHER edge never carries this edge's targets
+    other = client.get("/v1/edge/jobs/next", headers=agent(client, inv, "b1"))
+    assert _lease(other) is None
+
+
+@pytest.mark.parametrize("withdraw", ["locked", "flag", "removed", "edge_support"])
+def test_the_lease_is_withdrawn_when_the_target_stops_being_eligible(client, seed, inv, migrated, monkeypatch, withdraw):
+    cpe, h = _full(client, seed, inv, migrated)
+    assert _lease(client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1"))) is not None
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        if withdraw == "locked":
+            c.execute(text("UPDATE bench_targets SET write_locked = true, lock_reason = 'test'"))
+        elif withdraw == "flag":
+            c.execute(text("UPDATE tenant_features SET enabled = false WHERE feature = 'bench_writes'"))
+        elif withdraw == "removed":
+            c.execute(text("DELETE FROM bench_authorizations"))   # the owner CLI refuses to remove a target with an open authorization
+            c.execute(text("DELETE FROM bench_targets"))
+    if withdraw == "edge_support":
+        monkeypatch.setattr(bench, "EDGE_SUPPORT", False)
+    assert _lease(client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1"))) is None
+
+
+def test_no_lease_without_a_bench_target_and_none_by_default(client, seed, inv, migrated, monkeypatch):
+    assert _lease(client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1"))) is None
+    monkeypatch.setattr(bench, "EDGE_SUPPORT", False)
+    _full(client, seed, inv, migrated)
+    assert _lease(client.get("/v1/edge/jobs/next", headers=agent(client, inv, "a1"))) is None
+
+
+GOLDEN_LEASE = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "edge" / "bench_lease_signed.golden.json"
+GOLDEN_SEED = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="  # a public TEST seed (32 bytes of 0x01): signs only this fixture
+
+
+def test_golden_lease_matches_what_the_edge_verifies():
+    import base64
+
+    from cryptography.hazmat.primitives import serialization
+    key = jobsign.load_private(GOLDEN_SEED)
+    body = {"schema": "bench-lease/1", "tenant_id": "22222222-2222-4222-8222-222222222222", "edge_id": "33333333-3333-4333-8333-333333333333",
+            "issued_at": "2026-10-30T12:00:00+00:00", "expires_at": "2026-10-30T12:02:00+00:00",
+            "targets": [{"target_ref": "00259E-EG8145V5-48575443E2247AA5", "owner_epoch": 2}]}
+    body["signature"] = jobsign.sign(key, body)
+    pub = base64.b64encode(key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)).decode()
+    golden = {"public_key_b64": pub, "header": base64.b64encode(json.dumps(body, separators=(",", ":")).encode()).decode()}
+    assert GOLDEN_LEASE.exists(), "generate with: regenerate the fixture from this test body (public test seed)"
+    assert json.loads(GOLDEN_LEASE.read_text()) == golden
+
+
+def features_default(name):
+    from app.core import features
+    return features.FEATURES[name]

@@ -1,0 +1,226 @@
+package bench
+
+import (
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/jobs"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/nbi"
+)
+
+const (
+	benchRef = "00259E-EG8145V5-48575443E2247AA5"
+	prodRef  = "00259E-EG8145V5-48575443AAAAAAAA"
+	authID   = "11111111-1111-4111-8111-111111111111"
+)
+
+type fakeACS struct {
+	idErr, rebootErr error
+	out              nbi.BenchOutcome
+	identityCalls    int
+	rebootCalls      []string
+}
+
+func (f *fakeACS) BenchIdentity(_ context.Context, d nbi.BenchDevice, _ time.Time) error {
+	f.identityCalls++
+	return f.idErr
+}
+func (f *fakeACS) RebootBench(_ context.Context, d nbi.BenchDevice, _ time.Time, _, _ time.Duration, _ func() time.Time) (nbi.BenchOutcome, error) {
+	f.rebootCalls = append(f.rebootCalls, d.DeviceID)
+	return f.out, f.rebootErr
+}
+
+type okGuard struct{ err error }
+
+func (g okGuard) Reserve(string) error { return g.err }
+
+type env struct {
+	r    *Runner
+	acs  *fakeACS
+	priv ed25519.PrivateKey
+	now  time.Time
+	cl   *jobs.Claims
+}
+
+func setup(t *testing.T) *env {
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	e := &env{acs: &fakeACS{out: nbi.BenchOutcome{Attempted: true, Accepted: true, PostcheckOK: true}}, priv: priv,
+		now: time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)}
+	cl, err := jobs.OpenClaims(filepath.Join(t.TempDir(), "claims.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.cl = cl
+	h := &jobs.LeaseHolder{Pub: pub, EdgeID: "edge-1", TenantID: "ten-1", Now: func() time.Time { return e.now }}
+	e.r = &Runner{Devices: map[string]nbi.BenchDevice{benchRef: {DeviceID: benchRef, OUI: "00259E", ProductClass: "EG8145V5", Serial: "48575443E2247AA5"}},
+		Lease: h, Claims: cl, Guard: okGuard{}, ACS: e.acs, Now: func() time.Time { return e.now }}
+	return e
+}
+
+func (e *env) lease(t *testing.T, targets ...jobs.LeaseTarget) {
+	m := map[string]any{"schema": "bench-lease/1", "tenant_id": "ten-1", "edge_id": "edge-1", "issued_at": e.now.Format(time.RFC3339),
+		"expires_at": e.now.Add(jobs.LeaseTTL).Format(time.RFC3339), "targets": targets}
+	raw, _ := json.Marshal(m)
+	canon, _ := jobs.Canonical(raw)
+	m["signature"] = base64.StdEncoding.EncodeToString(ed25519.Sign(e.priv, canon))
+	out, _ := json.Marshal(m)
+	if err := e.r.Lease.Accept(base64.StdEncoding.EncodeToString(out)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func envelope(ref string) *jobs.Envelope {
+	return &jobs.Envelope{JobID: "job-1", Operation: "reboot_cpe", TargetRef: ref, AuthorizationID: authID, OwnerEpoch: 2,
+		ExpiresAt: "2026-10-30T12:02:00Z", AuthorizationEndsAt: "2026-10-30T12:10:00Z"}
+}
+
+func TestRunHappy(t *testing.T) {
+	e := setup(t)
+	e.lease(t, jobs.LeaseTarget{TargetRef: benchRef, OwnerEpoch: 2})
+	res := e.r.Run(context.Background(), envelope(benchRef))
+	if res.State != "succeeded" || !res.Postcheck {
+		t.Fatalf("%+v", res)
+	}
+	if len(e.acs.rebootCalls) != 1 || e.acs.rebootCalls[0] != benchRef {
+		t.Fatalf("calls %v", e.acs.rebootCalls)
+	}
+	if e.cl.State(authID) != jobs.ClaimDone {
+		t.Fatalf("claim %q", e.cl.State(authID))
+	}
+	// the same authorization can never run twice
+	e.r.Guard = okGuard{}
+	if res := e.r.Run(context.Background(), envelope(benchRef)); res.State != "failed" || len(e.acs.rebootCalls) != 1 {
+		t.Fatalf("second run must be refused: %+v calls=%v", res, e.acs.rebootCalls)
+	}
+}
+
+func TestRunRefusesAndSendsNothing(t *testing.T) {
+	cases := map[string]func(*env) *jobs.Envelope{
+		"production device not on the list": func(e *env) *jobs.Envelope {
+			e.lease(t, jobs.LeaseTarget{TargetRef: prodRef, OwnerEpoch: 2})
+			return envelope(prodRef)
+		},
+		"no lease": func(e *env) *jobs.Envelope { return envelope(benchRef) },
+		"wrong epoch": func(e *env) *jobs.Envelope {
+			e.lease(t, jobs.LeaseTarget{TargetRef: benchRef, OwnerEpoch: 3})
+			return envelope(benchRef)
+		},
+		"lease for another target": func(e *env) *jobs.Envelope {
+			e.lease(t, jobs.LeaseTarget{TargetRef: prodRef, OwnerEpoch: 2})
+			return envelope(benchRef)
+		},
+		"identity mismatch": func(e *env) *jobs.Envelope {
+			e.lease(t, jobs.LeaseTarget{TargetRef: benchRef, OwnerEpoch: 2})
+			e.acs.idErr = nbi.ErrBenchIdentity
+			return envelope(benchRef)
+		},
+		"offline": func(e *env) *jobs.Envelope {
+			e.lease(t, jobs.LeaseTarget{TargetRef: benchRef, OwnerEpoch: 2})
+			e.acs.idErr = nbi.ErrBenchOffline
+			return envelope(benchRef)
+		},
+		"pacing": func(e *env) *jobs.Envelope {
+			e.lease(t, jobs.LeaseTarget{TargetRef: benchRef, OwnerEpoch: 2})
+			e.r.Guard = okGuard{err: nbi.ErrRefreshTooSoon}
+			return envelope(benchRef)
+		},
+		"other operation": func(e *env) *jobs.Envelope {
+			e.lease(t, jobs.LeaseTarget{TargetRef: benchRef, OwnerEpoch: 2})
+			x := envelope(benchRef)
+			x.Operation = "factory_reset"
+			return x
+		},
+	}
+	for name, mk := range cases {
+		e := setup(t)
+		env := mk(e)
+		res := e.r.Run(context.Background(), env)
+		if res.State != "failed" {
+			t.Errorf("%s: %+v", name, res)
+		}
+		if len(e.acs.rebootCalls) != 0 {
+			t.Errorf("%s: a command was sent: %v", name, e.acs.rebootCalls)
+		}
+	}
+}
+
+func TestRunLeaseLapsesDuringIdentityRead(t *testing.T) {
+	e := setup(t)
+	e.lease(t, jobs.LeaseTarget{TargetRef: benchRef, OwnerEpoch: 2})
+	e.r.ACS = &laps{fakeACS: e.acs, advance: func() { e.now = e.now.Add(jobs.LeaseTTL) }}
+	if res := e.r.Run(context.Background(), envelope(benchRef)); res.State != "failed" || len(e.acs.rebootCalls) != 0 {
+		t.Fatalf("%+v %v", res, e.acs.rebootCalls)
+	}
+	if e.cl.State(authID) != "" {
+		t.Fatal("authorization must not be spent when the gate refused")
+	}
+}
+
+type laps struct {
+	*fakeACS
+	advance func()
+}
+
+func (l *laps) BenchIdentity(ctx context.Context, d nbi.BenchDevice, n time.Time) error {
+	l.advance()
+	return l.fakeACS.BenchIdentity(ctx, d, n)
+}
+
+func TestRunRefusesAnExpiredEnvelopeOrWindowAndSpendsNothing(t *testing.T) {
+	for name, mut := range map[string]func(*jobs.Envelope){
+		"envelope expired":  func(x *jobs.Envelope) { x.ExpiresAt = "2026-10-30T11:59:59Z" },
+		"window ended":      func(x *jobs.Envelope) { x.AuthorizationEndsAt = "2026-10-30T12:00:00Z" },
+		"unreadable expiry": func(x *jobs.Envelope) { x.ExpiresAt = "soon" },
+	} {
+		e := setup(t)
+		e.lease(t, jobs.LeaseTarget{TargetRef: benchRef, OwnerEpoch: 2})
+		x := envelope(benchRef)
+		mut(x)
+		if res := e.r.Run(context.Background(), x); res.State != "failed" || len(e.acs.rebootCalls) != 0 || e.cl.State(authID) != "" {
+			t.Errorf("%s: %+v calls=%v claim=%q", name, res, e.acs.rebootCalls, e.cl.State(authID))
+		}
+	}
+	// the envelope runs out WHILE the identity is being read: neither the pacing slot nor the authorization is spent
+	e := setup(t)
+	e.lease(t, jobs.LeaseTarget{TargetRef: benchRef, OwnerEpoch: 2})
+	e.r.ACS = &laps{fakeACS: e.acs, advance: func() { e.now = e.now.Add(3 * time.Minute) }}
+	e.r.Lease.Now = func() time.Time { return e.now.Add(-3 * time.Minute) } // keep the lease alive: only the envelope is expired
+	if res := e.r.Run(context.Background(), envelope(benchRef)); res.State != "failed" || len(e.acs.rebootCalls) != 0 || e.cl.State(authID) != "" {
+		t.Fatalf("%+v calls=%v claim=%q", res, e.acs.rebootCalls, e.cl.State(authID))
+	}
+}
+
+func TestRunOutcomes(t *testing.T) {
+	cases := []struct {
+		name  string
+		out   nbi.BenchOutcome
+		err   error
+		state string
+		post  bool
+		claim string
+	}{
+		{"delivered, did not come back", nbi.BenchOutcome{Attempted: true, Accepted: true}, nil, "succeeded", false, jobs.ClaimUnknown},
+		{"ambiguous", nbi.BenchOutcome{Attempted: true}, errors.New("ambiguous"), "failed", false, jobs.ClaimUnknown},
+		{"before send", nbi.BenchOutcome{}, nbi.ErrBenchPending, "failed", false, jobs.ClaimFailed},
+		{"queued and removed", nbi.BenchOutcome{Attempted: true}, nbi.ErrBenchIdentity, "failed", false, jobs.ClaimUnknown},
+	}
+	for _, c := range cases {
+		e := setup(t)
+		e.lease(t, jobs.LeaseTarget{TargetRef: benchRef, OwnerEpoch: 2})
+		e.acs.out, e.acs.rebootErr = c.out, c.err
+		res := e.r.Run(context.Background(), envelope(benchRef))
+		if res.State != c.state || res.Postcheck != c.post || e.cl.State(authID) != c.claim {
+			t.Errorf("%s: %+v claim=%q", c.name, res, e.cl.State(authID))
+		}
+		if len(e.acs.rebootCalls) != 1 {
+			t.Errorf("%s: calls=%v", c.name, e.acs.rebootCalls)
+		}
+	}
+}

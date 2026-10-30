@@ -47,3 +47,11 @@ Testes simulam uma OLT com a ONU de bancada e várias ONUs de produção na mesm
 
 ## Alternativas descartadas
 Liberar a escrita por modelo (um CPE igual de cliente passaria no gate); lista de alvos só na nuvem (um erro da nuvem viraria manobra em produção); alvo por padrão/regex (o ONT-ID errado casaria); repetir manobra de resultado incerto (pode duplicar o efeito).
+
+## Estado de implementação (atualizado 2026-10-30)
+- **H0 nuvem** (PR 56): alvos, autorização prévia de uso único, envelope assinado, trava de escrita.
+- **H0 Edge + código do H2** (PR 57): lista local fechada (`bench` na configuração do Edge, independente da nuvem), identidade do dispositivo relida do ACS (OUI/classe/serial e `_lastInform` recente) imediatamente antes do comando, claim durável único por `authorization_id` (claim sem resultado é lido como UNKNOWN após reinício e nunca reexecutado), `owner_epoch` que nunca recua, **lease** assinada pela nuvem (`X-Bench-Lease`, 2 min, só em memória, renovada em toda resposta de `jobs/next` e retirada quando o alvo é travado, removido, a flag é desligada ou o suporte do Edge falta), guard de ritmo persistido antes do envio (1 reboot por 30 min por dispositivo, 2 por hora), uma única tarefa `reboot` com remoção da PRÓPRIA tarefa em caso de fila/ambiguidade, pós-checagem por `_lastBoot`. `EDGE_SUPPORT = True` apenas nesta etapa.
+- **Ainda não executado em equipamento:** nenhuma manobra foi enviada. Faltam: (1) a regra de **primeira execução** (ver abaixo), (2) H1 (captura somente leitura na OLT), (3) a autorização PRÉVIA do responsável por manobra.
+
+### Emenda proposta: primeira execução (resolve o ciclo "evidência é posterior × registro `observed` é condição do gate")
+A condição (b) exige `observed` com evidência, mas a evidência só existe depois da primeira manobra. Para a PRIMEIRA execução de cada operação/perfil, a autorização prévia do responsável (item 4) pode ser marcada `first_run` pelo owner CLI; ela satisfaz (b) com entrada `supported` + `identified` do perfil exato, vale só enquanto não existir entrada `observed` para a operação/perfil, continua de uso único, e todas as demais condições seguem exigidas. A evidência da execução é então escrita e só ela promove a `observed` (`capability-set --evidence-file`). Implementada em PR à parte, com Codex.

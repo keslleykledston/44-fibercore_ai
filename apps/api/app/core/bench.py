@@ -14,12 +14,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import Connection, text
 
 from app.core import features
+
+
+TARGET_REF_RE = re.compile(r"[A-Za-z0-9._%-]{3,200}")
 
 
 @dataclass(frozen=True)
@@ -33,12 +37,31 @@ BENCH_OPS: dict[str, BenchOp] = {"reboot_cpe": BenchOp("tr069", frozenset())}
 from datetime import timedelta  # noqa: E402
 
 # Edge-side readiness (ADR-0030 items 2, 3 and 5): the Edge must confirm the device against the ACS, keep the durable claim and enforce
-# lease and the local bench list BEFORE a write can be enabled or dispatched. This stays False until that Edge code exists and is
-# tested; the server, the owner CLI and the tests all refuse while it is False (the tenant flag alone is not enough).
-EDGE_SUPPORT = False
+# lease and the local bench list BEFORE a write can be enabled or dispatched. True since the Edge half shipped (agents/edge/internal/bench,
+# jobs/claims.go, jobs/lease.go) with its tests; it is still only a precondition: the tenant flag, the bench target, the registry entry
+# and the owner's prior authorization all remain required, and an Edge older than this build ignores bench envelopes (they are never run).
+# The server, the owner CLI and the tests refuse everything bench-related while it is False.
+EDGE_SUPPORT = True
 
 ENVELOPE_TTL = timedelta(minutes=2)  # a bench envelope lives at most this long after it is issued
 MIN_APPROVALS = 1  # a bench write always needs one approval from someone other than the requester
+
+
+LEASE_TTL = timedelta(minutes=2)  # the Edge honours a lease for at most this long after receiving it (renewed on every poll)
+
+
+def lease_targets(conn: Connection, tenant_id: UUID, edge_id: UUID) -> list[dict]:
+    """The bench targets this Edge may act on RIGHT NOW (ADR-0030 item 4): [] unless the Edge-support switch and the tenant flag are on; only
+    targets registered to this Edge, not write-locked, with a TR-069 binding. Each entry carries the owner epoch the envelope must repeat.
+    A target that is unlocked/removed/moved simply stops appearing, and the lease the Edge holds runs out within LEASE_TTL."""
+    if not EDGE_SUPPORT or not features.enabled(conn, tenant_id, "bench_writes"):
+        return []
+    rows = conn.execute(
+        text("SELECT bt.owner_epoch, (SELECT b.external_id FROM cpe_protocol_bindings b WHERE b.cpe_id = bt.cpe_id AND b.protocol = 'tr069' "
+             "ORDER BY b.observed_at DESC NULLS LAST, b.id LIMIT 1) AS ref FROM bench_targets bt "
+             "WHERE bt.edge_id = :e AND NOT bt.write_locked ORDER BY bt.cpe_id"),
+        {"e": edge_id}).all()
+    return [{"target_ref": r.ref, "owner_epoch": r.owner_epoch} for r in rows if r.ref and TARGET_REF_RE.fullmatch(r.ref)]
 
 
 def params_hash(params: dict) -> str:

@@ -18,26 +18,43 @@ import (
 )
 
 type Config struct {
-	GatewayURL       string      `json:"gateway_url"`
-	EdgeID           string      `json:"edge_id"`
-	TenantID         string      `json:"tenant_id"`
-	ClientID         string      `json:"client_id"`
-	SecretFile       string      `json:"secret_file"` // file with the service-account secret, mode 0600
-	ConnectorID      string      `json:"connector_id"`
-	NBIURL           string      `json:"nbi_url"`
-	NBISecretFile    string      `json:"nbi_secret_file"` // optional: NBI Basic credentials "user:pass", mode 0600
-	Allowlist        []string    `json:"allowlist"`       // host:port the Edge may connect to (NBI, gateway excluded)
-	QueuePath        string      `json:"queue_path"`
-	HeartbeatSeconds int         `json:"heartbeat_seconds"`
-	CollectSeconds   int         `json:"collect_seconds"`
-	AllowInsecureDev bool        `json:"allow_insecure_dev"` // permits http:// gateway ONLY on loopback
-	OLTs             []OLTConfig `json:"olts"`
-	JobsEnabled      bool        `json:"jobs_enabled"`       // poll the Cloud for signed read-only jobs
-	JobPublicKey     string      `json:"job_public_key"`     // base64 Ed25519 public key of the Cloud, pinned locally
-	AllowedOps       []string    `json:"allowed_operations"` // narrows the compile-time read-only set (collect, refresh)
-	RefreshTasks     bool        `json:"refresh_tasks"`      // ADR-SD-002 item 4: let signed refresh jobs ask the ACS to read ONE CPE (needs nbi_url + jobs_enabled)
-	Version          string      `json:"-"`
+	GatewayURL       string       `json:"gateway_url"`
+	EdgeID           string       `json:"edge_id"`
+	TenantID         string       `json:"tenant_id"`
+	ClientID         string       `json:"client_id"`
+	SecretFile       string       `json:"secret_file"` // file with the service-account secret, mode 0600
+	ConnectorID      string       `json:"connector_id"`
+	NBIURL           string       `json:"nbi_url"`
+	NBISecretFile    string       `json:"nbi_secret_file"` // optional: NBI Basic credentials "user:pass", mode 0600
+	Allowlist        []string     `json:"allowlist"`       // host:port the Edge may connect to (NBI, gateway excluded)
+	QueuePath        string       `json:"queue_path"`
+	HeartbeatSeconds int          `json:"heartbeat_seconds"`
+	CollectSeconds   int          `json:"collect_seconds"`
+	AllowInsecureDev bool         `json:"allow_insecure_dev"` // permits http:// gateway ONLY on loopback
+	OLTs             []OLTConfig  `json:"olts"`
+	JobsEnabled      bool         `json:"jobs_enabled"`       // poll the Cloud for signed read-only jobs
+	JobPublicKey     string       `json:"job_public_key"`     // base64 Ed25519 public key of the Cloud, pinned locally
+	AllowedOps       []string     `json:"allowed_operations"` // narrows the compile-time read-only set (collect, refresh)
+	Bench            *BenchConfig `json:"bench"`              // ADR-0030: closed list of bench devices that may receive homologated writes (nil = none)
+	RefreshTasks     bool         `json:"refresh_tasks"`      // ADR-SD-002 item 4: let signed refresh jobs ask the ACS to read ONE CPE (needs nbi_url + jobs_enabled)
+	Version          string       `json:"-"`
 }
+
+// BenchConfig is the Edge's own, independent copy of the bench list (ADR-0030): the Cloud can name a device, never add one here.
+type BenchConfig struct {
+	Enabled bool                `json:"bench_writes_enabled"`
+	Devices []BenchDeviceConfig `json:"devices"`
+}
+
+// BenchDeviceConfig: the ACS identity (the three parts of the GenieACS _id) of one bench device, in clear: it is checked against the ACS.
+type BenchDeviceConfig struct {
+	OUI          string `json:"oui"`
+	ProductClass string `json:"product_class"`
+	Serial       string `json:"serial"`
+}
+
+// ID is the GenieACS _id form of the device.
+func (d BenchDeviceConfig) ID() string { return d.OUI + "-" + d.ProductClass + "-" + d.Serial }
 
 // OLTConfig describes one OLT the Edge may READ. Its address must also be listed in `allowlist`.
 type OLTConfig struct {
@@ -121,6 +138,30 @@ func (c *Config) Validate() error {
 	}
 	if c.RefreshTasks && (c.NBIURL == "" || !c.JobsEnabled) {
 		errs = append(errs, errors.New("refresh_tasks requires nbi_url and jobs_enabled (active reads only run from signed jobs)"))
+	}
+	if c.Bench != nil && c.Bench.Enabled {
+		b := c.Bench
+		switch {
+		case !c.JobsEnabled || c.NBIURL == "":
+			errs = append(errs, errors.New("bench.bench_writes_enabled requires jobs_enabled and nbi_url"))
+		case len(b.Devices) < 1 || len(b.Devices) > 4:
+			errs = append(errs, errors.New("bench.devices must list 1 to 4 devices"))
+		}
+		ids := map[string]bool{}
+		for _, d := range b.Devices {
+			if !benchPartRe.MatchString(d.OUI) || !benchPartRe.MatchString(d.ProductClass) || !benchPartRe.MatchString(d.Serial) || ids[d.ID()] {
+				errs = append(errs, errors.New("bench.devices: oui, product_class and serial are required (letters, digits, . _ only) and unique"))
+				break
+			}
+			ids[d.ID()] = true
+		}
+		ok := false
+		for _, o := range c.AllowedOps {
+			ok = ok || o == "reboot_cpe"
+		}
+		if !ok {
+			errs = append(errs, errors.New("bench writes need \"reboot_cpe\" listed in allowed_operations (explicit)"))
+		}
 	}
 	if c.JobsEnabled && c.JobPublicKey == "" {
 		errs = append(errs, errors.New("jobs_enabled requires job_public_key (pinned locally, never fetched from the Cloud)"))
@@ -243,6 +284,17 @@ func DeviceKey(addr string) string {
 func StateFiles(queuePath string) (lock, guard string) {
 	d := filepath.Dir(queuePath)
 	return filepath.Join(d, "edge.lock"), filepath.Join(d, "olt-guard.json")
+}
+
+var benchPartRe = regexp.MustCompile(`^[A-Za-z0-9._]{2,64}$`)
+
+// BenchClaimsFile and BenchGuardFile are the durable state of the bench writes (spent authorizations, pacing); they live next to the queue.
+func BenchClaimsFile(queuePath string) string {
+	return filepath.Join(filepath.Dir(queuePath), "bench-claims.json")
+}
+
+func BenchGuardFile(queuePath string) string {
+	return filepath.Join(filepath.Dir(queuePath), "bench-guard.json")
 }
 
 // RefreshGuardFile is the pacing state of the active CPE reads; it lives next to the other state files.

@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/bench"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/collector"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/gateway"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/jobs"
@@ -26,6 +27,7 @@ type Agent struct {
 	Collectors                []collector.Collector
 	Jobs                      *jobs.Verifier // nil => job polling disabled
 	Refresher                 RefreshFunc    // nil => refresh jobs that name a device fail closed
+	Bench                     *bench.Runner  // nil => bench writes are refused (ADR-0030); its Lease is fed from every poll answer
 	JobPollEvery              time.Duration
 	HeartbeatEvery            time.Duration
 	CollectEvery              time.Duration
@@ -112,10 +114,15 @@ func (a *Agent) PollJob(ctx context.Context) {
 	if a.Jobs == nil {
 		return
 	}
-	raw, err := a.GW.NextJob(ctx)
+	raw, lease, err := a.GW.NextJob(ctx)
 	if err != nil {
-		a.Log.Warn("job poll failed", "err", err)
+		a.Log.Warn("job poll failed", "err", err) // the lease already held simply runs out on its own
 		return
+	}
+	if a.Bench != nil {
+		if lerr := a.Bench.Lease.Accept(lease); lerr != nil {
+			a.Log.Warn("bench lease rejected; bench writes unavailable until a valid one arrives", "err", lerr)
+		}
 	}
 	if raw == nil {
 		return
@@ -129,6 +136,10 @@ func (a *Agent) PollJob(ctx context.Context) {
 	// Outcomes go through the durable queue (ordered after the data they refer to, retried until the Cloud acknowledges;
 	// the Cloud treats repeats of the same outcome as no-ops). A lost response can no longer strand a job.
 	a.reportJob(ctx, env.JobID, "accepted", "", false)
+	if jobs.BenchWriteOps[env.Operation] {
+		a.runBench(ctx, env)
+		return
+	}
 	// A refresh that names a device asks the ACS to read it first (rate-limited, allowlisted). Without a configured Refresher it fails closed.
 	refreshDetail := ""
 	if env.Operation == "refresh" && env.TargetRef != "" {
@@ -160,6 +171,22 @@ func (a *Agent) PollJob(ctx context.Context) {
 	}
 	a.reportJob(ctx, env.JobID, state, detail, ok)
 	a.Flush(ctx)
+}
+
+// runBench hands a verified bench write to the runner OFF the poll loop (the CPE takes minutes to boot again; heartbeats must not stop).
+// The runner refuses a second operation while one runs. Without a runner the job fails closed.
+func (a *Agent) runBench(ctx context.Context, env *jobs.Envelope) {
+	if a.Bench == nil {
+		a.reportJob(ctx, env.JobID, "failed", "bench writes are not enabled on this edge", false)
+		a.Flush(ctx)
+		return
+	}
+	go func() {
+		res := a.Bench.Run(ctx, env)
+		a.Log.Info("bench job finished", "job_id", env.JobID, "state", res.State, "detail", res.Detail)
+		a.reportJob(ctx, env.JobID, res.State, res.Detail, res.Postcheck)
+		a.Flush(ctx)
+	}()
 }
 
 func (a *Agent) reportJob(ctx context.Context, jobID, state, detail string, postcheck bool) {
