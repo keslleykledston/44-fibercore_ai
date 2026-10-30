@@ -1,0 +1,5 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), ADR-0030, round 3
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: needs-attention
+- [high] Autorização consumida na nuvem não impede replay no Edge (claim exclusivo e durável antes do I/O).
