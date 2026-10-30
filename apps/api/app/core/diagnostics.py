@@ -65,31 +65,45 @@ DOWN = frozenset({"Disconnected", "Unconfigured", "Down", "NotPresent", "LowerLa
 def r_d002_v1(i: dict) -> RuleResult:
     """R-D002 v1: what the CPE ITSELF reports about its WAN (link and connection state read from the ACS cache; ADR-0027).
 
-    Inputs: wan_link (str|None), connections (sorted list of connection states), state_fresh (bool), state_age_seconds (int|None),
-    onu_link ("confirmed"|"none"), onu_status (str|None), onu_fresh (bool).
-    Nothing is concluded without a FRESH observation. A connection counts as down only when EVERY reported connection is in DOWN: a
-    transitional or unknown state (Connecting, Dormant, Unknown...) never becomes a claim. The ONU state only adds context and never changes
-    the verdict."""
-    conns = [str(c) for c in i["connections"]]
+    Inputs: wan_link (str|None) and wan_link_fresh (bool); connections (list of {"state", "fresh"}, sorted); newest_age_seconds and
+    oldest_age_seconds of the WAN readings (int|None); onu_link ("confirmed"|"none"), onu_status (str|None), onu_fresh (bool).
+    Freshness is per reading, not per CPE: the cache keeps the last row of every connection, so a recent reading of one connection must
+    never vouch for an old reading of another. An established connection that is fresh wins; any connection last read too long ago could
+    still be established, so the rule says nothing then. A connection counts as down only when EVERY reported connection is fresh and in
+    DOWN: a transitional or unknown state (Connecting, Dormant, Unknown...) never becomes a claim. The ONU only adds context and never
+    changes the verdict."""
+    conns = [{"state": str(c["state"]), "fresh": bool(c["fresh"])} for c in i["connections"]]
+    link_fresh = bool(i["wan_link_fresh"])
     onu = {"link": i["onu_link"], "status": i["onu_status"], "fresh": bool(i["onu_fresh"])}
-    evidence = {"wan_link": i["wan_link"], "connections": conns, "state_age_seconds": i["state_age_seconds"], "onu": onu}
+    evidence = {"wan_link": i["wan_link"], "wan_link_fresh": link_fresh, "connections": conns,
+                "newest_age_seconds": i["newest_age_seconds"], "oldest_age_seconds": i["oldest_age_seconds"], "onu": onu}
+    refresh = "request a read-only refresh of this CPE (job refresh, R0) when a fresh read is wanted"
+
+    def unknown(why: str) -> RuleResult:
+        f = {"status": "unknown", "hypothesis": None, "reason": why, "evidence": evidence, "requires_human_confirmation": False,
+             "next_read_action": refresh}
+        return RuleResult(False, "unknown", f)
+
+    def observed(why: str) -> RuleResult:
+        f = {"status": "observed", "hypothesis": None, "reason": why, "evidence": evidence, "requires_human_confirmation": False,
+             "next_read_action": "re-read after the next collection"}
+        return RuleResult(False, "unknown", f)
+
     if i["wan_link"] is None and not conns:
-        f = {"status": "unknown", "hypothesis": None, "reason": "no WAN observation of this CPE", "evidence": evidence,
-             "requires_human_confirmation": False,
-             "next_read_action": "request a read-only refresh of this CPE (job refresh, R0) when a fresh read is wanted"}
-        return RuleResult(False, "unknown", f)
-    if not i["state_fresh"]:
-        f = {"status": "unknown", "hypothesis": None, "reason": "the newest WAN observation of this CPE is too old", "evidence": evidence,
-             "requires_human_confirmation": False, "next_read_action": "request a read-only refresh of this CPE (job refresh, R0)"}
-        return RuleResult(False, "unknown", f)
-    if any(c in CONNECTED for c in conns):
-        f = {"status": "observed", "hypothesis": None, "reason": "the CPE reports an established WAN connection", "evidence": evidence,
-             "requires_human_confirmation": False, "next_read_action": "re-read after the next collection"}
-        return RuleResult(False, "unknown", f)
-    if conns and all(c in DOWN for c in conns):
-        cause = "wan_link_down" if i["wan_link"] == "Down" else "wan_session_down"
-        what = ("the CPE reports no WAN link" if cause == "wan_link_down"
-                else "the CPE reports its WAN link without an established connection (session or provisioning)")
+        return unknown("no WAN observation of this CPE")
+    if any(c["fresh"] and c["state"] in CONNECTED for c in conns):
+        return observed("the CPE reports an established WAN connection")
+    if any(not c["fresh"] for c in conns):
+        return unknown("a WAN connection of this CPE was last read too long ago to rule out that it is established")
+    if not conns:  # only a link reading
+        return unknown("the newest WAN observation of this CPE is too old") if not link_fresh else observed(
+            "only the WAN link was read: not enough for a claim about the connection")
+    if all(c["state"] in DOWN for c in conns):
+        link_known = i["wan_link"] is not None and link_fresh
+        cause = "wan_link_down" if link_known and i["wan_link"] == "Down" else ("wan_session_down" if link_known else "wan_connection_down")
+        what = {"wan_link_down": "the CPE reports no WAN link",
+                "wan_session_down": "the CPE reports its WAN link without an established connection (session or provisioning)",
+                "wan_connection_down": "the CPE reports no established WAN connection (its link was not read recently)"}[cause]
         if i["onu_link"] == "confirmed" and onu["fresh"]:
             context = ("the linked ONU is online on the OLT: the access layer is up" if i["onu_status"] == "online"
                        else "the linked ONU is not online on the OLT: the CPE state can be a consequence")
@@ -99,9 +113,7 @@ def r_d002_v1(i: dict) -> RuleResult:
              "requires_human_confirmation": True,
              "next_read_action": "confirm on the CPE and in the authentication logs; do not change anything from here"}
         return RuleResult(True, cause, f)
-    f = {"status": "observed", "hypothesis": None, "reason": "the reported WAN state is transitional or not conclusive",
-         "evidence": evidence, "requires_human_confirmation": False, "next_read_action": "re-read after the next collection"}
-    return RuleResult(False, "unknown", f)
+    return observed("the reported WAN state is transitional or not conclusive")
 
 
 @dataclass(frozen=True)

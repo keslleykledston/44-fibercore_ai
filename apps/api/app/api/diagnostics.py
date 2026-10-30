@@ -20,7 +20,7 @@ from app.core import diagnostics, features
 
 router = APIRouter()
 
-# a WAN observation older than this supports no claim; the verdict is STORED as `state_fresh`, so a replay needs no clock
+# a WAN reading older than this supports no claim; the verdict is STORED per reading (`fresh`), so a replay needs no clock
 STATE_FRESH_FOR = timedelta(hours=1)
 MAX_PONS = 200   # one run looks at most at this many PONs; a bigger scope is reported as truncated, never silently cut
 
@@ -90,22 +90,29 @@ def _pon_inputs(conn: Connection, olt_id: UUID | None, pon_id: UUID | None) -> t
 
 
 def _cpe_inputs(conn: Connection, cpe_id: UUID) -> list[dict]:
-    """One row for the CPE from the stored state (RLS scopes the tenant). `state_fresh`, `state_age_seconds` and the ONU freshness are
-    STORED: the rule has no clock. Only enum words and numbers go in (no serial, no customer data)."""
+    """One row for the CPE from the stored state (RLS scopes the tenant). Per-reading freshness, the ages and the ONU freshness
+    are STORED: the rule has no clock. Only enum words and numbers go in (no serial, no customer data)."""
     if conn.execute(text("SELECT 1 FROM cpes WHERE id = :c"), {"c": cpe_id}).first() is None:
         raise HTTPException(404, "cpe not found")
     now = datetime.now(UTC)
     st = conn.execute(text("SELECT metric, scope, value, captured_at FROM cpe_state WHERE cpe_id = :c AND metric IN "
                            "('wan_link_status','wan_connection_status') ORDER BY metric, scope"), {"c": cpe_id}).all()
-    link = next((r.value for r in st if r.metric == "wan_link_status"), None)
-    conns = sorted(r.value for r in st if r.metric == "wan_connection_status")
-    newest = max((r.captured_at for r in st), default=None)
-    age = None if newest is None else max(0, int((now - newest).total_seconds()))
+
+    def age(r) -> int:
+        return max(0, int((now - r.captured_at).total_seconds()))
+
+    def fresh(r) -> bool:  # per reading: the cache keeps the last row of EVERY connection, one recent row must not vouch for an old one
+        return age(r) <= STATE_FRESH_FOR.total_seconds()
+
+    link = next((r for r in st if r.metric == "wan_link_status"), None)
+    conns = sorted(({"state": r.value, "fresh": fresh(r)} for r in st if r.metric == "wan_connection_status"),
+                   key=lambda c: (c["state"], c["fresh"]))
+    ages = [age(r) for r in st]
     onu = conn.execute(
         text("SELECT o.status, o.observed_at FROM onu_cpe_links l JOIN onus o ON o.id = l.onu_id AND o.tenant_id = l.tenant_id "
              "WHERE l.cpe_id = :c AND l.status = 'confirmed'"), {"c": cpe_id}).first()
-    return [{"subject_id": str(cpe_id), "wan_link": link, "connections": conns, "state_age_seconds": age,
-             "state_fresh": age is not None and age <= STATE_FRESH_FOR.total_seconds(),
+    return [{"subject_id": str(cpe_id), "wan_link": link.value if link else None, "wan_link_fresh": bool(link and fresh(link)),
+             "connections": conns, "newest_age_seconds": min(ages, default=None), "oldest_age_seconds": max(ages, default=None),
              "onu_link": "confirmed" if onu else "none", "onu_status": onu.status if onu else None,
              "onu_fresh": bool(onu and onu.observed_at and now - onu.observed_at <= EVAL_FRESH_FOR)}]
 
