@@ -124,7 +124,7 @@ func (c *Client) RebootBench(parent context.Context, d BenchDevice, notAfter tim
 		return BenchOutcome{}, err
 	}
 	for _, t := range docs {
-		if t.Name == "reboot" {
+		if t.Name == "reboot" || t.Name == "setParameterValues" { // any pending bench write blocks every new one
 			return BenchOutcome{}, ErrBenchPending
 		}
 	}
