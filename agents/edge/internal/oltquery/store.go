@@ -102,7 +102,20 @@ func (s *Store) load() (*file, error) {
 	if f.Claims == nil {
 		f.Claims = map[string][]time.Time{}
 	}
+	for id, e := range f.Entries { // one bad entry makes the whole file untrustworthy: nothing is claimed from a file that cannot be understood
+		if e == nil || e.JobID != id || e.Intent.OLTRef == "" || !validState(e.State) {
+			return nil, fmt.Errorf("%w: entry %q is malformed", ErrCorrupt, id)
+		}
+	}
 	return &f, nil
+}
+
+func validState(st State) bool {
+	switch st {
+	case Queued, Claimed, Executed, Failed, Expired, Unknown, Reported:
+		return true
+	}
+	return false
 }
 
 func (s *Store) save(f *file) error {
