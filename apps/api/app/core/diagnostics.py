@@ -109,10 +109,10 @@ def r_d002_v1(i: dict) -> RuleResult:
                 "wan_session_down": "the CPE reports its WAN link without an established connection (session or provisioning)",
                 "wan_connection_down": "the CPE reports no established WAN connection (its link state says nothing about the link)"}[cause]
         if i["onu_link"] == "confirmed" and onu["fresh"]:
-            context = ("the linked ONU is online on the OLT: the access layer is up" if i["onu_status"] == "online"
-                       else "the linked ONU is not online on the OLT: the CPE state can be a consequence")
+            context = ("the linked ONU appears online on the OLT" if i["onu_status"] == "online"
+                       else "the linked ONU does not appear online on the OLT")
         else:
-            context = "no fresh confirmed ONU link: the access layer was not considered"
+            context = "no fresh confirmed ONU link: the ONU was not considered"
         f = {"status": "inferred", "hypothesis": what, "suspected_cause": cause, "context": context, "evidence": evidence,
              "requires_human_confirmation": True,
              "next_read_action": "confirm on the CPE and in the authentication logs; do not change anything from here"}

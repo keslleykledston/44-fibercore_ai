@@ -318,7 +318,7 @@ def test_r_d002_onu_only_adds_context_and_never_changes_the_verdict():
     stale = _verdict(connections=[_c("Disconnected")], onu_link="confirmed", onu_status="online", onu_fresh=False)
     assert {base["status"], up["status"], down["status"], stale["status"]} == {"inferred"}
     assert {base["suspected_cause"], up["suspected_cause"], down["suspected_cause"], stale["suspected_cause"]} == {"wan_session_down"}
-    assert "access layer is up" in up["context"] and "can be a consequence" in down["context"]
+    assert up["context"] == "the linked ONU appears online on the OLT" and down["context"] == "the linked ONU does not appear online on the OLT"
     assert "not considered" in base["context"] and "not considered" in stale["context"]
 
 
@@ -387,7 +387,7 @@ def test_r_d002_run_reads_the_stored_state_is_read_only_and_reproducible(client,
     f = d["findings"][0]
     assert f["status"] == "inferred" and f["suspected_cause"] == "wan_session_down" and f["requires_human_confirmation"] is True
     assert f["evidence"]["connections"] == [{"state": "Disconnected", "fresh": True}] and f["evidence"]["links"] == [{"state": "Up", "fresh": True}]
-    assert "access layer is up" in f["context"] and f["evidence"]["newest_age_seconds"] < 300
+    assert f["context"] == "the linked ONU appears online on the OLT" and f["evidence"]["newest_age_seconds"] < 300
     with migrated.begin() as c:
         after = c.execute(text("SELECT (SELECT count(*) FROM incidents), (SELECT count(*) FROM cpe_state), (SELECT count(*) FROM events_outbox)")).one()
         stored = c.execute(text("SELECT inputs FROM diagnostic_runs WHERE id = :i"), {"i": d["run_id"]}).scalar_one()
