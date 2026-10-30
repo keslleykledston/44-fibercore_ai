@@ -25,7 +25,7 @@ from sqlalchemy import Connection, text
 
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import audit
-from app.core import bench, jobsign
+from app.core import bench, features, jobsign, olt_query
 from app.core.settings import Settings, get_settings
 from app.events import outbox
 
@@ -52,6 +52,8 @@ OPERATIONS: dict[str, Operation] = {
     "onu_reset": Operation("R2", "cpe", True, 1),
     "onu_deactivate": Operation("R2", "cpe", True, 1),
     "provision_onu": Operation("R3", "olt", True, 2),
+    # ADR-0029: a read-only query of the OLT's CLI; no approval, an exact closed intent, off by tenant flag and until the Edge channel exists
+    "olt_query": Operation("R0", "olt", False, 0),
 }
 # (operation) names whose firmware/model/transport homologation is complete. EMPTY by design in Sprint 3.
 HOMOLOGATED_WRITES: frozenset[str] = frozenset()
@@ -85,6 +87,20 @@ def _write_gate(conn: Connection, tenant_id: UUID, row, mode: str, by: UUID | No
     refusal = bench.gate(conn, tenant_id, row, mode=mode, by=by)
     # flag off, or no Edge support yet: the bench path is not visible, the global reason stays
     return "operation_not_homologated" if refusal in ("bench_writes_disabled", "edge_support_missing") else refusal
+
+
+def _query_gate(conn: Connection, tenant_id: UUID, params: dict) -> str | None:
+    """The conditions of an `olt_query`, asked at preview, again at submit and again at dispatch (a flag turned off, a rollout step withdrawn or a missing
+    channel stops a query that was created earlier). One answer for "flag off" and "no Edge channel yet": the feature is not there."""
+    if params.get("query_id") not in olt_query.ROLLOUT:
+        return "query_not_enabled"
+    if not olt_query.EDGE_SUPPORT or not features.enabled(conn, tenant_id, "olt_query"):
+        return "olt_query_disabled"
+    return None
+
+
+def _row_params(row) -> dict:
+    return json.loads(row.params) if isinstance(row.params, str) else (row.params or {})
 
 
 def cas(conn: Connection, job_id: UUID, to: str, *, extra: str = "", params: dict | None = None) -> bool:
@@ -131,16 +147,29 @@ def preview(
     op = OPERATIONS.get(body.operation)
     if op is None:
         raise HTTPException(422, "unknown operation")
+    params = body.params
     if body.operation in bench.BENCH_OPS:  # ADR-0030: exactly the catalog's parameters, each with its fixed shape
         if not bench.params_valid(body.operation, body.params):
             raise HTTPException(422, "parameters outside the bench catalog")
+    elif body.operation == "olt_query":
+        if not p.can("olt_query:run"):
+            raise HTTPException(403, "forbidden")
+        try:
+            params = olt_query.build_intent(body.target_id, body.params)  # the closed intent: query + exactly its scope's integers + OLT + catalog version
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        reason = _query_gate(conn, p.tenant_id, params)
+        if reason:
+            raise HTTPException(409, reason)
     elif body.params:
         raise HTTPException(422, "this operation accepts no parameters yet")  # strict: nothing free-form reaches an Edge
     table = {"olt": "olts", "cpe": "cpes"}[op.target]
     tgt = conn.execute(text(f"SELECT edge_id FROM {table} WHERE id = :i"), {"i": body.target_id}).first()  # noqa: S608
     if tgt is None:
         raise HTTPException(404, "target not found")
-    ih = _intent_hash(body.operation, op.target, body.target_id, body.params)
+    if body.operation == "olt_query" and tgt.edge_id is None:
+        raise HTTPException(409, "olt_without_edge")
+    ih = _intent_hash(body.operation, op.target, body.target_id, params)
     # the same key twice at once (retry racing the first answer, double click, the job screen and the CPE screen): the second waits for the first to COMMIT
     # and then finds its job, instead of both missing it and the loser hitting the unique index
     conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"job-idempotency|{p.tenant_id}|{idempotency_key}"})
@@ -149,16 +178,25 @@ def preview(
         if existing.intent_hash.strip() != ih:
             raise HTTPException(409, "idempotency key reused with a different intent")
         return _view(existing)
+    if body.operation == "olt_query":
+        # quota on the rolling hour, counted under a per-tenant lock so a burst of requests cannot all see room that only one of them has
+        conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"olt-query-quota|{p.tenant_id}"})
+        used = conn.execute(
+            text("SELECT count(*) AS by_tenant, count(*) FILTER (WHERE requested_by = :u) AS by_user, count(*) FILTER (WHERE target_id = :o) AS by_olt FROM jobs "
+                 "WHERE operation = 'olt_query' AND created_at > now() - interval '1 hour'"), {"u": p.id, "o": body.target_id}).one()
+        if used.by_user >= olt_query.USER_PER_HOUR or used.by_tenant >= olt_query.TENANT_PER_HOUR or used.by_olt >= olt_query.OLT_PER_HOUR:
+            raise HTTPException(429, "olt_query_quota")
     row = conn.execute(
         text(
             f"INSERT INTO jobs (tenant_id, edge_id, target_type, target_id, operation, params, intent_hash, idempotency_key, "  # noqa: S608
             f"risk, required_approvals, requested_by) VALUES (:t,:e,:tt,:ti,:op,CAST(:pa AS jsonb),:ih,:ik,:rk,:ra,:rb) RETURNING {COLS}"
         ),
-        {"t": p.tenant_id, "e": tgt.edge_id, "tt": op.target, "ti": body.target_id, "op": body.operation, "pa": json.dumps(body.params),
+        {"t": p.tenant_id, "e": tgt.edge_id, "tt": op.target, "ti": body.target_id, "op": body.operation, "pa": json.dumps(params),
          "ih": ih, "ik": idempotency_key, "rk": op.risk,
          "ra": max(op.approvals, bench.MIN_APPROVALS) if body.operation in bench.BENCH_OPS else op.approvals, "rb": p.id},
     ).one()
-    audit(conn, p, "job.preview", "job", str(row.id), {"operation": body.operation, "risk": op.risk})
+    audit(conn, p, "job.preview", "job", str(row.id), {"operation": body.operation, "risk": op.risk,
+                                                       **({"olt_query": params} if body.operation == "olt_query" else {})})  # who, which query, the whole intent
     return _view(row)
 
 
@@ -183,6 +221,11 @@ def submit(job_id: UUID, p: Principal = Depends(require("jobs:request")), conn: 
     if row.status != "PREVIEWED":
         raise HTTPException(409, f"job is {row.status}")
     reason = _write_gate(conn, p.tenant_id, row, "submit", p.id)
+    if reason is None and row.operation == "olt_query":
+        prm = _row_params(row)
+        reason = _query_gate(conn, p.tenant_id, prm)
+        if reason is None and _intent_hash(row.operation, row.target_type, row.target_id, prm) != row.intent_hash.strip():
+            reason = "intent_changed"  # what is stored is no longer what was previewed and hashed
     if reason:
         raise HTTPException(409, reason)  # write gate: never leaves PREVIEWED
     to = "PENDING_APPROVAL" if row.required_approvals > 0 else "APPROVED"
@@ -287,9 +330,10 @@ def next_job(
     row = conn.execute(
         text(
             f"SELECT {COLS}, nonce FROM jobs WHERE edge_id = :e AND status = 'APPROVED' "  # noqa: S608
+            "AND (operation <> 'olt_query' OR CAST(:q AS boolean)) "  # no channel on the Edge yet: a query waits and expires, it is never sent
             "ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED"
         ),
-        {"e": p.edge_id},
+        {"e": p.edge_id, "q": olt_query.EDGE_SUPPORT},
     ).first()
     if row is None:
         response.status_code = 204
@@ -302,6 +346,13 @@ def next_job(
         cas(conn, row.id, "CANCELLED")
         response.status_code = 204
         return None
+    if row.operation == "olt_query":  # defence in depth, like the write gate: the gates NOW, and the stored intent must still be the one that was hashed
+        prm = _row_params(row)
+        if _query_gate(conn, p.tenant_id, prm) or _intent_hash(row.operation, row.target_type, row.target_id, prm) != row.intent_hash.strip() \
+                or prm.get("olt_ref") != str(row.target_id) or prm.get("catalog_version") != olt_query.catalog_version():
+            cas(conn, row.id, "CANCELLED")
+            response.status_code = 204
+            return None
     approvals = [str(r.id) for r in conn.execute(text("SELECT id FROM job_approvals WHERE job_id = :j"), {"j": row.id})]
     issued = datetime.now(UTC)
     envelope = {
@@ -326,6 +377,8 @@ def next_job(
             envelope["params"] = prm
         # the envelope is also short-lived on its own (bench.ENVELOPE_TTL), so a copy that waits in transit or in a queue dies in minutes
         envelope["expires_at"] = min(row.expires_at, auth.window_end, issued + bench.ENVELOPE_TTL).isoformat()
+    if row.operation == "olt_query":  # the exact closed intent travels inside the signature; the Edge validates it again against its own catalog
+        envelope["params"] = _row_params(row)
     if (row.operation == "refresh" or bench_job) and row.target_type == "cpe":
         # The ACS device id the Edge may ask about (ADR-SD-002 item 4), covered by the signature. A CPE without a TR-069 binding keeps the
         # old behaviour (a plain collection round); the Edge validates the value again and only acts when active reads are enabled.

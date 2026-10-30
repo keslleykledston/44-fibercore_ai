@@ -1,0 +1,41 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18e8c-f401-7e03-adf8-3350264b9839).
+[codex] Turn started (01a18e8c-f672-78e3-a2b0-a0df18031d46).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os fluxos de autorização, validação, cotas e despa...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/jobs.py ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/jobs.py ap... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- apps/api/app/api/olt_querie...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- apps/api/app/api/olt_querie... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"params|intent_sha256|olt_query|job.*tenant|CREATE POLICY|jobs\" apps/a...
+[codex] Command completed: /bin/bash -lc "rg -n \"params|intent_sha256|olt_query|job.*tenant|CREATE POLICY|jobs\" apps/a... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '330,375p' apps/api/app/api/jobs.py; sed -n '1,130p' agents/edge/intern...
+[codex] Command completed: /bin/bash -lc "sed -n '330,375p' apps/api/app/api/jobs.py; sed -n '1,130p' agents/edge/intern... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,100p' apps/api/alembic/versions/0008_jobs.py; sed -n '125,180p' agen...
+[codex] Command completed: /bin/bash -lc "sed -n '1,100p' apps/api/alembic/versions/0008_jobs.py; sed -n '125,180p' agen... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: os jobs `olt_query` podem ficar pre...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: os jobs `olt_query` podem ficar presos em PREVIEWED, e a assinatura não vincula o conteúdo de `params` ao hash de intenção consumido pelo Edge.
+
+Findings:
+- [high] A rota específica deixa jobs criados sem submissão (apps/api/app/api/olt_queries.py:48-60)
+  `request_query` chama `jobs.preview`, que cria e confirma um job PREVIEWED, e só depois chama `jobs.submit`. Se a submissão falhar (por exemplo, erro transitório no banco ou falha ao gravar auditoria durante o preview), o job permanece PREVIEWED. Uma repetição com a mesma chave de idempotência encontra o job existente e retorna `outcome: existing` sem tentar submetê-lo. O cliente não tem como concluir o fluxo por essa rota, e cada tentativa pode consumir cota. Faça a criação e submissão atômicas, ou permita retomar/submeter o job existente com autorização e estado verificados.
+  Recommendation: Unifique preview e submit numa transação indivisível para esta rota, ou, ao retornar um job existente PREVIEWED, retome a submissão após validar solicitante, intenção e gates atuais.
+- [high] O hash assinado não cobre os parâmetros enviados ao Edge (apps/api/app/api/jobs.py:334-356)
+  O hash de intenção é calculado sobre `{operation, target_type, target_id, params}`, mas `intent_sha256` é copiado para o envelope sem ser recalculado ou comparado com os parâmetros da linha. O Edge verifica a assinatura do envelope e inclui `olt_query` como operação permitida, mas seu verificador não valida `intent_sha256` contra `params` nem reconhece `olt_query` na lista local de operações. Assim, a propriedade documentada de que os parâmetros são cobertos pelo hash não é estabelecida pelo protocolo do Edge; a assinatura cobre diretamente os campos do envelope, mas nenhum consumidor mostrado verifica que o hash representa aqueles parâmetros. Isso deixa o vínculo de integridade que ADR-0029 declara incompleto e propenso a divergência entre implementação da nuvem e Edge.
+  Recommendation: Defina e implemente no Edge a verificação do hash sobre a intenção canônica completa, incluindo `params`; antes disso, mantenha `olt_query` fora de qualquer allowlist de execução. Inclua teste de rejeição quando hash e parâmetros divergem.
+- [medium] O preview genérico permite criar jobs PREVIEWED para consultas fora do rollout (apps/api/app/api/jobs.py:140-150)
+  O endpoint genérico aplica `build_intent` e exige permissão e flag/canal, mas não exige que `query_id` esteja em `ROLLOUT`. Ele cria um job PREVIEWED para qualquer consulta válida do catálogo, inclusive `olt.time`, que a rota específica recusa com `query_not_enabled`. A submissão atual não revalida rollout/flag/canal; se a consulta for criada quando habilitada ou por alteração de configuração, ela pode seguir para aprovação e despacho, e o teste de dispatch só bloqueia pelo `EDGE_SUPPORT`. Mesmo sem envio no estado atual, o bypass contradiz o gate de rollout fechado e cria fila/cota para intenções que deveriam ser rejeitadas.
+  Recommendation: Exija `query_id in ROLLOUT` na validação compartilhada do preview e revalide rollout, flag, presença do canal e vínculo da OLT em submit/dispatch.
+- [medium] O orçamento de cota por usuário pode ser contornado pelo uso de várias chaves/contas? (apps/api/app/api/jobs.py:168-175)
+  A consulta de cota é serializada por tenant, então a cota por provedor resiste a requests concorrentes dentro da transação. Porém, a cota por usuário conta apenas jobs ainda presentes na janela e `requested_by`; não há limite por OLT no Cloud, apesar de a rota aceitar múltiplas OLTs do mesmo Edge. Mais diretamente, idempotência é validada antes da cota, o que permite replay da mesma chave retornar o job existente sem consumir cota, comportamento correto para retry. Não identifico bypass concorrente demonstrável na contagem; removo este item da revisão.
+  Recommendation: Manter o lock do tenant e acrescentar testes concorrentes; definir explicitamente se a proteção de orçamento deve incluir limite por OLT.
+
+Next steps:
+- Implementar retomada atômica do job PREVIEWED na rota específica.
+- Completar o contrato cloud/Edge para `olt_query` e verificar o hash canônico dos parâmetros no Edge antes de habilitar o canal.
+- Aplicar o rollout no caminho genérico e revalidar gates nas transições antes do despacho.

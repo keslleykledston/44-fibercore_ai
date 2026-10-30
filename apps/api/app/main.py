@@ -17,6 +17,7 @@ from app.api.jobs import router as jobs_router
 from app.api.bench_authorizations import router as bench_auth_router
 from app.api.delegations import router as delegations_router
 from app.api.device_actions import router as device_actions_router
+from app.api.olt_queries import router as olt_queries_router
 from app.api.members import router as members_router
 from app.api.team import router as team_router
 from app.api.noc import router as noc_router
@@ -62,6 +63,7 @@ app.include_router(team_router)
 app.include_router(delegations_router)
 app.include_router(bench_auth_router)
 app.include_router(device_actions_router)
+app.include_router(olt_queries_router)
 app.include_router(context_router)
 app.include_router(diagnostics_router)
 app.include_router(diagnostic_jobs_router)

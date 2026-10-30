@@ -214,3 +214,7 @@
 ## Unreleased — PR 85 (onu_state_events)
 - API: migração 0028 `onu_state_events` (histórico de mudanças de estado das ONUs, escrito só por gatilho em `onus`; a role da aplicação só lê; baseline por ONU no instante da migração; ordem por `seq`, `at` nunca recua; retenção `onu_state_events_prune(>=370 dias)` só pelo dono do banco). `GET /v1/onus/{id}/history`, `GET /v1/onus/unstable`; o relatório `GET /v1/onus/offline` (JSON e CSV) ganha `drops_30d` e `offline_hours_30d`.
 - Web: coluna "Últimos 30 dias" no relatório de ONUs offline e cartão "Histórico (30 dias)" na ONU 360.
+
+## Unreleased — PR 86 (olt_query, metade da nuvem; ADR-0029)
+- API: operação `olt_query` (R0, alvo OLT, sem aprovação) no motor de jobs; intenção fechada por consulta (`query_id` + exatamente os inteiros do escopo; `olt_ref` e `catalog_version` acrescentados pela nuvem e cobertos por hash, auditoria e assinatura). `GET /v1/olts/{id}/queries` (catálogo como o chamador o vê) e `POST /v1/olts/{id}/queries/{query_id}`. Permissão `olt_query:run` (isp_admin, engineer, noc_n2), flag `olt_query` (desligada), cota por hora (10 por usuário, 60 por provedor, 20 por OLT; 429), rollout só `olt.version` e `olt.board`. O catálogo da nuvem é comparado por teste ao do Edge (`query.go`).
+- **Inerte por desenho:** o canal do Edge (fila persistente, arrendamento, parsers) ainda não existe, então `olt_query.EDGE_SUPPORT = False`: nada é oferecido, nenhum job é criado, a CLI `feature-set olt_query on` recusa e o despacho ignora `olt_query`. Contrato do envelope atualizado (`operation` e `params`).

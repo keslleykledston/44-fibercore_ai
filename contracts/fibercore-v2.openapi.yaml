@@ -802,6 +802,46 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {description: Execução inexistente ou de outro provedor}
+  /olts/{oltId}/queries:
+    get:
+      tags: [Network]
+      operationId: listOltQueries
+      summary: Catálogo de consultas somente leitura da OLT como ESTE chamador o vê (inventory:read). offered só é verdadeiro com a permissão olt_query:run, a consulta no degrau atual do rollout (ADR-0029 item 7), a flag olt_query do provedor ligada E o canal do Edge existente; reason = not_permitted | query_not_enabled | olt_query_disabled. Nesta versão o canal do Edge não existe, então nada é oferecido
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: oltId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200':
+          description: "{olt_id, catalog_version, enabled, limits{user_per_hour, tenant_per_hour, slot, port, ont}, items[{id, title, scope global|slot|pon|onu, fields[], validated, offered, reason}]}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: OLT inexistente ou de outro provedor}
+  /olts/{oltId}/queries/{queryId}:
+    post:
+      tags: [Network]
+      operationId: requestOltQuery
+      summary: Pede UMA consulta somente leitura da OLT pelo fluxo de jobs (olt_query:run + jobs:request; operação olt_query, R0, sem aprovação). O corpo leva exatamente os inteiros do escopo da consulta (global nenhum; slot=slot; pon=slot+port; onu=slot+port+ont); campo a mais ou a menos é 422. A nuvem acrescenta olt_ref e catalog_version à intenção assinada. Cota por hora por usuário e por provedor (429 olt_query_quota). 409 query_not_enabled, olt_query_disabled ou olt_without_edge
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: oltId, in: path, required: true, schema: {type: string, format: uuid}}, {name: queryId, in: path, required: true, schema: {type: string}}, {name: Idempotency-Key, in: header, required: true, schema: {type: string}}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                params:
+                  type: object
+                  properties:
+                    slot: {type: integer, minimum: 0, maximum: 17}
+                    port: {type: integer, minimum: 0, maximum: 15}
+                    ont: {type: integer, minimum: 0, maximum: 127}
+      responses:
+        '200':
+          description: "{outcome: submitted|existing, job}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: OLT inexistente ou de outro provedor}
+        '409': {description: query_not_enabled, olt_query_disabled ou olt_without_edge}
+        '422': {description: Consulta fora do catálogo ou campos que não casam com o escopo}
+        '429': {description: olt_query_quota}
   /cpes/{cpeId}/actions:
     get:
       tags: [CPE]

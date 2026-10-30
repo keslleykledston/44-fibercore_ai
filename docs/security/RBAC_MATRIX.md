@@ -21,6 +21,7 @@
 | `devices:act:reboot_cpe` | R2 | não | sim | Pedir, pela tela do CPE, o reinício do equipamento do assinante (nasce bloqueado até a homologação) |
 | `devices:act:set_wifi_ssid` | R2 | não | sim | Pedir, pela tela do CPE, a troca do nome do Wi-Fi (nasce bloqueado até a homologação) |
 | `bench:authorize` | R3 | sim | não | Autorizar UMA manobra de bancada (uso único, janela curta, só o alvo de bancada); o autorizador não pode ser quem pede nem quem aprova |
+| `olt_query:run` | R0 | não | sim | Pedir uma consulta somente leitura à OLT (catálogo fechado; a fila e a cota protegem o equipamento) |
 | `diagnostics:run` | R0 | não | sim | Rodar diagnósticos (somente leitura) |
 | `members:read` | R1 | não | não | Ver os membros do provedor e o estado do MFA de cada um |
 | `members:manage` | R3 | sim | não | Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite) |
@@ -50,6 +51,7 @@
 | `devices:act:reboot_cpe` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `devices:act:set_wifi_ssid` | ✔ | ✔ |  |  |  |  |  |  |  |
 | `bench:authorize` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
+| `olt_query:run` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `diagnostics:run` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `members:read` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `members:manage` | ✔ |  |  |  |  |  |  |  | ✔ |
@@ -126,6 +128,8 @@
 | PUT | `/v1/members/{user_id}/role` | `members:manage` |
 | GET | `/v1/olts` | `inventory:read` |
 | GET | `/v1/olts/{olt_id}/capabilities` | `inventory:read` |
+| GET | `/v1/olts/{olt_id}/queries` | `inventory:read` |
+| POST | `/v1/olts/{olt_id}/queries/{query_id}` | `olt_query:run` |
 | GET | `/v1/onu-cpe-links` | `inventory:read` |
 | POST | `/v1/onu-cpe-links/suggest` | `associations:review` |
 | POST | `/v1/onu-cpe-links/{link_id}/confirm` | `associations:review` |

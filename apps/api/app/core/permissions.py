@@ -38,6 +38,7 @@ CATALOG: dict[str, Permission] = dict([
     _p("devices:act:reboot_cpe", "Pedir, pela tela do CPE, o reinício do equipamento do assinante (nasce bloqueado até a homologação)", "R2", scopable=True),
     _p("devices:act:set_wifi_ssid", "Pedir, pela tela do CPE, a troca do nome do Wi-Fi (nasce bloqueado até a homologação)", "R2", scopable=True),
     _p("bench:authorize", "Autorizar UMA manobra de bancada (uso único, janela curta, só o alvo de bancada); o autorizador não pode ser quem pede nem quem aprova", "R3", mfa_recent=True),
+    _p("olt_query:run", "Pedir uma consulta somente leitura à OLT (catálogo fechado; a fila e a cota protegem o equipamento)", "R0", scopable=True),
     _p("diagnostics:run", "Rodar diagnósticos (somente leitura)", "R0", scopable=True),
     _p("members:read", "Ver os membros do provedor e o estado do MFA de cada um", "R1"),
     _p("members:manage", "Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite)", "R3", mfa_recent=True),
