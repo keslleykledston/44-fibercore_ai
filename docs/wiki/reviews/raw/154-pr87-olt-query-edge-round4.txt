@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18e99-a372-7901-bca6-733ccaaffb32).
+[codex] Turn started (01a18e99-a672-73a2-8c07-b3776c1c039e).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir o fluxo da fila em condições de retry, concorrênci...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/oltque...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/oltque... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- agents/edge/internal/oltque...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- agents/edge/internal/oltque... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- agents/edge/internal/jobs/q...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- agents/edge/internal/jobs/q... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/oltquery/store.go | sed -n '90,155p;185,235p'; git...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/oltquery/store.go | sed -n '90,155p;185,235p'; git... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: o carregamento aceita um arquivo váli...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: o carregamento aceita um arquivo válido em JSON que apaga o histórico do limite por hora, permitindo exceder o orçamento após corrupção parcial do estado.
+
+Findings:
+- [medium] Claims ausentes ou nulos zeram o limite por hora (agents/edge/internal/oltquery/store.go:99-109)
+  `load` converte `Claims` ausente ou `null` em um mapa vazio e não valida os timestamps carregados. Se uma corrupção parcial preservar JSON válido, por exemplo trocando `claims` por `null`, o próximo `Claim` trata o histórico como vazio e pode autorizar mais de 20 consultas por OLT na janela móvel. Isso viola o limite persistente e a alegação de falhar fechado quando o estado não é confiável. Exija `Claims` presente e válido nos arquivos existentes e recuse entradas malformadas, em vez de reconstruir um orçamento vazio.
+  Recommendation: Validar a presença de `claims`, cada chave e cada timestamp; retornar `ErrCorrupt` quando o histórico não puder ser confiado. Se houver migração de formato, fazê-la sem zerar o orçamento.

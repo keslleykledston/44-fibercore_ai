@@ -100,8 +100,15 @@ func (s *Store) load() (*file, error) {
 	if err := json.Unmarshal(b, &f); err != nil || f.Entries == nil {
 		return nil, fmt.Errorf("%w: not a queue file (%v)", ErrCorrupt, err)
 	}
-	if f.Claims == nil {
-		f.Claims = map[string][]time.Time{}
+	if f.Claims == nil { // a file that lost its budget history would hand out a fresh budget: it is corrupt, not new
+		return nil, fmt.Errorf("%w: no claims history", ErrCorrupt)
+	}
+	for ref, ts := range f.Claims {
+		for _, t := range ts {
+			if ref == "" || t.IsZero() {
+				return nil, fmt.Errorf("%w: malformed claims history", ErrCorrupt)
+			}
+		}
 	}
 	for id, e := range f.Entries { // one bad entry makes the whole file untrustworthy: nothing is claimed from a file that cannot be understood
 		if e == nil || e.JobID != id || e.Intent.OLTRef == "" || !validState(e.State) {
@@ -200,7 +207,7 @@ func (s *Store) Claim(oltRef, sessionID string) (Entry, error) {
 	var out Entry
 	err := s.update(func(f *file) error {
 		now := s.now()
-		keep := f.Claims[oltRef][:0:0]
+		keep := make([]time.Time, 0, len(f.Claims[oltRef])+1)
 		for _, t := range f.Claims[oltRef] {
 			if now.Sub(t) < time.Hour {
 				keep = append(keep, t)

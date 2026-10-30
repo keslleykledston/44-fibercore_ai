@@ -191,7 +191,7 @@ func TestExpiryAndBatchAbort(t *testing.T) {
 func TestACorruptFileSpendsTheBudget(t *testing.T) {
 	s, c := newStore(t)
 	enq(t, s, c, "j1", olt1)
-	for _, junk := range []string{"not json", "null", `{"entries":null}`, "", `{"entries":{"j1":null}}`, `{"entries":{"j1":{}}}`,
+	for _, junk := range []string{"not json", "null", `{"entries":null}`, "", `{"entries":{}}`, `{"entries":{},"claims":null}`, `{"entries":{},"claims":{"x":["0001-01-01T00:00:00Z"]}}`, `{"entries":{"j1":null}}`, `{"entries":{"j1":{}}}`,
 		`{"entries":{"j1":{"job_id":"other","state":"QUEUED","intent":{"olt_ref":"x"}}}}`, `{"entries":{"j1":{"job_id":"j1","state":"WEIRD","intent":{"olt_ref":"x"}}}}`} {
 		if err := os.WriteFile(s.Path, []byte(junk), 0o600); err != nil {
 			t.Fatal(err)
