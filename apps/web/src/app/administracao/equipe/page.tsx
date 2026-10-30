@@ -17,6 +17,12 @@ type Search = { aba?: string; q?: string; funcao?: string; tipo?: string };
 const ABAS = new Set(["pessoas", "funcoes", "atividade"]);
 const CELL = { all: { text: "Sim", icon: "✔", cls: "text-ok" }, some: { text: "Em parte", icon: "◐", cls: "text-warn" }, none: { text: "Não", icon: "—", cls: "text-muted" } } as const;
 
+/** Três estados: ligada, desligada e DESCONHECIDA (a leitura falhou): não se afirma o que não se sabe. */
+const mfaNote = (enforced: boolean | undefined) =>
+  enforced === true ? "o código é pedido ao entrar e, em algumas ações sensíveis, de novo na hora."
+  : enforced === false ? "o código é pedido só ao entrar na plataforma."
+  : "o código é pedido ao entrar na plataforma.";
+
 function Summary({ t }: { t: Team }) {
   const items = [
     { k: "Pessoas ativas", v: t.summary.active, hint: "com acesso hoje" },
@@ -243,7 +249,7 @@ export default async function Equipe({ searchParams }: { searchParams: Promise<S
     <div data-testid="team-ready">
       {t.members.some((m) => m.is_self && !m.mfa_enabled) && (
         <div role="status" data-testid="my-mfa-banner" className="panel mb-4 flex flex-wrap items-center justify-between gap-3 border-warn p-4 text-sm">
-          <span><strong>Ative a sua verificação em duas etapas.</strong> Ela protege a sua conta: {me.data?.mfa_recent?.enforced ? "o código é pedido ao entrar e, em algumas ações sensíveis, de novo na hora." : "o código é pedido só ao entrar na plataforma."}</span>
+          <span><strong>Ative a sua verificação em duas etapas.</strong> Ela protege a sua conta: {mfaNote(me.data?.mfa_recent?.enforced)}</span>
           <Link href="/conta/seguranca" className="inline-flex min-h-touch items-center rounded-btn bg-accent px-4 font-medium text-[color:var(--on-accent)]">Ativar agora</Link>
         </div>
       )}
