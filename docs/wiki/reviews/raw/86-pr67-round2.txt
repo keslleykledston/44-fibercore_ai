@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18b8b-4a93-7ac1-a7cc-c4ffc8ce0a35).
+[codex] Turn started (01a18b8b-4acd-7f70-932d-3ff012c6c052).
+[codex] Assistant message captured: I’ll inspect the branch diff against `main` and trace the reservation/error paths in the coll...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=8 main...HEAD -- agents/edge/internal/collect...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=8 main...HEAD -- agents/edge/internal/collect... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '100,121p;238,324p'; nl ...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '100,121p;238,324p'; nl ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship: Exclusive inherits the OLT’s collection ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship: Exclusive inherits the OLT’s collection cooldown for its reservation and pre-login failures, so configurations below 15 minutes bypass the stated default protection.
+
+Findings:
+- [high] Bench reservations and login failures can use the OLT’s shorter configured cooldown (agents/edge/internal/collector/olt.go:106-119)
+  `Exclusive` passes the configured `OLTSource` into `guarded` without overriding its `Cooldown`. The guard uses that value both for the pre-I/O reservation and as the fallback cooldown when `opened()` was never called. Since regular OLT `cooldown_seconds` accepts values as low as 60 seconds, a bench attempt can persist only that short reservation before login; a crash or failed login then leaves the shared collector eligible to retry after that shorter interval, contrary to the required 15-minute default. Set the bench reservation and pre-login failure fallback explicitly to the 15-minute CLI default, while applying the configured bench cooldown only after `opened()`.
+  Recommendation: In `Exclusive`, give the guard a 15-minute cooldown for the pessimistic reservation and failures before `opened()`. Keep the configured shorter duration isolated to post-login failures, and cover this with a source configured for a shorter general OLT cooldown.

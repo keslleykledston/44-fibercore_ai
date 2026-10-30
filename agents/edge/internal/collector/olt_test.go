@@ -810,3 +810,86 @@ func TestTheTimeoutCoversOpeningTheSessionNotOnlyTheReads(t *testing.T) {
 		}
 	}
 }
+
+func TestExclusiveSharesTheGuardAndHonoursAShorterCooldownOnlyAfterALogin(t *testing.T) {
+	var opens, runs int
+	clock := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	o := &OLT{EdgeID: "e", Sources: []OLTSource{cliSrc(&opens, &runs, nil)}, Now: func() time.Time { return clock }}
+	name := o.Sources[0].Name
+	loggedFail := func(opened func()) error { opened(); return errors.New("maneuver stopped") }
+	loginFail := func(opened func()) error { return errors.New("ssh: unable to authenticate") } // never reaches opened()
+	ok := func(opened func()) error { opened(); return nil }
+	if err := o.Exclusive(context.Background(), name, time.Minute, 2*time.Minute, loggedFail); err == nil {
+		t.Fatal("the failure is returned")
+	}
+	clock = clock.Add(90 * time.Second) // inside the (shorter) cooldown
+	if err := o.Exclusive(context.Background(), name, time.Minute, 2*time.Minute, ok); err == nil || !strings.Contains(err.Error(), "cooling down") {
+		t.Fatalf("still cooling: %v", err)
+	}
+	clock = clock.Add(time.Minute) // 2m30s after the failure: the 15 min default would still block, the configured 2 min does not
+	if err := o.Exclusive(context.Background(), name, time.Minute, 2*time.Minute, ok); err != nil {
+		t.Fatalf("after the configured cooldown it runs: %v", err)
+	}
+	// a failed LOGIN keeps the full 15 min, whatever is configured
+	clock = clock.Add(2 * time.Minute)
+	if err := o.Exclusive(context.Background(), name, time.Minute, 2*time.Minute, loginFail); err == nil {
+		t.Fatal("login failure")
+	}
+	clock = clock.Add(10 * time.Minute)
+	if err := o.Exclusive(context.Background(), name, time.Minute, 2*time.Minute, ok); err == nil || !strings.Contains(err.Error(), "cooling down") {
+		t.Fatalf("a failed login must keep the 15 min cooldown: %v", err)
+	}
+	// and the collector sees the same state
+	if _, err := o.Collect(context.Background()); err == nil || !strings.Contains(err.Error(), "cooling down") {
+		t.Fatalf("the collector shares the cooldown: %v", err)
+	}
+	clock = clock.Add(6 * time.Minute)
+	if err := o.Exclusive(context.Background(), name, time.Minute, 0, ok); err != nil { // 16 min after the login failure
+		t.Fatalf("after 15 min it runs: %v", err)
+	}
+	// nothing configured: the default (15 min) also applies after a logged-in failure
+	clock = clock.Add(2 * time.Minute)
+	if err := o.Exclusive(context.Background(), name, time.Minute, 0, loggedFail); err == nil {
+		t.Fatal("failure")
+	}
+	clock = clock.Add(10 * time.Minute)
+	if err := o.Exclusive(context.Background(), name, time.Minute, 0, ok); err == nil || !strings.Contains(err.Error(), "cooling down") {
+		t.Fatalf("the default cooldown is 15 min: %v", err)
+	}
+	// a session that is not due (too soon after the last one) is reported, never run
+	clock = clock.Add(10 * time.Minute)
+	if err := o.Exclusive(context.Background(), name, time.Hour, 0, ok); !errors.Is(err, ErrOLTNotDue) {
+		t.Fatalf("not due: %v", err)
+	}
+}
+
+func TestExclusiveIgnoresAShortCollectionCooldownBeforeTheLogin(t *testing.T) {
+	var opens, runs int
+	clock := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	src := cliSrc(&opens, &runs, nil)
+	src.Cooldown = time.Minute // the OLT's own collection cooldown is short
+	o := &OLT{EdgeID: "e", Sources: []OLTSource{src}, Now: func() time.Time { return clock }}
+	loginFail := func(opened func()) error { return errors.New("ssh: unable to authenticate") }
+	if err := o.Exclusive(context.Background(), src.Name, time.Minute, 2*time.Minute, loginFail); err == nil {
+		t.Fatal("login failure")
+	}
+	clock = clock.Add(5 * time.Minute) // longer than the OLT's own 1 min and than the bench 2 min
+	if err := o.Exclusive(context.Background(), src.Name, time.Minute, 2*time.Minute, func(opened func()) error { opened(); return nil }); err == nil ||
+		!strings.Contains(err.Error(), "cooling down") {
+		t.Fatalf("a failed login keeps 15 min: %v", err)
+	}
+	// the reservation made before the session is the long one too: a session that reserves and is then killed leaves 15 min on disk/in memory
+	o2 := &OLT{EdgeID: "e", Sources: []OLTSource{src}, Now: func() time.Time { return clock }}
+	_ = o2.Exclusive(context.Background(), src.Name, time.Minute, 2*time.Minute, func(opened func()) error {
+		o2.mu.Lock()
+		got := o2.st[src.SNMPKey]
+		if src.SNMPKey == "" {
+			got = o2.st[src.Name]
+		}
+		o2.mu.Unlock()
+		if want := clock.Add(15 * time.Minute); got.CoolUntil.Before(want.Add(-time.Second)) {
+			t.Errorf("the pre-session reservation must be the 15 min default, got until %s", got.CoolUntil)
+		}
+		return nil
+	})
+}

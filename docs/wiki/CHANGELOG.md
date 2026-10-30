@@ -177,3 +177,6 @@
 - Nuvem: operações `onu_reset`/`onu_deactivate` (alvo = CPE de bancada, sem parâmetros), perfil de registro = o da OLT alcançada pelo vínculo ONU↔CPE confirmado, CLI aceita os pares `olt`.
 - Edge: `internal/olt/bench.go` (lista fechada e exata de comandos, identidade na mesma sessão, reativação sempre, recuperação), `collector.OLT.Exclusive` (mesmo guard das coletas), seção `bench.olt`, execução do runner com ritmo e autorização gastos só depois da identidade.
 
+## Unreleased — PR 67 (Edge: cooldown pós-falha da bancada configurável)
+- `bench.olt.cooldown_seconds` (0 = 900; 60..900): quanto tempo a OLT fica em paz depois de uma sessão de manobra que FALHOU. O padrão continua 15 min; fica no guard compartilhado com as coletas. Antes, uma parada na confirmação ou numa checagem cobrava 15 min de espera a cada tentativa da homologação.
+

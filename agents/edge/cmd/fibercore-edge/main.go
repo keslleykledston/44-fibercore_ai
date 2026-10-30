@@ -225,9 +225,12 @@ func main() {
 					os.Exit(2)
 				}
 				onu := olt.BenchONU{Frame: bo.Frame, Slot: bo.Slot, Port: bo.Port, OntID: bo.OntID, GPONSerial: strings.ToUpper(bo.GPONSerial)}
-				gap, wait := 15*time.Minute, 4*time.Minute
+				gap, wait, cool := 15*time.Minute, 4*time.Minute, time.Duration(0)
 				if bo.MinGapSeconds > 0 {
 					gap = time.Duration(bo.MinGapSeconds) * time.Second
+				}
+				if bo.CooldownSeconds > 0 {
+					cool = time.Duration(bo.CooldownSeconds) * time.Second
 				}
 				if bo.WaitSeconds > 0 {
 					wait = time.Duration(bo.WaitSeconds) * time.Second
@@ -240,7 +243,7 @@ func main() {
 				}
 				benchRunner.OLT = func(ctx context.Context, op string, notAfter time.Time, before func() error) (olt.ManeuverOutcome, error) {
 					var out olt.ManeuverOutcome
-					xerr := oltCol.Exclusive(ctx, bo.Name, gap, func() error {
+					xerr := oltCol.Exclusive(ctx, bo.Name, gap, cool, func(opened func()) error {
 						cctx, cancel := context.WithTimeout(ctx, wait+3*time.Minute) // login + commands + the wait for the ONU to come back
 						defer cancel()
 						raw, closeFn, err := src.Open(cctx)
@@ -248,13 +251,14 @@ func main() {
 							return err
 						}
 						defer closeFn()
+						opened() // the login worked: from here a failure may use the shorter cooldown
 						var rerr error
 						out, rerr = olt.RunBenchManeuver(cctx, raw, onu, op, notAfter, before, wait, 10*time.Second, time.Now)
 						return rerr
 					})
 					return out, xerr
 				}
-				log.Warn("bench OLT maneuvers ENABLED for ONE ONU", "olt", bo.Name, "min_gap", gap.String())
+				log.Warn("bench OLT maneuvers ENABLED for ONE ONU", "olt", bo.Name, "min_gap", gap.String(), "cooldown", cool.String())
 			}
 			log.Warn("bench writes ENABLED for a closed list of devices", "devices", len(devs), "min_interval", minGap.String(), "max_per_hour", perHour)
 		}
