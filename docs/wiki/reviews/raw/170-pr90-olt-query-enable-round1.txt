@@ -1,0 +1,20 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18eca-6ae4-7083-945e-1c1d1a1a53b3).
+[codex] Turn started (01a18eca-6b1c-7630-968e-a86649672f19).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e rastrear as guardas da flag nos caminhos de preview, r...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/olt_querie...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/olt_querie... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"EDGE_SUPPORT|olt_query_enabled|allowed_operations|feature-set|olt_quer...
+[codex] Command completed: /bin/bash -lc "rg -n \"EDGE_SUPPORT|olt_query_enabled|allowed_operations|feature-set|olt_quer... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '80,115p' apps/api/app/api/jobs.py; sed -n '140,235p' apps/api/app/api/...
+[codex] Command completed: /bin/bash -lc "sed -n '80,115p' apps/api/app/api/jobs.py; sed -n '140,235p' apps/api/app/api/... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"Não encontrei caminho de preview, rota específica, emissão de...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+Não encontrei caminho de preview, rota específica, emissão de lease ou despacho que contorne a flag `olt_query`. O padrão da flag continua desligado; a documentação sobre `EDGE_SUPPORT=False` aparece em registros históricos das PRs 86–89, não como estado atual.
+
+No material findings.
