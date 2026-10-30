@@ -206,3 +206,7 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - `make test-api` 306 passed; `go vet ./... && go test -race ./...` PASS (Edge); ruff só os 5 E501 antigos das migrações 0013–0015; secrets-scan sem vazamento; validate_help e validate_addendum_v22 PASS. Contrato OpenAPI atualizado (YAML válido).
 - Ainda NOT_RUN: uso do estado por regra (R-D002…R-D004) e no Visão 360; leitura do estado com mais de uma ONT; CPE real de cliente (nenhum foi tocado).
 
+## 2026-10-30 — R-D002 v1 (PR 54, ADR-0027)
+- `make test-api` 316 passed (testes unitários da regra, propriedade com 800 casos e API: leitura somente leitura sem incidente/estado/evento, replay reproduzível, entradas sem serial nem texto livre, isolamento entre tenants, escopos exclusivos, vínculo ONU↔CPE só confirmado). ruff só os 5 E501 antigos; validate_addendum_v22 PASS; secrets-scan sem vazamento.
+- NOT_RUN: execução na LAB (a flag `diagnostic_engine` segue desligada; ligar é decisão do responsável) e tela de troubleshooting para a R-D002.
+

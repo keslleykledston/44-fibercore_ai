@@ -1,0 +1,5 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), PR 54, round 1
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: needs-attention
+- [high] A idade mais recente do CPE valida conexões antigas ainda armazenadas (diagnostics.py): cpe_state guarda a última linha por escopo; freshness agregada deixava uma conexão antiga ser tratada como atual. Guardar captured_at por conexão e por enlace.
