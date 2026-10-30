@@ -104,9 +104,18 @@ type OLTConfig struct {
 type LastDownConfig struct {
 	SNMPAddress       string `json:"snmp_address"`        // ip:161 - an IP LITERAL that is also in `allowlist`, and the same device as the entry's CLI address
 	SNMPCommunityFile string `json:"snmp_community_file"` // file (mode 0600) holding the read-only v2c community
-	PaceMillis        int    `json:"snmp_pace_ms"`        // 0 = 1000; minimum 1000
+	PaceMillis        int    `json:"snmp_pace_ms"`        // 0 = 2000; minimum 1000
 	MaxRequests       int    `json:"snmp_max_requests"`   // SNMP packets per run (0 = 400, max 1000)
 	EverySeconds      int    `json:"every_seconds"`       // minimum seconds between two runs (0 = 3600; 900..86400)
+}
+
+// Pace is the pause before every SNMP request of this channel. The default is 2 s, not the 1 s floor: measured on the real agent, requests 1 s
+// apart made it go mute (2 s apart were all answered), and this channel shares the agent with the operator's own monitoring.
+func (l LastDownConfig) Pace() time.Duration {
+	if l.PaceMillis <= 0 {
+		return 2 * time.Second
+	}
+	return time.Duration(l.PaceMillis) * time.Millisecond
 }
 
 // Every is the minimum time between two runs.

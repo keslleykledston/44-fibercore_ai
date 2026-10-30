@@ -181,7 +181,7 @@ func main() {
 							return nil, nil, err
 						}
 						return olt.DialSNMP(ctx, olt.SNMPConfig{Addr: l.SNMPAddress, Community: community, Allowed: al.Allowed,
-							Pace: time.Duration(l.PaceMillis) * time.Millisecond, MaxReqs: l.MaxRequests})
+							Pace: l.Pace(), MaxReqs: l.MaxRequests})
 					},
 				}
 			}

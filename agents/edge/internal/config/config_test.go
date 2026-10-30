@@ -392,8 +392,11 @@ func TestOLTLastDownConfig(t *testing.T) {
 	if err != nil || cfg.OLTs[0].LastDown == nil || cfg.OLTs[0].LastDown.Every() != 30*time.Minute {
 		t.Fatalf("valid last_down rejected: %v", err)
 	}
-	if cfg, _ = Load(write(t, 0o600, good(cli(ld(ok)))), "v"); cfg.OLTs[0].LastDown.Every() != time.Hour {
-		t.Fatal("default must be one hour")
+	if cfg, _ = Load(write(t, 0o600, good(cli(ld(ok)))), "v"); cfg.OLTs[0].LastDown.Every() != time.Hour || cfg.OLTs[0].LastDown.Pace() != 2*time.Second {
+		t.Fatal("default must be one hour and a 2 s pace (1 s apart made the real agent go mute)")
+	}
+	if cfg, _ = Load(write(t, 0o600, good(cli(ld(ok+`,"snmp_pace_ms":3000`)))), "v"); cfg.OLTs[0].LastDown.Pace() != 3*time.Second {
+		t.Fatal("an explicit pace must be honoured")
 	}
 	for name, extra := range map[string]string{
 		"other device":     ld(`"snmp_address":"10.0.0.8:161","snmp_community_file":"/c"`),
