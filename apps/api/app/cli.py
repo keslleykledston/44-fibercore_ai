@@ -229,6 +229,10 @@ def main(argv: list[str] | None = None) -> None:
                 from app.core import bench
                 if not bench.EDGE_SUPPORT:
                     sys.exit("refused: bench_writes cannot be turned on until the Edge-side bench gate exists and is tested (ADR-0030)")
+            if a.feature == "olt_query" and a.state == "on":
+                from app.core import olt_query
+                if not olt_query.EDGE_SUPPORT:
+                    sys.exit("refused: olt_query cannot be turned on until the Edge-side channel exists and is tested (ADR-0029)")
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
             if a.state == "default":
                 c.execute(text("DELETE FROM tenant_features WHERE tenant_id = :t AND feature = :f"), {"t": a.tenant_id, "f": a.feature})

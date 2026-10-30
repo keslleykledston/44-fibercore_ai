@@ -52,6 +52,7 @@ CAPABILITIES: list[tuple[str, str, tuple[str, ...]]] = [
     ("incidents", "Acompanhar incidentes", ("incidents:read",)),
     ("ack", "Reconhecer incidentes", ("incidents:ack",)),
     ("diagnose", "Rodar diagnósticos", ("diagnostics:run",)),
+    ("olt_query", "Consultar a OLT (somente leitura)", ("olt_query:run",)),
     ("request", "Pedir mudanças em equipamentos", ("jobs:request", "devices:act:reboot_cpe", "devices:act:set_wifi_ssid")),
     ("approve", "Aprovar mudanças", ("jobs:approve",)),
     ("bench", "Autorizar manobras de bancada", ("bench:authorize",)),

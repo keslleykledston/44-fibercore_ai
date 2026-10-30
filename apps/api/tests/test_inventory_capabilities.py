@@ -86,7 +86,7 @@ def test_olt_capabilities_use_the_olt_profile_and_olt_operations(client, seed, i
     _olt(client, inv, "OLT-CAP-1")
     _set(migrated, seed["A"], vendor="huawei", model="MA5800-X7", firmware="R018", protocol="olt", operation="collect", certification="observed")
     caps = client.get(f"/v1/olts/{_olt_id(client, seed, 'OLT-CAP-1')}/capabilities", headers=hdr(client, "alice", seed, "A")).json()
-    assert {(c["name"], c["protocol"]) for c in caps} == {("collect", "olt"), ("provision_onu", "olt")}
+    assert {(c["name"], c["protocol"]) for c in caps} == {("collect", "olt"), ("provision_onu", "olt"), ("olt_query", "olt")}
     by = {c["name"]: c for c in caps}
     assert by["collect"]["status"] == "supported" and by["provision_onu"]["status"] == "unknown"
     assert by["provision_onu"]["blocked_reason"] == "operation_not_homologated" and by["collect"]["blocked_reason"] is None
