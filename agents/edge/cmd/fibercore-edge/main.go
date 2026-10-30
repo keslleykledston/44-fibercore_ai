@@ -154,7 +154,7 @@ func main() {
 			if o.Profile == "huawei_ma56_r015" {
 				drv = olt.HuaweiR015{}
 			}
-			oc.Sources = append(oc.Sources, collector.OLTSource{
+			src := collector.OLTSource{
 				Name: o.Name, Driver: drv, Ports: o.PonPorts, AllowUnverified: o.AllowUnverifiedFirmware,
 				SNMPKey: config.DeviceKey(o.Address), Interval: o.OLTInterval(), Cooldown: o.OLTCooldown(),
 				Open: func(ctx context.Context) (olt.Session, func(), error) {
@@ -170,7 +170,22 @@ func main() {
 					}
 					return s, func() { s.Close() }, nil
 				},
-			})
+			}
+			if l := o.LastDown; l != nil { // read-only SNMP side channel: the OLT's own "last down time" of the offline ONUs
+				l := l
+				src.LastDown = &collector.LastDownSource{
+					Key: "last-down|" + config.DeviceKey(l.SNMPAddress), Every: l.Every(), Driver: olt.HuaweiSNMP{},
+					Open: func(ctx context.Context) (olt.SNMPReader, func(), error) {
+						community, err := config.ReadSecret(l.SNMPCommunityFile)
+						if err != nil {
+							return nil, nil, err
+						}
+						return olt.DialSNMP(ctx, olt.SNMPConfig{Addr: l.SNMPAddress, Community: community, Allowed: al.Allowed,
+							Pace: time.Duration(l.PaceMillis) * time.Millisecond, MaxReqs: l.MaxRequests})
+					},
+				}
+			}
+			oc.Sources = append(oc.Sources, src)
 		}
 		oltCol = oc
 		collectors = append(collectors, oc)

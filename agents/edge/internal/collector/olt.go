@@ -33,6 +33,8 @@ type OLTSource struct {
 	Cooldown time.Duration
 	// Timeout overrides the wall-clock budget of one attempt (opening the session included). 0 = oltTimeout(len(Ports)).
 	Timeout time.Duration
+	// LastDown (CLI sources only): optional read-only SNMP side channel for the OLT's own "last down time" of the offline ONUs.
+	LastDown *LastDownSource
 }
 
 func (s OLTSource) budget() time.Duration {
@@ -85,6 +87,9 @@ type OLT struct {
 	busy    map[string]bool       // device keys with a collection in flight
 	loaded  bool
 	corrupt bool // the state file could not be trusted: a device with no entry is treated as touched just now
+
+	ldMu sync.Mutex
+	ld   map[string]*lastDownState // OLT name -> what the last-down side channel remembers
 }
 
 // ErrOLTNotDue: the shared OLT guard says the last session on this device is too recent for another one now.
@@ -173,6 +178,7 @@ func (o *OLT) Collect(ctx context.Context) ([]Item, error) {
 	var errs []error
 	for _, src := range o.Sources {
 		its, err := o.collectOne(ctx, src, now().UTC().Format(time.RFC3339))
+		o.refreshLastDown(ctx, src) // after the CLI read (it never delays it); what it reads travels with the next snapshot
 		if err != nil {
 			errs = append(errs, fmt.Errorf("olt %s: %w", src.Name, err))
 			continue
@@ -213,6 +219,7 @@ func (o *OLT) collectCLI(ctx context.Context, src OLTSource, observed string) ([
 	if err != nil {
 		return nil, err
 	}
+	o.applyLastDown(src, &snap)
 	return o.buildItems(src.Name, observed, id, level, snap, func(p olt.PON) bool { return ponComplete(level, raw, p) })
 }
 

@@ -28,3 +28,11 @@ Pendências: mTLS (ADR-0011), assinatura/anti-replay de jobs (Sprint 3), SNMP/SS
  "snmp_community_file":"/etc/fibercore-edge/olt-exemplo.snmp","snmp_pace_ms":1000,"snmp_max_requests":300,"pon_ports":["0/0/14"]}
 ```
 `192.0.2.10:161` precisa constar em `allowlist` e ser IP literal. `snmp_pace_ms` nunca fica abaixo de 1000. A OLT medida limita a taxa do agente SNMP (ver `docs/engineering/DRIVER_SDK_INTERFACE.md`).
+
+## Exemplo: "Last down time" da OLT (canal SNMP somente leitura dentro de uma entrada CLI; valores fictícios)
+```json
+{"name":"olt-exemplo","vendor":"huawei","profile":"huawei_ma56_r015","address":"192.0.2.10:22", "...":"(campos CLI como acima)",
+ "last_down":{"snmp_address":"192.0.2.10:161","snmp_community_file":"/etc/fibercore-edge/olt-exemplo.snmp",
+              "snmp_pace_ms":1000,"snmp_max_requests":400,"every_seconds":3600}}
+```
+Só para entrada CLI Huawei com o perfil validado. A OLT é a MESMA (mesmo nome, mesmo IP; `snmp_address` em `allowlist` e IP literal). Depois de cada coleta CLI, no máximo a cada `every_seconds` (padrão 3600, mínimo 900), o Edge lê por SNMP (GET, 1 requisição/s) o "Last down time" das ONUs que a última coleta CLI mostrou fora do ar, só nas PONs que as têm, e o horário viaja como `last_down_at` no próximo snapshot. Falha ou timeout nunca derrubam a coleta CLI; o agente SNMP fica 5 min em paz depois de uma falha e o retry só vem no próximo intervalo. O horário é esquecido quando a ONU volta e nunca é herdado por uma nova queda.

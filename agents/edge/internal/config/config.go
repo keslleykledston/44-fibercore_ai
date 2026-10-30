@@ -95,6 +95,26 @@ type OLTConfig struct {
 	CollectSeconds          int      `json:"collect_seconds"`     // minimum seconds between two collections of THIS olt (0 = default: 900 for cli, every cycle for snmp)
 	CooldownSeconds         int      `json:"cooldown_seconds"`    // seconds to leave this olt alone after a failure (0 = default: 900 cli, 300 snmp)
 	LegacySSH               bool     `json:"legacy_ssh"`          // explicit per-OLT opt-in to old SSH algorithms (SHA1 DH, ssh-rsa, AES-CBC)
+	// LastDown (CLI huawei entries only): also read the OLT's own "last down time" of the offline ONUs over SNMP (read-only), at most every
+	// EverySeconds, and add it to the snapshots this entry sends. It never changes which OLT the snapshot belongs to.
+	LastDown *LastDownConfig `json:"last_down"`
+}
+
+// LastDownConfig is the read-only SNMP side channel of a CLI OLT entry (see OLTConfig.LastDown).
+type LastDownConfig struct {
+	SNMPAddress       string `json:"snmp_address"`        // ip:161 - an IP LITERAL that is also in `allowlist`, and the same device as the entry's CLI address
+	SNMPCommunityFile string `json:"snmp_community_file"` // file (mode 0600) holding the read-only v2c community
+	PaceMillis        int    `json:"snmp_pace_ms"`        // 0 = 1000; minimum 1000
+	MaxRequests       int    `json:"snmp_max_requests"`   // SNMP packets per run (0 = 400, max 1000)
+	EverySeconds      int    `json:"every_seconds"`       // minimum seconds between two runs (0 = 3600; 900..86400)
+}
+
+// Every is the minimum time between two runs.
+func (l LastDownConfig) Every() time.Duration {
+	if l.EverySeconds <= 0 {
+		return time.Hour
+	}
+	return time.Duration(l.EverySeconds) * time.Second
 }
 
 var ponRe = regexp.MustCompile(`^\d+/\d+/\d+$`)
@@ -298,6 +318,21 @@ func (c *Config) Validate() error {
 			}
 		default:
 			errs = append(errs, fmt.Errorf("%s: transport must be cli or snmp", p))
+		}
+		if l := o.LastDown; l != nil {
+			h, _, err := net.SplitHostPort(l.SNMPAddress)
+			switch {
+			case o.Transport == "snmp" || o.Vendor != "huawei" || o.Profile != "huawei_ma56_r015":
+				errs = append(errs, fmt.Errorf("%s: last_down requires a CLI huawei entry with profile huawei_ma56_r015", p))
+			case err != nil || net.ParseIP(h) == nil || !allowed[strings.ToLower(l.SNMPAddress)]:
+				errs = append(errs, fmt.Errorf("%s: last_down.snmp_address must be ip:port (IP literal) AND listed in allowlist", p))
+			case DeviceKey(l.SNMPAddress) != DeviceKey(o.Address):
+				errs = append(errs, fmt.Errorf("%s: last_down.snmp_address must be the same device as the entry's address", p))
+			}
+			if l.SNMPCommunityFile == "" || (l.PaceMillis != 0 && l.PaceMillis < 1000) || l.PaceMillis > 10000 || l.MaxRequests < 0 || l.MaxRequests > 1000 ||
+				(l.EverySeconds != 0 && (l.EverySeconds < 900 || l.EverySeconds > 86400)) {
+				errs = append(errs, fmt.Errorf("%s: last_down needs snmp_community_file; snmp_pace_ms 0 or 1000..10000; snmp_max_requests 0..1000; every_seconds 0 or 900..86400", p))
+			}
 		}
 		if (o.CollectSeconds != 0 && (o.CollectSeconds < 60 || o.CollectSeconds > 86400)) ||
 			(o.CooldownSeconds != 0 && (o.CooldownSeconds < 60 || o.CooldownSeconds > 86400)) {
