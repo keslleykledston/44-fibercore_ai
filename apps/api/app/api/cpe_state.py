@@ -19,7 +19,15 @@ from app.api.inventory import CpeBinding, _bound_edge, _check_observed
 
 router = APIRouter()
 
-SCOPE_RE = re.compile(r"^[a-z]+(/[0-9]+)+$")
+# The scope is closed PER METRIC (fixed word + numeric instances): a generic pattern would let free text such as an SSID in ("myhome/1").
+# Kept textually identical to the Edge's cloudScopeByMetric (params_test.go) and to the CHECK of migration 0019; a test compares them.
+SCOPE_RE = {
+    "wan_link_status": re.compile(r"^link/[0-9]{1,3}$"),
+    "wan_connection_status": re.compile(r"^(ppp|ip)(/[0-9]{1,3}){1,2}$"),
+    "uptime_seconds": re.compile(r"^((ppp|ip)(/[0-9]{1,3}){1,2}|device/0)$"),
+    "wifi_radio_enabled": re.compile(r"^radio/[0-9]{1,3}$"),
+    "wifi_channel": re.compile(r"^radio/[0-9]{1,3}$"),
+}
 _CONN = ("Unconfigured", "Connecting", "Connected", "PendingDisconnect", "Disconnecting", "Disconnected",  # TR-098 WANxxxConnection
          "Up", "Down", "Dormant", "NotPresent", "LowerLayerDown", "Error", "Unknown")  # TR-181 PPP interface
 # metric -> ("enum", accepted values) | ("int", min, max) | ("bool",). Mirrors agents/edge/internal/nbi/params.go (a test checks it).
@@ -41,13 +49,6 @@ class MetricIn(BaseModel):
     value: StrictStr | StrictInt | StrictBool
     captured_at: datetime
 
-    @field_validator("scope")
-    @classmethod
-    def _scope(cls, v: str) -> str:
-        if not SCOPE_RE.fullmatch(v):
-            raise ValueError("scope must be a lower-case word followed by numeric instances")
-        return v
-
     @field_validator("captured_at")
     @classmethod
     def _captured(cls, v: datetime) -> datetime:
@@ -55,6 +56,8 @@ class MetricIn(BaseModel):
 
     @model_validator(mode="after")
     def _typed(self) -> MetricIn:
+        if not SCOPE_RE[self.name].fullmatch(self.scope):
+            raise ValueError(f"scope is not valid for {self.name}")
         spec = METRICS[self.name]
         v = self.value
         if spec[0] == "enum":

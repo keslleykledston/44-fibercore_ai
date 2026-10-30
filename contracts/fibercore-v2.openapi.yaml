@@ -773,7 +773,7 @@ components:
                   required: [name, scope, value, captured_at]
                   properties:
                     name: {type: string, enum: [wan_link_status, wan_connection_status, uptime_seconds, wifi_radio_enabled, wifi_channel]}
-                    scope: {type: string, maxLength: 32, pattern: '^[a-z]+(/[0-9]+)+$'}
+                    scope: {type: string, maxLength: 32, pattern: '^(link/[0-9]{1,3}|(ppp|ip)(/[0-9]{1,3}){1,2}|device/0|radio/[0-9]{1,3})$', description: 'Fechado POR métrica: link/N (wan_link_status); ppp|ip/N[/N] (wan_connection_status, uptime_seconds); device/0 (uptime_seconds); radio/N (wifi_radio_enabled, wifi_channel)'}
                     value: {description: "Tipado por métrica: estados (enum fixo), inteiros em faixa ou booleano", oneOf: [{type: string}, {type: integer}, {type: boolean}]}
                     captured_at: {type: string, format: date-time, description: Horário do dispositivo guardado pelo ACS}
     CpeStateAck:

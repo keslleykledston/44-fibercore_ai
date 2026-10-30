@@ -25,7 +25,12 @@ def upgrade() -> None:
           cpe_id uuid NOT NULL,
           metric text NOT NULL CHECK (metric IN (
             'wan_link_status','wan_connection_status','uptime_seconds','wifi_radio_enabled','wifi_channel')),
-          scope text NOT NULL CHECK (scope ~ '^[a-z]+(/[0-9]+)+$' AND length(scope) <= 32),
+          -- the scope is closed PER METRIC (a generic "word/number" pattern would let an SSID like 'myhome/1' through)
+          scope text NOT NULL CHECK (
+            (metric = 'wan_link_status' AND scope ~ '^link/[0-9]{{1,3}}$')
+            OR (metric = 'wan_connection_status' AND scope ~ '^(ppp|ip)(/[0-9]{{1,3}}){{1,2}}$')
+            OR (metric = 'uptime_seconds' AND (scope ~ '^(ppp|ip)(/[0-9]{{1,3}}){{1,2}}$' OR scope = 'device/0'))
+            OR (metric IN ('wifi_radio_enabled','wifi_channel') AND scope ~ '^radio/[0-9]{{1,3}}$')),
           value jsonb NOT NULL CHECK (jsonb_typeof(value) IN ('string','number','boolean')),
           captured_at timestamptz NOT NULL,
           observed_at timestamptz NOT NULL,

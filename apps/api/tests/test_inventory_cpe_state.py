@@ -67,9 +67,16 @@ def test_ingest_then_read_back_with_provenance_and_age(client, seed, inv):
     _m("wifi_radio_enabled", "radio/1", 1),                 # an int is not a bool
     _m("uptime_seconds", "ppp/1/1", -1),
     _m("uptime_seconds", "ppp/1/1", (1 << 31) + 1),
-    _m("wan_link_status", "Link/1", "Up"),                  # scope: lower-case word + numeric instances only
+    _m("wan_link_status", "Link/1", "Up"),                  # the scope is closed per metric: fixed word + numeric instances
     _m("wan_link_status", "link/one", "Up"),
     _m("wan_link_status", "link/1/AA:BB:CC:DD:EE:FF", "Up"),  # a MAC cannot ride in the scope
+    _m("wan_link_status", "myhome/1", "Up"),                # nor an SSID that merely looks like word/number
+    _m("wifi_channel", "myhome/1", 6),
+    _m("wifi_channel", "link/1", 6),                        # a scope of ANOTHER metric
+    _m("wan_connection_status", "radio/1", "Connected"),
+    _m("wan_connection_status", "ppp/1/2/3", "Connected"),  # at most two instance numbers
+    _m("uptime_seconds", "radio/1", 5),
+    _m("wifi_radio_enabled", "radio/1234", True),           # at most three digits per instance
     _m("wan_link_status", "link/1", "Up", at="2999-01-01T00:00:00+00:00"),  # device clock in the future
     _m("wan_link_status", "link/1", "Up", at="2026-10-29T12:00:00"),        # no timezone
     {**_m("wan_link_status", "link/1", "Up"), "ssid": "MyHome"},            # unknown field (strict body)
@@ -134,6 +141,8 @@ def test_the_database_refuses_what_the_api_would_never_send(migrated, client, se
     _cpe(client, inv, "STATE-0006", "st-6")
     cid = _cpe_id(client, seed, "STATE-0006")
     for metric, scope, value in [("ssid", "radio/1", '"x"'), ("wifi_channel", "Radio/1", "1"), ("wifi_channel", "radio/1/aa", "1"),
+                                 ("wifi_channel", "myhome/1", "1"), ("wifi_channel", "link/1", "1"), ("wan_link_status", "radio/1", '"Up"'),
+                                 ("wan_connection_status", "ppp/1/2/3", '"Up"'), ("uptime_seconds", "radio/1", "1"),
                                  ("wifi_channel", "radio/1", "null"), ("wifi_channel", "radio/1", '{"a":1}'), ("wifi_channel", "radio/1", "[1]")]:
         with pytest.raises(DBAPIError), migrated.begin() as c:
             c.execute(text("INSERT INTO cpe_state (tenant_id, cpe_id, metric, scope, value, captured_at, observed_at) "
@@ -151,3 +160,29 @@ def test_cloud_metric_table_matches_what_the_edge_emits():
     assert emitted == cloud_enums, sorted(emitted ^ cloud_enums)
     assert re.search(r"uptime\s+=\s*spec\{metric: \"uptime_seconds\", kind: kInt, min: 0, max: 1 << 31\}", src)
     assert re.search(r"channel\s+=\s*spec\{metric: \"wifi_channel\", kind: kInt, min: 0, max: 196\}", src)
+
+
+def test_every_scope_the_edge_can_emit_is_accepted_by_the_api_and_by_the_database(migrated, client, seed, inv):
+    _cpe(client, inv, "STATE-0007", "st-7")
+    cid = _cpe_id(client, seed, "STATE-0007")
+    good = [("wan_link_status", "link/1", "Up"), ("wan_connection_status", "ppp/3/1", "Connected"), ("wan_connection_status", "ip/2/1", "Connected"),
+            ("wan_connection_status", "ppp/2", "Up"), ("uptime_seconds", "ppp/3/1", 1), ("uptime_seconds", "device/0", 1),
+            ("wifi_radio_enabled", "radio/5", True), ("wifi_channel", "radio/8", 1)]
+    r = _post(client, inv, _state(inv, "st-7", [_m(n, s, v) for n, s, v in good]))
+    assert r.status_code == 202 and r.json()["metrics"] == len(good), r.text
+    with migrated.begin() as c:  # the same scopes pass the CHECK on their own
+        for n, s, _ in good:
+            c.execute(text("INSERT INTO cpe_state (tenant_id, cpe_id, metric, scope, value, captured_at, observed_at) "
+                           "VALUES (:t, :c, :m, :s, '1', now(), now()) ON CONFLICT DO NOTHING"), {"t": str(seed["A"]), "c": cid, "m": n, "s": s})
+
+
+def test_cloud_scopes_are_the_ones_the_edge_tests_pin():
+    # the Edge pins the same patterns in agents/edge/internal/nbi/params_test.go (cloudScopeByMetric); both sides must not drift
+    from app.api.cpe_state import SCOPE_RE
+
+    go = (ROOT / "agents" / "edge" / "internal" / "nbi" / "params_test.go").read_text(encoding="utf-8")
+    block = go[go.index("var cloudScopeByMetric"):]
+    block = block[:block.index("\n}\n")]
+    pinned = dict(re.findall(r'"([a-z_]+)":\s*regexp\.MustCompile\(`([^`]+)`\)', block))
+    assert set(pinned) == set(SCOPE_RE) == set(METRICS)
+    assert all(pinned[k] == SCOPE_RE[k].pattern for k in pinned), {k: (pinned[k], SCOPE_RE[k].pattern) for k in pinned if pinned[k] != SCOPE_RE[k].pattern}
