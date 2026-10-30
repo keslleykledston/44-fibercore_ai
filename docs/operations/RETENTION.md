@@ -7,5 +7,5 @@
 - Mínimo aceito: 370 dias (a maior janela de consulta é 365). Variável `FIBERCORE_EVENTS_KEEP_DAYS`.
 
 ## Medição de desempenho
-- `N_ONU=30000 EV_PER=40 scripts/perf-onu-events.sh` (Postgres descartável na porta 55442; depois `docker rm -f fc-perf-pg`). Gera ONUs e eventos, roda `/unstable` em 30 e 365 dias (5 amostras, mediana e pior), o relatório offline (500 ONUs) e o histórico de 1 ONU, e imprime o plano `EXPLAIN (ANALYZE, BUFFERS)`.
+- `N_ONU=30000 EV_PER=40 scripts/perf-onu-events.sh` (Postgres descartável com nome único e rótulo, porta `PERF_PG_PORT`, padrão 55442; a própria execução remove o que criou e não toca em container preexistente). Gera ONUs e eventos, roda `/unstable` em 30 e 365 dias (5 amostras, mediana e pior), o relatório offline (500 ONUs) e o histórico de 1 ONU, e imprime o plano `EXPLAIN (ANALYZE, BUFFERS)`.
 - Resultado de 2026-10-30 (30 000 ONUs, 1 230 000 eventos): `/unstable` 30 d mediana 369 ms (pior 2,6 s a frio); 365 d mediana 1,5 s; relatório offline 72 ms; histórico de 1 ONU ~1 ms.

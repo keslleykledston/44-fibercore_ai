@@ -4,11 +4,12 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "apps", "api"))
-os.environ.update(DATABASE_URL="postgresql://fibercore_app:perf_app_pw_0123456789abc@127.0.0.1:55442/fibercore_perf", JWT_SECRET="x" * 40)
+PORT = os.environ.get("PERF_PG_PORT", "55442")
+os.environ.update(DATABASE_URL=f"postgresql://fibercore_app:perf_app_pw_0123456789abc@127.0.0.1:{PORT}/fibercore_perf", JWT_SECRET="x" * 40)
 from app.api import inventory
 from sqlalchemy import create_engine, text
 
-eng = create_engine("postgresql+psycopg://fibercore_app:perf_app_pw_0123456789abc@127.0.0.1:55442/fibercore_perf")
+eng = create_engine(f"postgresql+psycopg://fibercore_app:perf_app_pw_0123456789abc@127.0.0.1:{PORT}/fibercore_perf")
 T = "00000000-0000-0000-0000-0000000000a1"
 def conn():
     c = eng.connect(); c.execute(text("SELECT set_config('app.tenant_id', :t, false)"), {"t": T}); return c
