@@ -7,14 +7,18 @@ N_ONU=${N_ONU:-30000}; EV_PER=${EV_PER:-40}
 TOKEN="$(date -u +%Y%m%dT%H%M%SZ)-$$-$RANDOM$RANDOM"
 NAME="fc-perf-pg-$TOKEN"   # unique per run; cleanup is by the container ID this run was handed, never by a name
 PORT=${PERF_PG_PORT:-55442}
+# throwaway credentials, generated per run (nothing fixed in the repository): the container is local, bound to 127.0.0.1 and removed at the end
+rnd() { head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24; }
+ADMIN_PW="$(rnd)"; APP_PW="$(rnd)"; WORKER_PW="$(rnd)"; RBAC_PW="$(rnd)"
+export PERF_APP_PW="$APP_PW" PERF_PG_PORT="$PORT"
 if ss -ltn 2>/dev/null | grep -q ":$PORT "; then echo "porta $PORT ocupada (PERF_PG_PORT para outra)" >&2; exit 1; fi
-CID="$(docker run -d --name "$NAME" --label "fibercore.perf=$TOKEN" -e POSTGRES_USER=fibercore -e POSTGRES_PASSWORD=perf_admin_pw_only -e POSTGRES_DB=fibercore_perf -p 127.0.0.1:$PORT:5432 postgres:17-alpine)"
+CID="$(docker run -d --name "$NAME" --label "fibercore.perf=$TOKEN" -e POSTGRES_USER=fibercore -e POSTGRES_PASSWORD=$ADMIN_PW -e POSTGRES_DB=fibercore_perf -p 127.0.0.1:$PORT:5432 postgres:17-alpine)"
 trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT   # armed only AFTER docker run succeeded: a failed run (name clash, no image) removes nothing
 until docker exec "$NAME" pg_isready -U fibercore >/dev/null 2>&1; do sleep 1; done; sleep 2
 cd $ROOT/apps/api
-ADMIN=postgresql://fibercore:perf_admin_pw_only@127.0.0.1:$PORT/fibercore_perf
-APP=perf_app_pw_0123456789abc
-ADMIN_DATABASE_URL=$ADMIN APP_DB_PASSWORD=$APP WORKER_DB_PASSWORD=perf_worker_pw_0123456789 RBAC_DB_PASSWORD=perf_rbac_pw_0123456789a $ROOT/.venv/bin/python -m alembic upgrade head >/dev/null 2>&1
+ADMIN=postgresql://fibercore:$ADMIN_PW@127.0.0.1:$PORT/fibercore_perf
+APP=$APP_PW
+ADMIN_DATABASE_URL=$ADMIN APP_DB_PASSWORD=$APP WORKER_DB_PASSWORD=$WORKER_PW RBAC_DB_PASSWORD=$RBAC_PW $ROOT/.venv/bin/python -m alembic upgrade head >/dev/null 2>&1
 docker exec -i "$NAME" psql -U fibercore -d fibercore_perf -v ON_ERROR_STOP=1 -q <<SQL
 INSERT INTO tenants(id, name) VALUES ('00000000-0000-0000-0000-0000000000a1', 'perf');
 INSERT INTO edges(tenant_id, id, name) VALUES ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000e1', 'e1');
