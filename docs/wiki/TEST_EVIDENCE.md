@@ -244,3 +244,9 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - PR 59: `go test -race ./...` PASS (formatos de firmware aceitos/rejeitados, snapshot com e sem firmware).
 - NOT_RUN: qualquer escrita em equipamento; Edge com o firmware (0.5.x+PR 59) ainda a implantar.
 
+## 2026-10-30 — H2 `reboot_cpe` REAL na ONT de bancada (ADR-0030)
+- Autorização prévia `first_run` do responsável (03:30:49–03:45:49 UTC) → job `c6ed9338-…` criado, aprovado pelo solicitante (emenda do ADR) → despachado 03:31:38 → o Edge releu a identidade no ACS, reservou o ritmo, gravou o claim e enviou UMA tarefa `reboot` → `_lastBoot` novo 03:32:41 → `SUCCEEDED` 03:32:48 com pós-checagem.
+- Verificação independente: só 1 dispositivo do ACS com boot novo (a ONT de bancada); nenhuma tarefa `reboot` restante; claim `DONE`; autorização `consumed`; sem trava. O responsável observou a ONU voltar online na OLT e aceitou o resultado.
+- Registro: `reboot_cpe`/tr069 do perfil Huawei EG8145V5 V5R019C10S350 promovido a `observed` com a evidência `docs/wiki/bench/H2-reboot_cpe-2026-10-30.md` (checada pelo owner CLI). `certified` NÃO concedida.
+- NOT_RUN: segunda execução (pedida pelo responsável, com autorização normal); H3 (SSID) e H4 (OLT).
+
