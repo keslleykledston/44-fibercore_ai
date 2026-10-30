@@ -740,3 +740,22 @@ def test_h4_ops_take_no_params_and_the_cli_knows_the_olt_pairs(client, seed, inv
     monkeypatch.setenv("ADMIN_DATABASE_URL", admin_url)
     cli.main(["capability-set", str(seed["A"]), *OLT_PROFILE, "olt", "onu_reset", "supported", "identified", "--evidence", "docs/x.md",
               "--verified-at", "2026-10-30T00:00:00+00:00"])
+
+
+def test_first_run_cli_uses_the_olt_profile_for_olt_operations(client, seed, inv, migrated, admin_url, monkeypatch):
+    from app import cli
+
+    _flag(migrated, seed["A"])
+    cpe = _cpe(client, inv, seed)
+    _bench(migrated, seed, inv, cpe, op="onu_reset", capability=False, authorization=False)
+    _olt_link(migrated, seed, inv, cpe)
+    monkeypatch.setenv("ADMIN_DATABASE_URL", admin_url)
+    now = datetime.now(UTC)
+    argv = ["bench-authorize", str(seed["A"]), "onu_reset", cpe, "--from", now.isoformat(), "--to", (now + timedelta(minutes=5)).isoformat(),
+            "--by", "r", "--first-run"]
+    with pytest.raises(SystemExit, match="needs a complete"):
+        cli.main(argv)                                   # no entry for the OLT profile yet (the CPE profile does not count)
+    _olt_registry(migrated, seed, "onu_reset", cert="identified")
+    cli.main(argv)                                       # the OLT's identified entry is the one it needs
+    with migrated.begin() as c:
+        assert c.execute(text("SELECT first_run FROM bench_authorizations WHERE operation = 'onu_reset'")).scalar() is True

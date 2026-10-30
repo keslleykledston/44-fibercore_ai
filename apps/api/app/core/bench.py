@@ -86,6 +86,18 @@ def capability_lock_key(tenant_id: UUID, operation: str) -> str:
     return f"bench-capability|{tenant_id}|{operation}"
 
 
+def profile_for(conn: Connection, tenant_id: UUID, cpe_id, protocol: str):
+    """The (vendor, model, firmware) the registry is keyed on for a bench CPE: its own for TR-069, and for an OLT operation the OLT's, reached through
+    the one confirmed ONU<->CPE link. None when it cannot be resolved to exactly one."""
+    if protocol == "olt":
+        rows = conn.execute(
+            text("SELECT ol.vendor, ol.model, ol.firmware FROM onu_cpe_links l JOIN onus u ON u.tenant_id = l.tenant_id AND u.id = l.onu_id "
+                 "JOIN olts ol ON ol.tenant_id = u.tenant_id AND ol.id = u.olt_id "
+                 "WHERE l.tenant_id = :t AND l.cpe_id = :c AND l.status = 'confirmed'"), {"t": tenant_id, "c": cpe_id}).all()
+        return rows[0] if len(rows) == 1 else None
+    return conn.execute(text("SELECT vendor, model, firmware FROM cpes WHERE tenant_id = :t AND id = :c"), {"t": tenant_id, "c": cpe_id}).first()
+
+
 def params_hash(params: dict) -> str:
     return hashlib.sha256(json.dumps(params, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
@@ -114,16 +126,7 @@ def gate(conn: Connection, tenant_id: UUID, job, *, mode: str) -> str | None:
         return "target_write_locked"
     if job.edge_id is None or bt.edge_id != job.edge_id:
         return "bench_edge_mismatch"
-    if spec.protocol == "olt":
-        # the registry profile is the OLT's: exactly one confirmed ONU<->CPE link, whose ONU belongs to an OLT with a known profile
-        rows = conn.execute(
-            text("SELECT ol.vendor, ol.model, ol.firmware FROM onu_cpe_links l JOIN onus u ON u.tenant_id = l.tenant_id AND u.id = l.onu_id "
-                 "JOIN olts ol ON ol.tenant_id = u.tenant_id AND ol.id = u.olt_id "
-                 "WHERE l.tenant_id = :t AND l.cpe_id = :c AND l.status = 'confirmed'"), {"t": tenant_id, "c": job.target_id}).all()
-        cpe = rows[0] if len(rows) == 1 else None
-    else:
-        cpe = conn.execute(text("SELECT vendor, model, firmware FROM cpes WHERE tenant_id = :t AND id = :c"),
-                           {"t": tenant_id, "c": job.target_id}).first()
+    cpe = profile_for(conn, tenant_id, job.target_id, spec.protocol)
     if cpe is None or not (cpe.vendor and cpe.model and cpe.firmware):
         return "capability_not_observed"
     certs = {r.certification: r for r in conn.execute(
