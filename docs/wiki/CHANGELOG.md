@@ -170,3 +170,6 @@
 - Nuvem: `set_wifi_ssid` no catálogo de bancada com parâmetro `ssid` (formato fixo), `params` assinado no envelope, `bench-authorize --ssid`, hash da autorização ligado ao SSID.
 - Edge: `nbi/bench_ssid.go` (lê original, grava registro de restauração, muda uma vez, lê de volta, restaura e lê de volta), `RestoreFile`, runner com resultado por etapa.
 
+## Unreleased — PR 62 (Edge: ritmo da bancada configurável, motivo local da recusa)
+- `bench.min_interval_seconds` (0 = 30 min; mínimo 60) e `bench.max_per_hour` (0 = 2; máximo 20) na configuração do Edge, a pedido do responsável durante a homologação; o padrão do produto continua 30 min. O Edge passa a logar localmente o motivo exato de cada recusa/falha de manobra (nada disso viaja à nuvem).
+

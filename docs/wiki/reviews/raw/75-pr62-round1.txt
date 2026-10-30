@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18b35-7bc4-7381-9dd5-d97f73e154af).
+[codex] Turn started (01a18b35-7bfe-7eb0-85b6-1d556a2f3281).
+[codex] Assistant message captured: I’ll inspect the branch diff and the surrounding guard/config paths, with particular attentio...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n -C 5 'BenchPacing|MinIntervalSeconds|MaxPerHour|bench pacing|RefreshGuar...
+[codex] Command completed: /bin/bash -lc "rg -n -C 5 'BenchPacing|MinIntervalSeconds|MaxPerHour|bench pacing|RefreshGuar... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/cmd/fibercore-edge/main.go | sed -n '208,221p'; nl -ba agen...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/cmd/fibercore-edge/main.go | sed -n '208,221p'; nl -ba agen... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship: valid local pacing settings are logged b...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship: valid local pacing settings are logged but never reach the persisted guard, so the requested configuration has no effect.
+
+Findings:
+- [high] Bench guard still uses hard-coded pacing (agents/edge/cmd/fibercore-edge/main.go:212-219)
+  `BenchPacing()` resolves the configured values, but the guard is constructed with `30*time.Minute` and `2`. Every bench operation therefore keeps the defaults even when the owner configures values such as 60 seconds and 10 per hour. This blocks the requested homologation adjustment; the startup log can misleadingly report settings that are not enforced.
+  Recommendation: Pass `minGap` and `perHour` into `RefreshGuard.MinPerDevice` and `MaxPerHour`, and keep the startup log tied to those actual guard values.

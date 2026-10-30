@@ -326,3 +326,30 @@ func TestBenchConfigValidation(t *testing.T) {
 		t.Fatalf("disabled: %v", err)
 	}
 }
+
+func TestBenchPacingConfig(t *testing.T) {
+	base := `,"nbi_url":"http://127.0.0.1:7557","jobs_enabled":true,"job_public_key":"k","allowed_operations":["collect","reboot_cpe"]`
+	dev := `{"oui":"00259E","product_class":"EG8145V5","serial":"48575443E2247AA5"}`
+	mk := func(pace string) string {
+		return base + `,"bench":{"bench_writes_enabled":true,` + pace + `"devices":[` + dev + `]}`
+	}
+	c, err := Load(write(t, 0o600, good(mk(""))), "v")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m, n := c.Bench.BenchPacing(); m != 30*time.Minute || n != 2 {
+		t.Fatalf("defaults %v %d", m, n)
+	}
+	c, err = Load(write(t, 0o600, good(mk(`"min_interval_seconds":60,"max_per_hour":10,`))), "v")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m, n := c.Bench.BenchPacing(); m != time.Minute || n != 10 {
+		t.Fatalf("lowered %v %d", m, n)
+	}
+	for _, bad := range []string{`"min_interval_seconds":59,`, `"min_interval_seconds":1801,`, `"min_interval_seconds":-1,`, `"max_per_hour":21,`, `"max_per_hour":-1,`} {
+		if _, err := Load(write(t, 0o600, good(mk(bad))), "v"); err == nil {
+			t.Errorf("%s: must be refused", bad)
+		}
+	}
+}

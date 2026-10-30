@@ -42,8 +42,11 @@ type Config struct {
 
 // BenchConfig is the Edge's own, independent copy of the bench list (ADR-0030): the Cloud can name a device, never add one here.
 type BenchConfig struct {
-	Enabled bool                `json:"bench_writes_enabled"`
-	Devices []BenchDeviceConfig `json:"devices"`
+	Enabled bool `json:"bench_writes_enabled"`
+	// Pacing of bench writes per device. 0 = the defaults (30 min, 2 per hour). Homologation may lower them; never below the floors below.
+	MinIntervalSeconds int                 `json:"min_interval_seconds"`
+	MaxPerHour         int                 `json:"max_per_hour"`
+	Devices            []BenchDeviceConfig `json:"devices"`
 }
 
 // BenchDeviceConfig: the ACS identity (the three parts of the GenieACS _id) of one bench device, in clear: it is checked against the ACS.
@@ -146,6 +149,12 @@ func (c *Config) Validate() error {
 			errs = append(errs, errors.New("bench.bench_writes_enabled requires jobs_enabled and nbi_url"))
 		case len(b.Devices) < 1 || len(b.Devices) > 4:
 			errs = append(errs, errors.New("bench.devices must list 1 to 4 devices"))
+		}
+		if b.MinIntervalSeconds != 0 && (b.MinIntervalSeconds < BenchMinIntervalFloor || b.MinIntervalSeconds > 1800) {
+			errs = append(errs, fmt.Errorf("bench.min_interval_seconds must be 0 (30 min) or between %d and 1800", BenchMinIntervalFloor))
+		}
+		if b.MaxPerHour < 0 || b.MaxPerHour > 20 {
+			errs = append(errs, errors.New("bench.max_per_hour must be 0 (2) or between 1 and 20"))
 		}
 		ids := map[string]bool{}
 		for _, d := range b.Devices {
@@ -284,6 +293,21 @@ func DeviceKey(addr string) string {
 func StateFiles(queuePath string) (lock, guard string) {
 	d := filepath.Dir(queuePath)
 	return filepath.Join(d, "edge.lock"), filepath.Join(d, "olt-guard.json")
+}
+
+// BenchMinIntervalFloor is the shortest interval between two bench writes on one device that a configuration may ask for.
+const BenchMinIntervalFloor = 60
+
+// BenchPacing resolves the configured pacing to the guard's values.
+func (b BenchConfig) BenchPacing() (time.Duration, int) {
+	min, per := 30*time.Minute, 2
+	if b.MinIntervalSeconds > 0 {
+		min = time.Duration(b.MinIntervalSeconds) * time.Second
+	}
+	if b.MaxPerHour > 0 {
+		per = b.MaxPerHour
+	}
+	return min, per
 }
 
 var benchPartRe = regexp.MustCompile(`^[A-Za-z0-9._]{2,64}$`)
