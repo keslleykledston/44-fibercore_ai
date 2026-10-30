@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18ba8-e31b-7c53-9c0a-6743e0394a0d).
+[codex] Turn started (01a18ba8-e350-7df3-8d18-84d2f6228363).
+[codex] Assistant message captured: I’ll inspect the full `main...HEAD` diff and the surrounding collector/API flows, focusing on...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=12 main...HEAD -- agents/edge/internal/olt/hu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=12 main...HEAD -- agents/edge/internal/olt/hu... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "SNMP|lastDown|down_since|olt_down_at|last_down_at|MAX_FUTURE|SNMP.*rate...
+[codex] Command completed: /bin/bash -lc 'rg -n "SNMP|lastDown|down_since|olt_down_at|last_down_at|MAX_FUTURE|SNMP.*rate... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '385,450p'; nl -ba agents/edge/i...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '385,450p'; nl -ba agents/edge/i... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: the OpenAPI contract still omits the...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: the OpenAPI contract still omits the offline report’s `basis` field and its new `olt_reported` value, so clients cannot rely on the branch’s new response semantics.
+
+Findings:
+- [medium] Offline report contract omits the new basis value (contracts/fibercore-v2.openapi.yaml:352-360)
+  The endpoint now returns `basis: "olt_reported"` when `olt_down_at` supplies the outage start, but the OpenAPI response description still lists item fields without `basis`. The summary mentions outage bases but does not define this returned field or its enum. Contract-generated clients and API consumers therefore have no documented way to distinguish an OLT-reported time from an observed transition or last-online bound.
+  Recommendation: Document `basis` in `/onus/offline` item responses with the values `transition_observed`, `olt_reported`, and `since_last_online`; define the response schema rather than leaving these fields in an informal description.
