@@ -14,3 +14,5 @@ Escopo: SOMENTE a ONT de bancada (Huawei EG8145V5, firmware V5R019C10S350). Sem 
 
 ## Observação da OLT
 A coleta da OLT que começou às 03:30:31 UTC e terminou às 03:33:07 registrou a ONU `offline`: ela leu a ONU durante a reinicialização. A volta da ONU a `online` foi OBSERVADA pelo responsável na OLT logo após o reboot (~03:33 UTC, relato no chat da sessão); a coleta automática seguinte da nuvem (~03:48 UTC) ainda é registrada abaixo quando chegar.
+
+**Coleta automática seguinte (OLT, SNMP, observada às 03:50:01 UTC):** ONU de bancada `online`, RX óptico -13,04 dBm — igual ao estado de partida (H1). Volta confirmada também pela nuvem.
