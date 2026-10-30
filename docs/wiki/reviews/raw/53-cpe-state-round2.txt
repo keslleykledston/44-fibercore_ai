@@ -1,0 +1,5 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), PR 53, round 2
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: needs-attention
+- [high] Formato de wifi_radio_enabled diverge entre Edge e API (params.go): o Edge envia Enabled/Disabled (stateBool), a API só aceitava boolean; todo lote com rádio daria 422. Acrescentar teste ponta a ponta com valor emitido pelo parser.

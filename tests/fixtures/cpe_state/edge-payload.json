@@ -1,0 +1,81 @@
+{
+  "edge_id": "e1",
+  "observed_at": "2026-10-29T12:00:00Z",
+  "states": [
+    {
+      "binding": {
+        "protocol": "tr069",
+        "external_id": "OUI-PC-1",
+        "connector_id": "genieacs-lab"
+      },
+      "metrics": [
+        {
+          "name": "uptime_seconds",
+          "scope": "device/0",
+          "value": 86400,
+          "captured_at": "2026-10-29T11:59:00Z"
+        },
+        {
+          "name": "uptime_seconds",
+          "scope": "ip/2/1",
+          "value": 0,
+          "captured_at": "2026-10-29T11:59:00Z"
+        },
+        {
+          "name": "uptime_seconds",
+          "scope": "ppp/3/1",
+          "value": 5844,
+          "captured_at": "2026-10-29T11:59:00Z"
+        },
+        {
+          "name": "wan_connection_status",
+          "scope": "ip/2/1",
+          "value": "Disconnected",
+          "captured_at": "2026-10-29T11:59:00Z"
+        },
+        {
+          "name": "wan_connection_status",
+          "scope": "ppp/1",
+          "value": "LowerLayerDown",
+          "captured_at": "2026-10-29T11:59:00Z"
+        },
+        {
+          "name": "wan_connection_status",
+          "scope": "ppp/3/1",
+          "value": "Connected",
+          "captured_at": "2026-10-29T11:59:00Z"
+        },
+        {
+          "name": "wan_link_status",
+          "scope": "link/1",
+          "value": "Up",
+          "captured_at": "2026-10-29T11:59:00Z"
+        },
+        {
+          "name": "wifi_channel",
+          "scope": "radio/1",
+          "value": 1,
+          "captured_at": "2026-10-29T11:59:00Z"
+        },
+        {
+          "name": "wifi_channel",
+          "scope": "radio/5",
+          "value": 36,
+          "captured_at": "2026-10-29T11:59:00Z"
+        },
+        {
+          "name": "wifi_radio_enabled",
+          "scope": "radio/1",
+          "value": "Enabled",
+          "captured_at": "2026-10-29T11:59:00Z"
+        },
+        {
+          "name": "wifi_radio_enabled",
+          "scope": "radio/5",
+          "value": "Disabled",
+          "captured_at": "2026-10-29T11:59:00Z"
+        }
+      ]
+    }
+  ]
+}

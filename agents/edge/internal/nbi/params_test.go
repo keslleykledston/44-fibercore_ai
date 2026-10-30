@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -218,5 +219,24 @@ func TestCachedParamsBatchesAndRejectsUnboundedOrInvalidIDs(t *testing.T) {
 	}
 	if reqs != 0 {
 		t.Fatalf("a rejected call must not reach the network (requests=%d)", reqs)
+	}
+}
+
+// The Cloud accepts a scope only if it is closed PER METRIC (apps/api/app/api/cpe_state.py and the CHECK of migration 0019). Every scope this
+// reader can emit must be in it, or a whole batch of state would be refused; a test on the Cloud side compares these patterns with its own.
+var cloudScopeByMetric = map[string]*regexp.Regexp{
+	"wan_link_status":       regexp.MustCompile(`^link/[0-9]{1,3}$`),
+	"wan_connection_status": regexp.MustCompile(`^(ppp|ip)(/[0-9]{1,3}){1,2}$`),
+	"uptime_seconds":        regexp.MustCompile(`^((ppp|ip)(/[0-9]{1,3}){1,2}|device/0)$`),
+	"wifi_radio_enabled":    regexp.MustCompile(`^radio/[0-9]{1,3}$`),
+	"wifi_channel":          regexp.MustCompile(`^radio/[0-9]{1,3}$`),
+}
+
+func TestEveryScopeTheReaderCanEmitFitsTheCloudScopeForItsMetric(t *testing.T) {
+	for path, p := range allowlist {
+		re, ok := cloudScopeByMetric[p.spec.metric]
+		if !ok || !re.MatchString(p.scope) {
+			t.Fatalf("%s: metric %q scope %q is not accepted by the Cloud", path, p.spec.metric, p.scope)
+		}
 	}
 }

@@ -1,0 +1,5 @@
+# Transcrição do veredito do Codex (adversarial-review, base main), PR 53, round 1
+# (resumo fiel do que a ferramenta devolveu; a saída bruta completa não foi arquivada)
+
+Verdict: needs-attention
+- [high] Scope permite persistir SSID ou outro texto sensível (cpe_state.py): regex genérica 'palavra/número' aceitava 'minharede/1'; usar allowlist de scopes por métrica na API e no banco.

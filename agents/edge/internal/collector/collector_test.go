@@ -1,12 +1,16 @@
 package collector
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -144,5 +148,225 @@ func TestConflictAcrossTheChunkBoundaryIsStillDropped(t *testing.T) {
 	}
 	if total != maxPerSnapshot+3-2 {
 		t.Fatalf("total cpes %d", total)
+	}
+}
+
+type fakeParams struct {
+	byID  map[string][]nbi.Metric
+	err   error
+	asked []string
+	calls int
+}
+
+// CachedParams answers for the ids it is asked about and, on the FIRST call only, also for ids nobody asked about (a reader must not be trusted
+// to stay inside the request).
+func (f *fakeParams) CachedParams(_ context.Context, ids []string) ([]nbi.DeviceParams, error) {
+	f.asked = append(f.asked, ids...)
+	f.calls++
+	if f.err != nil {
+		return nil, f.err
+	}
+	asked := map[string]bool{}
+	for _, id := range ids {
+		asked[id] = true
+	}
+	var out []nbi.DeviceParams
+	for id, ms := range f.byID {
+		if asked[id] || f.calls == 1 {
+			out = append(out, nbi.DeviceParams{ID: id, Metrics: ms})
+		}
+	}
+	return out, nil
+}
+
+func stateNow() time.Time { return time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC) }
+
+func metric(name, scope string, v any, at string) nbi.Metric {
+	return nbi.Metric{Name: name, Scope: scope, Value: v, CapturedAt: at}
+}
+
+func TestStateFollowsInventoryAndOnlyCarriesKeptDevices(t *testing.T) {
+	ok := dev(1, "SER00001")
+	placeholder := nbi.Device{ID: "DISCOVERYSERVICE-DISCOVERYSERVICE-x", DeviceID: nbi.DeviceID{OUI: "DISCOVERYSERVICE", Manufacturer: "DISCOVERYSERVICE", ProductClass: "DISCOVERYSERVICE", SerialNumber: "x1234"}}
+	noSerial := dev(3, "")
+	p := &fakeParams{byID: map[string][]nbi.Metric{
+		ok.ID:          {metric("wan_link_status", "link/1", "Up", "2026-10-29T11:59:00Z"), metric("wifi_channel", "radio/5", 36.0, "2026-10-29T11:59:01Z")},
+		placeholder.ID: {metric("wan_link_status", "link/1", "Up", "2026-10-29T11:59:00Z")}, // a reader that answers for a device never asked about
+		"OUI-PC-999":   {metric("wan_link_status", "link/1", "Up", "2026-10-29T11:59:00Z")},
+	}}
+	g := &GenieACS{EdgeID: "e1", ConnectorID: "genieacs-lab", Client: fakeLister{[]nbi.Device{ok, placeholder, noSerial}}, Params: p, Now: stateNow}
+	items, err := g.Collect(context.Background())
+	if err != nil || len(items) != 2 || items[0].Kind != "cpe_snapshot" || items[1].Kind != "cpe_state" || items[1].Key != "cpe_state:genieacs-lab" {
+		t.Fatalf("%v %+v", err, items)
+	}
+	if len(p.asked) != 1 || p.asked[0] != ok.ID {
+		t.Fatalf("state may only be requested for devices kept in the inventory, asked %v", p.asked)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(items[1].Payload, &got); err != nil {
+		t.Fatal(err)
+	}
+	states := got["states"].([]any)
+	if got["edge_id"] != "e1" || got["observed_at"] != "2026-10-29T12:00:00Z" || len(states) != 1 {
+		t.Fatalf("%v", got)
+	}
+	st := states[0].(map[string]any)
+	b := st["binding"].(map[string]any)
+	if b["protocol"] != "tr069" || b["external_id"] != ok.ID || b["connector_id"] != "genieacs-lab" || len(st["metrics"].([]any)) != 2 {
+		t.Fatalf("%v", st)
+	}
+	m0 := st["metrics"].([]any)[0].(map[string]any)
+	for _, k := range []string{"name", "scope", "value", "captured_at"} {
+		if _, has := m0[k]; !has || len(m0) != 4 {
+			t.Fatalf("metric must have exactly name/scope/value/captured_at, got %v", m0)
+		}
+	}
+}
+
+func TestStateReadFailureNeverCostsTheInventory(t *testing.T) {
+	skips := map[string]int{}
+	g := &GenieACS{EdgeID: "e1", ConnectorID: "c", Client: fakeLister{[]nbi.Device{dev(1, "SER00001")}},
+		Params: &fakeParams{err: errors.New("acs down")}, Now: stateNow, OnSkip: func(r string, n int) { skips[r] = n }}
+	items, err := g.Collect(context.Background())
+	if err != nil || len(items) != 1 || items[0].Kind != "cpe_snapshot" || skips["state_read_failed"] != 1 {
+		t.Fatalf("%v %+v %v", err, items, skips)
+	}
+}
+
+func TestStateWithNoMetricsOrFutureClockSendsNothingForThatDevice(t *testing.T) {
+	a, b, c := dev(1, "SER00001"), dev(2, "SER00002"), dev(3, "SER00003")
+	skips := map[string]int{}
+	p := &fakeParams{byID: map[string][]nbi.Metric{
+		a.ID: nil,                                                                                                                       // nothing cached yet
+		b.ID: {metric("wan_link_status", "link/1", "Up", "2026-10-29T12:30:00Z")},                                                       // 30 min ahead: dropped
+		c.ID: {metric("wan_link_status", "link/1", "Up", "not a time"), metric("wifi_channel", "radio/1", 6.0, "2026-10-29T12:00:30Z")}, // 30 s ahead is within skew
+	}}
+	g := &GenieACS{EdgeID: "e", ConnectorID: "c", Client: fakeLister{[]nbi.Device{a, b, c}}, Params: p, Now: stateNow, OnSkip: func(r string, n int) { skips[r] = n }}
+	items, err := g.Collect(context.Background())
+	if err != nil || len(items) != 2 {
+		t.Fatalf("%v %+v", err, items)
+	}
+	var got cpeStateSnapshot
+	if err := json.Unmarshal(items[1].Payload, &got); err != nil || len(got.States) != 1 || got.States[0].Binding.ExternalID != c.ID || len(got.States[0].Metrics) != 1 || got.States[0].Metrics[0].Name != "wifi_channel" {
+		t.Fatalf("%v %+v", err, got)
+	}
+	if skips["state_future_timestamp"] != 2 {
+		t.Fatalf("future/invalid timestamps must be counted, got %v", skips)
+	}
+	// nothing at all to send: no empty cpe_state item
+	g.Params = &fakeParams{byID: map[string][]nbi.Metric{}}
+	if items, _ := g.Collect(context.Background()); len(items) != 1 {
+		t.Fatalf("an empty state round must not produce an item: %+v", items)
+	}
+}
+
+func TestStateIsSplitIntoBoundedItems(t *testing.T) {
+	var devs []nbi.Device
+	p := &batchParams{byID: map[string][]nbi.Metric{}}
+	for i := 1; i <= 450; i++ {
+		d := dev(i, fmt.Sprintf("SER%05d", i))
+		devs = append(devs, d)
+		p.byID[d.ID] = []nbi.Metric{metric("wan_link_status", "link/1", "Up", "2026-10-29T11:59:00Z")}
+	}
+	items, err := (&GenieACS{EdgeID: "e", ConnectorID: "c", Client: fakeLister{devs}, Params: p, Now: stateNow}).Collect(context.Background())
+	if err != nil || len(items) != 1+3 { // one inventory snapshot + 200 + 200 + 50
+		t.Fatalf("%v items=%d", err, len(items))
+	}
+	for _, it := range items[1:] {
+		var s cpeStateSnapshot
+		if json.Unmarshal(it.Payload, &s) != nil || len(s.States) > maxStatesPerItem || it.Kind != "cpe_state" {
+			t.Fatalf("%+v", it)
+		}
+	}
+}
+
+func lf(v any) map[string]any {
+	return map[string]any{"_value": v, "_type": "x", "_timestamp": "2026-10-29T11:59:00.000Z"}
+}
+
+// The payload below is produced by the REAL parser from a realistic ACS document (every metric, both data models) and compared with the golden
+// file the Cloud tests post verbatim (apps/api/tests/test_inventory_cpe_state.py): both sides agree on value formats, not only on names.
+// Regenerate with UPDATE_GOLDEN=1 after a deliberate change.
+func TestCPEStatePayloadFromTheRealParserMatchesTheGoldenTheCloudAccepts(t *testing.T) {
+	doc := map[string]any{"_id": "OUI-PC-1",
+		"InternetGatewayDevice": map[string]any{
+			"WANDevice": map[string]any{"1": map[string]any{
+				"WANCommonInterfaceConfig": map[string]any{"PhysicalLinkStatus": lf("Up")},
+				"WANConnectionDevice": map[string]any{
+					"3": map[string]any{"WANPPPConnection": map[string]any{"1": map[string]any{"ConnectionStatus": lf("Connected"), "Uptime": lf("5844")}}},
+					"2": map[string]any{"WANIPConnection": map[string]any{"1": map[string]any{"ConnectionStatus": lf("Disconnected"), "Uptime": lf(float64(0))}}}}}},
+			"LANDevice": map[string]any{"1": map[string]any{"WLANConfiguration": map[string]any{
+				"1": map[string]any{"Enable": lf(true), "Channel": lf(float64(1))},
+				"5": map[string]any{"Enable": lf(false), "Channel": lf(float64(36))}}}}},
+		"Device": map[string]any{
+			"DeviceInfo": map[string]any{"UpTime": lf(float64(86400))},
+			"PPP":        map[string]any{"Interface": map[string]any{"1": map[string]any{"Status": lf("LowerLayerDown")}}}}}
+	ms, rej := nbi.ExtractMetrics(doc)
+	if rej != 0 || len(ms) != 11 {
+		t.Fatalf("metrics=%d rejected=%d: %+v", len(ms), rej, ms)
+	}
+	sort.Slice(ms, func(i, j int) bool { return ms[i].Name+"@"+ms[i].Scope < ms[j].Name+"@"+ms[j].Scope })
+	g := &GenieACS{EdgeID: "e1", ConnectorID: "genieacs-lab", Client: fakeLister{[]nbi.Device{dev(1, "SER00001")}},
+		Params: &fakeParams{byID: map[string][]nbi.Metric{"OUI-PC-1": ms}}, Now: stateNow}
+	items, err := g.Collect(context.Background())
+	if err != nil || len(items) != 2 || items[1].Kind != "cpe_state" {
+		t.Fatalf("%v %+v", err, items)
+	}
+	var pretty bytes.Buffer
+	if err := json.Indent(&pretty, items[1].Payload, "", "  "); err != nil {
+		t.Fatal(err)
+	}
+	pretty.WriteByte('\n')
+	golden := filepath.Join("..", "..", "..", "..", "tests", "fixtures", "cpe_state", "edge-payload.json")
+	if os.Getenv("UPDATE_GOLDEN") != "" {
+		if err := os.WriteFile(golden, pretty.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(golden)
+	if err != nil || !bytes.Equal(want, pretty.Bytes()) {
+		t.Fatalf("golden payload differs (run with UPDATE_GOLDEN=1 after a deliberate change): err=%v\n%s", err, pretty.String())
+	}
+}
+
+type batchParams struct {
+	failFor string // any read whose ids include this one fails
+	sizes   []int
+	byID    map[string][]nbi.Metric
+}
+
+func (f *batchParams) CachedParams(_ context.Context, ids []string) ([]nbi.DeviceParams, error) {
+	f.sizes = append(f.sizes, len(ids))
+	var out []nbi.DeviceParams
+	for _, id := range ids {
+		if id == f.failFor {
+			return nil, errors.New("response too large")
+		}
+		out = append(out, nbi.DeviceParams{ID: id, Metrics: f.byID[id]})
+	}
+	return out, nil
+}
+
+// One failing read (an oversized ACS answer) costs only its own 25 devices; every other read is kept, and reads never exceed the NBI client's size.
+func TestStateReadsAreBatchedAndOneFailureOnlyCostsItsOwnBatch(t *testing.T) {
+	var devs []nbi.Device
+	p := &batchParams{failFor: "OUI-PC-30", byID: map[string][]nbi.Metric{}}
+	for i := 1; i <= 60; i++ {
+		d := dev(i, fmt.Sprintf("SER%05d", i))
+		devs = append(devs, d)
+		p.byID[d.ID] = []nbi.Metric{metric("wan_link_status", "link/1", "Up", "2026-10-29T11:59:00Z")}
+	}
+	skips := map[string]int{}
+	items, err := (&GenieACS{EdgeID: "e", ConnectorID: "c", Client: fakeLister{devs}, Params: p, Now: stateNow,
+		OnSkip: func(r string, n int) { skips[r] = n }}).Collect(context.Background())
+	if err != nil || len(items) != 2 || skips["state_read_failed"] != 1 {
+		t.Fatalf("%v items=%d skips=%v", err, len(items), skips)
+	}
+	if fmt.Sprint(p.sizes) != "[25 25 10]" {
+		t.Fatalf("reads must be batched by 25, got %v", p.sizes)
+	}
+	var s cpeStateSnapshot
+	if err := json.Unmarshal(items[1].Payload, &s); err != nil || len(s.States) != 35 { // 60 devices minus the failed batch of 25 (devices 26..50)
+		t.Fatalf("%v states=%d", err, len(s.States))
 	}
 }

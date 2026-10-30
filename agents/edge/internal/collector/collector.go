@@ -28,7 +28,15 @@ type DeviceLister interface {
 	Devices(ctx context.Context) ([]nbi.Device, error)
 }
 
+// ParamReader reads the validated CPE state the ACS already has cached (GET only; see nbi.CachedParams). Optional: without it only inventory is sent.
+type ParamReader interface {
+	CachedParams(ctx context.Context, ids []string) ([]nbi.DeviceParams, error)
+}
+
 type GenieACS struct {
+	// Params, when set, adds a cpe_state item per round for the devices that were kept in the inventory snapshot.
+	Params ParamReader
+
 	// OnSkip, when set, receives how many devices were left out and why ("no_serial", "placeholder_identity"); nothing identifying.
 	OnSkip func(reason string, n int)
 
@@ -51,6 +59,15 @@ type cpeIn struct {
 	Model           string     `json:"model,omitempty"`
 	Binding         cpeBinding `json:"binding"`
 }
+type cpeStateIn struct {
+	Binding cpeBinding   `json:"binding"`
+	Metrics []nbi.Metric `json:"metrics"`
+}
+type cpeStateSnapshot struct {
+	EdgeID     string       `json:"edge_id"`
+	ObservedAt string       `json:"observed_at"`
+	States     []cpeStateIn `json:"states"`
+}
 type cpeSnapshot struct {
 	EdgeID     string  `json:"edge_id"`
 	ObservedAt string  `json:"observed_at"`
@@ -58,6 +75,11 @@ type cpeSnapshot struct {
 }
 
 const maxPerSnapshot = 5000 // keep in sync with the Cloud limit
+// stateReadBatch is how many devices one cache read covers (the NBI client's own per-request size): a failed read costs only its own devices,
+// never the rest of the round, and never trips the client's ceiling per call.
+const stateReadBatch = 25
+const maxStatesPerItem = 200     // Cloud accepts 500 per call; smaller items keep one bad batch from costing many CPEs
+const maxStateSkew = time.Minute // a timestamp further ahead than this (the Cloud allows 5 min) is dropped here so one clock cannot poison a batch
 
 // placeholderID is the identity GenieACS/CPEs use BEFORE a device is really known (observed on the real server: Huawei ONTs informing
 // as DISCOVERYSERVICE with a fresh random serial each time). It is not an inventory identity: ingesting it would create a new fake CPE
@@ -103,7 +125,7 @@ func (g *GenieACS) Collect(ctx context.Context) ([]Item, error) {
 	skipped := map[string]int{}
 	defer func() {
 		if g.OnSkip != nil {
-			for _, r := range []string{"no_serial", "invalid_serial", "placeholder_identity", "conflicting_serial"} {
+			for _, r := range []string{"no_serial", "invalid_serial", "placeholder_identity", "conflicting_serial", "state_read_failed", "state_future_timestamp"} {
 				if skipped[r] > 0 {
 					g.OnSkip(r, skipped[r])
 				}
@@ -121,6 +143,7 @@ func (g *GenieACS) Collect(ctx context.Context) ([]Item, error) {
 			claims[k][d.ID] = true
 		}
 	}
+	var kept []nbi.Device // the devices that made it into the inventory snapshot: only these may carry state
 	for _, d := range devs {
 		if isPlaceholder(d) {
 			skipped["placeholder_identity"]++
@@ -143,11 +166,77 @@ func (g *GenieACS) Collect(ctx context.Context) ([]Item, error) {
 			CanonicalSerial: serial, Vendor: d.DeviceID.Manufacturer, Model: d.DeviceID.ProductClass,
 			Binding: cpeBinding{Protocol: "tr069", ExternalID: d.ID, ConnectorID: g.ConnectorID},
 		})
+		kept = append(kept, d)
 		if len(batch) == maxPerSnapshot {
 			if err := flush(); err != nil {
 				return nil, err
 			}
 		}
 	}
-	return items, flush()
+	if err := flush(); err != nil {
+		return nil, err
+	}
+	// State goes AFTER the inventory items of the same round (the Cloud resolves the CPE through the binding the snapshot just created).
+	// Failing to read it never costs the inventory.
+	if g.Params != nil && len(kept) > 0 {
+		items = append(items, g.stateItems(ctx, kept, observed, now(), skipped)...)
+	}
+	return items, nil
+}
+
+func (g *GenieACS) stateItems(ctx context.Context, kept []nbi.Device, observed string, now time.Time, skipped map[string]int) []Item {
+	known := map[string]bool{}
+	var res []nbi.DeviceParams
+	for i := 0; i < len(kept); i += stateReadBatch {
+		end := min(i+stateReadBatch, len(kept))
+		ids := make([]string, 0, end-i)
+		for _, d := range kept[i:end] {
+			ids = append(ids, d.ID)
+			known[d.ID] = true
+		}
+		r, err := g.Params.CachedParams(ctx, ids)
+		if err != nil {
+			skipped["state_read_failed"]++ // counted per failed read; what the other reads returned is kept, and the Cloud keeps the older state
+			if ctx.Err() != nil {
+				break
+			}
+			continue
+		}
+		res = append(res, r...)
+	}
+	var items []Item
+	var batch []cpeStateIn
+	flush := func() {
+		if len(batch) == 0 {
+			return
+		}
+		if b, err := json.Marshal(cpeStateSnapshot{EdgeID: g.EdgeID, ObservedAt: observed, States: batch}); err != nil {
+			skipped["state_read_failed"]++ // cannot happen with these plain types; if it ever does it is counted, not silent
+		} else {
+			items = append(items, Item{Kind: "cpe_state", Key: "cpe_state:" + g.ConnectorID, Payload: b})
+		}
+		batch = nil
+	}
+	for _, r := range res {
+		if !known[r.ID] { // only what was asked for, and only devices that are in this round's inventory
+			continue
+		}
+		var ms []nbi.Metric
+		for _, m := range r.Metrics {
+			if t, err := time.Parse(time.RFC3339, m.CapturedAt); err != nil || t.After(now.Add(maxStateSkew)) {
+				skipped["state_future_timestamp"]++
+				continue
+			}
+			ms = append(ms, m)
+		}
+		if len(ms) == 0 {
+			continue
+		}
+		batch = append(batch, cpeStateIn{Binding: cpeBinding{Protocol: "tr069", ExternalID: r.ID, ConnectorID: g.ConnectorID}, Metrics: ms})
+		if len(batch) == maxStatesPerItem {
+			flush()
+		}
+	}
+	flush()
+	return items
 }

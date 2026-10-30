@@ -502,6 +502,17 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {description: CPE inexistente ou de outro provedor}
+  /cpes/{cpeId}/state:
+    get:
+      tags: [CPE]
+      operationId: getCpeState
+      summary: Últimas observações de estado do CPE (cache do ACS) com idade e proveniência; `fresh` é só dica de exibição, cada regra decide a validade
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: cpeId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Estado observado, content: {application/json: {schema: {$ref: '#/components/schemas/CpeState'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: CPE inexistente ou de outro provedor}
   /olts/{oltId}/capabilities:
     get:
       tags: [Network]
@@ -675,6 +686,19 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {description: "Só quando o CPE já pertence a OUTRO edge (corrida entre edges). Reivindicação de identidade conflitante NÃO gera 409: é ignorada e contada em `conflicts`."}
         '422': {description: Validação}
+  /edge/cpe-state:
+    post:
+      tags: [Edge]
+      operationId: ingestCpeState
+      summary: "Estado WAN/Wi-Fi do CPE lido do cache do ACS pelo Edge (SD-001, ADR-SD-002). Lista FECHADA de métricas com valores tipados; o Edge só escreve nos CPEs do próprio edge (binding desconhecido ou de outro edge conta em `unknown`, sem distinguir). Vence apenas `captured_at` estritamente mais novo."
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CpeStateSnapshot'}}}}
+      responses:
+        '202':
+          description: Aceito. `unknown` conta CPEs não vinculados a este edge
+          content: {application/json: {schema: {$ref: '#/components/schemas/CpeStateAck'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {description: "Validação (métrica fora da lista, valor/escopo inválido, campo extra, relógio do dispositivo no futuro)"}
   /edges:
     get:
       tags: [Edge]
@@ -716,6 +740,69 @@ components:
         cpes: {type: integer, minimum: 0, description: CPEs gravados neste snapshot}
         skipped: {type: integer, minimum: 0, description: CPEs ignorados por terem observação mais antiga que a já gravada}
         conflicts: {type: integer, minimum: 0, description: Reivindicações de identidade ignoradas (external_id diferente do vinculado, serial/binding disputado no lote ou já ligado a outro serial)}
+    CpeStateSnapshot:
+      type: object
+      additionalProperties: false
+      required: [edge_id, observed_at, states]
+      properties:
+        edge_id: {type: string, format: uuid}
+        observed_at: {type: string, format: date-time}
+        states:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            additionalProperties: false
+            required: [binding, metrics]
+            properties:
+              binding:
+                type: object
+                additionalProperties: false
+                required: [protocol, external_id, connector_id]
+                properties:
+                  protocol: {type: string, enum: [tr069, tr369]}
+                  external_id: {type: string, minLength: 1, maxLength: 128}
+                  connector_id: {type: string, minLength: 1, maxLength: 128}
+              metrics:
+                type: array
+                minItems: 1
+                maxItems: 64
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [name, scope, value, captured_at]
+                  properties:
+                    name: {type: string, enum: [wan_link_status, wan_connection_status, uptime_seconds, wifi_radio_enabled, wifi_channel]}
+                    scope: {type: string, maxLength: 32, pattern: '^(link/[0-9]{1,3}|(ppp|ip)(/[0-9]{1,3}){1,2}|device/0|radio/[0-9]{1,3})$', description: 'Fechado POR métrica: link/N (wan_link_status); ppp|ip/N[/N] (wan_connection_status, uptime_seconds); device/0 (uptime_seconds); radio/N (wifi_radio_enabled, wifi_channel)'}
+                    value: {description: "Tipado por métrica: palavra de estado de um enum fixo (inclui Enabled/Disabled do rádio) ou inteiro em faixa", oneOf: [{type: string}, {type: integer}]}
+                    captured_at: {type: string, format: date-time, description: Horário do dispositivo guardado pelo ACS}
+    CpeStateAck:
+      type: object
+      required: [status, cpes, metrics, unknown]
+      properties:
+        status: {type: string, enum: [accepted]}
+        cpes: {type: integer, minimum: 0}
+        metrics: {type: integer, minimum: 0, description: Observações enviadas ao upsert (as não mais novas que a gravada não alteram nada)}
+        unknown: {type: integer, minimum: 0}
+    CpeState:
+      type: object
+      required: [cpe_id, source, metrics]
+      properties:
+        cpe_id: {type: string, format: uuid}
+        source: {type: string, enum: [acs_cache]}
+        metrics:
+          type: array
+          items:
+            type: object
+            required: [metric, scope, value, captured_at, received_at, age_seconds, fresh]
+            properties:
+              metric: {type: string}
+              scope: {type: string}
+              value: {oneOf: [{type: string}, {type: integer}]}
+              captured_at: {type: string, format: date-time}
+              received_at: {type: string, format: date-time}
+              age_seconds: {type: integer, minimum: 0}
+              fresh: {type: boolean}
     LoginRequest:
       type: object
       required: [email, password]
