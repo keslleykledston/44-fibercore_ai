@@ -12,5 +12,5 @@ Somente leitura. Nenhuma escrita foi enviada a equipamento. Sem credencial, IP, 
 - WAN: enlace Up, conexão PPP Connected; RX óptico da ONU em torno de -13 dBm (OLT); `_lastBoot` do ACS anterior ao teste.
 
 ## Pendências
-- **Aceite do responsável:** pendente (necessário para H2).
+- **Aceite do responsável:** dado em 2026-10-30, pelo chat da sessão ("está correto"), sobre as identidades acima.
 - A igualdade completa do serial GPON da ONU com o do CPE foi observada pelo sufixo e pela vinculação confirmada; o responsável confirma na autorização.
