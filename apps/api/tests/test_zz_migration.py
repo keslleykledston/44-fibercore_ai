@@ -8,11 +8,11 @@ def test_migration_hardens_preexisting_role(migrated, admin_url):
     import subprocess
     import sys
 
-    from tests.conftest import API_DIR, APP_PW, WORKER_PW
+    from tests.conftest import API_DIR, APP_PW, RBAC_PW, WORKER_PW
     with migrated.begin() as c:
         c.execute(text("ALTER ROLE fibercore_app BYPASSRLS"))
         c.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
-    env = {**os.environ, "ADMIN_DATABASE_URL": admin_url, "APP_DB_PASSWORD": APP_PW, "WORKER_DB_PASSWORD": WORKER_PW}
+    env = {**os.environ, "ADMIN_DATABASE_URL": admin_url, "APP_DB_PASSWORD": APP_PW, "WORKER_DB_PASSWORD": WORKER_PW, "RBAC_DB_PASSWORD": RBAC_PW}
     subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], cwd=API_DIR, env=env, check=True)
     with migrated.connect() as c:
         row = c.execute(text("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname='fibercore_app'")).one()
@@ -24,8 +24,8 @@ def test_0004_downgrade_removes_edge_agent_and_restores_role_checks(migrated, ad
     import subprocess
     import sys
 
-    from tests.conftest import API_DIR, APP_PW, WORKER_PW
-    env = {**os.environ, "ADMIN_DATABASE_URL": admin_url, "APP_DB_PASSWORD": APP_PW, "WORKER_DB_PASSWORD": WORKER_PW}
+    from tests.conftest import API_DIR, APP_PW, RBAC_PW, WORKER_PW
+    env = {**os.environ, "ADMIN_DATABASE_URL": admin_url, "APP_DB_PASSWORD": APP_PW, "WORKER_DB_PASSWORD": WORKER_PW, "RBAC_DB_PASSWORD": RBAC_PW}
     with migrated.begin() as c:
         tid = c.execute(text("INSERT INTO tenants(name) VALUES ('dg') RETURNING id")).scalar()
         eid = c.execute(text("INSERT INTO edges(tenant_id,name) VALUES (:t,'e') RETURNING id"), {"t": tid}).scalar()
@@ -45,8 +45,8 @@ def test_0013_refuses_colliding_identity_data_instead_of_merging_it(migrated, ad
     import subprocess
     import sys
 
-    from tests.conftest import API_DIR, APP_PW, WORKER_PW
-    env = {**os.environ, "ADMIN_DATABASE_URL": admin_url, "APP_DB_PASSWORD": APP_PW, "WORKER_DB_PASSWORD": WORKER_PW}
+    from tests.conftest import API_DIR, APP_PW, RBAC_PW, WORKER_PW
+    env = {**os.environ, "ADMIN_DATABASE_URL": admin_url, "APP_DB_PASSWORD": APP_PW, "WORKER_DB_PASSWORD": WORKER_PW, "RBAC_DB_PASSWORD": RBAC_PW}
     run = lambda *a: subprocess.run([sys.executable, "-m", "alembic", *a], cwd=API_DIR, env=env, capture_output=True, text=True)  # noqa: E731, S603
     assert run("downgrade", "0012").returncode == 0
     with migrated.begin() as c:

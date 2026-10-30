@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18d6a-8207-7011-b67c-4d10cc12059e).
+[codex] Turn started (01a18d6a-8241-7042-b9ba-66b1ca057a6b).
+[codex] Assistant message captured: Vou ler o diff contra `main` e rastrear as alterações de RBAC, migração e testes em busca de ...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/api/a...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/api/a... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --unified=35 main...HEAD -- apps/api/app/api/members.py apps/api/app/...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=35 main...HEAD -- apps/api/app/api/members.py apps/api/app/... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/alembic/versions/0024_rbac_assign_roles.py | sed -n '45,100p';...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/alembic/versions/0024_rbac_assign_roles.py | sed -n '45,100p';... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberaria ainda: uma escrita direta de papel pode...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberaria ainda: uma escrita direta de papel pode inverter a ordem dos locks e provocar deadlock com a função protegida.
+
+Findings:
+- [medium] O gatilho trava o workspace depois que a linha de membership já está bloqueada (apps/api/alembic/versions/0024_rbac_assign_roles.py:56-60)
+  `app_change_member_role` adquire o advisory lock do workspace antes de atualizar a membership. Já uma escrita direta em `tenant_memberships` bloqueia a linha antes de executar o gatilho `BEFORE`, que só então pede o mesmo advisory lock. Se a escrita direta bloquear a linha-alvo e esperar pelo advisory lock enquanto a função segura esse lock e espera pela linha, o PostgreSQL aborta uma das transações por deadlock. A role da aplicação não tem `UPDATE(role)`, mas o gatilho é a proteção de banco para escritas diretas; nesse cenário essa proteção causa falhas intermitentes em operações concorrentes. Recomendo uniformizar a ordem também para escritas diretas, por exemplo com uma função única que obtenha os locks antes da mutação, e cobrir a concorrência entre essa função e uma atualização direta.
+  Recommendation: Faça toda escrita de papel adquirir o lock do workspace antes do lock da linha de membership; evite depender de um trigger que tenta obter o advisory lock depois que a linha já foi bloqueada.

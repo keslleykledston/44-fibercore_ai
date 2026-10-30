@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18d62-be6f-7721-ad2b-0c92c2f50c09).
+[codex] Turn started (01a18d62-beaa-7d72-9e7c-47542b75cd13).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir especialmente a migração, a função SQL e os tes...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=50 main...HEA...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=50 main...HEA... (exit 0)
+[codex] Assistant message captured: A primeira passada confirma que a função e o trigger compartilham a mesma chave do workspace....
+[codex] Running command: /bin/bash -lc "git diff --unified=35 main...HEAD -- apps/api/tests/test_rbac_assign.py apps/a...
+[codex] Command completed: /bin/bash -lc "git diff --unified=35 main...HEAD -- apps/api/tests/test_rbac_assign.py apps/a... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/alembic/versions/0024_rbac_assign_roles.py | sed -n '25,78p'; ...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/alembic/versions/0024_rbac_assign_roles.py | sed -n '25,78p'; ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não confirmo que o único ponto restante seja o risco ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não confirmo que o único ponto restante seja o risco residual do ADR. A proteção do último administrador pode ser contornada ao desativar a conta, sem alterar a membership; isso pode deixar o provedor sem administrador ativo.
+
+Findings:
+- [medium] Desativar a conta contorna a proteção do último administrador (apps/api/alembic/versions/0024_rbac_assign_roles.py:64-74)
+  O trigger só roda em `UPDATE OF role` ou `DELETE` de `tenant_memberships`. A condição de administrador ativo também depende de `users_global.is_active`, então uma atualização dessa coluna pode desativar o último `isp_admin` sem acionar a proteção. A suíte demonstra que `is_active` pode ser alterado. Isso pode deixar o workspace sem administrador capaz de gerir os papéis. Proteja também a desativação da conta — por exemplo, com uma validação serializada que preserve ao menos um administrador ativo em cada workspace afetado.
+  Recommendation: Estenda a invariável para mudanças de `users_global.is_active`, coordenando a validação com a mesma trava por workspace, ou impeça a desativação da conta enquanto ela for o último administrador ativo de algum workspace.

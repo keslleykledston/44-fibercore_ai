@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     environment: str = "dev"
     # Runtime role: non-owner, NO BYPASSRLS. Migrations use ADMIN_DATABASE_URL instead.
     database_url: str = ""
+    rbac_database_url: str = ""  # role fibercore_rbac: the ONLY connection that may change a membership role (empty => role changes answer 503)
     module_manifest: Path = Path("/app/configs/modules.yaml")
     nats_monitor_url: str = ""
     jwt_secret: str = Field(default="", repr=False)
@@ -52,6 +53,9 @@ def get_settings() -> Settings:
     return Settings()
 
 
+ALWAYS_MFA_ROLES = frozenset({"access_manager"})  # whoever can grant roles always needs a second factor, whatever MFA_REQUIRED_ROLES says (ADR-0031)
+
+
 def required_mfa_roles(settings: Settings) -> frozenset[str]:
     """Parsed MFA_REQUIRED_ROLES. An unknown role name is a configuration error (a typo must not silently weaken the policy)."""
     from app.core.security import ROLE_PERMISSIONS  # lazy: security imports settings
@@ -60,4 +64,4 @@ def required_mfa_roles(settings: Settings) -> frozenset[str]:
     unknown = roles - set(ROLE_PERMISSIONS)
     if unknown:
         raise RuntimeError(f"MFA_REQUIRED_ROLES has unknown roles: {sorted(unknown)}")
-    return roles
+    return roles | ALWAYS_MFA_ROLES

@@ -28,7 +28,7 @@ jobs:
           TEST_NATS_URL: nats://127.0.0.1:4222
       - name: Compose syntax
         run: |
-          printf 'FIBERCORE_DB_PASSWORD=ci\nFIBERCORE_APP_DB_PASSWORD=ci\nFIBERCORE_WORKER_DB_PASSWORD=ci\nFIBERCORE_JWT_SECRET=%s\n' "$(openssl rand -hex 32)" > .env.dev
+          printf 'FIBERCORE_DB_PASSWORD=ci\nFIBERCORE_APP_DB_PASSWORD=ci\nFIBERCORE_WORKER_DB_PASSWORD=ci\nFIBERCORE_RBAC_DB_PASSWORD=ci\nFIBERCORE_JWT_SECRET=%s\n' "$(openssl rand -hex 32)" > .env.dev
           docker compose --env-file .env.dev -f infra/compose/compose.yaml config --quiet
   secrets-scan:
     runs-on: ubuntu-latest

@@ -20,6 +20,8 @@
 | `jobs:execute` | R3 | não | não | Executar operações aprovadas (somente contas de serviço do Edge) |
 | `diagnostics:run` | R0 | não | sim | Rodar diagnósticos (somente leitura) |
 | `members:read` | R1 | não | não | Ver os membros do provedor e o estado do MFA de cada um |
+| `members:manage` | R3 | sim | não | Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite) |
+| `roles:read` | R0 | não | não | Ver os papéis do sistema e as permissões de cada um |
 | `members:mfa_reset` | R3 | sim | não | Redefinir o MFA de outro membro |
 | `edge:read` | R0 | não | não | Ver os Edges do provedor |
 | `edge:heartbeat` | R0 | não | não | Enviar batimento (somente contas de serviço do Edge) |
@@ -27,26 +29,28 @@
 
 ## Papéis × permissões
 
-| Permissão | `isp_admin` | `engineer` | `noc_n2` | `noc_n1` | `support` | `auditor` | `platform_support` | `edge_agent` |
-|---|---|---|---|---|---|---|---|---|
-| `tenant:read` | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |  |
-| `inventory:read` | ✔ | ✔ | ✔ | ✔ | ✔ |  |  |  |
-| `inventory:write` |  |  |  |  |  |  |  | ✔ |
-| `incidents:read` | ✔ | ✔ | ✔ | ✔ |  |  |  |  |
-| `incidents:ack` | ✔ | ✔ | ✔ |  |  |  |  |  |
-| `customers:read` | ✔ | ✔ | ✔ |  | ✔ |  |  |  |
-| `customers:import` | ✔ |  |  |  |  |  |  |  |
-| `associations:review` | ✔ | ✔ |  |  |  |  |  |  |
-| `jobs:read` | ✔ | ✔ | ✔ |  |  |  |  |  |
-| `jobs:request` | ✔ | ✔ | ✔ |  |  |  |  |  |
-| `jobs:approve` | ✔ |  |  |  |  |  |  |  |
-| `jobs:execute` |  |  |  |  |  |  |  | ✔ |
-| `diagnostics:run` | ✔ | ✔ | ✔ |  |  |  |  |  |
-| `members:read` | ✔ |  |  |  |  |  |  |  |
-| `members:mfa_reset` | ✔ |  |  |  |  |  |  |  |
-| `edge:read` | ✔ | ✔ | ✔ |  |  |  |  |  |
-| `edge:heartbeat` |  |  |  |  |  |  |  | ✔ |
-| `audit:read` | ✔ |  |  |  |  | ✔ |  |  |
+| Permissão | `isp_admin` | `engineer` | `noc_n2` | `noc_n1` | `support` | `auditor` | `platform_support` | `edge_agent` | `access_manager` |
+|---|---|---|---|---|---|---|---|---|---|
+| `tenant:read` | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |  | ✔ |
+| `inventory:read` | ✔ | ✔ | ✔ | ✔ | ✔ |  |  |  |  |
+| `inventory:write` |  |  |  |  |  |  |  | ✔ |  |
+| `incidents:read` | ✔ | ✔ | ✔ | ✔ |  |  |  |  |  |
+| `incidents:ack` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
+| `customers:read` | ✔ | ✔ | ✔ |  | ✔ |  |  |  |  |
+| `customers:import` | ✔ |  |  |  |  |  |  |  |  |
+| `associations:review` | ✔ | ✔ |  |  |  |  |  |  |  |
+| `jobs:read` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
+| `jobs:request` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
+| `jobs:approve` | ✔ |  |  |  |  |  |  |  |  |
+| `jobs:execute` |  |  |  |  |  |  |  | ✔ |  |
+| `diagnostics:run` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
+| `members:read` | ✔ |  |  |  |  |  |  |  | ✔ |
+| `members:manage` | ✔ |  |  |  |  |  |  |  | ✔ |
+| `roles:read` | ✔ |  |  |  |  |  |  |  | ✔ |
+| `members:mfa_reset` | ✔ |  |  |  |  |  |  |  |  |
+| `edge:read` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
+| `edge:heartbeat` |  |  |  |  |  |  |  | ✔ |  |
+| `audit:read` | ✔ |  |  |  |  | ✔ |  |  | ✔ |
 
 ## Rotas × permissão
 
@@ -100,6 +104,7 @@
 | POST | `/v1/jobs/{job_id}/submit` | `jobs:request` |
 | GET | `/v1/members` | `members:read` |
 | POST | `/v1/members/{user_id}/mfa/reset` | `members:mfa_reset` |
+| PUT | `/v1/members/{user_id}/role` | `members:manage` |
 | GET | `/v1/olts` | `inventory:read` |
 | GET | `/v1/olts/{olt_id}/capabilities` | `inventory:read` |
 | GET | `/v1/onu-cpe-links` | `inventory:read` |
@@ -112,6 +117,7 @@
 | GET | `/v1/onus/{onu_id}/customer` | `customers:read` |
 | GET | `/v1/platform/modules` | (sessão válida, sem permissão) |
 | GET | `/v1/platform/versions` | (sessão válida, sem permissão) |
+| GET | `/v1/roles` | `roles:read` |
 | GET | `/v1/tenant` | `tenant:read` |
 | GET | `/v1/tenant/features` | `tenant:read` |
 | GET | `/version` | (pública ou usa credencial no corpo) |

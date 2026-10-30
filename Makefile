@@ -14,6 +14,7 @@ env-dev:  ## gera .env.dev com segredos aleatórios (nunca toca .env)
 	  echo "FIBERCORE_DB_PASSWORD=$$(openssl rand -hex 16)" > .env.dev; \
 	  echo "FIBERCORE_APP_DB_PASSWORD=$$(openssl rand -hex 16)" >> .env.dev; \
 	  echo "FIBERCORE_WORKER_DB_PASSWORD=$$(openssl rand -hex 16)" >> .env.dev; \
+	  echo "FIBERCORE_RBAC_DB_PASSWORD=$$(openssl rand -hex 16)" >> .env.dev; \
 	  echo "FIBERCORE_JWT_SECRET=$$(openssl rand -hex 32)" >> .env.dev; \
 	  echo "FIBERCORE_PII_HMAC_KEY=$$(openssl rand -hex 32)" >> .env.dev; \
 	  echo "FIBERCORE_JOB_SIGNING_KEY=$$(openssl rand -base64 32)" >> .env.dev; echo ".env.dev criado"; }
@@ -61,6 +62,7 @@ env-prod:  ## gera .env.prod (0600) com segredos aleatórios; Caddy atrás do ng
 	  echo "FIBERCORE_DB_PASSWORD=$$(openssl rand -hex 24)"; \
 	  echo "FIBERCORE_APP_DB_PASSWORD=$$(openssl rand -hex 24)"; \
 	  echo "FIBERCORE_WORKER_DB_PASSWORD=$$(openssl rand -hex 24)"; \
+	  echo "FIBERCORE_RBAC_DB_PASSWORD=$$(openssl rand -hex 24)"; \
 	  echo "FIBERCORE_JWT_SECRET=$$(openssl rand -hex 32)"; \
 	  echo "FIBERCORE_PII_HMAC_KEY=$$(openssl rand -hex 32)"; \
 	  echo "FIBERCORE_MFA_ENCRYPTION_KEY=$$(openssl rand -base64 32 | tr '+/' '-_')"; \

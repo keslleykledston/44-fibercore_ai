@@ -16,7 +16,7 @@ from sqlalchemy import text
 from app.core.db import make_engine
 from app.core.security import hash_secret
 
-ROLES = ["isp_admin", "engineer", "noc_n2", "noc_n1", "support", "auditor", "platform_support", "edge_agent"]
+ROLES = ["isp_admin", "access_manager", "engineer", "noc_n2", "noc_n1", "support", "auditor", "platform_support", "edge_agent"]
 
 
 def _engine():

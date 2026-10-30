@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18d5a-faf2-7de2-8326-20c01d8d04ed).
+[codex] Turn started (01a18d5a-fb29-7142-9418-f0c157c9457c).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de autorização, transação, trigger/...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/tests/test_rbac_as...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/tests/test_rbac_as... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '72,155p' apps/api/alembic/versions/0001_identity_tenancy_rls.py; sed -...
+[codex] Command completed: /bin/bash -lc "sed -n '72,155p' apps/api/alembic/versions/0001_identity_tenancy_rls.py; sed -... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: a permissão SQL de UPDATE(role) contorna a ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: a permissão SQL de UPDATE(role) contorna a política de atribuição e permite escalada até isp_admin por qualquer caminho que execute SQL como fibercore_app.
+
+Findings:
+- [high] GRANT de coluna permite ignorar a política RBAC da API (apps/api/alembic/versions/0024_rbac_assign_roles.py:19)
+  A migration concede `fibercore_app` permissão para atualizar `role` sem restringir quais transições são permitidas. A RLS limita a linha ao workspace selecionado, mas não limita o papel novo. Assim, qualquer outro caminho SQL executado com essa role — inclusive uma consulta comprometida — pode transformar um `access_manager` em `isp_admin`, contrariando a regra de que apenas isp_admin pode atribuir esse papel. O trigger protege somente o último administrador; não aplica `role_policy`.
+  Recommendation: Evite conceder UPDATE(role) diretamente à role geral da aplicação. Faça a mudança por uma função SQL restrita que valide ator e transição, ou mantenha a coluna sem grant para `fibercore_app` e use um mecanismo privilegiado estreito e auditável.
+- [medium] Troca de papel encerra sessões em todos os workspaces da conta (apps/api/app/api/members.py:174-176)
+  `tokens_valid_after` e `refresh_tokens` são atualizados por `user_id`, sem escopo de workspace. Como papéis pertencem a memberships por tenant, mudar o papel do usuário em um workspace invalida também suas sessões nos demais workspaces. Um usuário legítimo com memberships múltiplas sofre logout global por uma alteração local; o teste cobre apenas um workspace e não detecta esse efeito.
+  Recommendation: Se a invalidação deve ser local, versionar/revogar sessões por membership/workspace e validar essa versão ao selecionar o workspace. Se logout global for requisito, documente-o como efeito explícito e cubra-o com teste de memberships múltiplas.

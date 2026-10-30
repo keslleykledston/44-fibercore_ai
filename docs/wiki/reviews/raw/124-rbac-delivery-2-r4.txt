@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18d65-0a35-7c10-9cd2-94579d6a65a8).
+[codex] Turn started (01a18d65-0d81-7672-807f-27f19dab47b1).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de autorização, transação e migraçã...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/core/role_poli...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/core/role_poli... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"CREATE TABLE users_global|CREATE TABLE tenant_memberships|FORCE ROW LE...
+[codex] Command completed: /bin/bash -lc "rg -n \"CREATE TABLE users_global|CREATE TABLE tenant_memberships|FORCE ROW LE... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '55,175p' apps/api/alembic/versions/0001_identity_tenancy_rls.py; sed -...
+[codex] Command completed: /bin/bash -lc "sed -n '55,175p' apps/api/alembic/versions/0001_identity_tenancy_rls.py; sed -... (exit 0)
+[codex] Assistant message captured: Encontrei um risco de ordenação entre travas: a alteração de papel adquire a trava do provedo...
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/alembic/versions/0024_rbac_assign_roles.py | sed -n '74,98p'; ...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/alembic/versions/0024_rbac_assign_roles.py | sed -n '74,98p'; ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviaria ainda: há uma inversão concreta na ordem...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviaria ainda: há uma inversão concreta na ordem de locks que pode causar deadlock entre troca de papel e desativação de conta, falhando ambas as operações de forma intermitente.
+
+Findings:
+- [medium] Desativação e troca de papel podem entrar em deadlock (apps/api/alembic/versions/0024_rbac_assign_roles.py:80-84)
+  A troca de papel segura a trava advisory do provedor e depois atualiza `users_global` para invalidar sessões ([members.py](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/apps/api/app/api/members.py:184)). Já o gatilho de desativação é executado durante o `UPDATE users_global`, portanto a transação já segura a linha da conta quando tenta adquirir as travas advisory dos provedores ([0024_rbac_assign_roles.py](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/apps/api/alembic/versions/0024_rbac_assign_roles.py:80)). Se as operações concorrerem para a mesma conta/provedor, cada transação pode esperar pelo lock mantido pela outra; o PostgreSQL aborta uma com deadlock. A troca só trata SQLSTATE `42501`, então o deadlock vira erro 500 e a operação inteira, incluindo auditoria e revogação de sessões, é revertida. Recomendo alinhar a ordem de locks entre as duas operações ou desenhar a verificação de desativação para não adquirir locks depois de obter a linha da conta; trate/reteste deadlocks se ainda puderem ocorrer.
+  Recommendation: Padronize a aquisição de locks para conta e provedor em todos os caminhos concorrentes e adicione um teste de concorrência entre desativação e troca de papel que confirme ausência de deadlock.

@@ -389,6 +389,32 @@ paths:
           description: "{can_reset_mfa, members[{user_id, email, display_name, role, mfa_enabled, is_self}]}"
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /roles:
+    get:
+      tags: [Platform]
+      operationId: listRoles
+      summary: Papéis do sistema (ADR-0031) com as permissões de cada um, vindas do catálogo, e quais o chamador pode atribuir (roles:read)
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}]
+      responses:
+        '200':
+          description: "{roles[{role, label, assignable_by_me, permissions[{name, risk R0..R3, description}]}]}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /members/{user_id}/role:
+    put:
+      tags: [Platform]
+      operationId: changeMemberRole
+      summary: Altera o papel de sistema de um membro (members:manage). Recusas com código estável (403 cannot_change_own_role | role_cannot_grant | role_not_assignable | target_role_protected; 409 role_unchanged | last_isp_admin). Uma trava por provedor; o último isp_admin ativo não sai; as sessões do membro terminam; toda mudança é auditada com o motivo. As sessões são da CONTA, então a mudança desloga o membro de todos os provedores a que pertence. A escrita no banco só passa pela função app_change_member_role (o papel de execução não tem UPDATE na coluna)
+      parameters: [{$ref: '#/components/parameters/WorkspaceOptional'}, {name: user_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [role, reason], properties: {role: {type: string}, reason: {type: string, minLength: 3, maxLength: 200}}}}}}
+      responses:
+        '200':
+          description: "{user_id, role, previous_role, revoked_sessions}"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Membro inexistente neste provedor}
+        '409': {description: Papel igual ao atual ou último isp_admin}
+        '422': {description: Papel desconhecido ou motivo ausente}
   /members/{user_id}/mfa/reset:
     post:
       tags: [Platform]

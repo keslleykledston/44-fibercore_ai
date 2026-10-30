@@ -19,8 +19,10 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "isp_admin": frozenset({
         "customers:read", "customers:import", "associations:review", "incidents:read", "incidents:ack",
         "jobs:read", "jobs:request", "jobs:approve", "inventory:read", "tenant:read", "audit:read", "members:read", "edge:read",
-        "members:mfa_reset", "diagnostics:run",
+        "members:mfa_reset", "diagnostics:run", "members:manage", "roles:read",
     }),
+    # ADR-0031: grants roles, has NO operational power at all (cannot see customers, jobs, incidents or the network)
+    "access_manager": frozenset({"tenant:read", "members:read", "members:manage", "roles:read", "audit:read"}),
     "engineer": frozenset({
         "customers:read", "associations:review", "incidents:read", "incidents:ack", "jobs:read", "jobs:request",
         "inventory:read", "tenant:read", "edge:read", "diagnostics:run",

@@ -12,11 +12,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import Connection, text
+from sqlalchemy.exc import DBAPIError
 
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import _client_ip, _gate, _record, _throttled, audit
 from app.api.session import _check_second_factor, _mfa_required, _reauth
-from app.core.db import get_engine, scoped_connection
+from app.core import role_policy
+from app.core.db import get_engine, get_rbac_engine, scoped_connection
+from app.core.permissions import CATALOG
+from app.core.security import ROLE_PERMISSIONS
 from app.core.settings import Settings, get_settings
 from app.events import outbox
 
@@ -37,8 +41,11 @@ def list_members(p: Principal = Depends(require("members:read")), conn: Connecti
     )
     return {
         "can_reset_mfa": p.can("members:mfa_reset"),
+        "can_manage_roles": p.can("members:manage"),
         "members": [{"user_id": str(r.user_id), "email": r.email, "display_name": r.display_name, "role": r.role,
-                     "mfa_enabled": r.mfa_enabled, "is_self": r.user_id == p.id} for r in rows],
+                     "mfa_enabled": r.mfa_enabled, "is_self": r.user_id == p.id,
+                     "can_change_role": p.can("members:manage") and role_policy.can_change_any(p.role, r.role, is_self=r.user_id == p.id)}
+                    for r in rows],
     }
 
 
@@ -109,3 +116,58 @@ def reset_member_mfa(
     outbox.enqueue(conn, tenant_id=p.tenant_id, aggregate_type="user", aggregate_id=user_id, event_type="member.mfa_reset",
                    payload={"by": str(p.id), "revoked_sessions": revoked})
     return {"status": "reset", "revoked_sessions": revoked}
+
+
+ROLE_LABEL = {
+    "isp_admin": "Administrador do provedor", "access_manager": "Gestor de Acesso", "engineer": "Engenheiro", "noc_n2": "NOC nível 2",
+    "noc_n1": "NOC nível 1", "support": "Atendimento", "auditor": "Auditor", "platform_support": "Suporte da plataforma (delegado)",
+    "edge_agent": "Agente Edge (conta de serviço)",
+}
+
+
+@router.get("/v1/roles")
+def list_roles(p: Principal = Depends(require("roles:read"))) -> dict:
+    """The system roles with what each one may do, straight from the permission catalog (ADR-0031), and which of them the caller may hand out."""
+    mine = role_policy.ASSIGNABLE_BY.get(p.role, frozenset()) if p.can("members:manage") else frozenset()
+    return {"roles": [
+        {"role": r, "label": ROLE_LABEL.get(r, r), "assignable_by_me": r in mine,
+         "permissions": [{"name": n, "risk": CATALOG[n].risk, "description": CATALOG[n].description} for n in CATALOG if n in ROLE_PERMISSIONS[r]]}
+        for r in ROLE_PERMISSIONS]}
+
+
+class RoleChangeIn(BaseModel):
+    role: str = Field(min_length=1, max_length=32)
+    reason: str = Field(min_length=3, max_length=200)
+
+
+# reason codes raised by app_change_member_role (the SQL function is the authority) -> HTTP status
+ROLE_CHANGE_STATUS = {
+    "member_not_found": 404, "cannot_change_own_role": 403, "role_cannot_grant": 403, "role_not_assignable": 403, "target_role_protected": 403,
+    "role_unchanged": 409, "last_isp_admin": 409, "reason_required": 422,
+}
+
+
+@router.put("/v1/members/{user_id}/role")
+def change_member_role(user_id: UUID, body: RoleChangeIn, p: Principal = Depends(require("members:manage"))) -> dict:
+    """Changes a member's system role (ADR-0031). The whole change — validation of actor and transition, the write, ending the member's sessions, the
+    audit record and the event — is ONE database function (`app_change_member_role`) that only the dedicated `fibercore_rbac` connection may execute:
+    the application's normal database role cannot change a role at all, not even with forged session settings. The rules mirror role_policy (tested
+    equal); this route only authenticates, validates the shape and maps the function's reason code."""
+    if body.role not in ROLE_PERMISSIONS:
+        raise HTTPException(422, "unknown role")
+    engine = get_rbac_engine()
+    if engine is None:
+        raise HTTPException(503, "rbac_unavailable")   # fail closed: no dedicated connection configured, no role change
+    try:
+        with engine.begin() as c:
+            res = c.execute(text("SELECT app_change_member_role(:a, :t, :u, :r, :why)"),
+                            {"a": p.id, "t": p.tenant_id, "u": user_id, "r": body.role, "why": body.reason}).scalar_one()
+    except DBAPIError as exc:
+        state = str(getattr(exc.orig, "sqlstate", "") or "")
+        code = str(getattr(getattr(exc.orig, "diag", None), "message_primary", "") or "")
+        if state == "P0001" and code in ROLE_CHANGE_STATUS:
+            raise HTTPException(ROLE_CHANGE_STATUS[code], code) from exc
+        if state in ("40P01", "40001"):   # a deadlock/serialisation loser changed nothing: tell the caller to try again
+            raise HTTPException(409, "conflict_retry") from exc
+        raise
+    return {"user_id": str(user_id), "role": body.role, "previous_role": res["previous_role"], "revoked_sessions": res["revoked_sessions"]}

@@ -115,9 +115,9 @@ def test_policy_typos_fail_closed_at_startup_not_silently(policy):
     with pytest.raises(RuntimeError, match="unknown roles"):
         required_mfa_roles(get_settings())
     policy(" isp_admin , noc_n1 ")
-    assert required_mfa_roles(get_settings()) == {"isp_admin", "noc_n1"}
+    assert required_mfa_roles(get_settings()) == {"isp_admin", "noc_n1", "access_manager"}   # access_manager is ALWAYS an MFA role (ADR-0031)
     policy("")
-    assert required_mfa_roles(get_settings()) == frozenset()
+    assert required_mfa_roles(get_settings()) == frozenset({"access_manager"})
 
 
 def test_the_api_refuses_to_boot_with_a_misspelt_role(policy):

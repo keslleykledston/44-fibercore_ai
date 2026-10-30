@@ -40,6 +40,7 @@ services:
       ADMIN_DATABASE_URL: postgresql://fibercore:${FIBERCORE_DB_PASSWORD}@postgres:5432/fibercore
       APP_DB_PASSWORD: ${FIBERCORE_APP_DB_PASSWORD:?Set FIBERCORE_APP_DB_PASSWORD}
       WORKER_DB_PASSWORD: ${FIBERCORE_WORKER_DB_PASSWORD:?Set FIBERCORE_WORKER_DB_PASSWORD}
+      RBAC_DB_PASSWORD: ${FIBERCORE_RBAC_DB_PASSWORD:?Set FIBERCORE_RBAC_DB_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
@@ -54,6 +55,7 @@ services:
     environment:
       ENVIRONMENT: dev
       DATABASE_URL: postgresql://fibercore_app:${FIBERCORE_APP_DB_PASSWORD}@postgres:5432/fibercore
+      RBAC_DATABASE_URL: postgresql://fibercore_rbac:${FIBERCORE_RBAC_DB_PASSWORD}@postgres:5432/fibercore  # the only connection that may change a membership role (ADR-0031)
       JWT_SECRET: ${FIBERCORE_JWT_SECRET:?Set FIBERCORE_JWT_SECRET (>=32 chars)}
       MODULE_MANIFEST: /app/configs/modules.yaml
       NATS_MONITOR_URL: http://nats:8222
