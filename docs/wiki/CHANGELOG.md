@@ -191,3 +191,7 @@
 
 ## Unreleased — PR 74
 - Edge: "Last down time" da OLT por CLI (`down_times` na entrada CLI R015): `display ont register-info` na mesma sessão da coleta, só ONUs offline, até `max_per_round` por coleta; exclusivo com `last_down` (SNMP, não homologado na OLT real). Parser falha fechado (todo registro bem formado, maior UpTime decide).
+
+## Unreleased — PR 81
+- API: migração 0025. MFA recente (10 min): `POST /v1/auth/mfa/step-up`, `mfa_at` na sessão, `403 mfa_recent_required` nas permissões `mfa_recent` (ligada por padrão; `MFA_RECENT_ENFORCE`/`MFA_RECENT_SECONDS`). Delegação da plataforma (até 8 h, com motivo): `GET/POST /v1/platform-delegations`, `DELETE /v1/platform-delegations/{id}`, permissão `platform:delegate` (só `isp_admin`); `platform_support` deixa de ser membership e só existe por delegação viva conferida a cada requisição; CLI `platform-operator`.
+- Web: seção de acesso temporário em Administração → Papéis e permissões e confirmação do segundo fator dentro da ação.
