@@ -278,3 +278,9 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - O Edge confirmou a identidade, enviou `ont reset 14 10`, respondeu "y" UMA vez à pergunta observada e o CLI executou: o ACS registrou `1 BOOT` da ONT de bancada às 06:20:09 (≈1 min depois do comando) e ela voltou a informar. O Edge, porém, leu o eco do próprio "y" na linha da pergunta como uma segunda pergunta, abortou o acompanhamento e reportou `FAILED` ("outcome unknown"): bug do Edge (PR 66), não da OLT. Alvo travado; autorização `3b98c1b1-…` consumida.
 - O reset só conta como homologado depois de um job `SUCCEEDED` com a pós-checagem pela OLT (próxima autorização).
 
+## 2026-10-30 — H4 REAL na ONU de bancada: `onu_reset` e `onu_deactivate` (ADR-0030)
+- `onu_reset`: job `e83e7313-…` `SUCCEEDED` (≈60 s): identidade lida duas vezes na OLT na mesma sessão, `ont reset 14 10` com a confirmação observada respondida uma vez, ONU de volta `online` com novo horário de subida (OLT) e novo boot da ONT (ACS); só a ONT de bancada reiniciou.
+- `onu_deactivate`: job `68e7c250-…` `SUCCEEDED` (≈30 s): `ont deactivate 14 10` observado, `ont activate 14 10` SEMPRE enviado depois e `active`/`online` lidos de volta na OLT; a ONT não reiniciou.
+- Registro: `onu_reset` e `onu_deactivate` (protocolo `olt`, perfil huawei MA5608T MA5600V800R015C00) promovidos a `observed` com as evidências `H4-onu_reset-2026-10-30.md` e `H4-onu_deactivate-2026-10-30.md` (aceitas pelo responsável). `certified` NÃO concedida.
+- Quatro tentativas até o primeiro `SUCCEEDED` do reset (duas recusadas pelo guard da OLT antes de enviar, uma parada na confirmação, uma com bug do eco da resposta, corrigido no PR 66): ver o histórico na evidência.
+
