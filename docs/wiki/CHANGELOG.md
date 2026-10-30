@@ -183,3 +183,7 @@
 ## Unreleased — PR 68 (relatório de ONUs offline há mais de X horas)
 - `GET /v1/onus/offline?min_hours=24&olt_id=&pon_path=&include_stale=&format=json|csv&limit=` (inventory:read, somente leitura, sem migração): as ONUs fora do ar há pelo menos X horas, as mais antigas primeiro, por OLT/PON, com exportação CSV. O início da queda traz a BASE (`transition_observed` exato; `since_last_online` = no máximo isso); ONU nunca vista online só é contada em `excluded.unknown_start`; dado de OLT sem coleta recente fica fora (`excluded.stale`) salvo `include_stale=true`. Sem dado pessoal (serial, OLT, PON). CSV neutraliza fórmulas de planilha.
 
+
+## Unreleased — "Last down time" da OLT
+- Edge: lê por SNMP (somente leitura, lotes de 20) o "Last down time" das ONUs offline e envia `last_down_at` no snapshot.
+- API: migração 0023 `onus.olt_down_at`; `GET /v1/onus/offline` ganha a base `olt_reported` (abaixo de `transition_observed`, acima de `since_last_online`). `down_since` não muda de significado.

@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18ba8-0fc9-7823-82a7-14db397d285e).
+[codex] Turn started (01a18ba8-1003-7ec3-85ac-fdadb45f681f).
+[codex] Assistant message captured: I’ll inspect the branch diff and the surrounding collector, ingestion, reporting, and migrati...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- agents/edge/internal/olt/hu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- agents/edge/internal/olt/hu... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"type SNMPReader|func .*Get\\(|rate|1.*second|SNMP\" agents/edge/intern...
+[codex] Command completed: /bin/bash -lc "rg -n \"type SNMPReader|func .*Get\\(|rate|1.*second|SNMP\" agents/edge/intern... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/snmp.go | sed -n '40,155p'; nl -ba apps/api/ap...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/snmp.go | sed -n '40,155p'; nl -ba apps/api/ap... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'transition_observed|since_last_online|basis:' contracts/fibercore-v2.op...
+[codex] Command completed: /bin/bash -lc "rg -n 'transition_observed|since_last_online|basis:' contracts/fibercore-v2.op... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: malformed SNMP DateAndTime values ca...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: malformed SNMP DateAndTime values can be accepted and persisted as fabricated outage timestamps.
+
+Findings:
+- [medium] DateAndTime parser accepts invalid sub-second and timezone fields (agents/edge/internal/olt/huawei_snmp.go:241-250)
+  The parser checks seconds and timezone hour/minute ranges but does not validate deciseconds (`b[7]`) or the RFC 2579 constraint that a 14-hour offset must have zero minutes. `time.Date` normalizes out-of-range nanoseconds, so malformed varbinds such as decisecond 255 become a different timestamp instead of being discarded. That value then reaches `olt_down_at` and can affect outage age and report ordering. Reject deciseconds above 9 and offsets beyond ±14:00 before constructing the timestamp.
+  Recommendation: Validate `b[7] <= 9` and require `b[10] == 0` when `b[9] == 14`; add malformed-value tests confirming these inputs are omitted.

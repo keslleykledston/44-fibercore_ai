@@ -419,3 +419,95 @@ func TestSNMPPaceFloorCannotBeLoweredByConfig(t *testing.T) {
 		closeFn()
 	}
 }
+
+func dateAndTime(y, mo, d, h, mi, s int, sign byte, th, tm int) SNMPValue {
+	return SNMPValue{IsBytes: true, Bytes: []byte{byte(y >> 8), byte(y), byte(mo), byte(d), byte(h), byte(mi), byte(s), 0, sign, byte(th), byte(tm)}}
+}
+
+func TestSNMPReadsTheLastDownTimeOfOfflineOnusOnlyAndInBatches(t *testing.T) {
+	const ifx = 4194307584
+	m := newPon14()
+	// the OLT says ONT 0 went down 2026-10-30 02:30:34 at UTC-04:00; ONT 1 reports the all-zero "never" value; ONT 2 an 8-byte value (no zone)
+	m.vals[fmt.Sprintf("%s.46.1.23.%d.0", hwXpon, ifx)] = dateAndTime(2026, 10, 30, 2, 30, 34, '-', 4, 0)
+	m.vals[fmt.Sprintf("%s.46.1.23.%d.1", hwXpon, ifx)] = SNMPValue{IsBytes: true, Bytes: []byte{0, 0, 1, 1, 0, 0, 0, 0, '+', 0, 0}}
+	m.vals[fmt.Sprintf("%s.46.1.23.%d.2", hwXpon, ifx)] = SNMPValue{IsBytes: true, Bytes: []byte{0x07, 0xEA, 10, 30, 2, 30, 34, 0}}
+	m.vals[fmt.Sprintf("%s.46.1.23.%d.7", hwXpon, ifx)] = dateAndTime(2026, 10, 1, 1, 1, 1, '+', 0, 0) // an ONLINE ONU: must never be asked
+	snap, err := HuaweiSNMP{}.Snapshot(context.Background(), m, []string{"0/0/14"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[int]ONU{}
+	for _, u := range snap.ONUs {
+		id, _ := strconv.ParseInt(u.Serial[14:], 16, 32)
+		byID[int(id)] = u
+	}
+	want := time.Date(2026, 10, 30, 6, 30, 34, 0, time.UTC)
+	if g := byID[0].LastDownAt; g == nil || !g.Equal(want) {
+		t.Fatalf("ONT 0: want %s got %v", want, g)
+	}
+	for _, id := range []int{1, 2, 3, 4, 5, 6, 8, 9, 7, 10, 11} {
+		if byID[id].LastDownAt != nil {
+			t.Errorf("ONT %d must have no last-down time: %v", id, byID[id].LastDownAt)
+		}
+	}
+	asked := 0
+	for _, o := range m.gets {
+		if strings.Contains(o, ".46.1.23.") {
+			asked++
+			if strings.HasSuffix(o, ".7") || strings.HasSuffix(o, ".10") || strings.HasSuffix(o, ".11") {
+				t.Errorf("an online ONU was asked for its last down time: %s", o)
+			}
+		}
+	}
+	if asked != 9 {
+		t.Fatalf("one OID per OFFLINE ONU (9), got %d", asked)
+	}
+}
+
+func TestParseDateAndTimeIsStrict(t *testing.T) {
+	ok := dateAndTime(2026, 10, 30, 2, 30, 34, '-', 4, 0).Bytes
+	if got, good := parseDateAndTime(ok); !good || !got.Equal(time.Date(2026, 10, 30, 6, 30, 34, 0, time.UTC)) {
+		t.Fatalf("%v %v", got, good)
+	}
+	for name, b := range map[string][]byte{
+		"short": ok[:8], "empty": nil, "year 0": dateAndTime(0, 1, 1, 0, 0, 0, '+', 0, 0).Bytes, "year 2009": dateAndTime(2009, 1, 1, 0, 0, 0, '+', 0, 0).Bytes,
+		"month 13": dateAndTime(2026, 13, 1, 0, 0, 0, '+', 0, 0).Bytes, "feb 30": dateAndTime(2026, 2, 30, 0, 0, 0, '+', 0, 0).Bytes,
+		"hour 24": dateAndTime(2026, 1, 1, 24, 0, 0, '+', 0, 0).Bytes, "bad sign": dateAndTime(2026, 1, 1, 0, 0, 0, '*', 0, 0).Bytes,
+		"zone 15h": dateAndTime(2026, 1, 1, 0, 0, 0, '+', 15, 0).Bytes, "zone 14h30": dateAndTime(2026, 1, 1, 0, 0, 0, '+', 14, 30).Bytes,
+		"second 60": dateAndTime(2026, 1, 1, 0, 0, 60, '+', 0, 0).Bytes, "decisecond 255": withDeci(ok, 255), "decisecond 10": withDeci(ok, 10),
+	} {
+		if _, good := parseDateAndTime(b); good {
+			t.Errorf("%s must be refused", name)
+		}
+	}
+}
+
+func withDeci(b []byte, d byte) []byte {
+	c := append([]byte(nil), b...)
+	c[7] = d
+	return c
+}
+
+func TestSNMPLastDownFailureNeverFailsTheSnapshot(t *testing.T) {
+	m := &failingDown{newPon14()}
+	snap, err := HuaweiSNMP{}.Snapshot(context.Background(), m, []string{"0/0/14"})
+	if err != nil || len(snap.ONUs) != 12 || !snap.PONs[0].Verified {
+		t.Fatalf("err=%v onus=%d", err, len(snap.ONUs))
+	}
+	for _, u := range snap.ONUs {
+		if u.LastDownAt != nil {
+			t.Fatalf("nothing was read: %+v", u)
+		}
+	}
+}
+
+type failingDown struct{ *fakeMIB }
+
+func (f *failingDown) Get(ctx context.Context, oids []string) (map[string]SNMPValue, error) {
+	for _, o := range oids {
+		if strings.Contains(o, ".46.1.23.") {
+			return nil, errors.New("snmp: timeout")
+		}
+	}
+	return f.fakeMIB.Get(ctx, oids)
+}

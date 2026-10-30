@@ -59,9 +59,9 @@ func TestHuaweiSnapshotGolden(t *testing.T) {
 		t.Fatalf("snap=%+v", snap)
 	}
 	want := []ONU{
-		{"48575443A1B2C3D4", "0/1/0", "online", f(-21.5)},
-		{"48575443A1B2C3D5", "0/1/0", "offline", nil},
-		{"48575443A1B2C3D6", "0/1/0", "online", f(-27.8)}, // serial upper-cased
+		{"48575443A1B2C3D4", "0/1/0", "online", f(-21.5), nil},
+		{"48575443A1B2C3D5", "0/1/0", "offline", nil, nil},
+		{"48575443A1B2C3D6", "0/1/0", "online", f(-27.8), nil}, // serial upper-cased
 	}
 	for i, w := range want {
 		g := snap.ONUs[i]

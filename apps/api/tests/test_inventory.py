@@ -496,3 +496,79 @@ def test_offline_report_counts_missing_observation_times_as_stale(client, seed, 
     assert "OFF-LONG-0001" not in [i["serial"] for i in d["items"]] and d["excluded"]["stale"] >= 1
     inc = client.get("/v1/onus/offline?min_hours=24&include_stale=true", headers=h).json()
     assert next(i for i in inc["items"] if i["serial"] == "OFF-LONG-0001")["freshness"] == "unknown"
+
+
+# ---- the OLT's own "last down time" (olt_down_at) ----
+def _olt_down(migrated, seed, serial):
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        r = c.execute(text("SELECT olt_down_at, down_since FROM onus WHERE serial = :s"), {"s": serial}).one()
+    return r.olt_down_at, r.down_since
+
+
+def test_olt_reported_last_down_time_dates_an_outage_without_observed_transition(client, seed, inv, migrated):
+    from datetime import UTC, datetime, timedelta
+
+    a = agent(client, inv, "a1")
+    down = (datetime.now(UTC) - timedelta(hours=40)).replace(microsecond=0)
+    body = snap(inv, name="OLT-LASTDOWN", observed=_now(-30))
+    body["pons"] = [{"pon_path": "0/2/0", "status": "up", "complete": False}]
+    body["onus"] = [
+        {"serial": "OLTDOWN-0001", "pon_path": "0/2/0", "status": "offline", "last_down_at": down.isoformat()},
+        {"serial": "OLTDOWN-NONE1", "pon_path": "0/2/0", "status": "offline"},
+        {"serial": "OLTDOWN-FUT01", "pon_path": "0/2/0", "status": "offline", "last_down_at": (datetime.now(UTC) + timedelta(hours=2)).isoformat()},
+        {"serial": "OLTDOWN-ONL01", "pon_path": "0/2/0", "status": "online", "rx_dbm": -20.0, "last_down_at": down.isoformat()},
+    ]
+    assert client.post("/v1/edge/olt-snapshots", headers=a, json=body).status_code == 202
+    got, since = _olt_down(migrated, seed, "OLTDOWN-0001")
+    assert got == down and since is None                       # kept apart from down_since (incident correlation reads that one)
+    assert _olt_down(migrated, seed, "OLTDOWN-NONE1") == (None, None)
+    fut, _ = _olt_down(migrated, seed, "OLTDOWN-FUT01")
+    assert fut is not None and fut <= datetime.now(UTC)        # never later than the server clock
+    assert _olt_down(migrated, seed, "OLTDOWN-ONL01")[0] is None   # an online ONU has no down time
+
+    h = hdr(client, "alice", seed, "A")
+    items = {i["serial"]: i for i in client.get("/v1/onus/offline?min_hours=24", headers=h).json()["items"]}
+    assert items["OLTDOWN-0001"]["basis"] == "olt_reported" and 39.9 <= items["OLTDOWN-0001"]["offline_hours"] <= 40.2
+    assert "OLTDOWN-NONE1" not in items                           # still no known start
+
+    # a later snapshot without the (best-effort) reading keeps the last value; a newer reading replaces it; coming back online erases it
+    later = snap(inv, name="OLT-LASTDOWN", observed=_now(-20))
+    later["pons"] = body["pons"]
+    later["onus"] = [{"serial": "OLTDOWN-0001", "pon_path": "0/2/0", "status": "offline"}]
+    assert client.post("/v1/edge/olt-snapshots", headers=a, json=later).status_code == 202
+    assert _olt_down(migrated, seed, "OLTDOWN-0001")[0] == down
+    newer = snap(inv, name="OLT-LASTDOWN", observed=_now(-10))
+    newer["pons"] = body["pons"]
+    newer["onus"] = [{"serial": "OLTDOWN-0001", "pon_path": "0/2/0", "status": "offline", "last_down_at": (down + timedelta(hours=1)).isoformat()}]
+    assert client.post("/v1/edge/olt-snapshots", headers=a, json=newer).status_code == 202
+    assert _olt_down(migrated, seed, "OLTDOWN-0001")[0] == down + timedelta(hours=1)
+    back = snap(inv, name="OLT-LASTDOWN", observed=_now(-5))
+    back["pons"] = body["pons"]
+    back["onus"] = [{"serial": "OLTDOWN-0001", "pon_path": "0/2/0", "status": "online", "rx_dbm": -19.0}]
+    assert client.post("/v1/edge/olt-snapshots", headers=a, json=back).status_code == 202
+    assert _olt_down(migrated, seed, "OLTDOWN-0001")[0] is None
+
+
+def test_an_observed_transition_wins_over_the_olt_reported_time_and_a_naive_time_is_refused(client, seed, inv, migrated):
+    from datetime import UTC, datetime, timedelta
+
+    a = agent(client, inv, "a1")
+    first = snap(inv, name="OLT-LASTDOWN2", observed=_now(-60))
+    first["pons"] = [{"pon_path": "0/3/0", "status": "up", "complete": False}]
+    first["onus"] = [{"serial": "OLTDOWN-TRANS1", "pon_path": "0/3/0", "status": "online", "rx_dbm": -20.0}]
+    assert client.post("/v1/edge/olt-snapshots", headers=a, json=first).status_code == 202
+    second = snap(inv, name="OLT-LASTDOWN2", observed=_now(-30))
+    second["pons"] = first["pons"]
+    second["onus"] = [{"serial": "OLTDOWN-TRANS1", "pon_path": "0/3/0", "status": "offline",
+                       "last_down_at": (datetime.now(UTC) - timedelta(minutes=45)).isoformat()}]
+    assert client.post("/v1/edge/olt-snapshots", headers=a, json=second).status_code == 202
+    got, since = _olt_down(migrated, seed, "OLTDOWN-TRANS1")
+    assert got is not None and since is not None
+    _age(migrated, seed, "OLTDOWN-TRANS1", down_hours=30, last_online_hours=31)
+    h = hdr(client, "alice", seed, "A")
+    row = next(i for i in client.get("/v1/onus/offline?min_hours=24", headers=h).json()["items"] if i["serial"] == "OLTDOWN-TRANS1")
+    assert row["basis"] == "transition_observed"
+    bad = snap(inv, observed=_now(-1))
+    bad["onus"] = [{"serial": "OLTDOWN-NAIVE", "status": "offline", "last_down_at": "2026-10-30T10:00:00"}]
+    assert client.post("/v1/edge/olt-snapshots", headers=a, json=bad).status_code == 422

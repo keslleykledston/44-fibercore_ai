@@ -337,7 +337,7 @@ paths:
     get:
       tags: [Network]
       operationId: listOfflineOnus
-      summary: ONUs offline há pelo menos `min_hours`, as mais antigas primeiro (agendar retirada, contatar o cliente). O início da queda traz a BASE (`transition_observed` = visto online e depois fora, exato; `since_last_online` = visto online pela última vez nesse instante, a queda dura NO MÁXIMO isso). ONU nunca vista online não tem início conhecido e só é contada em `excluded.unknown_start`; linhas com ONU OU snapshot da OLT velhos (>15 min) ficam fora (`excluded.stale`, decidido antes do `limit`) salvo `include_stale=true`. `format=csv` devolve o mesmo conteúdo em CSV (cabeçalhos X-Excluded-*). inventory:read
+      summary: ONUs offline há pelo menos `min_hours`, as mais antigas primeiro (agendar retirada, contatar o cliente). O início da queda traz a BASE (`transition_observed` = visto online e depois fora, exato; `olt_reported` = o \"Last down time\" que a própria OLT informa para a ONU (o relógio da OLT pode divergir alguns minutos); `since_last_online` = visto online pela última vez nesse instante, a queda dura NO MÁXIMO isso). ONU nunca vista online não tem início conhecido e só é contada em `excluded.unknown_start`; linhas com ONU OU snapshot da OLT velhos (>15 min) ficam fora (`excluded.stale`, decidido antes do `limit`) salvo `include_stale=true`. `format=csv` devolve o mesmo conteúdo em CSV (cabeçalhos X-Excluded-*). inventory:read
       parameters:
         - $ref: '#/components/parameters/WorkspaceOptional'
         - {name: min_hours, in: query, required: false, schema: {type: number, minimum: 0, maximum: 8760, default: 24}}
@@ -348,7 +348,10 @@ paths:
         - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 5000, default: 500}}
       responses:
         '200':
-          description: "{generated_at, criteria{}, excluded{stale,unknown_start}, truncated, count, items[{onu_id, serial, olt, pon_path, status, offline_since, offline_hours, basis, last_online_at, observed_at, olt_observed_at, freshness}]} ou text/csv"
+          description: ONUs offline; JSON (OfflineOnuReport) ou text/csv (mesmas colunas dos itens; cabeçalhos X-Excluded-Stale, X-Excluded-Unknown-Start, X-Truncated)
+          content:
+            application/json: {schema: {$ref: '#/components/schemas/OfflineOnuReport'}}
+            text/csv: {schema: {type: string}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
   /onus/{onu_id}:
@@ -1282,6 +1285,40 @@ components:
       required: [module, version]
       properties: {module: {type: string}, version: {type: string}, changelog_url: {type: string}, approved_for_tenant: {type: boolean}}
     Freshness: {type: string, enum: [fresh, stale, unknown], description: "Calculado na leitura (limite 15 min). Silêncio do Edge/OLT => stale, nunca offline fabricado."}
+    OfflineOnuReport:
+      type: object
+      required: [generated_at, criteria, excluded, truncated, count, items]
+      properties:
+        generated_at: {type: string, format: date-time}
+        criteria: {type: object, properties: {min_hours: {type: number}, olt_id: {type: [string, 'null'], format: uuid}, pon_path: {type: [string, 'null']}, include_stale: {type: boolean}}}
+        excluded:
+          type: object
+          properties:
+            stale: {type: integer, description: "ONU ou snapshot da OLT velhos (>15 min), deixados de fora salvo include_stale=true"}
+            unknown_start: {type: integer, description: "Offline sem nenhum início conhecido (nunca vista online, sem transição, sem Last down time da OLT)"}
+        truncated: {type: boolean}
+        count: {type: integer}
+        items:
+          type: array
+          items:
+            type: object
+            required: [onu_id, serial, olt, status, offline_since, offline_hours, basis, freshness]
+            properties:
+              onu_id: {type: string, format: uuid}
+              serial: {type: string}
+              olt: {type: string}
+              pon_path: {type: [string, 'null']}
+              status: {type: string, enum: [offline, los, dying_gasp]}
+              offline_since: {type: string, format: date-time}
+              offline_hours: {type: number}
+              basis:
+                type: string
+                enum: [transition_observed, olt_reported, since_last_online]
+                description: "transition_observed = o Edge viu online e depois fora (exato); olt_reported = o 'Last down time' que a própria OLT informa (relógio da OLT pode divergir alguns minutos); since_last_online = visto online pela última vez nesse instante (a queda dura NO MÁXIMO isso)"
+              last_online_at: {type: [string, 'null'], format: date-time}
+              observed_at: {type: [string, 'null'], format: date-time}
+              olt_observed_at: {type: [string, 'null'], format: date-time}
+              freshness: {$ref: '#/components/schemas/Freshness'}
     Olt:
       type: object
       required: [id, name, vendor, edge_id, support_level, onu_count, freshness]
@@ -1340,7 +1377,7 @@ components:
         firmware: {type: [string, 'null']}
         driver_level: {type: string, enum: [identified, observed], default: identified}
         pons: {type: array, maxItems: 512, items: {type: object, required: [pon_path], properties: {pon_path: {type: string}, status: {type: string, enum: [up, down, unknown]}, complete: {type: boolean, default: false, description: "true só se o snapshot lista TODAS as ONUs da PON; apenas PONs completas entram na correlação de incidentes"}}}}
-        onus: {type: array, maxItems: 20000, items: {type: object, required: [serial], properties: {serial: {type: string}, pon_path: {type: string}, status: {type: string, enum: [online, offline, los, dying_gasp, unknown]}, rx_dbm: {type: [number, 'null'], minimum: -50, maximum: 10}}}}
+        onus: {type: array, maxItems: 20000, items: {type: object, required: [serial], properties: {serial: {type: string}, pon_path: {type: string}, status: {type: string, enum: [online, offline, los, dying_gasp, unknown]}, rx_dbm: {type: [number, 'null'], minimum: -50, maximum: 10}, last_down_at: {type: [string, 'null'], format: date-time, description: "\"Last down time\" que a própria OLT guarda da ONU (leitura SNMP, só para ONU fora do ar; com fuso). Guardado à parte de down_since."}}}}
     CpeSnapshot:
       type: object
       required: [edge_id, observed_at, cpes]
