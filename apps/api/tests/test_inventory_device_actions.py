@@ -170,3 +170,30 @@ def test_repeating_a_blocked_request_still_says_blocked_with_the_reason(client, 
     assert (again["outcome"], again["reason"], again["job"]["id"], again["job"]["status"]) == ("blocked", "operation_not_homologated", first["job"]["id"], "CANCELLED")
     with migrated.connect() as c:
         assert c.execute(text("SELECT count(*) FROM jobs WHERE target_id = :c"), {"c": cpe}).scalar_one() == 1   # still ONE job for this CPE
+
+
+def test_simultaneous_requests_with_the_same_key_make_one_job_and_no_error(client, seed, inv, migrated):
+    import threading
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    _flag(migrated, seed["A"])
+    cpe = _cpe(client, inv, seed)
+    _bench(migrated, seed, inv, cpe)
+    h = hdr(client, "alice", seed, "A")
+    key = _key()
+    out: list = []
+    gate = threading.Barrier(6)
+
+    def go():
+        c = TestClient(app)
+        gate.wait()
+        out.append(_post(c, h, cpe, key=key))
+
+    ts = [threading.Thread(target=go) for _ in range(6)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert sorted(r.status_code for r in out) == [200] * 6, [r.text for r in out if r.status_code != 200]
+    assert sorted(r.json()["outcome"] for r in out) == ["existing"] * 5 + ["submitted"]
+    assert len({r.json()["job"]["id"] for r in out}) == 1

@@ -90,6 +90,9 @@ def _request(operation: str):
             raise HTTPException(409, reason or "not_available")  # no job exists for an action the screen would not have offered
         if bench.BENCH_OPS[operation].params and not bench.params_valid(operation, body.params):
             raise HTTPException(422, "parameters outside the bench catalog")
+        # two requests with the same key at once (double click, retry racing the first answer): the second waits for the first to COMMIT and then
+        # finds its job, instead of both missing it and the loser hitting the unique index
+        conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"device-action-key|{p.tenant_id}|{idempotency_key}"})
         view = jobs.preview(jobs.PreviewIn(operation=operation, target_id=cpe_id, params=body.params), idempotency_key, p, conn)
         if view["status"] != "PREVIEWED":  # the same request again (retry after a lost answer, double click): nothing new is created
             if view["status"] in ("CANCELLED", "EXPIRED"):  # it ended without running: say so, with the reason recorded when it was blocked
