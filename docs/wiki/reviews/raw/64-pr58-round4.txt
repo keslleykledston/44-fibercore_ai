@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18ac3-1055-7471-ad35-cb8e8d81f5cd).
+[codex] Turn started (01a18ac3-10b5-7b23-a0ef-6715dfb10295).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de migração, autorização e execução...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=35 main...HEAD -- apps/api/app/core/bench.py ...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=35 main...HEAD -- apps/api/app/core/bench.py ... (exit 0)
+[codex] Assistant message captured: A revisão do gate não mostrou, até aqui, uma quebra óbvia na alternância entre autorização `f...
+[codex] Running command: /bin/bash -lc "sed -n '1,130p' apps/api/alembic/versions/0021_bench_gate.py && sed -n '1,290p...
+[codex] Command completed: /bin/bash -lc "sed -n '1,130p' apps/api/alembic/versions/0021_bench_gate.py && sed -n '1,290p... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '285,390p' apps/api/app/api/jobs.py && sed -n '1,100p' apps/api/alembic...
+[codex] Command failed: /bin/bash -lc "sed -n '285,390p' apps/api/app/api/jobs.py && sed -n '1,100p' apps/api/alembic... (exit 2)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"No-ship: capability promotion can race dispatch, lett...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+No-ship: capability promotion can race dispatch, letting a first-run authorization pass after an observed entry has been committed.
+
+Findings:
+- [medium] First-run eligibility is not serialized with dispatch (apps/api/app/core/bench.py:92-120)
+  At dispatch, `gate()` reads capability rows to decide `observed`, then separately reads the authorization. Under PostgreSQL’s usual READ COMMITTED isolation, the owner CLI can promote the profile to `observed` after the capability query but before the gate completes; this dispatch can still pass using the earlier snapshot and emit an envelope backed by a first-run authorization. That violates the rule that first-run authorizations are valid only while no observed entry exists. Serialize promotion with dispatch or recheck eligibility in a transaction that prevents this race.
+  Recommendation: Make capability promotion and dispatch eligibility mutually exclusive, for example by locking the matching capability row and rechecking it at dispatch, or by using a shared advisory lock around promotion and dispatch gate evaluation.

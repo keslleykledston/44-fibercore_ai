@@ -576,3 +576,31 @@ def test_the_gate_scopes_every_lookup_to_the_tenant_it_is_given(client, seed, in
         # the same rows, visible through the session (RLS is set to A), are NOT usable under another tenant id: every lookup names the tenant
         for mode in ("submit", "consume", "dispatch"):
             assert bench.gate(c, seed["B"], job, mode=mode) in ("bench_writes_disabled", "target_not_bench")
+
+
+def test_capability_promotion_and_gate_evaluation_exclude_each_other(client, seed, inv, migrated):
+    """The promotion takes the exclusive advisory lock the gate takes shared: while a gate evaluation is open the promotion cannot proceed."""
+    import threading
+
+    cpe, h = _full(client, seed, inv, migrated, cert="identified", first_run=True)
+    key = bench.capability_lock_key(seed["A"], "reboot_cpe")
+    got = threading.Event()
+    with migrated.connect() as holder:
+        tx = holder.begin()
+        holder.execute(text("SELECT pg_advisory_xact_lock_shared(hashtextextended(:k, 0))"), {"k": key})   # a gate evaluation in flight
+
+        def promote():
+            with migrated.begin() as c:
+                c.execute(text("SET LOCAL lock_timeout = '3s'"))
+                try:
+                    c.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": key})
+                    got.set()
+                except Exception:
+                    pass
+        t = threading.Thread(target=promote)
+        t.start()
+        t.join(1.0)
+        assert not got.is_set()            # blocked while the evaluation is open
+        tx.rollback()
+        t.join(5)
+    assert got.is_set()                    # and proceeds once it ends

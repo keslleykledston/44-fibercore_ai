@@ -64,6 +64,10 @@ def lease_targets(conn: Connection, tenant_id: UUID, edge_id: UUID) -> list[dict
     return [{"target_ref": r.ref, "owner_epoch": r.owner_epoch} for r in rows if r.ref and TARGET_REF_RE.fullmatch(r.ref)]
 
 
+def capability_lock_key(tenant_id: UUID, operation: str) -> str:
+    return f"bench-capability|{tenant_id}|{operation}"
+
+
 def params_hash(params: dict) -> str:
     return hashlib.sha256(json.dumps(params, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
@@ -77,6 +81,9 @@ def gate(conn: Connection, tenant_id: UUID, job, *, mode: str) -> str | None:
         return "operation_not_homologated"
     if not EDGE_SUPPORT:
         return "edge_support_missing"
+    # promotion of the registry entry (owner CLI, exclusive) and this evaluation (shared) cannot interleave: a decision taken here sees either
+    # the whole promotion or none of it, and the promotion waits for this transaction (which also emits the envelope) to finish
+    conn.execute(text("SELECT pg_advisory_xact_lock_shared(hashtextextended(:k, 0))"), {"k": capability_lock_key(tenant_id, job.operation)})
     if not features.enabled(conn, tenant_id, "bench_writes"):
         return "bench_writes_disabled"
     if set(json.loads(job.params) if isinstance(job.params, str) else (job.params or {})) - spec.params:

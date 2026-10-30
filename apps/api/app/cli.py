@@ -114,6 +114,8 @@ def main(argv: list[str] | None = None) -> None:
                 if a.certification == "certified":
                     sys.exit("`certified` is not granted by ADR-0030: bench evidence supports `observed` only")
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            if a.operation in bench.BENCH_OPS:  # exclusive against every bench gate evaluation of this operation (see bench.gate)
+                c.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": bench.capability_lock_key(a.tenant_id, a.operation)})
             cid = c.execute(
                 text("INSERT INTO device_capabilities (tenant_id, vendor, model, firmware, protocol, operation, status, certification, "
                      "verified_at, evidence_ref) VALUES (:t,btrim(:v),btrim(:m),btrim(:f),:p,:o,:s,:c,CAST(:va AS timestamptz),:e) "
