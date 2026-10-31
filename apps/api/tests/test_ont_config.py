@@ -86,6 +86,8 @@ def test_nothing_is_visible_while_the_flag_is_off(client, seed, inv):
     h = hdr(client, "alice", seed, "A")
     for path in ("configuration", "capabilities", "form-schema"):
         assert client.get(f"/v1/cpes/{cpe}/ont-config/{path}", headers=h).status_code == 403
+    ing = client.post("/v1/edge/cpe-config", headers=agent(client, inv, "a1"), json=_report(inv, "ext-cfg-off-1", [_f("wifi.ssid", "ssid/1", "x")]))
+    assert ing.status_code == 403 and ing.json()["detail"] == "feature_disabled"      # nothing is collected while the module is off
     assert client.get("/v1/ont-config/health", headers=h).json() == {"enabled": False, "writes_enabled": False, "cpes_with_configuration": 0, "catalog_fields": len(ont_config.FIELDS)}
 
 

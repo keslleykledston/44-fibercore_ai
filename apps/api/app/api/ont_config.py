@@ -65,6 +65,7 @@ class ConfigSnapshot(BaseModel):
 @router.post("/v1/edge/cpe-config", status_code=202)
 def ingest_cpe_config(body: ConfigSnapshot, p: Principal = Depends(require("inventory:write")), conn: Connection = TENANT_CONN) -> dict:
     _bound_edge(p, body.edge_id)
+    _gate(conn, p)   # a tenant with the module off collects nothing: turning it off stops the intake too
     if not body.configs:
         return {"status": "accepted", "cpes": 0, "fields": 0, "unknown": 0}
     bound = {

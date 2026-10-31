@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18ffb-9a83-75c1-aa6d-1261cfa4e30c).
+[codex] Turn started (01a18ffb-9abb-7a10-9795-51ff84d53b21).
+[codex] Assistant message captured: Vou inspecionar o diff real contra `main`, priorizando a transação de ingestão e suas garanti...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff -- apps/api/app/core/ont_config.py app...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff -- apps/api/app/core/ont_config.py app... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff main...HEAD -- apps/api/app/core/ont_config.py apps/api/app/api/ont_c...
+[codex] Command completed: /bin/bash -lc 'git diff main...HEAD -- apps/api/app/core/ont_config.py apps/api/app/api/ont_c... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"TENANT_CONN|def tenant|begin\\(|commit\\(\" apps/api/app/api/deps.py a...
+[codex] Command completed: /bin/bash -lc "rg -n \"TENANT_CONN|def tenant|begin\\(|commit\\(\" apps/api/app/api/deps.py a... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a ingestão grava configurações mes...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a ingestão grava configurações mesmo com `ont_config` desativado, contrariando o gate documentado e permitindo acumular dados enquanto a funcionalidade está desligada.
+
+Findings:
+- [medium] Ingestão ignora a flag `ont_config` (apps/api/app/api/ont_config.py:65-68)
+  As rotas de leitura verificam a flag com `_gate`, mas `ingest_cpe_config` valida o Edge e grava os campos sem verificar `features.enabled`/`features.ensure`. Assim, um Edge autorizado continua persistindo dados de configuração quando a funcionalidade do tenant está desligada; reativá-la pode expor observações coletadas durante esse período, e desligá-la não interrompe efetivamente a coleta. Isso também contradiz a documentação do módulo, que diz que chamadas são recusadas com a flag desligada.
+  Recommendation: Aplicar o gate de `ont_config` no início da ingestão, antes de consultar bindings ou gravar campos, e cobrir o caso de flag desligada.
