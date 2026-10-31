@@ -153,6 +153,34 @@ test("teste de banda (cenário): uma leitura lenta e antiga nunca sobrescreve o 
   await expect(page.getByTestId("speed-active")).toHaveCount(0);
 });
 
+test("teste de banda (cenário): pedido aceito continua em curso se a leitura seguinte falha ou chega velha, e os botões ficam travados", async ({ page, request }) => {
+  test.setTimeout(90_000);
+  await confirmDemoA2(request);
+  let reads = 0, posts = 0;
+  await page.route("**/bff/cpes/*/speed", (r) => {
+    reads += 1;
+    if (reads === 1) return r.fulfill({ json: { caps: CAPS(), runs: [] } });                                          // abrir a aba
+    if (reads === 2) return r.fulfill({ status: 502, json: { error: "failed" } });                                    // a leitura logo após o pedido FALHA
+    if (reads === 3) return r.fulfill({ json: { caps: CAPS(), runs: [] } });                                          // a seguinte chega VELHA (ainda sem a execução)
+    return r.fulfill({ json: { caps: CAPS(), runs: [RUN({ status: "awaiting_approval" })] } });                      // por fim a execução aparece
+  });
+  await page.route("**/bff/cpes/*/speed/runs", (r) => { posts += 1; return r.fulfill({ status: 201, json: { ok: true, outcome: "submitted" } }); });
+  await openTab(page);
+  await page.getByTestId("speed-start-download").click();
+  await expect(page.getByTestId("speed-pending")).toBeVisible();
+  await expect(page.getByTestId("speed-refresh-failed")).toBeVisible();                                                 // avisa, não troca a tela por um erro
+  await expect(page.getByTestId("speed-error")).toHaveCount(0);
+  await expect(page.getByTestId("speed-start-download")).toBeDisabled();
+  await expect(page.getByTestId("speed-start-upload")).toBeDisabled();
+  await page.waitForTimeout(4800);                                                                                       // a leitura velha já chegou: continua travado
+  await expect(page.getByTestId("speed-start-download")).toBeDisabled();
+  await expect(page.getByTestId("speed-pending")).toBeVisible();
+  await expect(page.getByTestId("speed-active")).toContainText("Aguardando aprovação", { timeout: 15_000 });           // a execução apareceu: o pedido deixa de ser "pendente"
+  await expect(page.getByTestId("speed-pending")).toHaveCount(0);
+  await expect(page.getByTestId("speed-refresh-failed")).toHaveCount(0);
+  expect(posts).toBe(1);                                                                                                 // um único pedido, nunca repetido
+});
+
 // Prova do recuo (só roda com a flag desligada no provedor: SPEED_FLAG_OFF=1): a aba, o cartão e a rota do BFF não existem para a tela; o resto do painel segue igual.
 test("flag speed_diagnostics desligada: sem aba, sem cartão na ONU 360° e o BFF responde que está desligado", async ({ page, request }) => {
   test.skip(!process.env.SPEED_FLAG_OFF, "rodar com SPEED_FLAG_OFF=1 e a flag desligada no provedor");

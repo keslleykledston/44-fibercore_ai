@@ -14,6 +14,8 @@ const LOAD_ERROR: Record<string, string> = {
 };
 const when = (iso: string) => new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 const POLL_MS = 4000;
+const PENDING_MS = 20 * 60_000;   // a vida do pedido na API é de 15 minutos
+const UNCERTAIN_MS = 60_000;
 
 function Kpi({ title, run }: { title: string; run: SpeedRun | undefined }) {
   const ok = run && (run.status === "completed" || run.status === "partial");
@@ -33,8 +35,19 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
   const [profile, setProfile] = useState("10mb");
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
+  // Um pedido ACEITO pela API é lembrado à parte do último retrato das execuções: se a leitura seguinte falha ou chega velha, a tela continua dizendo que há um pedido em curso
+  // e os botões continuam travados (senão um novo clique geraria outro tráfego). Sai quando uma leitura mostra uma execução nova, ou depois do prazo de vida do pedido.
+  const [pending, setPending] = useState<{ known: string[]; until: number } | null>(null);
+  const [refreshFailed, setRefreshFailed] = useState(false);
   const alive = useRef(true);
   const seq = useRef(0);   // cada leitura leva um número: só a MAIS RECENTE pode atualizar a tela (uma resposta lenta e antiga nunca esconde um teste ativo nem reabilita os botões)
+
+  // uma leitura que falha NÃO apaga o que a tela já sabe: só a primeira carga vira erro; depois disso a tela avisa e tenta de novo
+  const hasData = useRef(false);
+  const keepOrFail = useCallback((code: string) => {
+    if (hasData.current) setRefreshFailed(true);
+    else setLoad({ kind: "error", code });
+  }, []);
 
   const fetchAll = useCallback(async (signal?: AbortSignal) => {
     const mine = ++seq.current;
@@ -43,17 +56,23 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
       const j = (await r.json().catch(() => ({}))) as { caps?: unknown; runs?: unknown; error?: string };
       const caps = r.ok ? readCaps(j.caps) : null, runs = r.ok ? readRuns({ items: j.runs }) : null;
       if (!alive.current || mine !== seq.current) return;
-      setLoad(caps && runs ? { kind: "ready", caps, runs } : { kind: "error", code: j.error && LOAD_ERROR[j.error] ? j.error : "failed" });
-    } catch (e) { if ((e as Error).name !== "AbortError" && alive.current && mine === seq.current) setLoad({ kind: "error", code: "failed" }); }
-  }, [cpeId]);
+      if (caps && runs) {
+        hasData.current = true;
+        setRefreshFailed(false);
+        setLoad({ kind: "ready", caps, runs });
+        setPending((p) => (p && (runs.some((x) => !p.known.includes(x.id)) || Date.now() > p.until) ? null : p));
+      } else keepOrFail(j.error && LOAD_ERROR[j.error] ? j.error : "failed");
+    } catch (e) { if ((e as Error).name !== "AbortError" && alive.current && mine === seq.current) keepOrFail("failed"); }
+  }, [cpeId, keepOrFail]);
 
   useEffect(() => { alive.current = true; const c = new AbortController(); void fetchAll(c.signal); return () => { alive.current = false; c.abort(); }; }, [fetchAll]);
   const active = load.kind === "ready" && load.runs.some((r) => ACTIVE.has(r.status));
-  useEffect(() => {   // enquanto há teste em andamento, acompanha; parado, não consulta
-    if (!active) return;
+  const following = active || pending !== null;
+  useEffect(() => {   // enquanto há teste em andamento (ou um pedido ainda não confirmado pela leitura), acompanha; parado, não consulta
+    if (!following) return;
     const t = setInterval(() => void fetchAll(), POLL_MS);
     return () => clearInterval(t);
-  }, [active, fetchAll]);
+  }, [following, fetchAll]);
 
   if (load.kind === "loading") return <p className="text-sm text-muted" data-testid="speed-loading">Carregando o teste de banda…</p>;
   if (load.kind === "error") {
@@ -83,9 +102,13 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
         body: JSON.stringify({ key: crypto.randomUUID(), direction, endpoint_id: endpoint.id, profile, ...(group ? { group_id: group } : {}) }),
       });
       const j = (await r.json().catch(() => ({}))) as { error?: string; reason?: string };
-      if (!r.ok) setRefusal(j.error === "blocked" && j.reason ? BLOCKED_TEXT[j.reason] ?? "O pedido foi recusado." : j.error === "forbidden" ? BLOCKED_TEXT.not_permitted! : "Não foi possível pedir o teste agora.");
+      if (r.ok) setPending({ known: runs.map((x) => x.id), until: Date.now() + PENDING_MS });   // aceito: lembrado até uma leitura mostrar a execução
+      else setRefusal(j.error === "blocked" && j.reason ? BLOCKED_TEXT[j.reason] ?? "O pedido foi recusado." : j.error === "forbidden" ? BLOCKED_TEXT.not_permitted! : "Não foi possível pedir o teste agora.");
       await fetchAll();
-    } catch { setRefusal("Não foi possível pedir o teste agora."); } finally { setBusy(false); }
+    } catch {   // o pedido pode ter chegado: não se sabe. Trava por pouco tempo e deixa a leitura dizer
+      setPending({ known: runs.map((x) => x.id), until: Date.now() + UNCERTAIN_MS });
+      setRefusal("Não foi possível confirmar o pedido. Aguarde a atualização antes de pedir de novo.");
+    } finally { setBusy(false); }
   };
 
   const blockedReason = !anyOffered ? (dl.reason ?? ul.reason ?? "operation_not_homologated") : null;
@@ -126,7 +149,7 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
           </div>
           <div className="flex flex-wrap gap-2">
             {(["download", "upload"] as const).map((d) => (
-              <button key={d} type="button" data-testid={`speed-start-${d}`} onClick={() => void start(d)} disabled={busy || active || !endpoint || !caps.directions[d].offered}
+              <button key={d} type="button" data-testid={`speed-start-${d}`} onClick={() => void start(d)} disabled={busy || active || pending !== null || !endpoint || !caps.directions[d].offered}
                 className="min-h-touch rounded-btn bg-accent px-4 text-sm font-medium text-[color:var(--on-accent)] disabled:opacity-50">
                 Testar {d === "download" ? "download" : "upload"}
               </button>
@@ -136,6 +159,8 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
         </>
       )}
       {refusal && <p role="alert" className="text-sm text-danger" data-testid="speed-refusal">{refusal}</p>}
+      {refreshFailed && <p role="status" className="text-xs text-warn" data-testid="speed-refresh-failed">Não foi possível atualizar agora. O que aparece pode estar desatualizado; tentando de novo.</p>}
+      {pending && !active && <p role="status" className="rounded-card border border-line p-3 text-sm" data-testid="speed-pending">Pedido enviado. Aguardando a confirmação da leitura; os botões ficam travados até lá.</p>}
       {active && (
         <div role="status" className="rounded-card border border-line p-3 text-sm" data-testid="speed-active">
           {runs.filter((r) => ACTIVE.has(r.status)).map((r) => <p key={r.id}>{DIRECTION_TEXT[r.direction]}: {STATUS_TEXT[r.status]}</p>)}

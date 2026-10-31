@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19120-fb3f-7371-bba7-2753b954c01c).
+[codex] Turn started (01a19120-fb77-7481-a186-9e5eea4edc7c).
+[codex] Assistant message captured: I’ll inspect the full diff against `main`, then trace the UI sequencing guard through the BFF...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Spe...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Spe... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=40 main...HEAD -- apps/web/e2e/speed.spec.ts ...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=40 main...HEAD -- apps/web/e2e/speed.spec.ts ... (exit 0)
+[codex] Assistant message captured: The sequence guard handles response ordering, but one adjacent path still looks important: co...
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/components/SpeedTestSection.tsx | sed -n '35,120p'; nl -ba...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/components/SpeedTestSection.tsx | sed -n '35,120p'; nl -ba... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: after a run is accepted, a failed or...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: after a run is accepted, a failed or stale post-submit refresh can leave the UI showing no active run and re-enable both test controls while the backend may already be executing it.
+
+Findings:
+- [high] Accepted test can disappear after refresh failure, re-enabling duplicate requests (apps/web/src/components/SpeedTestSection.tsx:75-88)
+  After POST succeeds, `start` relies on the following `fetchAll()` to reveal the accepted run. If that read fails, it replaces the ready state with an error; when a user retries, or when the fetch returns a stale snapshot, the UI has no active run and its start controls become available again. The POST response is treated as submitted, but its outcome is not retained in UI state. The backend may still have queued or started the test, so another click can submit a second request and generate additional traffic or conflicting operations. The sequence number prevents an older response from overwriting a newer read, but it does not address a failed or stale newest read after acceptance.
+  Recommendation: On successful POST, preserve a pending/accepted state and keep both controls disabled until a read confirms a terminal state or a clear failure; distinguish refresh failure from request failure and provide polling/retry without clearing the accepted state.
+
+Next steps:
+- Retain accepted request state independently of the latest runs snapshot, and add coverage for POST success followed by failed/stale reads.
+done 0
