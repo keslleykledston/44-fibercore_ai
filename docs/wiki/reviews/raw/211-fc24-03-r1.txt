@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1903f-5e57-7e63-b802-9e93dbc418f9).
+[codex] Turn started (01a1903f-616a-7ca1-adac-d5352d21e1ab).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de validação, autorização, persistê...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- apps/api/app/core/ont_confi...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- apps/api/app/core/ont_confi... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"mfa_recent_enforce|def mfa_is_recent|CREATE POLICY tenant_isolation|GR...
+[codex] Command completed: /bin/bash -lc "rg -n \"mfa_recent_enforce|def mfa_is_recent|CREATE POLICY tenant_isolation|GR... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: R3 pode ser solicitado sem MFA rec...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: R3 pode ser solicitado sem MFA recente na configuração padrão, apesar do requisito de MFA explícito.
+
+Findings:
+- [high] R3 não exige MFA recente quando a flag global está desligada (apps/api/app/api/ont_config.py:208-214)
+  `mfa_recent_enforce` tem valor padrão `False` (`app/core/settings.py:42`), e este helper só recusa a solicitação quando a flag está ligada. Assim, um usuário com `ont_config:request_high` pode criar e submeter pedidos LAN/WAN R3 sem provar MFA recente na configuração padrão. Isso deixa a proteção R3 dependente de uma opção de implantação, embora o foco do requisito peça MFA recente para R3.
+  Recommendation: Exigir MFA recente incondicionalmente para este caminho R3 ou garantir, com validação de configuração que falhe fechada, que `mfa_recent_enforce` esteja ligado sempre que pedidos R3 estiverem habilitados.
+
+Next steps:
+- Falhar fechado para R3 sem MFA recente e adicionar cobertura para o comportamento quando `mfa_recent_enforce` está desligado.

@@ -54,6 +54,7 @@ CAPABILITIES: list[tuple[str, str, tuple[str, ...]]] = [
     ("diagnose", "Rodar diagnósticos", ("diagnostics:run",)),
     ("olt_query", "Consultar a OLT (somente leitura)", ("olt_query:run",)),
     ("erp", "Conectar e testar o ERP do provedor (somente leitura)", ("erp:manage", "erp:test")),
+    ("ont_change", "Pedir mudança de Wi-Fi, LAN ou WAN do aparelho (hoje bloqueada)", ("ont_config:request", "ont_config:request_high")),
     ("request", "Pedir mudanças em equipamentos", ("jobs:request", "devices:act:reboot_cpe", "devices:act:set_wifi_ssid")),
     ("approve", "Aprovar mudanças", ("jobs:approve",)),
     ("bench", "Autorizar manobras de bancada", ("bench:authorize",)),

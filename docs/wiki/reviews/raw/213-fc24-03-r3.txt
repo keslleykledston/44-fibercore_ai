@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19041-93bc-7fa3-876a-32f2c1bec5bd).
+[codex] Turn started (01a19041-93f6-70d2-ae67-def9a92d51b6).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os caminhos de execução, autorização, validação, s...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=12 main...HEAD -- apps/api/app/api/ont_config...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=12 main...HEAD -- apps/api/app/api/ont_config... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"TENANT_CONN|def tenant|commit\\(|rollback\\(|cpe_config_changes|mfa_re...
+[codex] Command completed: /bin/bash -lc "rg -n \"TENANT_CONN|def tenant|commit\\(|rollback\\(|cpe_config_changes|mfa_re... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,220p' apps/api/app/core/ont_config.py; sed -n '125,150p' apps/api/ap...
+[codex] Command completed: /bin/bash -lc "sed -n '1,220p' apps/api/app/core/ont_config.py; sed -n '125,150p' apps/api/ap... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a validação DHCP aceita mudanças d...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a validação DHCP aceita mudanças de faixa sem conseguir verificar a faixa completa quando um limite não foi observado.
+
+Findings:
+- [medium] Mudança parcial de DHCP pode passar sem validar os dois limites (apps/api/app/core/ont_config_changes.py:73-83)
+  Quando o pedido altera só `dhcp_min` ou só `dhcp_max`, `_effective` usa o valor observado para o outro limite, mas pode retornar `None`. A validação então verifica apenas os endereços presentes e aceita o pedido sem comprovar ordenação nem coerência da faixa completa. Como `observed()` exige qualquer campo da capacidade DHCP, basta outro campo, como `dhcp_enabled`, para permitir esse caminho com os limites ausentes. Isso pode registrar uma prévia que aparenta válida, mas descreve uma configuração impossível ou insegura. Exija ambos os limites efetivos conhecidos para alterações de faixa; se algum estiver ausente, rejeite a prévia até haver observação suficiente.
+  Recommendation: Ao alterar qualquer limite DHCP, rejeite se `lo` ou `hi` efetivo não estiver disponível; valide a faixa completa contra subnet e gateway antes de aceitar.
