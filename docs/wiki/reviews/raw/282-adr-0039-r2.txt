@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192ff-afaa-7943-be7f-290a3450b73c).
+[codex] Turn started (01a192ff-afe4-7690-9a72-678ef8b5f6b4).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir as referências da condição 5 até o CLI, o gate e o...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/adr/ADR-0030-homo...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/adr/ADR-0030-homo... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=5 main...HEAD -- docs/wiki/adr/ADR-0038-speed...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=5 main...HEAD -- docs/wiki/adr/ADR-0038-speed... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: a condição 5 valida o aceite apenas n...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: a condição 5 valida o aceite apenas no momento do `capability-set`; depois, o gate confia no formato de `evidence_ref`, sem proteção contra alteração ou remoção do arquivo aprovado.
+
+Findings:
+- [high] O aceite pode deixar de existir após liberar a opção C (docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md:55-57)
+  A proposta manda o CLI conferir o conteúdo do arquivo ao gravar a linha, mas o gate só verifica se `evidence_ref` tem o formato esperado. Se o arquivo for alterado ou removido depois, a linha `supported/observed` ainda pode liberar o teste sem o aceite que justificou o risco. A emenda também não exige conteúdo imutável ou hash que vincule a linha à versão validada.
+  Recommendation: Vincule a linha a um hash do conteúdo validado e faça o gate verificar esse vínculo, ou torne o aceite imutável e exija sua integridade no gate; inclua teste para arquivo alterado ou removido após o registro.
