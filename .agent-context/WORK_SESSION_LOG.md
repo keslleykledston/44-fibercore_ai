@@ -64,3 +64,7 @@ Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetido
 - PR 98 (cache primeiro, ADR-0032 item 4; Codex 4 rodadas): migração 0031 no LAB, API+web implantados. Cache alimentado só por jobs; rota de ingestão do Edge + poda de `olt_metric_samples` ficam para o item 5 (rotinas).
 - Lote 1: `olt.autofind` -> "Failure: The automatically found ONTs do not exist" (só o caso vazio visto; fixture guardada, consulta NÃO validada: sem o formato com ONTs não há parser honesto). `olt.alarm.active` paginou (Edge recusa).
 - Lote 2 agendado (config do Edge): slot.cpu/mem/board nos slots 0-2 e pon.ont.summary da PON da bancada (0/14); 4 capturas/h => ~2,5 h. Depois: fixtures, parsers, promoção.
+
+## 2026-10-31 (cont.) — PRs 99, 100, 101 no LAB
+- PR 99 ONT Config (leitura, FC24-00/01, ADR-0034, migração 0032, flag `ont_config`); PR 100 sidebar de configuração do aparelho (FC24-02); PR 101 ONU Quick Inspector (UX 2.2, ADR-0035, flag `onu_quick_inspector`). Todas as flags DESLIGADAS no LAB. Sem dado real de ONT lido; só perfis sintéticos rotulados.
+- Pendências: ligar flags por tenant + capturas reais da ajuda (`ont/consultar-configuracao`, `rede/resumo-da-onu`); FC24-03 (preview/jobs), FC24-04 (Edge lê/escreve, só lab autorizado); lote 2 da captura da OLT em andamento; ZTE aguardando reinício do responsável; HubSoft HS-03+ aguardando credenciais/instância.
