@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ponHref } from "@/components/PonMatrix";
-import type { PonSummary } from "@/lib/faceplates";
+import { causesText, type PonSummary } from "@/lib/faceplates";
 import type { Olt } from "@/lib/types";
 
 /** Árvore OLT › PON (ADR-0037): navegação por links (a seleção vive na URL: recarregar ou compartilhar a tela mantém o recorte). */
@@ -24,7 +24,7 @@ export function PonTree({ olts, oltId, ponId, pons }: { olts: Olt[]; oltId: stri
                       className={`flex min-h-10 items-center gap-2 rounded-btn px-2 text-sm hover:bg-surface-2 ${p.path === ponId ? "bg-accent-soft font-medium" : ""}`}>
                       <span className="flex-1">PON {p.path}</span>
                       <span className="tabular text-xs text-muted">{p.total}</span>
-                      {p.down > 0 && <span className={`tabular text-xs ${p.state === "los" ? "text-danger" : "text-warn"}`}>{p.down} fora{p.state === "los" ? " · LOS" : p.state === "energia" ? " · energia" : ""}</span>}
+                      {p.down > 0 && <span className={`tabular text-xs ${p.state === "los" ? "text-danger" : "text-warn"}`}>{p.down} fora{causesText(p) ? ` · ${causesText(p)}` : ""}</span>}
                     </Link>
                   </li>
                 ))}
