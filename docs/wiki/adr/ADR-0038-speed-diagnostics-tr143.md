@@ -44,3 +44,17 @@ Terceiro caminho de escrita paralelo ao de bancada (duplicaria gate, auditoria e
 - **Ajuda.** Artigo `rede/testar-banda` com capturas **reais** (estado indisponível, desktop e mobile, aplicação integrada com dados sintéticos) e capturas de **cenário** rotuladas como simuladas (aguardando aprovação; resultado confiável, parcial e erro). Capturas do LAB dependem do deploy autorizado.
 - **Guia de homologação.** `docs/operations/SPEED_HOMOLOGACAO.md`: pré-requisitos do responsável, planilha por modelo+firmware (vazia), procedimento com 3 repetições e comparação cabeada, critérios de aceite, recuo. Sem evidência simulada.
 - **Recuo provado.** Com a flag desligada a aba e o cartão não existem e o BFF responde 403 (teste e2e com `SPEED_FLAG_OFF=1`).
+
+## Emenda PROPOSTA (2026-10-31) — aguarda aprovação do responsável: aceite formal do risco de redirecionamento na bancada
+**Fato (sonda real, `docs/wiki/bench/H-speed-sonda-3xx-eg8145v5-2026-10-31.md`):** a EG8145V5 `V5R019C10S350` SEGUE redirecionamento 3xx; `speed_test_redirect_probe` = `unsupported`. Pelo item 4 o gate fica em `redirect_unverified` e só abre com ACL de saída real (`speed_test_egress_acl`) ou por esta emenda.
+**Proposta (opção C):** uma terceira linha do registro, `speed_test_redirect_risk_accepted` (`supported`, `observed`, com `evidence_ref` = o documento de aceite assinado e `verified_at`), aceita pelo gate **somente** quando TODAS as condições abaixo valem, e qualquer ausência recusa (`redirect_unverified`):
+1. o CPE é alvo de bancada (já exigido) e existe a linha `speed_test_redirect_probe` = `unsupported` para o mesmo modelo/firmware (o risco é conhecido, não presumido);
+2. o destino é do tipo **CORE** e fica dentro de `core_cidrs` do Edge, ou seja, um nó do próprio provedor; destinos `INTERNET` (de terceiros) **não** valem nesta emenda;
+3. o nó é o `tools/speed-node` (nunca emite 3xx, testado em `tools/speed-node/main_test.go`) com lista de origens explícita; o Edge continua com a sonda de saúde sem seguir redirecionamento;
+4. validade de **90 dias** a partir de `verified_at`, e a linha é por firmware: troca de firmware invalida;
+5. o aceite é um documento em `docs/wiki/bench/` com o responsável, a data, o escopo (esta ONT, este firmware, estes nós) e os riscos residuais abaixo.
+**Risco residual aceito:** se o nó fosse comprometido ou mal configurado e passasse a emitir 3xx, a ONT de bancada seguiria para o destino indicado e geraria tráfego até lá. Mitigações: nó sob controle do provedor, lista de origens, janela e uso único por execução, bancada isolada de clientes quanto ao CPE (não quanto à PON).
+**Efeito no código (só depois da aprovação, com Codex):** `speed.redirect_verified()` passa a aceitar a nova linha com as condições 1–4; testes para cada condição (incluindo INTERNET recusado, firmware diferente e linha vencida). **Não abre a frota**: a emenda vale só para a bancada; ampliar exige ADR novo.
+**Alternativa B (continua válida e preferível para produção):** ACL de saída real na WAN de serviço, confirmada pela rede; registrar `speed_test_egress_acl` com a referência do chamado.
+**Decisão do responsável:** ☐ aprovar a opção C ☐ aguardar a ACL (opção B) ☐ rejeitar
+**Aprovado por:** ______________________  **Data:** ____/____/______
