@@ -20,6 +20,7 @@ from sqlalchemy import Connection, text
 from sqlalchemy.engine import Engine
 
 from app.core.db import make_engine, scoped_connection
+from app.core.heartbeat import beat
 from app.events import bus
 
 log = logging.getLogger("consumer")
@@ -101,6 +102,7 @@ async def run() -> None:  # pragma: no cover - process entrypoint
     while True:
         try:
             await consume_batch(sub, js, engine, "audit-projection", audit_handler)
+            beat()
         except Exception:
             log.exception("consume iteration failed")
             await asyncio.sleep(1)

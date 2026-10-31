@@ -15,6 +15,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.core.db import make_engine
+from app.core.heartbeat import beat
 from app.events import bus
 
 log = logging.getLogger("relay")
@@ -86,6 +87,7 @@ async def run() -> None:  # pragma: no cover - process entrypoint
     while True:
         try:
             n = await relay_once(engine, js)
+            beat()
             if n:
                 log.info("relayed %d events", n)
         except Exception:
