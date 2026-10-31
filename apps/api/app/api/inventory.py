@@ -21,7 +21,10 @@ from app.events import outbox
 
 router = APIRouter()
 
-FRESH_FOR = timedelta(minutes=15)
+# A OLT real só é consultada a cada 15 min no mínimo (proteção do equipamento): a janela de "dado recente" precisa cobrir DUAS coletas e uma folga, senão o inventário
+# vira "defasado" na metade do tempo mesmo com o Edge saudável (a matriz de PONs ficava toda "sem leitura"). 15 min de intervalo x 2 + 5 min de folga.
+OLT_COLLECT_INTERVAL = timedelta(minutes=15)
+FRESH_FOR = 2 * OLT_COLLECT_INTERVAL + timedelta(minutes=5)
 MAX_FUTURE_SKEW = timedelta(minutes=5)
 LEVEL_ORDER = {"identified": 0, "observed": 1, "certified": 2}
 Short = Annotated[str, Field(min_length=1, max_length=128)]

@@ -20,5 +20,7 @@ O painel do Quick Inspector (ADR-0035) e o sidebar de configuração (ADR-0034) 
 - Ajuda: capturas dos artigos de Rede precisam ser refeitas no novo layout.
 - Testes e2e reorganizados: o painel agora é coluna, o filtro é `radiogroup`, a seleção da OLT é pela árvore.
 
+- **Janela de dado recente do inventário: 15 → 35 min** (emenda de 2026-10-31). Observado no LAB: a OLT real só é consultada a cada 15 min (piso de proteção do equipamento), então com janela de 15 min o inventário ficava "defasado" na metade do tempo mesmo com o Edge saudável e a matriz de PONs inteira virava "sem leitura". Nova regra: 2 coletas + 5 min de folga (`OLT_COLLECT_INTERVAL`). Não muda a avaliação de incidentes do NOC (`EVAL_FRESH_FOR` segue 15 min: ponto em aberto, mesmo problema, decisão à parte).
+
 ## Alternativas descartadas
 Manter o painel fixo à direita (esconde a lista); abas na ONU 360° já (reescrita ampla dos testes sem como validar com o seed completo); virtualizar a lista (775 linhas renderizam bem; fica para quando houver OLT maior); copiar o código do Lovable (stack diferente: TanStack Router + Radix; o padrão foi reproduzido com os componentes e tokens do app).

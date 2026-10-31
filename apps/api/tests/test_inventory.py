@@ -593,3 +593,14 @@ def test_get_cpe_by_id_is_tenant_isolated_and_matches_the_list(client, seed, inv
     assert client.get(f"/v1/cpes/{rows[0]['id']}", headers=hb).status_code == 404   # another provider's CPE does not exist for bob
     assert client.get("/v1/cpes/00000000-0000-0000-0000-000000000000", headers=ha).status_code == 404
     assert client.get("/v1/cpes/not-a-uuid", headers=ha).status_code == 422
+
+
+def test_fresh_window_covers_two_olt_collections(client, seed, inv):
+    """A OLT real é consultada a cada 15 min no mínimo: uma coleta de 25 min atrás ainda é recente (a anterior ao próximo ciclo); só passa de 35 min vira defasada."""
+    h = hdr(client, "alice", seed, "A")
+    a = agent(client, inv, "a1")
+    for name, serial, ago in (("OLT-W25", "WIN25", -25 * 60), ("OLT-W40", "WIN40", -40 * 60)):
+        s = snap(inv, name=name, observed=_now(ago), onus=[{"serial": serial, "status": "online"}])
+        assert client.post("/v1/edge/olt-snapshots", headers=a, json=s).status_code == 202
+    assert client.get("/v1/onus?serial=WIN25", headers=h).json()[0]["freshness"] == "fresh"
+    assert client.get("/v1/onus?serial=WIN40", headers=h).json()[0]["freshness"] == "stale"
