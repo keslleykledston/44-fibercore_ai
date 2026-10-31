@@ -21,7 +21,7 @@ SELECT count(*) AS onus,
        count(*) FILTER (WHERE o.serial LIKE '414C434C%') AS prefixo_alcl,
        count(DISTINCT o.observed_at) AS instantes, count(DISTINCT o.pon_id) AS pons, count(DISTINCT o.olt_id) AS olts
 FROM onus o JOIN pon_ports p ON p.id = o.pon_id AND p.tenant_id = o.tenant_id AND p.olt_id = o.olt_id
-WHERE p.pon_path = '0/0/14' AND o.tenant_id = '<id-do-provedor-da-bancada>'
+WHERE p.pon_path = '0/0/14' AND o.tenant_id = :tenant_id
   AND date_trunc('second', o.observed_at) = timestamptz '2026-10-31 16:59:01+00';
 ```
-Saída agregada verificada em 2026-10-31: `onus = 12`, `prefixo_zteg = 5`, `prefixo_alcl = 2`, `instantes = 1`, `pons = 1`, `olts = 1` (uma única PON, de uma única OLT, numa única coleta). A família vem dos 4 primeiros bytes do GPON SN em hex lidos como ASCII. Não há exportação versionada (seriam seriais de ONUs). O resultado vale para esse instante; outra coleta pode ter outros números.
+Parâmetro `:tenant_id` = id do provedor da bancada (uso em `psql`: `\set tenant_id '…'` e `:'tenant_id'`; a sessão também fixa `app.tenant_id`, o escopo de RLS). Saída agregada da execução de 2026-10-31 (uma linha, colunas na ordem do SELECT): `12 | 5 | 2 | 1 | 1 | 1`, ou seja `onus = 12`, `prefixo_zteg = 5`, `prefixo_alcl = 2`, `instantes = 1`, `pons = 1`, `olts = 1` (uma única PON, de uma única OLT, numa única coleta). A família vem dos 4 primeiros bytes do GPON SN em hex lidos como ASCII. Não há exportação versionada (seriam seriais de ONUs). O resultado vale para esse instante; outra coleta pode ter outros números.

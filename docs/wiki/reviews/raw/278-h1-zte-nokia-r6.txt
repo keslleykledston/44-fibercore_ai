@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192f5-ee86-7c93-92c9-504de78ac488).
+[codex] Turn started (01a192f5-eebf-7c30-89cd-64bae1e9d407).
+[codex] Assistant message captured: Vou comparar o branch com `main` e conferir se a consulta e os totais agregados sustentam exa...
+[codex] Running command: /bin/bash -lc 'git diff --find-renames --find-copies --stat main...HEAD && git diff --find-re...
+[codex] Command completed: /bin/bash -lc 'git diff --find-renames --find-copies --stat main...HEAD && git diff --find-re... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --unified=60 main...HEAD -- docs/wiki/reviews/raw/273-h1-zte-nokia-r1...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=60 main...HEAD -- docs/wiki/reviews/raw/273-h1-zte-nokia-r1... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/bench/H1-identificacao-zte-f670l-2026-10-31.md | sed -n '18,3...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/wiki/bench/H1-identificacao-zte-f670l-2026-10-31.md | sed -n '18,3... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não confirme os totais ainda: o SQL registrado não po...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não confirme os totais ainda: o SQL registrado não pode ser executado como está, e a saída agregada não tem evidência independente que permita validar 12/5/2 e 1/1/1.
+
+Findings:
+- [medium] Consulta documentada contém tenant placeholder (docs/wiki/bench/H1-identificacao-zte-f670l-2026-10-31.md:28-31)
+  O filtro usa `o.tenant_id = '<id-do-provedor-da-bancada>'`, portanto o SQL publicado não é executável como está. Como a única evidência apresentada para os totais é a afirmação de que a saída foi verificada, não é possível reproduzir nem confirmar que os filtros por tenant, OLT, PON e instante produziram 12/5/2 e instantes=1, pons=1, olts=1. Registre a consulta com um parâmetro substituível claramente definido e preserve uma saída agregada verificável, sem expor seriais.
+  Recommendation: Substituir o placeholder por um parâmetro SQL executável ou documentar como bind parameter, e anexar a saída agregada registrada da execução; aplicar o mesmo ajuste ao H1 da Nokia.
