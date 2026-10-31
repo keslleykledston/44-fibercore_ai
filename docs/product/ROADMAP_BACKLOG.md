@@ -139,3 +139,6 @@ Fonte: `docs/addenda/v2.2/` (pacote intacto). Análise: `docs/addenda/v2.2/GAP_A
 | QI-02 captura real da ajuda `rede/resumo-da-onu`, ligar a flag por tenant após QA | [ ] |
 | QI-03 [~] ADR-0037: árvore OLT/PON e matriz de PONs na Rede (entregue); falta NOC/associações como pontos de entrada; árvore PON/NOC como pontos de entrada; associações `medium/conflict` e estados ACS indisponível/unsupported quando houver dado | [ ] |
 | UX-LAYOUT ADR-0037 | [x] Gestão de ONUs no padrão Lovable: matriz de PONs, árvore, lista com filtros, painel com abas Resumo/Aparelho/Histórico, painéis frontais; ONU 360° com trilha e painel frontal (atrás da flag `onu_quick_inspector`) |
+
+## Ideias de frontend (2026-10-31)
+Ver `docs/product/BACKLOG_IDEIAS_FRONTEND_2026-10-31.md` (análise de uma aplicação de referência e plano futuro, sem compromisso de prazo).
