@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192ec-f14f-7613-8d79-d01b081366ab).
+[codex] Turn started (01a192ec-f505-7e93-a884-8b95bc549456).
+[codex] Running command: /bin/bash -lc 'nl -ba docs/wiki/bench/H-speed-sonda-3xx-eg8145v5-2026-10-31.md && nl -ba docs...
+[codex] Command completed: /bin/bash -lc 'nl -ba docs/wiki/bench/H-speed-sonda-3xx-eg8145v5-2026-10-31.md && nl -ba docs... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship enquanto o serial/ID do equipamento permanec...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship enquanto o serial/ID do equipamento permanecerem no repositório. A conclusão sobre o 3xx mantém corretamente o gate fechado e não libera teste de banda.
+
+Findings:
+- [medium] Serial e ID ACS identificam o equipamento (docs/wiki/bench/H-speed-sonda-3xx-eg8145v5-2026-10-31.md:11-12)
+  A linha registra o serial completo e o `_id` ACS, apesar de afirmar que não há dado de cliente. Esses identificadores podem vincular a evidência a um assinante ou equipamento específico se a ONT não for exclusivamente de bancada; o texto não demonstra essa exclusividade além de rotulá-la como bancada. Isso cria exposição evitável em documentação versionada.
+  Recommendation: Remova serial e `_id` completos; registre apenas identificadores redigidos ou um rótulo de bancada não reversível.
+- [low] Presença de ROMTime não está demonstrada na evidência descrita (docs/operations/SPEED_HOMOLOGACAO.md:25)
+  A planilha afirma que `ROMTime` está presente, mas a seção de observações lista valores apenas para `DiagnosticsState`, três contadores e `BOMTime`/`EOMTime`; o procedimento também só diz que resultados foram lidos, sem apresentar a leitura de `ROMTime`. Assim, a célula transforma uma alegação sem suporte visível em fato observado.
+  Recommendation: Inclua na evidência a leitura de `ROMTime` ou retire-o da lista de folhas confirmadas até ser verificado.
