@@ -20,11 +20,11 @@
 |---|---|---|---|
 | Fabricante / modelo / firmware | | | |
 | Modelo de dados (Device:2 × IGD:1) e raiz usada | | | |
-| `DownloadDiagnostics` presente e `DiagnosticsState` gravável (cache do ACS) | | | |
+| `DownloadDiagnostics` presente e `DiagnosticsState` gravável (cache do ACS) | Sim (IGD:1, raiz `InternetGatewayDevice`) | `docs/wiki/bench/H-speed-sonda-3xx-eg8145v5-2026-10-31.md` | 2026-10-31 |
 | `UploadDiagnostics` presente e `DiagnosticsState` gravável | | | |
-| Folhas de resultado listadas (`BOMTime`, `EOMTime`, `TestBytesReceived`, `TotalBytesReceived`, `TotalBytesSent`, `TestBytesSent`?) | | | |
-| Caminho da WAN de serviço (`speed_wan_interface`) e por que não é a de gerência | | | |
-| Comportamento do aparelho diante de um **3xx** de um destino permitido (segue / não segue) | | | |
+| Folhas de resultado listadas (`BOMTime`, `EOMTime`, `TestBytesReceived`, `TotalBytesReceived`, `TotalBytesSent`, `TestBytesSent`?) | `ROMTime`, `BOMTime`, `EOMTime`, `TestBytesReceived`, `TotalBytesReceived`, `TotalBytesSent` presentes; `TestBytesSent` não testado | idem | 2026-10-31 |
+| Caminho da WAN de serviço (`speed_wan_interface`) e por que não é a de gerência | `InternetGatewayDevice.WANDevice.1.WANConnectionDevice.3.WANPPPConnection.1` (única WAN da bancada, aceita em `Interface`) | idem | 2026-10-31 |
+| Comportamento do aparelho diante de um **3xx** de um destino permitido (segue / não segue) | **SEGUE** (EG8145V5 V5R019C10S350): `speed_test_redirect_probe` = `unsupported` | `docs/wiki/bench/H-speed-sonda-3xx-eg8145v5-2026-10-31.md` | 2026-10-31 |
 | Download: 3 repetições (Mbps, duração, confiabilidade) | | | |
 | Upload: 3 repetições (Mbps, duração, confiabilidade) | | | |
 | Comparação com medição **cabeada** de referência (mesmo nó, mesma janela) | | | |
