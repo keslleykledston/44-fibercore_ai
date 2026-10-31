@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192f4-9cc7-78a1-83b8-40867832b9f4).
+[codex] Turn started (01a192f4-9d00-7ef1-b4fa-b68bbff9141a).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e validar se a tabela, o filtro, o horário e a classificaçã...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- docs/wiki/bench/H1-identifi...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- docs/wiki/bench/H1-identifi... (exit 0)
+[codex] Running command: /bin/bash -lc "git status --short && git diff --check main...HEAD && rg -n \"Fonte dos número...
+[codex] Command completed: /bin/bash -lc "git status --short && git diff --check main...HEAD && rg -n \"Fonte dos número... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "CREATE TABLE.*onus|CREATE TABLE.*pon_ports|CREATE TABLE onus|pon_path.*...
+[codex] Command failed: /bin/bash -lc 'rg -n "CREATE TABLE.*onus|CREATE TABLE.*pon_ports|CREATE TABLE onus|pon_path.*... (exit 2)
+[codex] Running command: /bin/bash -lc "sed -n '30,85p' apps/api/alembic/versions/0005_inventory.py && nl -ba docs/wik...
+[codex] Command completed: /bin/bash -lc "sed -n '30,85p' apps/api/alembic/versions/0005_inventory.py && nl -ba docs/wik... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não confirmar ainda: a fonte informa o horário da col...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não confirmar ainda: a fonte informa o horário da coleta, mas o método não limita a contagem às ONUs observadas nessa coleta; os números e a classificação por prefixo podem incluir registros antigos.
+
+Findings:
+- [medium] A contagem da PON pode incluir ONUs com dados antigos (docs/wiki/bench/H1-identificacao-zte-f670l-2026-10-31.md:21)
+  A fonte descreve a consulta como `onus` filtrada por `pon_path = '0/0/14'`, mas não informa filtro por `onus.observed_at` nem como a coleta citada foi associada às linhas contadas. No esquema, as linhas de `onus` persistem e têm seu próprio `observed_at`; citar o horário de `pon_ports` ou da coleta não demonstra que cada ONU foi atualizada nela. Assim, as 12 ONUs e as contagens por prefixo podem combinar observações de épocas diferentes e sustentar incorretamente a conclusão de que a PON não é exclusiva da bancada. Inclua a consulta reproduzível, vinculando explicitamente cada linha ao snapshot (ou aplicando um critério de frescor coerente), e registre o horário usado para as linhas de ONU.
+  Recommendation: Documentar a consulta com condição verificável sobre `onus.observed_at`/snapshot e repetir o mesmo método nas duas páginas; se não for possível vincular as linhas à coleta, retirar as contagens derivadas.
