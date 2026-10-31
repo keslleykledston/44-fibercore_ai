@@ -15,3 +15,9 @@ A falha é de credencial (401), não de rede. Hipóteses para a senha divergir, 
 
 ## Próximo (precisa de autorização do responsável, é escrita em dispositivo)
 F1: reenviar à ONT a MESMA credencial que o ACS guarda, por tarefa enfileirada, e repetir o teste de 401. F2: se continuar 401, reiniciar a ONT de bancada pelo caminho gated (H2) para aplicar. F3: conferir a senha na interface web da ONT.
+
+## Execução do F1 (autorizado pelo responsável em 2026-10-31, bancada apenas)
+- 1ª tentativa (reenvio do mesmo valor): **no-op**. O GenieACS não reenvia valor igual ao do cache; a tarefa saiu da fila sem requisição à ONT. Nada foi escrito.
+- 2ª tentativa (valor temporário aleatório + retorno ao original; original guardado em arquivo 0600 de root, depois apagado com `shred`): no Inform de 19:23 UTC o ACS enviou **dois `SetParameterValues` reais** (temporário e, na mesma sessão, o original pelo provision `inform`); sem falhas, sem tarefas pendentes, cache do ACS igual ao original.
+- **Resultado: a ONT continua respondendo 401** à credencial do ACS depois das escritas aceitas. Ou seja, a ONT aceita a escrita da senha de Connection Request mas não a usa (hipótese: só aplica após reinício, ou a senha efetiva vem de outra configuração). Causa ainda NÃO confirmada.
+- Próximo: F2 (reinício da ONT de bancada pelo caminho gated H2, autorização de uso único) e/ou F3 (conferir a senha na interface web da ONT).
