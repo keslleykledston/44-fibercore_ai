@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19452-54e8-7c13-94d5-86de24496945).
+[codex] Turn started (01a19452-5520-7d32-bf36-3aaed50e6a4a).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e ler o documento H1 completo, com foco na retirada da seçã...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- docs/wiki/bench/H1-vinculo-...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- docs/wiki/bench/H1-vinculo-... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- && git show --stat --onelin...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- && git show --stat --onelin... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Ainda não aprovar: a cronologia contém uma afirmação ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Ainda não aprovar: a cronologia contém uma afirmação contraditória sobre a incerteza entre os relógios, que pode ser lida como base para comparar os eventos.
+
+Findings:
+- [medium] A cronologia contradiz a ressalva sobre os relógios (docs/wiki/bench/H1-vinculo-zte-f670l-2026-10-31.md:32)
+  A seção de horários diz que não há limite conhecido para a incerteza entre OLT e ACS, mas a linha do tempo afirma “Não há desvio conhecido”. Isso pode sugerir que os relógios não têm desvio, apesar de não terem sido comparados, e enfraquece a ressalva de que os eventos não permitem comparação. Explicite que o desvio é desconhecido; mantenha os relatos separados até medi-lo.
+  Recommendation: Trocar “Não há desvio conhecido” por uma formulação inequívoca, como “O desvio entre os relógios é desconhecido”, e preservar a separação entre os relatos.
