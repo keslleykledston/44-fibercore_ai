@@ -1,0 +1,22 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1909c-2356-7a32-ab59-65da83d44fe0).
+[codex] Turn started (01a1909c-2391-7e43-b807-ea15a45d479d).
+[codex] Assistant message captured: Vou conferir o contexto dos componentes e dos estilos de acessibilidade para identificar regr...
+[codex] Running command: /bin/bash -lc "sed -n '1,180p' apps/web/src/components/PonMatrix.tsx && sed -n '1,180p' apps/...
+[codex] Command completed: /bin/bash -lc "sed -n '1,180p' apps/web/src/components/PonMatrix.tsx && sed -n '1,180p' apps/... (exit 0)
+[codex] Assistant message captured: Encontrei um problema específico no caso de aba única: a lista de abas some, mas o painel con...
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/components/OntConfigView.tsx | sed -n '78,94p'; nl -ba app...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/components/OntConfigView.tsx | sed -n '78,94p'; nl -ba app... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não deve ser enviado ainda: no caso de configuração c...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não deve ser enviado ainda: no caso de configuração com uma única aba, o painel fica com referência de acessibilidade quebrada para uma aba removida.
+
+Findings:
+- [medium] Painel de aba única referencia um controle inexistente (apps/web/src/components/OntConfigView.tsx:83-89)
+  Quando `tabs.length` é 1, o tablist e o único botão são omitidos, mas o `div` continua com `role="tabpanel"` e `aria-labelledby="ont-tab-resumo"`. Esse ID não existe no DOM; leitores de tela podem anunciar o painel sem nome ou com contexto incorreto. Condicione também os atributos/role do painel, ou preserve um rótulo visível/acessível válido no caso de aba única.
+  Recommendation: Renderize o conteúdo como painel de abas apenas quando houver múltiplas abas; para uma aba, remova `role="tabpanel"` e `aria-labelledby`, ou forneça uma referência a um elemento que continue renderizado.

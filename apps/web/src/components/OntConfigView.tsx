@@ -86,7 +86,7 @@ export function OntFormBody({ load, form, retry }: { load: Load; form: OntForm |
                     className={`min-h-touch rounded-btn px-3 text-sm ${active === t ? "bg-accent text-[color:var(--on-accent)]" : "border border-line hover:bg-bg"}`}>{TAB_LABEL[t]}</button>
                 ))}
               </div>}
-              <div role="tabpanel" id={`ont-panel-${active}`} aria-labelledby={`ont-tab-${active}`} className="grid gap-4">
+              <div {...(tabs.length > 1 ? { role: "tabpanel", id: `ont-panel-${active}`, "aria-labelledby": `ont-tab-${active}` } : {})} className="grid gap-4">
                 {active === "resumo" && (
                   <>
                     {g("optical") && (
