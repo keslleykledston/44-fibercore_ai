@@ -1,0 +1,5 @@
+  Command:
+          display cpu 0/0 
+  Send message for inquiring board cpu occupancy successfully, board executing...
+  CPU occupancy: 15%
+

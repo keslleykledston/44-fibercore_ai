@@ -435,3 +435,10 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - Flag DESLIGADA (prova pontual na stack efêmera, 1 passed): Rede volta ao inventário com a coluna de OLTs, sem matriz nem árvore; o resumo é o simples de antes; a ONU 360° sem trilha nem painel frontal.
 - NÃO verificado: `app.spec.ts` completo com o seed do demo (Compose, `scripts/e2e.sh`): na stack efêmera 9 testes falham por dependerem de dados que o seed efêmero não cria (clientes/associações/CPEs de DEMOA0001) ou por violação preexistente de axe em `/dispositivos/capacidades` (`scrollable-region-focusable`), fora deste PR; capturas da ajuda de Rede refeitas só depois do deploy; OLT com mais de 1000 ONUs (lista parcial avisada, não paginada).
 
+## Consultas à OLT — lote 2a validado: CPU e memória por placa (PR 107)
+- Capturas reais supervisionadas (ADR-0032) na MA5608T (slots 0, 1 e 2): `display cpu 0/<slot>` e `display mem 0/<slot>`. A placa de linha responde com uma linha fixa ("Send message … board executing…") antes do valor, só na CPU; a placa de controle responde só com o valor. Fixtures sanitizadas (só percentuais) em `internal/olt/testdata/.../display_{cpu,mem}_0_{0,2}.txt`.
+- Go: `go test ./...` do Edge PASS (parsers fechados; falham em: vazio, só a linha fixa, >100 %, sem `%`, duas respostas, texto livre, rótulo trocado, linha fixa repetida ou depois do valor, linha fixa na memória). Python: `test_olt_query.py` + `test_olt_cache.py` 42 passed; `ruff` limpo; hash do catálogo `959fdad3…` igual nos dois lados e vetor de intenção `e3ccc5ca…` atualizado.
+- `slot.cpu` e `slot.mem` ficam Validated mas FORA do ROLLOUT: a tela só oferece consultas globais; entram quando houver seletor de slot.
+- Remoção dos brutos no Edge: os 10 arquivos de captura (lotes 1 e 2a) foram apagados por nome e a listagem seguinte mostrou só `done.json`; cópias locais também apagadas. Motivo adicional: a pasta de capturas estava cheia (`captures_dir_full` desde 01:17 local) e bloqueava `slot.board` e `pon.ont.summary`.
+- NÃO verificado: `slot.board` e `pon.ont.summary` (lote 2b: ainda sem captura); a oferta das consultas por slot na tela.
+

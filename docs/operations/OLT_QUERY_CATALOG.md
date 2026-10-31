@@ -16,8 +16,8 @@ Legenda: **V** = já executado na OLT real e coberto por fixture (aceito por pad
 | `olt.temperature` | `display temperature 0` | global | V | 3 |
 | `olt.sync` | `display data sync state` | global | V | 3 |
 | `slot.board` | `display board 0/<slot>` | slot | N | 3 |
-| `slot.cpu` | `display cpu 0/<slot>` | slot | N | 3 |
-| `slot.mem` | `display mem 0/<slot>` | slot | N | 3 |
+| `slot.cpu` | `display cpu 0/<slot>` | slot | S (validada em 31/10/2026; ainda não oferecida: falta o seletor de slot na tela) | 3 |
+| `slot.mem` | `display mem 0/<slot>` | slot | S (validada em 31/10/2026; ainda não oferecida: falta o seletor de slot na tela) | 3 |
 | `pon.ont.info` | `display ont info <porta> all` | PON | V | 5 |
 | `pon.ont.optical` | `display ont optical-info <porta> all` | PON | V | 6 |
 | `pon.ont.summary` | `display ont info summary <porta>` | PON | N | 5 |

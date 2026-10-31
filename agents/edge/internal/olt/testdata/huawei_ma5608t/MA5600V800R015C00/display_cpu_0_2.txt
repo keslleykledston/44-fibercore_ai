@@ -1,0 +1,4 @@
+  Command:
+          display cpu 0/2 
+  CPU occupancy: 51%
+
