@@ -1,0 +1,31 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19090-b568-79d1-b8a4-284a3b888f4e).
+[codex] Turn started (01a19090-b5a5-7412-b895-73f2f7aa7569).
+[codex] Assistant message captured: Vou comparar a branch com `main` e rastrear os caminhos alterados, deixando de fora os cinco ...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/app/bff/onus/'...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/app/bff/onus/'... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=10 main...HEAD -- apps/web/src/components/Onu...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=10 main...HEAD -- apps/web/src/components/Onu... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/app/rede/page.tsx | sed -n '65,180p'; nl -ba apps/web/src/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/app/rede/page.tsx | sed -n '65,180p'; nl -ba apps/web/src/... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/lib/onu-quick.ts | sed -n '45,100p'; git diff --check main...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/lib/onu-quick.ts | sed -n '45,100p'; git diff --check main... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/components/Faceplate.tsx | sed -n '1,220p'; git diff --no-...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/components/Faceplate.tsx | sed -n '1,220p'; git diff --no-... (exit 0)
+[codex] Running command: /bin/bash -lc "rg 'def .*onus|serial:.*Query|serial.*ilike|olt_id.*Query' apps/api/app -n | h...
+[codex] Command completed: /bin/bash -lc "rg 'def .*onus|serial:.*Query|serial.*ilike|olt_id.*Query' apps/api/app -n | h... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '350,410p'; nl -ba apps/api/app/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '350,410p'; nl -ba apps/api/app/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a árvore pode ocultar OLTs válidas...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a árvore pode ocultar OLTs válidas quando o provedor passa de 200 equipamentos, sem indicar que a lista está incompleta.
+
+Findings:
+- [medium] A árvore e os links só incluem as primeiras 200 OLTs (apps/web/src/app/rede/page.tsx:22)
+  A tela consulta `/v1/olts?limit=200` e usa essa resposta como lista completa para localizar a OLT pedida e montar a árvore. A API aceita até 1000; com mais de 200 OLTs, as restantes desaparecem da navegação e um link direto para uma delas é tratado como OLT inexistente, embora exista. Isso torna parte do inventário inacessível nessa experiência e confunde uma lista truncada com um recurso removido.
+  Recommendation: Buscar até o limite máximo aceito pela API e, se ainda houver truncamento, expor uma indicação clara e uma forma de acessar as OLTs omitidas; não tratar a ausência na página limitada como prova de inexistência.

@@ -57,9 +57,10 @@ export default async function Rede({ searchParams }: { searchParams: Promise<{ s
   }
 
   // ---- Gestão de ONUs (ADR-0037, padrão Lovable): matriz de PONs · árvore · lista com filtros · detalhes
-  const olts = await apiSafe<Olt[]>("/v1/olts?limit=200");
+  const olts = await apiSafe<Olt[]>(`/v1/olts?limit=${READ_LIMIT}`);
   if (olts.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver o inventário." /></AppShell>;
   const list = olts.data ?? [];
+  const oltsTruncated = list.length >= READ_LIMIT;   // lista parcial: a ausência de uma OLT aqui não prova que ela não existe
   const bySerial = serialQ !== "";   // busca por serial atravessa as OLTs: sem matriz nem árvore, só o resultado
   const oltAsked = !bySerial && oltParam !== undefined;   // um recorte pedido pela URL: se não existe, a tela diz (nunca cai em outra OLT em silêncio)
   const olt = oltAsked ? list.find((o) => o.id === oltParam && UUID.test(oltParam)) ?? null : list[0] ?? null;
@@ -70,7 +71,7 @@ export default async function Rede({ searchParams }: { searchParams: Promise<{ s
       <AppShell active="/rede" user="1">
         <PageHeader title="Rede" subtitle="OLTs, PONs e ONUs com frescor e fonte do dado" helpSlug="rede/consultar-onu" />
         <DevicesTabs current="/rede" />
-        <div data-testid="onu-inventory-ready"><EmptyState title="OLT não encontrada" hint="O link aponta para uma OLT que não existe (ou não existe mais) neste provedor." /></div>
+        <div data-testid="onu-inventory-ready"><EmptyState title="OLT não encontrada" hint={oltsTruncated ? `Não está entre as primeiras ${READ_LIMIT} OLTs lidas; ela pode existir. Use a busca por serial.` : "O link aponta para uma OLT que não existe (ou não existe mais) neste provedor."} /></div>
         <p className="mt-4 text-sm"><Link href="/rede" className="text-accent underline underline-offset-2">Ver todas as OLTs</Link></p>
       </AppShell>
     );
@@ -104,6 +105,7 @@ export default async function Rede({ searchParams }: { searchParams: Promise<{ s
         </nav>
       )}
       {ponMissing && <p role="status" className="mb-4 rounded-btn bg-warn-soft px-4 py-3 text-sm text-warn" data-testid="pon-missing">A PON pedida no link não tem ONUs nesta OLT (ou o link é inválido). Mostrando a OLT inteira.</p>}
+      {oltsTruncated && <p role="status" className="mb-4 rounded-btn bg-warn-soft px-4 py-3 text-sm text-warn" data-testid="olts-truncated">Mostrando as primeiras {READ_LIMIT} OLTs: há mais do que o limite de leitura.</p>}
       {bySerial && <p className="mb-4 text-sm"><Link href="/rede" className="text-accent underline underline-offset-2">Limpar a busca</Link></p>}
       <div data-testid="onu-inventory-ready">
         {olts.data === null ? <ErrorState title="Falha ao carregar OLTs" />
