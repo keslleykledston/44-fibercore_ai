@@ -701,8 +701,8 @@ func (b BenchConfig) SpeedWANInterfaces() map[string]string {
 	return out
 }
 
-// benchOwnsCapture reports whether a PON- or ONU-scope capture names the bench: the H4 ONU (bench.olt) or one of the read-only bench ONUs. A PON scope is
-// the PON of any of them; an ONU scope must also be that exact ONU.
+// benchOwnsCapture reports whether a PON- or ONU-scope capture names the bench. The H4 ONU (bench.olt) owns its PON and itself. A read-only bench ONU
+// (bench.read_only_onus) owns ONLY that exact ONU: it never opens a PON scope, because a PON query lists the other ONUs on the port (subscribers).
 func (c *Config) benchOwnsCapture(oltName string, ponScope bool, cp CaptureConfig) bool {
 	if c.Bench == nil {
 		return false
@@ -710,8 +710,11 @@ func (c *Config) benchOwnsCapture(oltName string, ponScope bool, cp CaptureConfi
 	if o := c.Bench.OLT; o != nil && o.Name == oltName && o.Slot == cp.Slot && o.Port == cp.Port && (ponScope || o.OntID == cp.ONT) {
 		return true
 	}
+	if ponScope {
+		return false
+	}
 	for _, r := range c.Bench.ReadOnlyONUs {
-		if r.Name == oltName && r.Slot == cp.Slot && r.Port == cp.Port && (ponScope || r.OntID == cp.ONT) {
+		if r.Name == oltName && r.Slot == cp.Slot && r.Port == cp.Port && r.OntID == cp.ONT {
 			return true
 		}
 	}
