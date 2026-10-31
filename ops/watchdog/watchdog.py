@@ -150,6 +150,7 @@ class Watchdog:
         rows = self.containers()
         if rows is None:
             unknown.add("container")
+            self.state["unhealthy"] = {}  # ciclo desconhecido quebra a sequência de "unhealthy seguidos"
             active.add("docker")
             self.alert("docker", "watchdog não consegue consultar o Docker")
             return

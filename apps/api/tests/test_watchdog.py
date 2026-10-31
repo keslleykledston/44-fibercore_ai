@@ -279,3 +279,39 @@ def test_low_disk_alerts_per_mount(env):
 def test_docker_unavailable_does_not_crash(env):
     w = make(env, lambda cmd, timeout=30: (127, "OSError"), [1_000_000.0])
     w.run_all()
+
+
+def test_unknown_docker_cycle_breaks_the_unhealthy_streak(env):
+    now = [1_000_000.0]
+    f = Fake([row("web", status="Up (unhealthy)")])
+    w = make(env, f, now)
+    os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
+    w.run_all()  # 1º ciclo unhealthy
+    good = w.run
+    w.run = lambda cmd, timeout=30: (1, "x") if cmd[:2] == ["docker", "ps"] else good(cmd, timeout)
+    now[0] += 60
+    os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
+    w.run_all()  # docker ps falha: ciclo desconhecido
+    w.run = good
+    now[0] += 60
+    os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
+    w.run_all()  # unhealthy de novo: conta como 1º, não 2º
+    assert f.actions() == []
+
+
+def test_container_alerts_survive_a_docker_ps_failure(env):
+    now = [1_000_000.0]
+    f = Fake([row("web", status="Up (unhealthy)")], action_rc=1)
+    w = make(env, f, now)
+    for _ in range(2):
+        now[0] += 60
+        os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
+        w.run_all()
+    assert "container:web" in w.state["alerts"]
+    good = w.run
+    w.run = lambda cmd, timeout=30: (1, "x") if cmd[:2] == ["docker", "ps"] else good(cmd, timeout)
+    now[0] += 60
+    os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
+    n = len(env[2])
+    w.run_all()
+    assert "container:web" in w.state["alerts"] and not any("resolvido" in m for m in env[2][n:])
