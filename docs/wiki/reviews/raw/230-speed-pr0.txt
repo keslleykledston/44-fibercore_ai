@@ -1,0 +1,34 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a190e7-a7b0-7fc0-9f12-2f2af7edf386).
+[codex] Turn started (01a190e7-a7e8-7152-b731-a9b54d6fe664).
+[codex] Assistant message captured: Vou comparar o diff com `main` e conferir as afirmações do inventário contra o código, os ADR...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- docs/addenda/v2.2-speed/CUR...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- docs/addenda/v2.2-speed/CUR... (exit 0)
+[codex] Running command: /bin/bash -lc 'git status --short; rg -n "ADR-0008|ADR-0010|ADR-0030|ADR-0025|HOMOLOGATED_WRI...
+[codex] Command failed: /bin/bash -lc 'git status --short; rg -n "ADR-0008|ADR-0010|ADR-0030|ADR-0025|HOMOLOGATED_WRI... (exit 2)
+[codex] Running command: /bin/bash -lc "rg --files docs/wiki/adr | sort; cat docs/wiki/adr/ADR-0008* docs/wiki/adr/ADR...
+[codex] Command completed: /bin/bash -lc "rg --files docs/wiki/adr | sort; cat docs/wiki/adr/ADR-0008* docs/wiki/adr/ADR... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar: o plano abre um terceiro caminho de escr...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar: o plano abre um terceiro caminho de escrita incompatível com os ADRs vigentes e deixa uma lacuna de SSRF no mapeamento Edge→URL.
+
+Findings:
+- [high] Gate `speed` contradiz os bloqueios de escrita e de testes ativos dos ADRs (docs/addenda/v2.2-speed/IMPLEMENTATION_PLAN.md:10-11)
+  O plano propõe habilitar `speed_test_download/upload` para CPEs gerais após capacidade observada, flag e outros checks, sem aprovação por teste; também prevê suporte de Edge como condição futura. Isso conflita com ADR-0010, que mantém escrita em equipamento bloqueada até homologação por firmware, e com ADR-0025, que bloqueia testes ativos até ADR-SD-003. ADR-0030 autoriza exceção restrita à ONT de bancada, mas o plano descreve um terceiro caminho mais amplo e não limita o gate a essa identidade; chamar o bloqueio de provisório até o gate abrir não resolve a incompatibilidade de política. A permissão R2 tampouco substitui a autorização operacional e a aprovação previstas para a exceção de bancada. PR 0 não deve fixar esse desenho como caminho de implementação sem emendar/reconciliar os ADRs e restringir explicitamente o alvo e o processo de autorização.
+  Recommendation: Reescrever o desenho para manter escrita fechada sob ADR-0010/0025, ou propor e aprovar ADR que altere esses limites antes de PR 1; para a primeira homologação, herdar explicitamente identidade, autorização de uso único, separação de atores e trava de resultado incerto do ADR-0030.
+- [high] Allowlist de URL no Edge não fecha SSRF por configuração (docs/addenda/v2.2-speed/IMPLEMENTATION_PLAN.md:12)
+  O plano elimina URL do envelope e da tabela cloud, mas deixa a URL real em configuração local do Edge e descreve apenas lista fechada, sem redirecionamento e HTTP GET/PUT. Não especifica validação de esquema/host/IP após DNS nem bloqueio de loopback, redes privadas/link-local, mudanças de DNS ou redirecionamentos em todos os saltos. Se config local ou resolução do hostname apontar para um serviço interno, o Edge pode induzir o CPE a requisitar um destino não autorizado; tirar URL da API não elimina esse risco. O pacote exige allowlist para evitar SSRF, mas o plano não define o controle de rede que a torna efetiva.
+  Recommendation: Definir allowlist com host/porta/esquema fixos por endpoint e validação de resolução/endereço no Edge, proibir destinos especiais e redirecionamentos, e limitar por ACL/firewall a saída do CPE e do nó de teste; cobrir DNS rebinding e configuração inválida nos critérios de aceitação.
+- [medium] O inventário trata `_writable` como evidência de escrita sem conferir a capacidade existente (docs/addenda/v2.2-speed/GAP_MAP.md:10-11)
+  O estado atual afirma que o registro de capacidades exige `supported` ou `observed|certified` com evidência, mas o ADR-0019 e o código dizem que o registro não abre escrita por si só. O inventário precisa distinguir a observação de presença/`_writable` pelo Edge da homologação operacional de uma escrita TR-143. Além disso, afirmar que há descoberta de capacidade baseada em `cpe_config_fields` é arriscado: o próprio estado diz que esses campos não identificam sozinhos a WAN de serviço, e ADR-0027 trata WAN como inferência que não substitui confirmação. O gate proposto pode então interpretar sinal de leitura como prova de que a interface de serviço está identificada e autorizada.
+  Recommendation: Separar capacidades observadas pelo Edge de homologação/certificação e autorização para escrita; exigir evidência explícita por firmware para interface WAN de serviço e declarar `cpe_config_fields` apenas como sinal auxiliar, com recusa quando a referência homologada não casar.
+
+Next steps:
+- Corrigir a proposta do gate e reconciliá-la com ADR-0010, ADR-0025 e o escopo estrito de ADR-0030 antes de planejar PR 1.
+- Documentar controles SSRF verificáveis no Edge e rede antes de aceitar URL local como limite de segurança.
+- Ajustar o inventário para separar capacidade observada, seleção da WAN de serviço e autorização operacional.

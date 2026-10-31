@@ -1,0 +1,131 @@
+openapi: 3.0.3
+info:
+  title: FiberCore Speed Diagnostics — contrato de referência
+  version: 1.0.0
+  description: >-
+    FRAGMENTO: unir aos paths já existentes de /api/v1 no FiberCore 2.2.
+    Não substitui auth/tenant/DTOs do projeto.
+servers:
+  - url: /api/v1
+paths:
+  /devices/{deviceId}/diagnostics/speed/capabilities:
+    get:
+      operationId: getSpeedCapabilities
+      summary: Capacidade de medir pela ONT
+      parameters:
+        - $ref: '#/components/parameters/deviceId'
+      responses:
+        '200':
+          description: Capabilities do dispositivo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SpeedCapabilities' }
+        '403': { description: Tenant/acesso negado }
+  /devices/{deviceId}/diagnostics/speed/runs:
+    get:
+      operationId: listSpeedRuns
+      parameters:
+        - $ref: '#/components/parameters/deviceId'
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 20, default: 5 }
+      responses:
+        '200':
+          description: Histórico
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SpeedRun' }
+    post:
+      operationId: startSpeedRun
+      summary: Iniciar diagnóstico manual (jamais URL arbitrária)
+      parameters:
+        - $ref: '#/components/parameters/deviceId'
+        - in: header
+          name: Idempotency-Key
+          schema: { type: string, maxLength: 120 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [target]
+              properties:
+                target: { type: string, enum: [CORE, INTERNET] }
+      responses:
+        '202':
+          description: Job aceito, não necessariamente iniciado no CPE
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SpeedRun' }
+        '403': { description: Permissão ou tenant negados }
+        '409': { description: Limite/slot ocupado }
+        '422': { description: Capacidade, WAN ou destino incompatível }
+  /devices/{deviceId}/diagnostics/speed/runs/{runId}:
+    get:
+      operationId: getSpeedRun
+      parameters:
+        - $ref: '#/components/parameters/deviceId'
+        - in: path
+          name: runId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Estado e resultado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SpeedRun' }
+        '404': { description: Não encontrado no tenant }
+components:
+  parameters:
+    deviceId:
+      in: path
+      name: deviceId
+      required: true
+      schema: { type: string }
+  schemas:
+    SpeedCapabilities:
+      type: object
+      required: [status, supportsDownload, supportsUpload, wanInterfaceVerified, targets, blockers]
+      properties:
+        status: { type: string, enum: [SUPPORTED, PARTIAL, UNSUPPORTED, UNKNOWN] }
+        supportsDownload: { type: boolean }
+        supportsUpload: { type: boolean }
+        wanInterfaceVerified: { type: boolean }
+        method: { type: string, enum: [TR143_HTTP] }
+        wanInterface: { type: string, nullable: true }
+        targets:
+          type: array
+          items: { type: string, enum: [CORE, INTERNET] }
+        blockers:
+          type: array
+          items: { type: string }
+        lastCheckedAt: { type: string, format: date-time, nullable: true }
+    SpeedRun:
+      type: object
+      required: [id, deviceId, target, method, state, requestedAt, warnings]
+      properties:
+        id: { type: string }
+        deviceId: { type: string }
+        target: { type: string, enum: [CORE, INTERNET] }
+        method: { type: string, enum: [TR143_HTTP] }
+        state:
+          type: string
+          enum: [queued, dispatched, running, collecting, completed, partial, failed, timeout, unsupported]
+        quality: { type: string, enum: [valid, partial, inconclusive], nullable: true }
+        currentDirection: { type: string, enum: [download, upload], nullable: true }
+        downloadMbps: { type: number, minimum: 0, nullable: true }
+        uploadMbps: { type: number, minimum: 0, nullable: true }
+        wanInterface: { type: string, nullable: true }
+        endpointName: { type: string, nullable: true }
+        requestedAt: { type: string, format: date-time }
+        startedAt: { type: string, format: date-time, nullable: true }
+        finishedAt: { type: string, format: date-time, nullable: true }
+        errorCode: { type: string, nullable: true }
+        warnings:
+          type: array
+          items: { type: string }

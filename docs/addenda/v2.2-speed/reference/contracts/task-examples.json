@@ -1,0 +1,29 @@
+{
+  "_warning": "EXEMPLOS DOCUMENTAIS; IP 192.0.2.10 não é um host real; interface Device.IP.Interface.1 ilustrativa",
+  "download_Device2": {
+    "name": "setParameterValues",
+    "parameterValues": [
+      ["Device.IP.Diagnostics.DownloadDiagnostics.Interface", "Device.IP.Interface.1", "xsd:string"],
+      ["Device.IP.Diagnostics.DownloadDiagnostics.DownloadURL", "http://192.0.2.10:8080/download/128MiB.bin", "xsd:string"],
+      ["Device.IP.Diagnostics.DownloadDiagnostics.DiagnosticsState", "Requested", "xsd:string"]
+    ]
+  },
+  "upload_Device2": {
+    "name": "setParameterValues",
+    "parameterValues": [
+      ["Device.IP.Diagnostics.UploadDiagnostics.Interface", "Device.IP.Interface.1", "xsd:string"],
+      ["Device.IP.Diagnostics.UploadDiagnostics.UploadURL", "http://192.0.2.10:8080/upload", "xsd:string"],
+      ["Device.IP.Diagnostics.UploadDiagnostics.TestFileLength", 67108864, "xsd:unsignedInt"],
+      ["Device.IP.Diagnostics.UploadDiagnostics.DiagnosticsState", "Requested", "xsd:string"]
+    ]
+  },
+  "download_IGD1": {
+    "name": "setParameterValues",
+    "parameterValues": [
+      ["InternetGatewayDevice.DownloadDiagnostics.Interface", "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1", "xsd:string"],
+      ["InternetGatewayDevice.DownloadDiagnostics.DownloadURL", "http://192.0.2.10:8080/download/128MiB.bin", "xsd:string"],
+      ["InternetGatewayDevice.DownloadDiagnostics.DiagnosticsState", "Requested", "xsd:string"]
+    ]
+  },
+  "nbi_note": "POST /devices/{urlencoded_device_id}/tasks?connection_request => 200 = task executada na sessão, 202 = fila, nenhum dos dois garante Diagnostics Completed"
+}

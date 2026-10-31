@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a190e8-d903-7bc0-8ea1-f176324444d0).
+[codex] Turn started (01a190e8-d93d-7673-95ca-d1f07878170a).
+[codex] Assistant message captured: Vou comparar o diff completo com `main`, concentrando a revisão nos critérios de redirecionam...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/addenda/v2.2-speed doc...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/addenda/v2.2-speed doc... (exit 0)
+[codex] Running command: /bin/bash -lc 'nl -ba docs/addenda/v2.2-speed/IMPLEMENTATION_PLAN.md; nl -ba docs/addenda/v2....
+[codex] Command completed: /bin/bash -lc 'nl -ba docs/addenda/v2.2-speed/IMPLEMENTATION_PLAN.md; nl -ba docs/addenda/v2.... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o caminho alternativo de segurança...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o caminho alternativo de segurança para CPEs que seguem redirecionamentos não está exigido de forma verificável no checklist de ativação.
+
+Findings:
+- [high] Checklist não confirma o controle de saída exigido para CPEs que seguem 3xx (docs/addenda/v2.2-speed/reference/checklists/ROLL_OUT.md:11)
+  O plano condiciona a elegibilidade, quando não há evidência de rejeição de 3xx ou o firmware segue o redirecionamento, à confirmação do operador de uma ACL/firewall que restrinja a saída da WAN de serviço aos nós de teste. O checklist de rollout pede apenas que “Firewall/ACL, limite tamanho e simultaneidade” estejam configurados; não exige confirmar o comportamento 3xx por firmware nem que a ACL restrinja especificamente a saída do CPE aos nós de teste. Assim, uma ativação pode satisfazer o checklist sem comprovar o controle que deveria compensar o redirecionamento, deixando o tráfego do teste sujeito ao destino indicado pelo 3xx.
+  Recommendation: Adicionar itens explícitos por modelo+firmware para registrar se o CPE segue 3xx e, quando seguir ou faltar evidência, exigir confirmação documentada de ACL/firewall na WAN de serviço que permita saída somente aos nós de teste antes da ativação.
+
+Next steps:
+- Tornar o registro do comportamento 3xx e a confirmação específica da ACL de saída condições obrigatórias no checklist de rollout.

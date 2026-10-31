@@ -1,0 +1,14 @@
+{
+  "deviceId": "ont_demo_bridge_2",
+  "model": "ONU-SINTETICA-BRIDGE",
+  "firmware": "FW-DEMO-1.0",
+  "mode": "BRIDGE",
+  "capabilities": {
+    "status": "UNSUPPORTED",
+    "supportsDownload": false,
+    "supportsUpload": false,
+    "wanInterfaceVerified": false,
+    "targets": [],
+    "blockers": ["BRIDGE_NO_SERVICE_WAN", "NO_TR143"]
+  }
+}
