@@ -1,0 +1,20 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18f87-2f93-70d3-9e98-ab19583853ff).
+[codex] Turn started (01a18f87-2fd0-7493-8075-82e65b3c3978).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e rastrear especialmente as transições de estado, a migr...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/erp_connec...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/erp_connec... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'def scoped_connection|TENANT_CONN|def audit|erp:test|erp:manage' apps/a...
+[codex] Command completed: /bin/bash -lc "rg -n 'def scoped_connection|TENANT_CONN|def audit|erp:test|erp:manage' apps/a... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"Não encontrei falha material restante no diff. As transições ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+Não encontrei falha material restante no diff. As transições enable/disable/test são condicionais e a constraint do banco preserva enabled ⇒ healthy, inclusive nas corridas revisadas.
+
+No material findings.

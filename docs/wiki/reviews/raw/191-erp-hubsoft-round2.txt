@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18f85-7665-7c12-a0b9-86d4aacbe605).
+[codex] Turn started (01a18f85-78e9-7170-9839-aab96f413760).
+[codex] Assistant message captured: Vou confrontar o diff com `main` e seguir os caminhos de autenticação, orçamento, isolamento ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/erp_hub.p...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/erp_hub.p... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/core/erp_hub.p...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/core/erp_hub.p... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/erp_hub.py | sed -n '105,170p'; nl -ba apps/api/app/i...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/erp_hub.py | sed -n '105,170p'; nl -ba apps/api/app/i... (exit 0)
+[codex] Assistant message captured: O orçamento global parece serializar corretamente os incrementos por janela. Estou verificand...
+[codex] Running command: /bin/bash -lc "rg -n \"sni_hostname|make_send|auth_gate|erp_egress_budget|secret_permissions|...
+[codex] Command completed: /bin/bash -lc "rg -n \"sni_hostname|make_send|auth_gate|erp_egress_budget|secret_permissions|... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o teste de conexão mantém uma tran...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o teste de conexão mantém uma transação e lock da linha durante a chamada externa, atrasando o kill switch de desativação justamente quando o ERP está lento.
+
+Findings:
+- [medium] A desativação pode ficar bloqueada pelo teste de conexão (apps/api/app/api/erp_connections.py:126-128)
+  `test_connection` atualiza `last_tested_at` e mantém essa transação aberta enquanto resolve DNS, autentica, aplica retries e aguarda a resposta externa. O `UPDATE` bloqueia a linha até o commit da dependência `TENANT_CONN`; portanto, uma chamada de `disable_connection` para a mesma conexão aguarda esse lock e não consegue desativá-la prontamente durante uma falha ou lentidão do ERP. Isso enfraquece o kill switch descrito no próprio endpoint e pode deixar a conexão habilitada durante a espera.
+  Recommendation: Registre o início do teste e faça commit antes da operação de rede, executando a chamada externa fora da transação que mantém lock na linha; grave o resultado em uma transação curta separada. Preserve a limitação concorrente de testes com um mecanismo que não retenha o lock durante a chamada externa.

@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18f86-75dc-7ea2-ada3-334e6c88bfef).
+[codex] Turn started (01a18f86-7614-7e73-aad5-7db2fc26cee5).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main`, priorizando concorrência, persistência de estado e os l...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/erp_connec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/erp_connec... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/app/api/erp_connec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/app/api/erp_connec... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/erp_connections.py | sed -n '145,185p'; git status --s...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/erp_connections.py | sed -n '145,185p'; git status --s... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: o enable usa uma leitura prévia de st...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: o enable usa uma leitura prévia de status e depois atualiza sem condição; concorrência pode habilitar uma conexão já desativada ou cujo teste falhou.
+
+Findings:
+- [high] Enable pode reverter o kill switch sob concorrência (apps/api/app/api/erp_connections.py:169-173)
+  Após ler `healthy`, o endpoint faz `UPDATE ... SET enabled = true` sem exigir que o status ainda seja `healthy`. Se `disable` gravar `status='disabled', enabled=false` entre essas operações, o enable posterior deixa a linha como `disabled` e `enabled=true`. O mesmo padrão pode habilitar uma conexão após um teste concorrente alterar o status para falha. Isso viola a garantia de que desativada é final e pode ativar consumidores que confiem em `enabled`. Faça a atualização condicional (`WHERE status = 'healthy'`) e confirme que uma linha foi alterada; serialize a decisão e a auditoria na mesma transação.
+  Recommendation: Substitua a verificação separada por um UPDATE atômico condicionado a `status = 'healthy'`; se nenhuma linha for atualizada, retorne 409. Garanta que disable e enable concorrentes não possam terminar com `status='disabled' AND enabled=true`.
+
+Next steps:
+- Adicionar cobertura concorrente de enable contra disable e contra resultado de teste malsucedido.
