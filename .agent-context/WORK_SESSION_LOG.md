@@ -84,3 +84,8 @@ Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetido
 - PR 108 (docs) e PR 109 (nuvem: ADR-0038, migração 0034, `app/core/speed.py`, `app/api/speed.py`, catálogo de bancada, flag `speed_diagnostics` OFF, `bench.SPEED_EDGE_SUPPORT=False`; Codex 8 rodadas, approve; 727 testes PASS) em `main` (d3b3fd0). Nada executado em ONT/OLT/ACS.
 - Próximo: PR 2 (Edge Go `internal/speed`, NBI de escrita fechado, descoberta, testes com NBI falso; Edge implantado ANTES da nuvem), depois PR 3 (UX, ajuda, guia de homologação).
 - Só o responsável: autorizar homologação na ONT de bancada + aprovar emenda ao ADR-0030; nó de teste e ACL; WAN de serviço da bancada; janela de baixa carga.
+
+## 2026-10-31 (cont.) — Speed Diagnostics: PRs 110 e 111 mergeados
+- PR 110 (Edge Go: `internal/speed`, `internal/nbi/speed.go`, ramo no `bench.Runner`, envelope, seção `speed`, saúde dos nós; nuvem: `SPEED_EDGE_SUPPORT=True`, migração 0035 com destino→Edge dono, `POST /v1/edge/speed-health`, contrato do envelope) e PR 111 (aba/cartão `SpeedTestSection`, BFF, ajuda com capturas reais e de cenário rotuladas, guia de homologação, recuo provado) em `main` (d6b6d08, cca8ed6). Testes: API 732 PASS, Go todos os pacotes PASS, e2e do speed 12 passed + 1 do recuo.
+- Aprendizados: uma correção de leitura periódica fora de ordem virou 6 rodadas de Codex só de segurança de tráfego na tela; guardas de UI (contador de requisição, marcador de pedido em curso por aparelho em sessionStorage, 5xx = ambíguo) têm teste e2e. `python3 -` sem entrada trava o shell: nunca deixar no comando.
+- Pilha efêmera de UI parada. Nenhum Edge/LAB reimplantado.
