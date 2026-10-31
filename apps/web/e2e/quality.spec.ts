@@ -136,8 +136,8 @@ test("qualidade (cenário): resposta fora do formato fechado (escopo/grupo/valor
   await confirmDemoA2(request);
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
-  for (const bad of [null, M({ scope: "<img src=x>" }), M({ group: "DADOS" }), M({ value: "x".repeat(60) }), M({ instance: "a b<c>" }), M({ collected_at: "ontem" })]) {
-    await page.route("**/bff/cpes/*/quality", (r) => r.fulfill({ json: { caps: CAPS, runs: [RUN(bad === null ? { created_at: "ontem" } : { metrics: [bad] })] } }));
+  for (const bad of [null, "2024", { hyp: true }, { obs: true }, M({ scope: "<img src=x>" }), M({ group: "DADOS" }), M({ value: "x".repeat(60) }), M({ instance: "a b<c>" }), M({ collected_at: "ontem" })]) {
+    await page.route("**/bff/cpes/*/quality", (r) => r.fulfill({ json: { caps: CAPS, runs: [RUN(bad === null ? { created_at: "ontem" } : bad === "2024" ? { created_at: "2024" } : "hyp" in (bad as object) ? { hypotheses: [{ code: "DNS_POTENTIAL", label: { x: 1 }, confidence: "low", recommended_check: "x", caveats: [] }] } : "obs" in (bad as object) ? { summary: { state: "attention", observations: [{ code: "WAN_LINK_DOWN", scope: "<b>" }], indicators: IND(), note: null } } : { metrics: [bad] })] } }));
     await page.goto("/rede");
     await row(page, "DEMOA0002").click();
     await page.getByRole("tab", { name: "Qualidade" }).click();

@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1933d-d972-7792-9301-6554bf81d4d4).
+[codex] Turn started (01a1933d-d9ac-7b23-ba30-13f53d97189f).
+[codex] Assistant message captured: Vou comparar a branch com `main` e seguir o fluxo de leitura até a renderização, com foco em ...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=60 main...HEAD -- apps/web/src/lib/quality.ts...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=60 main...HEAD -- apps/web/src/lib/quality.ts... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/lib/quality.ts | sed -n '25,105p'; rg -n \"hypotheses|obse...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/lib/quality.ts | sed -n '25,105p'; rg -n \"hypotheses|obse... (exit 0)
+[codex] Running command: /bin/bash -lc "cat docs/addenda/v2.2-qos/reference/contracts/quality-run.schema.json; sed -n ...
+[codex] Command completed: /bin/bash -lc "cat docs/addenda/v2.2-qos/reference/contracts/quality-run.schema.json; sed -n ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: `created_at` ainda aceita formatos...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: `created_at` ainda aceita formatos ambíguos, e campos textuais de hipóteses são renderizados após coerção em vez de validação de tipo.
+
+Findings:
+- [medium] `created_at` aceita datas que não seguem o formato esperado (apps/web/src/lib/quality.ts:59)
+  A checagem usa apenas `Date.parse`, que aceita strings não padronizadas como `"0"` e `"2024"`. Assim, um timestamp malformado pode passar por `readRun` e ser exibido como uma data plausível, mascarando corrupção ou incompatibilidade de schema. Exija o formato date-time definido pelo contrato antes de aceitar a leitura.
+  Recommendation: Validar `created_at` contra o formato date-time esperado, além de confirmar que representa uma data válida; recusar o run se não corresponder.
+- [medium] Texto de hipótese é renderizado sem validação de tipo (apps/web/src/lib/quality.ts:31)
+  `label` e `recommended_check` passam por `String(...)`, enquanto os itens de `caveats` também são convertidos sem checar se são strings. Se a API retornar objeto, array ou outro tipo por corrupção ou drift de schema, a interface pode mostrar texto enganoso como `[object Object]` ou conteúdo serializado como frase diagnóstica. Isso afeta diretamente o texto que orienta a verificação do operador.
+  Recommendation: Aceitar esses campos apenas quando forem strings dentro do limite previsto; rejeitar a hipótese malformada ou omiti-la sem renderizar valores convertidos.

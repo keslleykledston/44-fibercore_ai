@@ -28,7 +28,9 @@ const STATES: readonly string[] = ["ok", "attention", "stale", "unknown"];
 const GLOBAL: readonly string[] = ["attention", "no_anomalies_observed", "insufficient_data"];
 export const INDICATORS = ["wan", "optical", "wifi", "cpe"] as const;
 
-const str = (v: unknown, max: number): string => String(v ?? "").slice(0, max);
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
+const isoOk = (v: unknown): v is string => typeof v === "string" && ISO.test(v) && !Number.isNaN(Date.parse(v));
+const txt = (v: unknown, max: number): string | null => (typeof v === "string" && v.length > 0 && v.length <= max ? v : null);
 
 export function readCaps(d: unknown): QCaps | null {
   const q = (d as { modes?: { quick?: { offered?: unknown; reason?: unknown } } } | null)?.modes?.quick;
@@ -39,7 +41,7 @@ export function readCaps(d: unknown): QCaps | null {
 function readMetric(m: QMetric): QMetric | null {
   if (!m || !MID.test(m.id) || !STATUSES.includes(m.status) || !GROUPS.includes(m.group) || !SOURCES.includes(m.source) || !SCOPES.includes(m.scope)) return null;
   if (m.instance !== null && m.instance !== undefined && (typeof m.instance !== "string" || !INST.test(m.instance))) return null;
-  if (m.collected_at !== null && m.collected_at !== undefined && (typeof m.collected_at !== "string" || Number.isNaN(Date.parse(m.collected_at)))) return null;
+  if (m.collected_at !== null && m.collected_at !== undefined && !isoOk(m.collected_at)) return null;
   if (m.freshness_s !== null && m.freshness_s !== undefined && (typeof m.freshness_s !== "number" || !Number.isFinite(m.freshness_s))) return null;
   if (m.unit !== null && m.unit !== undefined && (typeof m.unit !== "string" || !/^[A-Za-z%\/]{1,12}$/.test(m.unit))) return null;
   const keeps = m.status === "valid" || m.status === "stale";
@@ -56,27 +58,32 @@ function readMetric(m: QMetric): QMetric | null {
 export function readRun(r: unknown): QRun | null {
   const o = r as QRun | null;
   if (!o || !ID.test(o.id) || (o.mode !== "quick" && o.mode !== "full") || !Array.isArray(o.metrics) || o.metrics.length > 80 || !Array.isArray(o.hypotheses) || o.hypotheses.length > 12) return null;
-  if (typeof o.created_at !== "string" || Number.isNaN(Date.parse(o.created_at))) return null;   // horário de leitura inválido: a resposta inteira é recusada, nunca "Invalid Date" na tela
+  if (!isoOk(o.created_at)) return null;   // horário de leitura inválido: a resposta inteira é recusada, nunca "Invalid Date" na tela
   const s = o.summary;
-  if (!s || !GLOBAL.includes(s.state) || !s.indicators || !Array.isArray(s.observations)) return null;
+  if (!s || !GLOBAL.includes(s.state) || !s.indicators || !Array.isArray(s.observations) || s.observations.length > 12 || !s.observations.every((x) => x && typeof x.code === "string" && UP.test(x.code) && SCOPES.includes(x.scope))) return null;
   const ind = {} as QSummary["indicators"];
   for (const k of INDICATORS) {
     const x = s.indicators[k];
     if (!x || !STATES.includes(x.state) || !Array.isArray(x.metric_ids)) return null;
     ind[k] = { state: x.state, metric_ids: x.metric_ids.filter((i): i is string => typeof i === "string" && MID.test(i)).slice(0, 40) };
   }
+  const hyps = o.hypotheses.map((h) => {
+    if (!h || typeof h.code !== "string" || !UP.test(h.code) || !Array.isArray(h.caveats) || h.caveats.length > 5) return null;
+    const label = txt(h.label, 200), check = txt(h.recommended_check, 200), caveats = h.caveats.map((c) => txt(c, 200));
+    if (!label || !check || caveats.some((c) => c === null) || !CONF.includes(h.confidence)) return null;
+    return { code: h.code, label, confidence: h.confidence, recommended_check: check, caveats: caveats as string[] };
+  });
+  if (hyps.some((h) => h === null)) return null;   // hipótese malformada recusa a resposta inteira: nunca texto convertido à força
+  if (s.note !== null && s.note !== undefined && txt(s.note, 200) === null) return null;
   const metrics = o.metrics.map(readMetric);
   if (metrics.some((m) => m === null)) return null;
   return {
     id: o.id, mode: o.mode, created_at: o.created_at,
     metrics: metrics as QMetric[],
-    hypotheses: o.hypotheses.filter((h) => h && UP.test(h.code)).map((h) => ({
-      code: h.code, label: str(h.label, 200), confidence: CONF.includes(h.confidence) ? h.confidence : "low", recommended_check: str(h.recommended_check, 200),
-      caveats: Array.isArray(h.caveats) ? h.caveats.slice(0, 5).map((c) => str(c, 200)) : [],
-    })),
+    hypotheses: hyps as QHypothesis[],
     summary: {
-      state: s.state, indicators: ind, note: typeof s.note === "string" ? s.note.slice(0, 200) : null,
-      observations: s.observations.filter((x) => x && UP.test(x.code)).slice(0, 12).map((x) => ({ code: x.code, scope: SCOPES.includes(x.scope) ? x.scope : "CPE" })),
+      state: s.state, indicators: ind, note: s.note ? s.note : null,
+      observations: s.observations as QObservation[],
     },
   };
 }
