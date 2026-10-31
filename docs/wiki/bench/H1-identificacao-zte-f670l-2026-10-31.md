@@ -18,13 +18,14 @@ Uma destas, com a evidência anexada aqui: (a) leitura do GPON SN no próprio CP
 Emenda do ADR-0030 (lista fechada com mais de um modelo), autorização do responsável para ESTA identidade, `bench-target-add`, entrada na lista local do Edge e registro de capacidades por fabricante/modelo/firmware.
 
 ## Fonte dos números da PON
-Consulta somente leitura ao banco da nuvem do LAB (escopo do provedor da bancada), repetida em 2026-10-31 depois da coleta de OLT das 16:59 UTC:
+Consulta somente leitura ao banco da nuvem do LAB (escopo do provedor da bancada), com o instante da coleta de OLT escolhido **explicitamente** (2026-10-31 16:59:01 UTC):
 ```sql
-SELECT count(*), min(o.observed_at), max(o.observed_at),
+SELECT count(*) AS onus,
        count(*) FILTER (WHERE o.serial LIKE '5A544547%') AS prefixo_zteg,
-       count(*) FILTER (WHERE o.serial LIKE '414C434C%') AS prefixo_alcl
+       count(*) FILTER (WHERE o.serial LIKE '414C434C%') AS prefixo_alcl,
+       count(DISTINCT o.observed_at) AS instantes_distintos
 FROM onus o JOIN pon_ports p ON p.id = o.pon_id AND p.tenant_id = o.tenant_id
 WHERE p.pon_path = '0/0/14'
-  AND o.observed_at >= (SELECT max(observed_at) FROM onus) - interval '30 minutes';
+  AND date_trunc('second', o.observed_at) = timestamptz '2026-10-31 16:59:01+00';
 ```
-Resultado: **12** linhas, todas com `observed_at` = 2026-10-31 16:59:01 UTC (`min` = `max`, ou seja, uma única coleta, sem linhas antigas), das quais 5 com prefixo `ZTEG` e 2 com `ALCL`. A família vem dos 4 primeiros bytes do GPON SN em hex lidos como ASCII. Não há exportação versionada (seriam seriais de ONUs).
+Saída agregada verificada em 2026-10-31: `onus = 12`, `prefixo_zteg = 5`, `prefixo_alcl = 2`, `instantes_distintos = 1` (todas as linhas da PON pertencem a essa única coleta). A família vem dos 4 primeiros bytes do GPON SN em hex lidos como ASCII. Não há exportação versionada (seriam seriais de ONUs). O resultado vale para esse instante; outra coleta pode ter outros números.
