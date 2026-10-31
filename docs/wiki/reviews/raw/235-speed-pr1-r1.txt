@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a190f6-4161-7121-9481-2cc8ef3a27b1).
+[codex] Turn started (01a190f6-446d-7f92-9710-714110b41301).
+[codex] Assistant message captured: I’ll inspect the branch diff and the surrounding authorization, schema, and persistence code,...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/speed.py; nl -ba apps/api/app/core/speed.py; nl -ba ap...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/speed.py; nl -ba apps/api/app/core/speed.py; nl -ba ap... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '365,540p'; nl -ba apps/api/app/cli.p...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '365,540p'; nl -ba apps/api/app/cli.p... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: a supplied group_id can be reused to...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: a supplied group_id can be reused to create multiple runs for the same direction pair, so grouped test history can silently contain duplicate directions.
+
+Findings:
+- [medium] A speed-test group can contain duplicate directions (apps/api/app/api/speed.py:159-162)
+  The group check only compares the requested direction with the first run in the group. After that first run, every request for the opposite direction passes—even if that direction is already present. Once the prior run is no longer active, a client can reuse the same group_id to create another download or upload, making one displayed group represent more than one two-direction test. Enforce at most one run per direction per group, preferably with a database constraint or a locked transactional check.
+  Recommendation: Reject a group_id if it already contains the requested direction, and add a uniqueness constraint on tenant/group/direction so concurrent requests cannot create duplicates.
+done 0

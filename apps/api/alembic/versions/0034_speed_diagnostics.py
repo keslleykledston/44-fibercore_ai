@@ -62,6 +62,7 @@ def upgrade() -> None:
           completed_at timestamptz,
           PRIMARY KEY (tenant_id, id),
           UNIQUE (tenant_id, job_id),
+          UNIQUE (tenant_id, group_id, direction),   -- a group is one test: one run per direction
           FOREIGN KEY (tenant_id, cpe_id) REFERENCES cpes(tenant_id, id),
           FOREIGN KEY (tenant_id, job_id) REFERENCES jobs(tenant_id, id),
           FOREIGN KEY (tenant_id, endpoint_id) REFERENCES speed_endpoints(tenant_id, id),

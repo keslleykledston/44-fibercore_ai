@@ -157,8 +157,9 @@ def request_run(
         return {"outcome": "existing", "reason": None if run else "cancelled", "run": run}
     group = body.group_id or None
     if group is not None:
-        first = conn.execute(text("SELECT cpe_id, endpoint_id, profile, direction FROM speed_test_runs WHERE group_id = :g ORDER BY created_at LIMIT 1"), {"g": group}).first()
-        if first is None or first.cpe_id != cpe_id or first.endpoint_id != body.endpoint_id or first.profile != body.profile or first.direction == body.direction:
+        # a group is ONE test: at most one run per direction, all for the same CPE, endpoint and profile (the unique index backs this under concurrency)
+        members = conn.execute(text("SELECT cpe_id, endpoint_id, profile, direction FROM speed_test_runs WHERE group_id = :g"), {"g": group}).all()
+        if not members or any(m.cpe_id != cpe_id or m.endpoint_id != body.endpoint_id or m.profile != body.profile or m.direction == body.direction for m in members):
             return _blocked(conn, p, response, cpe_id, "group_mismatch", body)
     caps = _capabilities(conn, p.tenant_id, "cpe", c.vendor, c.model, c.firmware)
     is_bench = bool(conn.execute(text("SELECT 1 FROM bench_targets WHERE cpe_id = :c"), {"c": cpe_id}).first())

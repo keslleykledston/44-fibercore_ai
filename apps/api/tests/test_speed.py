@@ -491,10 +491,7 @@ def test_owner_cli_manages_logical_endpoints_and_records_the_redirect_evidence(c
         cli.main([*args, "--speed-target", EP, "--speed-profile", PF])
 
 
-def test_the_upload_that_follows_the_download_of_the_same_test_joins_its_group(client, seed, inv, migrated):
-    cpe, h, run, _ = _dispatched(client, seed, inv, migrated)
-    assert client.post(f"/v1/edge/jobs/{run['job_id']}/result", headers=agent(client, inv, "a1"),
-                       json={"state": "succeeded", "postcheck_ok": True, "data": counters()}).status_code == 204
+def _upload_evidence(migrated, seed, cpe):
     with migrated.begin() as c:   # the upload has its own registry evidence and its own single-use authorization
         c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
         c.execute(text("INSERT INTO device_capabilities (tenant_id, vendor, model, firmware, protocol, operation, status, certification, verified_at, evidence_ref) "
@@ -503,5 +500,29 @@ def test_the_upload_that_follows_the_download_of_the_same_test_joins_its_group(c
         c.execute(text("INSERT INTO bench_authorizations (tenant_id, operation, cpe_id, params_hash, window_start, window_end, authorized_by) "
                        "VALUES (:t,'speed_test_upload',:c,:h,now() - interval '1 minute',now() + interval '30 minutes','responsavel')"),
                   {"t": seed["A"], "c": cpe, "h": bench.params_hash(PARAMS)})
+
+
+def test_the_upload_that_follows_the_download_of_the_same_test_joins_its_group(client, seed, inv, migrated):
+    cpe, h, run, _ = _dispatched(client, seed, inv, migrated)
+    assert client.post(f"/v1/edge/jobs/{run['job_id']}/result", headers=agent(client, inv, "a1"),
+                       json={"state": "succeeded", "postcheck_ok": True, "data": counters()}).status_code == 204
+    _upload_evidence(migrated, seed, cpe)
     r = _post(client, h, cpe, direction="upload", group_id=run["group_id"])
     assert r.status_code == 201 and r.json()["run"]["group_id"] == run["group_id"] and r.json()["run"]["direction"] == "upload"
+
+
+def test_a_group_never_holds_the_same_direction_twice_even_after_the_first_ended(client, seed, inv, migrated):
+    cpe, h, run, _ = _dispatched(client, seed, inv, migrated)
+    assert client.post(f"/v1/edge/jobs/{run['job_id']}/result", headers=agent(client, inv, "a1"),
+                       json={"state": "succeeded", "postcheck_ok": True, "data": counters()}).status_code == 204
+    _upload_evidence(migrated, seed, cpe)
+    assert _post(client, h, cpe, direction="upload", group_id=run["group_id"]).status_code == 201
+    up = _rows(migrated, "SELECT job_id FROM speed_test_runs WHERE direction = 'upload'")[0].job_id
+    with migrated.begin() as c:   # the upload ended too: the slot is free, the group is complete
+        c.execute(text("UPDATE jobs SET status = 'CANCELLED' WHERE id = :j"), {"j": up})
+    for d in ("download", "upload"):
+        assert _post(client, h, cpe, direction=d, group_id=run["group_id"]).json()["reason"] == "group_mismatch"
+    with pytest.raises(DBAPIError):   # and the database refuses it on its own
+        with migrated.begin() as c:
+            c.execute(text("INSERT INTO speed_test_runs (tenant_id, cpe_id, job_id, group_id, direction, endpoint_id, profile, pon_id, requested_by) "
+                           "SELECT tenant_id, cpe_id, job_id, group_id, direction, endpoint_id, profile, pon_id, requested_by FROM speed_test_runs LIMIT 1"))
