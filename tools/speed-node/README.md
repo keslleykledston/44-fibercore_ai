@@ -29,3 +29,13 @@ SPEED_NODE_ALLOW=<rede-de-serviço-da-ONT>/<n>,<ip-do-host-do-Edge>/32 \
 - Parar o nó encerra o teste: o Edge passa a ver `down` na próxima sonda e a nuvem deixa de oferecer o teste.
 
 Não é um servidor de benchmark certificado: a capacidade do enlace e da CPU do host é fato de homologação (planilha em `docs/operations/SPEED_HOMOLOGACAO.md`).
+
+## Contêiner (LAB)
+`infra/compose/speed-node.compose.yaml` sobe o nó com `network_mode: host` (a lista de origens precisa do endereço de origem real), sem root, `read_only`, `cap_drop: ALL`, 128 MiB, 1 CPU e healthcheck em `/health`:
+```bash
+# build/speed-node.env (0600, fora do Git): SPEED_NODE_LISTEN=<ip>:<porta> e SPEED_NODE_ALLOW=<este-ip>/32,<origem-do-Edge>/32,<rede-da-ONT>
+docker compose -p fibercore-speed -f infra/compose/speed-node.compose.yaml --env-file build/speed-node.env up -d --build
+```
+- Inclua o **próprio IP do nó** na lista: o healthcheck do contêiner sai dele.
+- **Origem do Edge = o endereço que o nó enxerga**, que atrás de NAT é o IP público da rede do Edge, não o interno. Descobrir por captura (`tcpdump -l` na porta, só o SYN) e liberar só esse /32 no firewall do host, para a porta do nó.
+- Firewall do host (UFW): uma regra por origem e porta, nunca a porta aberta para todos. Parar o nó: `docker compose -p fibercore-speed -f infra/compose/speed-node.compose.yaml down`.
