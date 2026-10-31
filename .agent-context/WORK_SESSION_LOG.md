@@ -54,3 +54,8 @@ Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetido
 ## 2026-10-30/31 — captura supervisionada (ADR-0032 item 1, PR 95)
 - Edge: modo captura (`olts[].capture`): saída crua só em `captures/` (0700/0600, 24 h, 10 arquivos), orçamento persistido (2/sessão, 4/h, agregado 8), execução única (`done.json`; reexecutar = apagar o marcador), lote inteiro sob um mutex. Codex 5 rodadas → approve. `go vet` + `go test ./...` PASS; teste de concorrência com `-race`. Merge `76a52c0`, push feito.
 - Próximo: reimplantar o Edge (binário `0.1.0-lab-76a52c0`) com o lote 1 numa janela de coleta; recolher os arquivos crus por SFTP, sanitizar, escrever parsers, `Validated`, apagar os crus e registrar a remoção verificada.
+
+## 2026-10-31 — PRs 95, 96, 97 no LAB
+- PR 95 (captura) + lote 1 na OLT real: time/sync/temperature ok; alarm.active paginou (Edge recusa saída paginada); autofind espera o orçamento (4/h). PR 96 (ERP HubSoft primeiro, HS-01/HS-02, só mocks, migração 0030). PR 97 (lote 1 validado: fixtures reais, parsers, nuvem, tela; Codex 3 rodadas).
+- LAB: Alembic 0030; Edge `0.1.0-lab-b731997` (implantado antes da nuvem) com `capture`; API+web com catálogo `7e386eb3…`, ROLLOUT = version, board, time, sync, temperature. Backups `fibercore-20261031T011751Z` e `…T014058Z`.
+- Pendências: ZTE (reinício manual do responsável → conferir ACS); autofind (próxima janela após 01:49 UTC) e paginação de alarm.active/history/event.history; HubSoft HS-03+ (precisa de segredo/host/instância do dono); ADR-0032 itens 3–5.
