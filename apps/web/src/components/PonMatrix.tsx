@@ -2,9 +2,9 @@ import Link from "next/link";
 import { PON_STATE_LABEL, type PonState, type PonSummary } from "@/lib/faceplates";
 
 const RING: Record<PonState, string> = {
-  ok: "border-ok bg-ok-soft", fora: "border-warn bg-warn-soft", los: "border-danger bg-danger-soft", energia: "border-warn bg-warn-soft", "sem-leitura": "border-line bg-stale-soft fp-hatch",
+  ok: "border-ok bg-ok-soft", fora: "border-warn bg-warn-soft", los: "border-danger bg-danger-soft", energia: "border-warn border-dashed bg-warn-soft", "sem-leitura": "border-line bg-stale-soft fp-hatch",
 };
-const DOT: Record<PonState, string> = { ok: "bg-ok", fora: "bg-warn", los: "bg-danger fp-blink", energia: "bg-warn", "sem-leitura": "bg-muted" };
+const DOT: Record<PonState, string> = { ok: "bg-ok", fora: "bg-warn", los: "bg-danger fp-blink", energia: "bg-warn rounded-none", "sem-leitura": "bg-muted" };
 const caption = (p: PonSummary) => `${PON_STATE_LABEL[p.state]} · ${p.total} ONU${p.total === 1 ? "" : "s"}${p.down ? `, ${p.down} fora` : ""}`;
 export const ponHref = (olt: string, pon?: string) => `/rede?olt=${encodeURIComponent(olt)}${pon ? `&pon=${encodeURIComponent(pon)}` : ""}`;
 

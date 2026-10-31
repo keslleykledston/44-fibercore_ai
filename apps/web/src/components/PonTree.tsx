@@ -24,7 +24,7 @@ export function PonTree({ olts, oltId, ponId, pons }: { olts: Olt[]; oltId: stri
                       className={`flex min-h-10 items-center gap-2 rounded-btn px-2 text-sm hover:bg-surface-2 ${p.path === ponId ? "bg-accent-soft font-medium" : ""}`}>
                       <span className="flex-1">PON {p.path}</span>
                       <span className="tabular text-xs text-muted">{p.total}</span>
-                      {p.down > 0 && <span className={`tabular text-xs ${p.state === "los" ? "text-danger" : "text-warn"}`}>{p.down} fora</span>}
+                      {p.down > 0 && <span className={`tabular text-xs ${p.state === "los" ? "text-danger" : "text-warn"}`}>{p.down} fora{p.state === "los" ? " · LOS" : p.state === "energia" ? " · energia" : ""}</span>}
                     </Link>
                   </li>
                 ))}
