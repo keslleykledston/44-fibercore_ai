@@ -1,0 +1,20 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192c3-3d3c-7da0-917e-184a19f07be6).
+[codex] Turn started (01a192c3-3f94-7aa1-bf49-e8be49745faf).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de falha do `make` e do script, com...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- Makefile scripts/test-env.s...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- Makefile scripts/test-env.s... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "test-env.sh|test-api|TEST_NATS_PORT|TEST_PG_PORT" README* docs scripts ...
+[codex] Command completed: /bin/bash -lc 'rg -n "test-env.sh|test-api|TEST_NATS_PORT|TEST_PG_PORT" README* docs scripts ... (exit 0)
+[codex] Running command: /bin/bash -lc "cat docs/wiki/reviews/raw/259-test-pg-volume-leak-r3.txt; nl -ba scripts/test-...
+[codex] Command completed: /bin/bash -lc "cat docs/wiki/reviews/raw/259-test-pg-volume-leak-r3.txt; nl -ba scripts/test-... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"O achado da r3 foi resolvido: ambas as esperas agora têm praz...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+O achado da r3 foi resolvido: ambas as esperas agora têm prazo de 90 s, detectam se o Postgres parou e saem com erro para acionar o rollback. Não encontrei regressões materiais no diff revisado.
+
+No material findings.

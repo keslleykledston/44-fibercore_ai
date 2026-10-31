@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192c0-8dda-7181-89a0-96d0a93725e2).
+[codex] Turn started (01a192c0-902a-75f0-9415-4608440e9218).
+[codex] Assistant message captured: Vou comparar `HEAD` com `main` e rastrear os três pontos da Rodada 2 nos scripts e no Makefil...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- Makefile scripts/test-env.s...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- Makefile scripts/test-env.s... (exit 0)
+[codex] Running command: /bin/bash -lc "cat docs/wiki/reviews/raw/258-test-pg-volume-leak-r2.txt docs/wiki/reviews/raw...
+[codex] Command completed: /bin/bash -lc "cat docs/wiki/reviews/raw/258-test-pg-volume-leak-r2.txt docs/wiki/reviews/raw... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Os três achados da r2 foram endereçados. Ainda há fal...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Os três achados da r2 foram endereçados. Ainda há falha material: a espera por prontidão pode ficar presa indefinidamente e impedir o rollback prometido.
+
+Findings:
+- [medium] A espera por prontidão pode impedir o rollback (scripts/test-env.sh:30-31)
+  Se o Postgres encerrar ou nunca ficar pronto, `docker exec` falha a cada tentativa, mas o `until` não tem timeout nem verifica se o contêiner continua rodando. O script fica dormindo indefinidamente; como `START_OK` permanece 0, o trap só remove os serviços quando o processo finalmente terminar. Isso deixa o ambiente parcialmente iniciado ocupando portas e não retorna a falha ao chamador.
+  Recommendation: Adicione um prazo máximo à espera e encerre com erro se o contêiner sair ou não ficar pronto; isso aciona `rollback_start` e libera os recursos.
