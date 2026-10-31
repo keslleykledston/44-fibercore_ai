@@ -178,3 +178,9 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 - ZTE F670L e Nokia G-1426G-A: só H1 de leitura (`docs/wiki/bench/H1-identificacao-*`); nenhuma está na lista de bancada; vínculo da ZTE não confirmado; a PON 0/0/14 não é exclusiva da bancada (12 ONUs). Precisa de emenda do ADR-0030 (lista fechada com mais modelos) e autorização por identidade.
 - QoS-001 (adendo ao SD-001): PR0 (somente documentação) em `docs/addenda/v2.2-qos/`. NÃO programar o PR A antes de: ADR-0039 aprovado, emenda do ADR-0030 (`ping_test`/`dns_test`) e reserva compartilhada por CPE (banda/ping/DNS) especificada.
 - `main` local está à frente do `origin/main` (sem push por ordem do responsável).
+
+## Atualização 2026-10-31 (noite: aprovações e opção C)
+- Responsável APROVOU (chat): emenda do ADR-0038 (opção C), emenda do ADR-0030 (ping_test/dns_test + regra de identidades) e ADR-0039 (QoS-001). Nenhuma identidade foi autorizada nominalmente (Nokia sem caixa marcada; ZTE sem caixa: vínculo não confirmado).
+- Opção C IMPLEMENTADA e NO LAB (migração 0036; Codex 2 rodadas): aceite `fc9a45dc…` para EG8145V5 V5R019C10S350, destino `core-lab`, válido até 2026-11-30, documento `docs/wiki/bench/ACEITE-risco-3xx-eg8145v5-2026-10-31.md`, auditoria OK. A flag `speed_diagnostics` segue DESLIGADA; nenhum teste de banda executado.
+- Para o 1º teste real (dentro da autorização de homologação da bancada): registro `speed_test_download`/`speed_test_upload` supported/identified com evidência, `bench-authorize --first-run --speed-target core-lab --speed-profile 10mb`, flag ligada na janela, solicitante ≠ aprovador ≠ autorizador. Connection Request da ONT é instável: 202 ⇒ tarefa removida, sem reenvio.
+- QoS-001: PR A (ping_test/dns_test na bancada, reserva compartilhada por CPE, quality_runs, eth_link_*, API, flags/permissões) e PR B (aba Qualidade, ajuda, changelog) ainda NÃO começaram.
