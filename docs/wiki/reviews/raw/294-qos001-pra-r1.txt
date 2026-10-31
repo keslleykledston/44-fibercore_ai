@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1932b-f48a-7e83-9ef7-62ea4ef01f27).
+[codex] Turn started (01a1932b-f7cb-7231-ad49-7ad915d24c8f).
+[codex] Assistant message captured: Vou comparar o diff com `main` e seguir os fluxos de autorização, classificação, persistência...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/quality.p...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/quality.p... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=5 main...HEAD -- apps/api/app/core/quality.py...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=5 main...HEAD -- apps/api/app/core/quality.py... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/quality.py | sed -n '80,160p'; nl -ba apps/api/alembi...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/quality.py | sed -n '80,160p'; nl -ba apps/api/alembi... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a chave idempotente não vincula o ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a chave idempotente não vincula o grupo SD-001 referenciado, e timestamps futuros podem fazer leituras inválidas parecerem atuais.
+
+Findings:
+- [medium] Reutilizar a chave com outro grupo SD-001 devolve a leitura anterior (apps/api/app/api/quality.py:109-115)
+  A busca de idempotência compara apenas CPE e modo. Se o cliente repetir a chave com outro `speed_group_id`, a API responde 200 com a leitura antiga, sem indicar que a referência solicitada mudou. Isso pode ocultar qual teste de banda embasou o diagnóstico e tornar retries ou correções difíceis de interpretar.
+  Recommendation: Persistir e comparar os parâmetros relevantes da requisição, incluindo `speed_group_id`; retornar 409 quando a mesma chave for reutilizada com parâmetros diferentes.
+- [medium] Timestamp no futuro passa pela validação de atualidade (apps/api/app/core/quality.py:86-87)
+  A checagem só limita a idade máxima: quando `captured_at` está no futuro, a diferença é negativa e a leitura recebe status `valid`. Um relógio incorreto no CPE/cache pode, portanto, fazer um status antigo ou inválido contar como atual e disparar observações ou um resumo sem anomalias. A consulta SD-001 também aceita `created_at` futuro, pois só verifica o limite inferior.
+  Recommendation: Tratar timestamps futuros além de uma tolerância explícita como inválidos ou inconclusivos; aplicar a mesma validação às referências SD-001 antes de incluí-las.

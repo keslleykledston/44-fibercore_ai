@@ -54,8 +54,8 @@ def _facts(conn: Connection, cpe_id: UUID, now: datetime, speed_group: UUID | No
         runs = conn.execute(
             text("SELECT r.id, r.group_id, r.direction, r.outcome, r.mbps, r.created_at, COALESCE(e.target_kind, 'CORE') AS kind FROM speed_test_runs r "
                  "LEFT JOIN speed_endpoints e ON e.tenant_id = r.tenant_id AND e.id = r.endpoint_id "
-                 "WHERE r.group_id = :g AND r.cpe_id = :c AND r.created_at > :since"),
-            {"g": speed_group, "c": cpe_id, "since": now - SPEED_REF_MAX_AGE}).all()
+                 "WHERE r.group_id = :g AND r.cpe_id = :c AND r.created_at > :since AND r.created_at <= :until"),
+            {"g": speed_group, "c": cpe_id, "since": now - SPEED_REF_MAX_AGE, "until": now + timedelta(seconds=quality.CLOCK_SKEW_S)}).all()
         if not runs:
             raise HTTPException(422, "speed_group_not_found_for_this_cpe_or_too_old")
         groups = [speed_group]
@@ -109,7 +109,8 @@ def request_run(
     prior = conn.execute(text(f"SELECT {COLS}, cpe_id AS c2 FROM quality_runs WHERE requested_by = :u AND idempotency_key = :k"),  # noqa: S608
                          {"u": p.id, "k": idempotency_key}).first()
     if prior is not None:
-        if prior.cpe_id != cpe_id or prior.mode != body.mode:
+        asked = [body.speed_group_id] if body.mode == "full" and body.speed_group_id else []
+        if prior.cpe_id != cpe_id or prior.mode != body.mode or list(prior.speed_group_ids) != asked:   # the key names ONE read, with its exact reference
             raise HTTPException(409, "idempotency_key_reused_for_another_read")
         response.status_code = 200
         return _view(prior)

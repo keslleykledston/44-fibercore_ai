@@ -217,3 +217,10 @@ def test_the_quality_router_cannot_reach_the_device_or_the_acs():
     src = inspect.getsource(quality)
     for banned in ("jobs.create_preview", "bench.", "requests.", "httpx", "7557", "nbi", "edge_commands"):
         assert banned not in src, banned
+
+
+def test_the_key_names_one_read_with_its_exact_reference(client, seed, inv, migrated):
+    cpe, h = _go(client, inv, seed, migrated, flags=("quality_diagnostics", "quality_full"))
+    assert run(client, h, cpe, mode="full", key="ref-key-0001").status_code == 201                       # no group referenced
+    assert run(client, h, cpe, mode="full", key="ref-key-0001").status_code == 200                       # the same read again
+    assert run(client, h, cpe, mode="full", key="ref-key-0001", speed_group_id=str(uuid4())).status_code == 409   # another reference under the same key

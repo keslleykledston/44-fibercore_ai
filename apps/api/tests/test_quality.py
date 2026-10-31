@@ -178,3 +178,19 @@ def test_every_hypothesis_carries_evidence_a_check_and_caveats_and_no_score_exis
     for h in hs:
         assert h["evidence_metric_ids"] and h["recommended_check"] and h["caveats"] and h["confidence"] in ("low", "medium")
     assert not any(k in s for k in ("score", "quality", "grade", "percent"))
+
+
+def test_a_timestamp_from_the_future_is_neither_current_nor_history():
+    _, ms, _, s = build(cpe_state=(row("wan_link_status", "link/1", "Down", age=-3600), row("wan_connection_status", "ppp/3/1", "Connected", age=-30)),
+                        onu=q.OnuFact("offline", None, ago(-7200)))
+    far, near = one(ms, "wan.link_status"), one(ms, "wan.connection_status")
+    assert far["status"] == "inconclusive" and far["value"] is None                   # a wrong clock cannot make a bad reading look current
+    assert near["status"] == "valid"                                                  # within the tolerated skew it is still current
+    assert q.observations(ms) == [] and one(ms, "onu.status")["status"] == "inconclusive"
+    assert s["state"] == "insufficient_data"
+
+
+def test_a_speed_result_stamped_in_the_future_is_not_a_measurement():
+    f = q.Facts(now=NOW, speed=(q.SpeedFact("r1", "g1", "download", "CORE", "completed", 400.0, NOW + timedelta(hours=2)),))
+    m = next(m for m in q.build_metrics(f) if m["id"] == "speed.download_mbps")
+    assert m["status"] != "valid" and m["value"] is None

@@ -21,6 +21,7 @@ SCOPES = ("SERVICE_WAN", "MGMT_WAN", "WAN_UNCLASSIFIED", "LAN", "PON", "WIFI", "
 TTL_S = {"WAN": 900, "OPTICAL": 1200, "ETHERNET": 900, "WIFI": 300, "CPE": 900}
 DEGRADED_RATIO = 0.5   # a comparable result below this fraction of its reference is "degraded" for the path rules (explicit, so it can be argued with)
 MIN_PING_SAMPLE = 3
+CLOCK_SKEW_S = 60   # a reading stamped further ahead than this is not "current": the clock that wrote it is wrong, and its age is unknown
 
 LINK_BAD = frozenset({"Down", "Unavailable"})
 CONN_BAD = frozenset({"Disconnected", "Unconfigured", "Down", "LowerLayerDown", "NotPresent", "Error"})
@@ -84,7 +85,10 @@ def metric(mid: str, group: str, status: str, *, value: Any = None, unit: str | 
 
 
 def _fresh_status(now: datetime, at: datetime, group: str) -> str:
-    return "valid" if (now - at).total_seconds() <= TTL_S[group] else "stale"
+    age = (now - at).total_seconds()
+    if age < -CLOCK_SKEW_S:
+        return "inconclusive"   # from the future: neither current nor history
+    return "valid" if age <= TTL_S[group] else "stale"
 
 
 def build_metrics(f: Facts) -> list[dict]:
@@ -128,7 +132,8 @@ def build_metrics(f: Facts) -> list[dict]:
     for s in f.speed:   # COMPLETO: SD-001 is REFERENCED (same run ids), never re-run or recomputed here
         mid = f"speed.{s.direction}_mbps"
         group = "CORE" if s.target_kind == "CORE" else "INTERNET"
-        ok = s.outcome == "completed" and s.mbps is not None
+        not_future = (f.now - s.created_at).total_seconds() >= -CLOCK_SKEW_S
+        ok = s.outcome == "completed" and s.mbps is not None and not_future
         status = "valid" if ok else ("inconclusive" if s.outcome in ("partial", "inconclusive") else "failed" if s.outcome == "error" else "not_available")
         out.append(metric(mid, group, status, value=s.mbps if ok else None, unit="Mbit/s", source="SD001", scope="WAN_UNCLASSIFIED",
                           now=f.now, collected_at=s.created_at, evidence_ref=f"speed-run:{s.run_id}", details={"group_id": s.group_id, "outcome": s.outcome}))
