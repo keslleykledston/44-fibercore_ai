@@ -2,6 +2,9 @@
 export type OltQueryItem = { id: string; title: string; scope: "global" | "slot" | "pon" | "onu"; fields: string[]; validated: boolean; offered: boolean; reason: string | null };
 export type OltQueryCatalog = { olt_id: string; enabled: boolean; limits: { user_per_hour: number; tenant_per_hour: number }; items: OltQueryItem[] };
 export type OltVersion = { product: string; version: string; patch: string; uptime_seconds: number };
+export type OltTime = { time: string };
+export type OltSync = { standby: "absent_or_fault" };
+export type OltTemperature = { boards: { slot: number; name: string; celsius: number }[] };
 export type OltBoard = { boards: { slot: number; name: string; status: string }[]; empty_slots: number[] };
 
 export const QUERY_UNAVAILABLE: Record<string, string> = {
@@ -57,4 +60,26 @@ export function readBoard(d: unknown): OltBoard | null {
   if (!o || typeof o !== "object" || !Array.isArray(o.boards) || !Array.isArray(o.empty_slots)) return null;
   const ok = o.boards.length <= 18 && o.boards.every((b) => Number.isInteger(b.slot) && typeof b.name === "string" && S.test(b.name) && typeof b.status === "string" && S.test(b.status)) && o.empty_slots.every((n) => Number.isInteger(n));
   return ok ? o : null;
+}
+
+const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/;
+export function readTime(d: unknown): OltTime | null {
+  const o = d as OltTime | null;
+  return o && typeof o === "object" && Object.keys(o).length === 1 && typeof o.time === "string" && TIME.test(o.time) && !Number.isNaN(Date.parse(o.time)) ? o : null;
+}
+export function readSync(d: unknown): OltSync | null {
+  const o = d as OltSync | null;
+  return o && typeof o === "object" && Object.keys(o).length === 1 && o.standby === "absent_or_fault" ? o : null;
+}
+export function readTemperature(d: unknown): OltTemperature | null {
+  const o = d as OltTemperature | null;
+  if (!o || typeof o !== "object" || Object.keys(o).length !== 1 || !Array.isArray(o.boards) || o.boards.length < 1 || o.boards.length > 18) return null;
+  const ok = o.boards.every((b) => Number.isInteger(b.slot) && b.slot >= 0 && b.slot <= 17 && typeof b.name === "string" && S.test(b.name) && Number.isInteger(b.celsius) && b.celsius >= -40 && b.celsius <= 150);
+  return ok && new Set(o.boards.map((b) => b.slot)).size === o.boards.length ? o : null;
+}
+/** A hora que a própria OLT informa, com o fuso dela, como veio (o relógio da OLT pode divergir da hora real). */
+export function oltClockText(iso: string): string {
+  const [date, rest] = iso.split("T");
+  const [y, m, d] = date.split("-");
+  return `${d}/${m}/${y} ${rest.slice(0, 8)} (fuso ${rest.slice(8)})`;
 }

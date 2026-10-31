@@ -5,6 +5,9 @@ import { login } from "./helpers";
 const CATALOG_OFF = { enabled: false, limits: { user_per_hour: 10, tenant_per_hour: 60 }, items: [
   { id: "olt.version", title: "Software, patch e uptime", scope: "global", fields: [], validated: true, offered: false, reason: "olt_query_disabled" },
   { id: "olt.board", title: "Placas e estado", scope: "global", fields: [], validated: true, offered: false, reason: "olt_query_disabled" },
+  { id: "olt.time", title: "Hora e fuso da OLT", scope: "global", fields: [], validated: true, offered: false, reason: "olt_query_disabled" },
+  { id: "olt.sync", title: "Sincronismo de controladoras", scope: "global", fields: [], validated: true, offered: false, reason: "olt_query_disabled" },
+  { id: "olt.temperature", title: "Temperatura", scope: "global", fields: [], validated: true, offered: false, reason: "olt_query_disabled" },
 ] };
 const CATALOG_ON = { ...CATALOG_OFF, enabled: true, items: CATALOG_OFF.items.map((i) => ({ ...i, offered: true, reason: null })) };
 const VERSION = { product: "MA5608T", version: "MA5600V800R015C00", patch: "SPC100 HP1013", uptime_seconds: 89047277 };
@@ -114,4 +117,37 @@ test("consultas da OLT: fechar a gaveta para o polling e reabrir retoma o MESMO 
   await page.clock.fastForward(11_000);
   await expect(page.getByTestId("olt-query-result")).toContainText("MA5608T");
   expect(posted).toEqual(["olt.version"]);                      // nothing was asked twice
+});
+
+
+test("consultas da OLT: hora, sincronismo e temperatura mostram só o formato fechado", async ({ page }) => {
+  let data: unknown = { time: "2026-10-30T20:42:45-04:00" };
+  await page.route("**/bff/olts/*/queries", (r) => r.fulfill({ json: CATALOG_ON }));
+  await page.route("**/bff/olts/*/queries/*", (r) => r.fulfill({ json: { ok: true, outcome: "submitted", job_id: JOB } }));
+  await page.route(`**/bff/jobs/${JOB}`, (r) => r.fulfill({ json: { status: "SUCCEEDED", detail: "typed result", data } }));
+  await page.clock.install();
+  await openDrawer(page);
+  const ask = async (name: RegExp) => {
+    await page.getByRole("radio", { name }).check();
+    await page.getByRole("button", { name: "Pedir consulta" }).click();
+    await expect(page.getByTestId("olt-queries-waiting")).toBeVisible();
+    await page.clock.fastForward(11_000);
+  };
+  await ask(/Hora e fuso da OLT/);
+  await expect(page.getByTestId("olt-query-result")).toContainText("30/10/2026 20:42:45 (fuso -04:00)");
+  data = { standby: "absent_or_fault" };
+  await page.getByRole("button", { name: "Nova consulta" }).click();
+  await ask(/Sincronismo de controladoras/);
+  await expect(page.getByTestId("olt-query-result")).toContainText("ausente ou com falha");
+  data = { boards: [{ slot: 0, name: "H805GPFD", celsius: 45 }, { slot: 2, name: "H801MCUD1", celsius: 43 }] };
+  await page.getByRole("button", { name: "Nova consulta" }).click();
+  await ask(/Temperatura/);
+  await expect(page.getByTestId("olt-query-result").getByRole("table", { name: "Temperatura das placas" })).toContainText("45 °C");
+  data = { boards: [{ slot: 0, name: "<img src=x onerror=alert(1)>", celsius: 45 }] };
+  await page.getByRole("button", { name: "Nova consulta" }).click();
+  await ask(/Temperatura/);
+  await expect(page.getByTestId("olt-queries-done")).toContainText("não tinha o formato esperado");
+  await expect(page.locator("img[src='x']")).toHaveCount(0);
+  const a11y = await new AxeBuilder({ page: page as never }).include("dialog").analyze();
+  expect(a11y.violations.filter((v) => ["serious", "critical"].includes(v.impact ?? ""))).toEqual([]);
 });

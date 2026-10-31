@@ -87,16 +87,16 @@ func TestACaptureWritesTheRawOutputOnlyToAPrivateFileAndRunsOnce(t *testing.T) {
 }
 
 func TestOnlyTheListedUnvalidatedQueriesReachTheDevice(t *testing.T) {
-	sess := &qSession{inner: r015Session{}, extra: map[string]string{"display time": rawTime, "display temperature 0": "temp"}}
-	o, _, _ := captureRig(t, sess, "olt.time") // temperature is in the catalog, NOT listed
+	sess := &qSession{inner: r015Session{}, extra: map[string]string{"display time": rawTime, "display event history all list": "events"}}
+	o, _, _ := captureRig(t, sess, "olt.time") // event history is in the catalog, NOT listed
 	if _, err := o.Collect(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(strings.Join(sess.sent, "|"), "display temperature") {
+	if strings.Contains(strings.Join(sess.sent, "|"), "display event history") {
 		t.Fatalf("%v", sess.sent)
 	}
 	// and the session allowlist refuses it even if something asked
-	if _, err := (olt.HuaweiR015{Queries: olt.QueryPolicy{Enabled: map[string]bool{"olt.time": true}}}).RunQueryInConfig(context.Background(), sess, "olt.temperature", olt.Params{}); err == nil {
+	if _, err := (olt.HuaweiR015{Queries: olt.QueryPolicy{Enabled: map[string]bool{"olt.time": true}}}).RunQueryInConfig(context.Background(), sess, "olt.event.history", olt.Params{}); err == nil {
 		t.Fatal("an unlisted unvalidated query must be refused")
 	}
 }

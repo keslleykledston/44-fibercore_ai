@@ -128,7 +128,7 @@ def test_gates_before_a_job_exists(client, seed, inv, olt, on, migrated):
     assert _ask(client, h, olt, "olt.version", {"slot": 1}).status_code == 422                 # a field the scope does not take
     assert _ask(client, h, olt, "olt.nothing").status_code == 422                               # not in the catalog
     assert _ask(client, h, olt, "pon.ont.info", {"slot": 1, "port": 0}).json()["detail"] == "query_not_enabled"   # validated, but not in this rollout step
-    assert _ask(client, h, olt, "olt.time").json()["detail"] == "query_not_enabled"             # in the catalog, not validated
+    assert _ask(client, h, olt, "olt.event.history").json()["detail"] == "query_not_enabled"             # in the catalog, not validated
     assert _ask(client, hdr(client, "dave", seed, "A"), olt).status_code == 403                 # noc_n1 reads, does not ask
     assert _ask(client, hdr(client, "carol", seed, "A"), olt).status_code == 403                # an auditor neither
     assert _ask(client, hdr(client, "bob", seed, "B"), olt).status_code == 404                  # another provider's OLT does not exist for them
@@ -241,9 +241,9 @@ def test_the_vectors_the_edge_pins_are_the_ones_the_cloud_computes():
 
     from app.api.jobs import _intent_hash
     oid = UUID("8f14e45f-ceea-467a-9a36-4a1b5c3d2e10")
-    assert olt_query.catalog_version() == "1e1e5b3010c3788d6d86ae858c3d7bc976fc40a56916342d131b42acd5723b84"
+    assert olt_query.catalog_version() == "7e386eb3208fc48e848edaaf106256602a361c528fc13f493120d1a342a68eef"
     params = olt_query.build_intent(oid, {"query_id": "pon.ont.info", "slot": 1, "port": 0})
-    assert _intent_hash("olt_query", "olt", oid, params) == "775f8c74e86cbbd5112a6c798605ab0654c31a748b05fae20024e74e3393adde"
+    assert _intent_hash("olt_query", "olt", oid, params) == "07065fc989790b810a2de02a058c7f8722afcb501ffac927e406e2326f76ce3b"
 
 
 def _report(client, inv, jid, **body):
@@ -441,3 +441,20 @@ def test_a_role_that_cannot_follow_the_job_is_not_offered_the_query(client, seed
     assert _ask(client, h, olt).status_code == 403
     monkeypatch.setitem(security.ROLE_PERMISSIONS, "noc_n1", frozenset(base | {"olt_query:run", "jobs:request", "jobs:read"}))
     assert _ask(client, h, olt).status_code == 200
+
+
+def test_the_typed_shapes_of_lot_1_are_closed():
+    good = {"olt.time": {"time": "2026-10-30T20:42:45-04:00"}, "olt.sync": {"standby": "absent_or_fault"},
+            "olt.temperature": {"boards": [{"slot": 0, "name": "H805GPFD", "celsius": 45}, {"slot": 2, "name": "H801MCUD1", "celsius": 43}]}}
+    for qid, data in good.items():
+        assert olt_query.check_result(qid, data), qid
+    bad = [("olt.time", {"time": "2026-10-30 20:42:45-04:00"}), ("olt.time", {"time": "1999-10-30T20:42:45-04:00"}), ("olt.time", {"time": "2026-13-30T20:42:45-04:00"}),
+           ("olt.time", {"time": "2026-10-30T20:42:45-04:00", "extra": 1}), ("olt.time", {"time": 5}),
+           ("olt.sync", {"standby": "ok"}), ("olt.sync", {"standby": "absent_or_fault", "x": 1}), ("olt.sync", {}),
+           ("olt.temperature", {"boards": []}), ("olt.temperature", {"boards": [{"slot": 0, "name": "H805GPFD", "celsius": 999}]}),
+           ("olt.temperature", {"boards": [{"slot": 0, "name": "H805GPFD", "celsius": 45}, {"slot": 0, "name": "H805GPFD", "celsius": 46}]}),
+           ("olt.temperature", {"boards": [{"slot": 99, "name": "H805GPFD", "celsius": 45}]}), ("olt.temperature", {"boards": [{"slot": 0, "name": "<b>", "celsius": 45}]}),
+           ("olt.temperature", {"boards": [{"slot": 0, "name": "H805GPFD", "celsius": True}]}), ("olt.temperature", {"boards": [{"slot": 0, "name": "H805GPFD", "celsius": 45, "x": 1}]})]
+    for qid, data in bad:
+        assert not olt_query.check_result(qid, data), (qid, data)
+    assert {"olt.time", "olt.sync", "olt.temperature"} <= olt_query.ROLLOUT

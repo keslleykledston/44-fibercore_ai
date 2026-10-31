@@ -8,13 +8,13 @@ Legenda: **V** = já executado na OLT real e coberto por fixture (aceito por pad
 |---|---|---|---|---|
 | `olt.version` | `display version` | global | V | 3 |
 | `olt.board` | `display board 0` | global | V | 3 |
-| `olt.time` | `display time` | global | N | 2 |
+| `olt.time` | `display time` | global | V | 2 |
 | `olt.alarm.active` | `display alarm active all` | global | N | 2 |
 | `olt.alarm.history` | `display alarm history all list` | global | N | 2 |
 | `olt.event.history` | `display event history all list` | global | N | 3 |
 | `olt.autofind` | `display ont autofind all` | global | N | 2 |
-| `olt.temperature` | `display temperature 0` | global | N | 3 |
-| `olt.sync` | `display data sync state` | global | N | 3 |
+| `olt.temperature` | `display temperature 0` | global | V | 3 |
+| `olt.sync` | `display data sync state` | global | V | 3 |
 | `slot.board` | `display board 0/<slot>` | slot | N | 3 |
 | `slot.cpu` | `display cpu 0/<slot>` | slot | N | 3 |
 | `slot.mem` | `display mem 0/<slot>` | slot | N | 3 |
