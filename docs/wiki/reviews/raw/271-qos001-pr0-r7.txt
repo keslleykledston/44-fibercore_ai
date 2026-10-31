@@ -1,0 +1,19 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192f2-ccb1-7361-bccd-925d4c7ad73e).
+[codex] Turn started (01a192f2-ccec-71b2-bcbf-6dbbc885e057).
+[codex] Assistant message captured: Vou conferir o diff real de `main` e o contexto do `GAP_MAP.md`, com foco em se a ressalva co...
+[codex] Running command: /bin/bash -lc 'git diff --unified=40 main...HEAD -- docs/addenda/v2.2-qos/GAP_MAP.md'
+[codex] Command completed: /bin/bash -lc 'git diff --unified=40 main...HEAD -- docs/addenda/v2.2-qos/GAP_MAP.md' (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"A alteração confirma a ressalva para C5, D1, E1 e E2 ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+A alteração confirma a ressalva para C5, D1, E1 e E2 pelo escopo global de “Tudo marcado ESTENDER”. Resta ambiguidade editorial: essas linhas ainda aparecem como extensão sem repetir que são propostas condicionadas ao ADR-0039 e à aprovação do responsável.
+
+Findings:
+- [low] Ressalva global exige interpretação para linhas sem marca local (docs/addenda/v2.2-qos/GAP_MAP.md:3)
+  O topo declara que toda linha ESTENDER é proposta condicionada ao ADR-0039 e à aprovação do responsável, o que abrange C5, D1, E1 e E2. Porém, C5 está classificada como JÁ, apesar de descrever uso de jobs/outbox atuais, e C3/C4 repetem a condição explicitamente enquanto D1/E1/E2 não. Isso deixa margem para leitores entenderem essas linhas como decisões aprovadas ou implementação comprometida. É ambiguidade editorial, não uma lacuna material demonstrada.
+  Recommendation: Para eliminar a dúvida, explicitar a condição junto às linhas ESTENDER relevantes; revisar C5 separadamente, pois a ressalva global não se aplica a ela enquanto continuar classificada como JÁ.

@@ -36,20 +36,20 @@ Classificação: **JÁ** = implementado, reutilizar sem mudança · **ESTENDER**
 | C2 | Banda executável hoje | **BLOQUEADO** | gate `redirect_unverified` (EG8145V5 segue 3xx): precisa de ACL de saída real ou emenda do ADR-0038; COMPLETO mostra `speed=not_available` e preserva a parte rápida (Q10) |
 | C3 | Entidade de suite (`QualityRun`) | **ESTENDER — PROPOSTA, condicionada ao ADR-0039** (o ADR pode alterar ou rejeitar) | `quality_runs` (RLS forçada, imutável como `diagnostic_jobs`): modo, estado, métricas normalizadas, hipóteses, ids de jobs e do grupo de speed |
 | C4 | API | **ESTENDER — PROPOSTA, condicionada ao ADR-0039** | `POST/GET /v1/cpes/{id}/quality/runs` no mesmo estilo de `app/api/speed.py`; **sem** endpoint genérico duplicado |
-| C5 | Sem nova fila/worker/broker | **JÁ** | usa os jobs assinados e o outbox atuais |
+| C5 | Sem nova fila/worker/broker | **JÁ** (o mecanismo existe; **usá-lo para o QoS é proposta do ADR-0039**) | usa os jobs assinados e o outbox atuais |
 
 ## D. Interpretação
 | # | Requisito | Classe | Evidência / o que fazer |
 |---|---|---|---|
-| D1 | Hipóteses determinísticas, com ids de métrica e ressalvas | **ESTENDER** | regras puras em `app/core/quality.py` (LAN_LINK_100M, WIFI_POTENTIAL só se houver dados, OPTICAL_ATTENTION por perfil, EXTERNAL_PATH/ACCESS_PATH só com SD-001 válido, DNS_POTENTIAL, PACKET_LOSS); sem score; "dados insuficientes" é saída legítima |
+| D1 | Hipóteses determinísticas, com ids de métrica e ressalvas | **ESTENDER (proposta, ADR-0039)** | regras puras em `app/core/quality.py` (LAN_LINK_100M, WIFI_POTENTIAL só se houver dados, OPTICAL_ATTENTION por perfil, EXTERNAL_PATH/ACCESS_PATH só com SD-001 válido, DNS_POTENTIAL, PACKET_LOSS); sem score; "dados insuficientes" é saída legítima |
 | D2 | Copiloto read-only | **BLOQUEADO** | `smart_diagnostics_copilot` bloqueada até ADR-0015/SD-006; este lote só deixa o JSON normalizado pronto para ele |
 | D3 | Plano contratado × medido | **FORA** | só com fonte já integrada (ERP); nenhuma conclusão de SLA |
 
 ## E. Governança, UX, evidência
 | # | Requisito | Classe | O que fazer |
 |---|---|---|---|
-| E1 | Flags independentes, OFF | **ESTENDER** | `quality_diagnostics`, `quality_active_tests`, `quality_full` (`app/core/features.py`); desligar QoS não afeta SD-001 (Q19) |
-| E2 | RBAC e auditoria | **ESTENDER** | `diagnostics:quality_read`, `diagnostics:quality_run`, `diagnostics:quality_run_full` (+ matriz regenerada); `quality.requested|blocked` na auditoria; COMPLETO exige também `diagnostics:speed_run` |
+| E1 | Flags independentes, OFF | **ESTENDER (proposta, ADR-0039)** | `quality_diagnostics`, `quality_active_tests`, `quality_full` (`app/core/features.py`); desligar QoS não afeta SD-001 (Q19) |
+| E2 | RBAC e auditoria | **ESTENDER (proposta, ADR-0039)** | `diagnostics:quality_read`, `diagnostics:quality_run`, `diagnostics:quality_run_full` (+ matriz regenerada); `quality.requested|blocked` na auditoria; COMPLETO exige também `diagnostics:speed_run` |
 | E3 | Cartão no sidebar existente | **ESTENDER** | nova aba "Qualidade" em `OnuQuickInspector.tsx` + cartão no ONU 360, no padrão de `SpeedTestSection.tsx`; 4 indicadores + "Ver detalhes por camada"; **sem nova página** |
 | E4 | Central de Ajuda com capturas reais | **ESTENDER** | `docs/help/how-to/rede/qualidade-do-servico.md`, manifesto, `e2e/help-quality.spec.ts`; estados simulados rotulados como cenário |
 | E5 | Changelog / ADR / homologação multivendor | **ESTENDER** | ADR-0039; `docs/operations/QUALITY_HOMOLOGACAO.md` (planilha por modelo/firmware, vazia até haver execução real) |
