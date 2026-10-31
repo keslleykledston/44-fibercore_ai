@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1934c-0556-7eb2-80c9-09410a85e0df).
+[codex] Turn started (01a1934c-07b5-7bc3-a76f-34e0f4e87f84).
+[codex] Assistant message captured: Vou conferir o texto contra o código atual de diagnóstico/bench e o restante do ADR, focando ...
+[codex] Running command: /bin/bash -lc "sed -n '1,180p' docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md && sed -n '1...
+[codex] Command completed: /bin/bash -lc "sed -n '1,180p' docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md && sed -n '1... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/nbi/speed.go | sed -n '1,230p'; nl -ba agents/edge...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/nbi/speed.go | sed -n '1,230p'; nl -ba agents/edge... (exit 0)
+[codex] Running command: /bin/bash -lc 'nl -ba docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md | tail -45'
+[codex] Command completed: /bin/bash -lc 'nl -ba docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md | tail -45' (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: a proposta trata a reconciliação d...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: a proposta trata a reconciliação da fila como contenção suficiente, mas ela não cobre tráfego iniciado antes da queda do Edge; também assume uma janela de 12 min sem demonstrar que ela cobre execução e leitura atrasadas.
+
+Findings:
+- [high] Reconciliação não contém diagnóstico já iniciado (docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md:92-96)
+  O item 8 propõe remover tarefas próprias ainda pendentes após reinício. Se o ACS já executou o `setParameterValues` antes da queda, a tarefa não estará mais na fila e a ONT pode continuar o teste sem acompanhamento; não há retomada nem cancelamento do diagnóstico descritos. O item 96 reconhece tráfego sem acompanhamento, mas a mitigação citada não cobre esse caso. Isso pode consumir até o perfil de tráfego previsto e deixar o job incerto sem identificar se o teste ainda está ativo. Explicitar esse risco residual e definir como detectar/encerrar um diagnóstico em andamento após reinício, ou limitar o envio a uma janela que o Edge consiga supervisionar.
+  Recommendation: Definir reconciliação também para o caso em que a tarefa já sumiu da fila: verificar `DiagnosticsState` e, se estiver ativo, acompanhar até estado terminal ou estabelecer um mecanismo suportado de cancelamento; documentar o limite se nenhum deles for possível.
+- [medium] Orçamento de 12 min depende de prazos não demonstrados (docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md:88-91)
+  O cálculo fixa 300 s por Inform e 60 s como duração máxima do perfil, mas o texto não apresenta evidência de que a ONT conclui todos os perfis em até 60 s nem de que um `getParameterValues` enfileirado após o evento de diagnóstico concluído será executado nesse mesmo Inform. Se o evento já tiver ocorrido quando a leitura for criada, ela pode esperar outro Inform; duração maior do teste ou atraso adicional pode exceder o orçamento, produzir `timeout` e manter o alvo travado apesar de um resultado válido posterior. O item 7 deixa a compatibilidade do prazo da nuvem para conferência futura, então esse prazo também não está estabelecido.
+  Recommendation: Marcar os 60 s e a execução da leitura no Inform de conclusão como hipóteses até serem medidos na ONT/versão do GenieACS; dimensionar o orçamento e o prazo da nuvem com limites observados e testar atraso de Inform e conclusão tardia.
