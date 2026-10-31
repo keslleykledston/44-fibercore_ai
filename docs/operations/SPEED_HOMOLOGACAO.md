@@ -29,7 +29,7 @@
 | Upload: 3 repetições (Mbps, duração, confiabilidade) | | | |
 | Comparação com medição **cabeada** de referência (mesmo nó, mesma janela) | | | |
 | Concorrência: segundo pedido durante o teste foi recusado (`cpe_busy`)? | | | |
-| Resultado após o teste: aparelho sem tarefa pendente no ACS, serviço do cliente de bancada intacto | | | |
+| Resultado após o teste: aparelho sem tarefa pendente no ACS, serviço do cliente de bancada intacto | 1ª tentativa de download NÃO iniciou (Connection Request retornou HTTP 202, tarefa enfileirada; causa não confirmada; nada escrito); ACS sem tarefa pendente e sem falha depois | `docs/wiki/bench/H-speed_test_download-tentativa-1-2026-10-31.md` | 2026-10-31 |
 
 ## 2. Procedimento (cada passo registra quem, quando e o resultado)
 
