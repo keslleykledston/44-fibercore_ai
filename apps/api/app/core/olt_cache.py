@@ -44,8 +44,9 @@ def store_latest(conn: Connection, tenant_id: UUID, olt_id: UUID, query_id: str,
 
 def latest(conn: Connection, olt_id: UUID, query_id: str, key: str) -> dict | None:
     r = conn.execute(
-        text("SELECT data, observed_at, received_at, owner_epoch, source, version, EXTRACT(EPOCH FROM (now() - observed_at)) AS age FROM olt_query_latest "
-             "WHERE olt_id = :o AND query_id = :q AND params_key = :k"), {"o": olt_id, "q": query_id, "k": key}).first()
+        text("SELECT l.data, l.observed_at, l.received_at, l.owner_epoch, l.source, l.version, EXTRACT(EPOCH FROM (now() - l.observed_at)) AS age FROM olt_query_latest l "
+             "WHERE l.olt_id = :o AND l.query_id = :q AND l.params_key = :k "
+             "AND l.owner_epoch = (SELECT owner_epoch FROM olts WHERE id = l.olt_id)"), {"o": olt_id, "q": query_id, "k": key}).first()
     if r is None:
         return None
     age = max(0, int(r.age))

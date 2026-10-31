@@ -100,6 +100,7 @@ def test_an_older_epoch_or_a_failed_result_never_replaces_the_cache(client, seed
     with migrated.begin() as c:
         c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
         c.execute(text("UPDATE olt_query_latest SET owner_epoch = 3 WHERE olt_id = :o"), {"o": olt})
+        c.execute(text("UPDATE olts SET owner_epoch = 3 WHERE id = :o"), {"o": olt})      # the OLT is now in generation 3
         assert olt_cache.store_latest(c, seed["A"], UUID(olt), "olt.version", "", {**VERSION, "uptime_seconds": 1}, 2, datetime.now(UTC)) is False      # the previous owner's value
         assert olt_cache.store_latest(c, seed["A"], UUID(olt), "olt.version", "", {**VERSION, "uptime_seconds": 7}, 3, datetime.now(UTC)) is True
     assert client.get(f"/v1/olts/{olt}/queries/olt.version/latest", headers=h).json()["data"]["uptime_seconds"] == 7
@@ -177,3 +178,12 @@ def test_a_result_from_an_older_ownership_generation_is_never_cached_even_if_the
     assert client.get(f"/v1/olts/{olt}/queries/olt.version/latest", headers=h).json()["detail"] == "no_cached_value"
     with migrated.begin() as c:
         c.execute(text("UPDATE olts SET owner_epoch = owner_epoch - 2 WHERE id = :o"), {"o": olt})
+
+
+def test_a_value_of_a_previous_ownership_generation_is_not_served_after_a_transfer(client, seed, inv, olt, on, migrated):
+    h = _succeed(client, seed, inv, olt, "olt.version", VERSION)
+    assert _ask(client, h, olt, "olt.version").json()["outcome"] == "cached"
+    with migrated.begin() as c:
+        c.execute(text("UPDATE olts SET owner_epoch = owner_epoch + 1 WHERE id = :o"), {"o": olt})      # the OLT changed owner
+    assert client.get(f"/v1/olts/{olt}/queries/olt.version/latest", headers=h).json()["detail"] == "no_cached_value"
+    assert _ask(client, h, olt, "olt.version").json()["outcome"] == "submitted"      # asked again, to the new owner
