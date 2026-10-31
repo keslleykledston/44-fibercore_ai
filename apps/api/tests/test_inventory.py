@@ -604,3 +604,13 @@ def test_fresh_window_covers_two_olt_collections(client, seed, inv):
         assert client.post("/v1/edge/olt-snapshots", headers=a, json=s).status_code == 202
     assert client.get("/v1/onus?serial=WIN25", headers=h).json()[0]["freshness"] == "fresh"
     assert client.get("/v1/onus?serial=WIN40", headers=h).json()[0]["freshness"] == "stale"
+
+
+def test_cpe_freshness_keeps_the_default_window(client, seed, inv):
+    """A janela de 35 min é da OLT (coleta a cada 15 min no mínimo): o dado do CPE/ACS, com cadência própria, segue a janela padrão de 15 min."""
+    body = {"edge_id": str(inv["a1"]["edge"]), "observed_at": _now(-25 * 60), "cpes": [
+        {"canonical_serial": "FRESHCPE0001", "vendor": "Huawei", "model": "HG8245H",
+         "binding": {"protocol": "tr069", "external_id": "00259E-HG8245H-FRESHCPE0001", "connector_id": "genieacs-lab"}}]}
+    assert client.post("/v1/edge/cpe-snapshots", headers=agent(client, inv, "a1"), json=body).status_code == 202
+    rows = client.get("/v1/cpes", headers=hdr(client, "alice", seed, "A")).json()
+    assert next(r for r in rows if r["canonical_serial"] == "FRESHCPE0001")["freshness"] == "stale"
