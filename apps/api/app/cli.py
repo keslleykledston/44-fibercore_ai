@@ -82,6 +82,16 @@ def main(argv: list[str] | None = None) -> None:
     se.add_argument("tenant_id"); se.add_argument("endpoint_id"); se.add_argument("label")
     se.add_argument("kind", choices=["CORE", "INTERNET"]); se.add_argument("region"); se.add_argument("state", choices=["on", "off"])
     se.add_argument("--edge", required=True, help="the Edge that owns this test node (only it can report its health, and only a bench CPE of that Edge can use it)")
+    sas = sub.add_parser("speed-acceptance-set", help="ADR-0038 amendment (option C): record the formal acceptance of the 3xx risk for ONE vendor/model/firmware and CORE destinations (owner-only)")
+    sas.add_argument("tenant_id"); sas.add_argument("vendor"); sas.add_argument("model"); sas.add_argument("firmware")
+    sas.add_argument("--endpoints", required=True, help="comma-separated LOGICAL endpoint ids (CORE only)")
+    sas.add_argument("--approved-by", required=True); sas.add_argument("--accepted-on", required=True, help="YYYY-MM-DD")
+    sas.add_argument("--expires-on", required=True, help="YYYY-MM-DD, at most 90 days after --accepted-on")
+    sas.add_argument("--doc", required=True, help="path of docs/wiki/bench/ACEITE-risco-3xx-<model>-<date>.md as mounted in this container")
+    sar = sub.add_parser("speed-acceptance-revoke", help="ADR-0038 amendment: revoke an acceptance (takes effect for every job not yet dispatched)")
+    sar.add_argument("tenant_id"); sar.add_argument("acceptance_id")
+    saa = sub.add_parser("speed-acceptance-audit", help="recompute each acceptance document hash against the mounted docs directory; exit 1 on a mismatch or missing file of an ACTIVE acceptance")
+    saa.add_argument("tenant_id"); saa.add_argument("--docs-dir", required=True)
     sp = sub.add_parser("set-password", help="set a user's password (owner-only); ends all their sessions")
     sp.add_argument("email"); sp.add_argument("--password-env")
     ul = sub.add_parser("unlock-login"); ul.add_argument("key", help="e-mail, or svc:<client_id>, or ip:<addr>")
@@ -255,6 +265,68 @@ def main(argv: list[str] | None = None) -> None:
                            "health = CASE WHEN speed_endpoints.edge_id IS DISTINCT FROM EXCLUDED.edge_id THEN 'unknown' ELSE speed_endpoints.health END"),
                       {"t": a.tenant_id, "i": a.endpoint_id, "l": a.label, "k": a.kind, "r": a.region, "e": a.state == "on", "g": a.edge})
             print(f"speed endpoint {a.endpoint_id}: {a.kind}, {'enabled' if a.state == 'on' else 'disabled'} (health is reported by the Edge)")
+        elif a.cmd == "speed-acceptance-set":
+            import hashlib
+            from datetime import date, timedelta
+
+            from app.core import bench, speed
+            eps = [x for x in (e.strip() for e in a.endpoints.split(",")) if x]
+            if not eps or any(speed.ENDPOINT_ID_RE.fullmatch(e) is None for e in eps):
+                sys.exit("--endpoints: logical ids only (a name, never an address or URL)")
+            try:
+                acc_on, exp_on = date.fromisoformat(a.accepted_on), date.fromisoformat(a.expires_on)
+            except ValueError:
+                sys.exit("dates must be YYYY-MM-DD")
+            if not acc_on < exp_on <= acc_on + timedelta(days=speed.ACCEPTANCE_MAX_DAYS):
+                sys.exit(f"the acceptance lasts at most {speed.ACCEPTANCE_MAX_DAYS} days")
+            try:
+                raw = open(a.doc, "rb").read()
+            except OSError as exc:
+                sys.exit(f"cannot read the acceptance document: {exc}")
+            base = os.path.basename(a.doc)
+            gaps = speed.acceptance_doc_gaps(base, raw.decode("utf-8", "replace"), vendor=a.vendor, model=a.model, firmware=a.firmware,
+                                             approved_by=a.approved_by, accepted_on=a.accepted_on, endpoint_ids=eps)
+            if gaps:
+                sys.exit("the acceptance document is incomplete: " + "; ".join(gaps))
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            for op in sorted(speed.OPERATION_DIRECTION):   # exclusive against every gate evaluation of the two speed operations
+                c.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": bench.capability_lock_key(a.tenant_id, op)})
+            core = {r.id for r in c.execute(text("SELECT id FROM speed_endpoints WHERE target_kind = 'CORE'"))}
+            if any(e not in core for e in eps):
+                sys.exit("every destination must be an existing CORE endpoint (INTERNET nodes are not ours: never accepted)")
+            probe = c.execute(text("SELECT 1 FROM device_capabilities WHERE lower(vendor) = lower(:v) AND lower(model) = lower(:m) AND firmware = :f AND protocol = 'tr069' "
+                                   "AND operation = :o AND status = 'unsupported' AND certification IN ('observed','certified') AND evidence_ref IS NOT NULL AND verified_at IS NOT NULL"),
+                              {"v": a.vendor.strip(), "m": a.model.strip(), "f": a.firmware.strip(), "o": speed.REDIRECT_PROBE}).first()
+            if probe is None:
+                sys.exit("the 3xx probe must be recorded first for this exact vendor/model/firmware (speed_test_redirect_probe, unsupported, observed, with evidence)")
+            aid = c.execute(text("INSERT INTO speed_risk_acceptances (tenant_id, vendor, model, firmware, endpoint_ids, approved_by, accepted_on, expires_on, doc_ref, doc_sha256) "
+                                 "VALUES (:t, btrim(:v), btrim(:m), btrim(:f), :e, btrim(:b), :a, :x, :r, :h) RETURNING id"),
+                            {"t": a.tenant_id, "v": a.vendor, "m": a.model, "f": a.firmware, "e": eps, "b": a.approved_by, "a": acc_on, "x": exp_on,
+                             "r": "docs/wiki/bench/" + base, "h": hashlib.sha256(raw).hexdigest()}).scalar()
+            print(f"speed risk acceptance {aid}: {a.vendor} {a.model} {a.firmware}, destinations {','.join(eps)}, until {exp_on} (doc sha256 {hashlib.sha256(raw).hexdigest()[:12]}…)")
+        elif a.cmd == "speed-acceptance-revoke":
+            from app.core import bench, speed
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            for op in sorted(speed.OPERATION_DIRECTION):
+                c.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": bench.capability_lock_key(a.tenant_id, op)})
+            n = c.execute(text("UPDATE speed_risk_acceptances SET revoked_at = now() WHERE id = :i AND revoked_at IS NULL"), {"i": a.acceptance_id}).rowcount
+            if not n:
+                sys.exit("no active acceptance with this id for this tenant")
+            print("acceptance revoked: no job that has not been dispatched yet can use it")
+        elif a.cmd == "speed-acceptance-audit":
+            import hashlib
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            bad = 0
+            for r in c.execute(text("SELECT id, doc_ref, doc_sha256, revoked_at, expires_on >= (now() AT TIME ZONE 'UTC')::date AS live FROM speed_risk_acceptances ORDER BY created_at")):
+                active = r.revoked_at is None and r.live
+                try:
+                    got = hashlib.sha256(open(os.path.join(a.docs_dir, os.path.basename(r.doc_ref)), "rb").read()).hexdigest()
+                    state = "OK" if got == r.doc_sha256 else "MISMATCH"
+                except OSError:
+                    state = "MISSING"
+                bad += state != "OK" and active
+                print(f"{r.id} {'active' if active else 'inactive'} {state}")
+            sys.exit(1 if bad else 0)
         elif a.cmd == "olt-transfer-start":
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
             o = c.execute(text("SELECT edge_id, transfer_to FROM olts WHERE id = :o FOR UPDATE"), {"o": a.olt_id}).first()

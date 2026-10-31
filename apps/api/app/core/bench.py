@@ -156,7 +156,9 @@ def gate(conn: Connection, tenant_id: UUID, job, *, mode: str, by: UUID | None =
         return "speed_disabled"   # the flag hides the feature AND stops what was requested before it was turned off
     if job.operation in SPEED_OPS:   # ADR-0038: the test node must not be able to steer the CPE elsewhere (3xx probe, or the confirmed egress ACL)
         from app.core import speed  # local: speed.py is independent of this module's load order
-        if not speed.redirect_verified(conn, tenant_id, cpe.vendor, cpe.model, cpe.firmware):
+        prm_t = json.loads(job.params) if isinstance(job.params, str) else (job.params or {})
+        # option C (accepted risk) is decided for THIS destination, at this moment, under the shared lock taken above (see speed.redirect_basis)
+        if not speed.redirect_verified(conn, tenant_id, cpe.vendor, cpe.model, cpe.firmware, prm_t.get("target")):
             return "redirect_unverified"
     certs = {r.certification: r for r in conn.execute(
         text("SELECT certification, evidence_ref, verified_at FROM device_capabilities WHERE tenant_id = :t AND lower(vendor) = lower(:v) AND lower(model) = lower(:m) "

@@ -64,3 +64,8 @@ Terceiro caminho de escrita paralelo ao de bancada (duplicaria gate, auditoria e
 **Alternativa B (continua válida e preferível para produção):** ACL de saída real na WAN de serviço, confirmada pela rede; registrar `speed_test_egress_acl` com a referência do chamado.
 **Decisão do responsável:** ☒ aprovar a opção C ☐ aguardar a ACL (opção B) ☐ rejeitar
 **Aprovado por:** o responsável do projeto, pelo chat da sessão, 2026-10-31 ("aprovar ADR-0038"). Implementação em andamento; a aceitação concreta (modelo, firmware, destinos, validade) será registrada pelo owner CLI com o documento `ACEITE-risco-3xx-*`. A alternativa B (ACL real) continua preferível para produção.
+
+### Implementação da emenda (opção C) — 2026-10-31
+- Migração 0036 `speed_risk_acceptances` (RLS forçada; a aplicação só lê; só o owner CLI escreve); `speed.redirect_basis()` decide `probe | acl | acceptance | None` por destino; `bench.gate` passa o destino e reavalia no pedido, na aprovação e no despacho sob o bloqueio compartilhado do registro (a revogação e o aceite tomam o mesmo bloqueio exclusivo). Owner CLI: `speed-acceptance-set | -revoke | -audit`.
+- O envelope de bancada já vive no máximo `bench.ENVELOPE_TTL` = **2 min** (menor que os 9 min 15 s do texto); o pior caso depois de uma revogação é portanto ≤ 2 min + 45 s de desvio de relógio. O Edge já recusa envelope vencido antes de qualquer escrita (`internal/bench`, teste "envelope expired"). Teste novo: a vida do envelope sob aceitação nunca passa de 9 min 15 s.
+- Documento do primeiro aceite: `docs/wiki/bench/ACEITE-risco-3xx-eg8145v5-2026-10-31.md` (hash em `ACEITES.sha256`, conferido por teste de CI).

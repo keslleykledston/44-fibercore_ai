@@ -179,7 +179,7 @@ def request_run(
             return _blocked(conn, p, response, cpe_id, "group_mismatch", body)
     caps = _capabilities(conn, p.tenant_id, "cpe", c.vendor, c.model, c.firmware)
     is_bench = bool(conn.execute(text("SELECT 1 FROM bench_targets WHERE cpe_id = :c"), {"c": cpe_id}).first())
-    redirect_ok = bool(c.vendor and c.model and c.firmware and speed.redirect_verified(conn, p.tenant_id, c.vendor, c.model, c.firmware))
+    redirect_ok = bool(c.vendor and c.model and c.firmware and speed.redirect_verified(conn, p.tenant_id, c.vendor, c.model, c.firmware, body.endpoint_id))
     st = _direction_state(p, caps, operation, is_bench, redirect_ok)
     if not st["offered"]:
         return _blocked(conn, p, response, cpe_id, st["reason"], body)

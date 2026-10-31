@@ -53,8 +53,18 @@
 
 ## 4. Voltar atrás
 
+Primeiro passo, independente da nuvem: `speed.enabled=false` na configuração local do Edge e reiniciá-lo (impede até um envelope já entregue). Depois:
+
 Desligar `speed_diagnostics` no provedor (a aba some e as rotas respondem 403); `bench_writes` desligado fecha qualquer escrita de bancada; revogar autorizações abertas (`DELETE /v1/bench/authorizations/{id}` ou CLI); desligar `speed.enabled` no Edge e reiniciá-lo. As tabelas aditivas podem ficar.
 
 ## 5. Não fazer
 
 Usar ONT de cliente; apontar o nó para endereço que não seja do provedor; guardar URL/endereço do nó fora do servidor do Edge; repetir às cegas um teste `UNKNOWN`; ligar a flag em produção sem o aceite.
+
+## 6. Aceite do risco de 3xx na bancada (ADR-0038, emenda aprovada — opção C)
+A EG8145V5 `V5R019C10S350` segue 3xx (sonda real). Enquanto não houver ACL de saída real (`speed_test_egress_acl`), o teste só é elegível com um aceite vigente:
+1. O responsável aprova e o documento `docs/wiki/bench/ACEITE-risco-3xx-<modelo>-<data>.md` é versionado, com o hash em `ACEITES.sha256` (um teste de CI confere).
+2. `speed-acceptance-set <tenant> "<fabricante>" <modelo> <firmware> --endpoints <ids CORE> --approved-by "<nome>" --accepted-on AAAA-MM-DD --expires-on AAAA-MM-DD --doc <caminho montado>` (no máximo 90 dias; só destinos CORE; exige a sonda `unsupported` já registrada).
+3. `speed-acceptance-audit <tenant> --docs-dir <pasta montada>` compara o hash gravado com o arquivo (divergência é achado de auditoria, não abre nem fecha o gate).
+4. `speed-acceptance-revoke <tenant> <id>` fecha a opção C para todo job ainda não despachado.
+Montar a pasta: `docker compose … run --rm -T --no-deps -v "$PWD/docs/wiki/bench:/bench:ro" migrate python -m app.cli …` e usar `/bench/<arquivo>` em `--doc`/`--docs-dir`.
