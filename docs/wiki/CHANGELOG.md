@@ -323,3 +323,6 @@
 
 ## Speed — `speed_test_download` observed e 1ª medição confiável (2026-10-31)
 - Aceite do responsável registrado ("aceito download") e `speed_test_download` promovido a `observed` para Huawei EG8145V5 `V5R019C10S350`. Download de 200 MB na bancada: 331,15 Mbps em 4,96 s, `completed`. Faltam repetições, referência cabeada e upload. Flag `speed_diagnostics` desligada; nada de produção afetado.
+
+## Speed — 3 repetições de download e H1 do upload (2026-10-31)
+- 3 downloads de 200 MB na bancada, todos `completed` (331,15 / 330,83 / 380,93 Mbps). H1 de leitura do `UploadDiagnostics`: folhas necessárias presentes; `speed_test_upload` registrado `supported`/`identified` (não observado). Faltam referência cabeada, upload real (precisa da autorização `--first-run`) e relatório periódico.
