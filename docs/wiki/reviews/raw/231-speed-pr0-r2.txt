@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a190e8-7fa6-7002-b8b4-fcd67ee92134).
+[codex] Turn started (01a190e8-81ef-7053-ab93-60b1ad157f07).
+[codex] Assistant message captured: Vou comparar o diff completo com `main` e verificar especificamente se as correções de SSRF e...
+[codex] Running command: /bin/bash -lc 'git diff --find-renames --find-copies --stat main...HEAD && git diff --find-re...
+[codex] Command completed: /bin/bash -lc 'git diff --find-renames --find-copies --stat main...HEAD && git diff --find-re... (exit 0)
+[codex] Running command: /bin/bash -lc 'nl -ba docs/addenda/v2.2-speed/IMPLEMENTATION_PLAN.md; nl -ba docs/addenda/v2....
+[codex] Command completed: /bin/bash -lc 'nl -ba docs/addenda/v2.2-speed/IMPLEMENTATION_PLAN.md; nl -ba docs/addenda/v2.... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: os controles SSRF descritos cobrem...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: os controles SSRF descritos cobrem a sondagem do Edge, mas não demonstram que o cliente TR-143 no CPE rejeita redirecionamentos durante o teste. Isso deixa o caminho efetivo de tráfego sem a mesma proteção.
+
+Findings:
+- [high] A proteção contra redirecionamento não cobre a requisição feita pelo CPE (docs/addenda/v2.2-speed/IMPLEMENTATION_PLAN.md:16)
+  O teste é executado pelo CPE, que recebe a URL/IP e faz o GET/PUT; a sondagem citada aqui é feita pelo Edge. Assim, o teste de saúde sem redirecionamento não prova que o cliente TR-143 do CPE rejeita uma resposta 3xx do destino permitido. Se o endpoint for comprometido ou responder com redirecionamento para outro host, a ONT pode seguir a nova URL e acessar destinos não previstos, conforme o comportamento do firmware. O plano não define como isso é impedido ou verificado por modelo.
+  Recommendation: Definir o comportamento de redirect do cliente TR-143 como requisito de homologação por firmware. Se não houver garantia verificável de rejeição, exigir que o endpoint de teste não redirecione e aplicar controles de rede que restrinjam o destino do tráfego gerado pelo CPE.
+
+Next steps:
+- Documentar e testar o comportamento de redirecionamento do CPE durante a homologação, incluindo resposta 3xx do destino permitido.
