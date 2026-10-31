@@ -24,13 +24,23 @@ articles:
   status: draft
 - slug: rede/resumo-da-onu
   ui_route: /rede
-  status: draft
+  status: published
+  images:
+  - assets/rede/resumo-da-onu/desktop.png
+  - assets/rede/resumo-da-onu/mobile.png
+  e2e_test: inspetor (e2e/onu-quick.spec.ts); captura real no LAB (ONU de bancada)
+  last_verified: '2026-10-31'
 - slug: rede/consultar-olt
   ui_route: /rede
   status: draft
 - slug: ont/consultar-configuracao
   ui_route: /rede/onu/[id]
-  status: draft
+  status: published
+  images:
+  - assets/ont/consultar-configuracao/desktop.png
+  - assets/ont/consultar-configuracao/mobile.png
+  e2e_test: aparelho (e2e/ont-sidebar.spec.ts); captura real no LAB (ONU de bancada)
+  last_verified: '2026-10-31'
 - slug: rede/dispositivos
   ui_route: /dispositivos
   status: draft

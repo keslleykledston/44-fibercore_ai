@@ -2,7 +2,7 @@
 title: "Como ver o resumo rápido de uma ONU"
 slug: "rede/resumo-da-onu"
 role: [isp_admin, engineer, noc_n2, noc_n1, support]
-status: draft
+status: published
 product_version: "0.1.0"
 last_verified: "2026-10-31"
 help_owner: "Plataforma FiberCore"
@@ -37,7 +37,18 @@ ui_route: "/rede"
 
 A potência recebida não tem cor de alerta porque ainda não há limiar homologado. A miniatura é genérica; os pontos de luz mostram a PON e o ACS, não os LEDs reais.
 
+![Tela em desktop 1440×900 — Como ver o resumo rápido de uma ONU](../../assets/rede/resumo-da-onu/desktop.png)
+
+![Tela em mobile 390×844 — Como ver o resumo rápido de uma ONU](../../assets/rede/resumo-da-onu/mobile.png)
+
 ## Se algo não funcionar
 
 - **“Não foi possível carregar o resumo”:** clique em **Tentar novamente**; a lista continua funcionando.
 - **O painel não abre assim:** o recurso está desligado para o provedor.
+
+## Evidências de documentação
+
+- Build/commit: 3118b85 (LAB, ramo principal após o PR 102)
+- Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844 (tela como o usuário vê, sem rolagem da página)
+- Origem: capturas REAIS do ambiente de laboratório com usuário de leitura (papel NOC N1), usando só a ONU de bancada; nenhuma ONU de cliente aparece
+- Dados: ONU de bancada (Huawei EG8145V5); horários relativos mascarados fora do painel
