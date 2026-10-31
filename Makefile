@@ -31,14 +31,16 @@ validate-help: venv
 lint: venv
 	$(VENV)/bin/ruff check apps/api
 
-test-api: venv  ## sobe Postgres descartável, roda pytest, remove container
-	-docker rm -f fc-test-pg fc-test-nats >/dev/null 2>&1
-	docker run -d --name fc-test-nats -p 127.0.0.1:54222:4222 nats:2.11-alpine -js >/dev/null
-	docker run -d --name fc-test-pg -e POSTGRES_USER=fibercore -e POSTGRES_PASSWORD=test_admin_pw_only \
-	  -e POSTGRES_DB=fibercore_test -p 127.0.0.1:$(TEST_PG_PORT):5432 postgres:17-alpine >/dev/null
-	@until docker exec fc-test-pg pg_isready -U fibercore >/dev/null 2>&1; do sleep 1; done; sleep 2
+test-api: venv  ## sobe Postgres descartável, roda pytest, remove container E volume (mesmo se o teste falhar)
+	@set -e; \
+	cleanup() { docker rm -fv fc-test-pg fc-test-nats >/dev/null 2>&1 || true; }; \
+	cleanup; trap cleanup EXIT INT TERM; \
+	docker run -d --name fc-test-nats -p 127.0.0.1:54222:4222 nats:2.11-alpine -js >/dev/null; \
+	docker run -d --name fc-test-pg --tmpfs /var/lib/postgresql/data -e POSTGRES_USER=fibercore -e POSTGRES_PASSWORD=test_admin_pw_only \
+	  -e POSTGRES_DB=fibercore_test -p 127.0.0.1:$(TEST_PG_PORT):5432 postgres:17-alpine >/dev/null; \
+	until docker exec fc-test-pg pg_isready -U fibercore >/dev/null 2>&1; do sleep 1; done; sleep 2; \
 	cd apps/api && TEST_NATS_URL=nats://127.0.0.1:54222 TEST_ADMIN_DATABASE_URL=postgresql://fibercore:test_admin_pw_only@127.0.0.1:$(TEST_PG_PORT)/fibercore_test \
-	  ../../$(PY) -m pytest -q; rc=$$?; docker rm -f fc-test-pg fc-test-nats >/dev/null; exit $$rc
+	  ../../$(PY) -m pytest -q
 
 rbac-matrix: venv  ## regenera docs/security/RBAC_MATRIX.md a partir do código (ADR-0031)
 	$(PY) scripts/gen_rbac_matrix.py

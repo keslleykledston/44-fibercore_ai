@@ -13,7 +13,7 @@ ADMIN_PW="$(rnd)"; APP_PW="$(rnd)"; WORKER_PW="$(rnd)"; RBAC_PW="$(rnd)"
 export PERF_APP_PW="$APP_PW" PERF_PG_PORT="$PORT"
 if ss -ltn 2>/dev/null | grep -q ":$PORT "; then echo "porta $PORT ocupada (PERF_PG_PORT para outra)" >&2; exit 1; fi
 CID="$(docker run -d --name "$NAME" --label "fibercore.perf=$TOKEN" -e POSTGRES_USER=fibercore -e POSTGRES_PASSWORD=$ADMIN_PW -e POSTGRES_DB=fibercore_perf -p 127.0.0.1:$PORT:5432 postgres:17-alpine)"
-trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT   # armed only AFTER docker run succeeded: a failed run (name clash, no image) removes nothing
+trap 'docker rm -fv "$CID" >/dev/null 2>&1 || true' EXIT   # armed only AFTER docker run succeeded (-v também remove o volume anônimo da imagem): a failed run (name clash, no image) removes nothing
 until docker exec "$NAME" pg_isready -U fibercore >/dev/null 2>&1; do sleep 1; done; sleep 2
 cd $ROOT/apps/api
 ADMIN=postgresql://fibercore:$ADMIN_PW@127.0.0.1:$PORT/fibercore_perf
