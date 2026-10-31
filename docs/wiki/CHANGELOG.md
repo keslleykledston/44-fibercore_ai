@@ -309,3 +309,6 @@
 
 ## Speed Diagnostics — aceite do risco de 3xx na bancada (ADR-0038, emenda aprovada em 2026-10-31)
 - Migração 0036 `speed_risk_acceptances` e a opção C no gate (`speed.redirect_basis`): destino CORE nomeado, firmware exato, validade ≤ 90 dias, sonda `unsupported` registrada, revogação serializada com o despacho. Owner CLI `speed-acceptance-set|revoke|audit`. A flag `speed_diagnostics` segue DESLIGADA; nada executado em equipamento por este PR.
+
+## QoS-001 PR A — leitura de qualidade passiva (ADR-0039, flag OFF)
+- `GET /v1/cpes/{id}/quality/capabilities`, `POST|GET /v1/cpes/{id}/quality/runs[/{run}]`; migração 0037 `quality_runs` (imutável, RLS forçada); permissões `diagnostics:quality_*`; flags `quality_diagnostics|quality_full|quality_active_tests` (todas OFF). Só dados já retidos (ACS em cache, OLT); o COMPLETO referencia um grupo do SD-001, não inicia teste. Sem ping/DNS/traceroute nesta entrega.

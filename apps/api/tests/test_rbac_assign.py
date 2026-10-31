@@ -236,7 +236,7 @@ def test_roles_endpoint_lists_the_catalog_per_role_and_what_the_caller_may_hand_
     by = {r["role"]: r for r in d}
     assert set(by) == set(ROLE_PERMISSIONS) and by["access_manager"]["label"] == "Gestor de Acesso"
     assert {r for r, x in by.items() if x["assignable_by_me"]} == {"isp_admin", "access_manager", "engineer", "noc_n2", "noc_n1", "support", "auditor"}
-    assert {p["name"] for p in by["noc_n1"]["permissions"]} == {"tenant:read", "inventory:read", "incidents:read"}
+    assert {p["name"] for p in by["noc_n1"]["permissions"]} == {"tenant:read", "inventory:read", "incidents:read", "diagnostics:quality_read", "diagnostics:quality_run"}
     assert all(p["risk"] in ("R0", "R1", "R2", "R3") for r in d for p in r["permissions"])
     assert client.get("/v1/roles", headers=_h(client, nocn1)).status_code == 403
     m = client.get("/v1/members", headers=_h(client, adm)).json()
@@ -411,7 +411,7 @@ def test_me_describes_only_the_callers_own_role_from_the_catalog(client, new_ten
     make(t, "isp_admin")
     n1 = make(t, "noc_n1")
     d = client.get("/v1/auth/me", headers=_h(client, n1)).json()
-    assert d["role"] == "noc_n1" and {x["name"] for x in d["permissions"]} == {"tenant:read", "inventory:read", "incidents:read"}
+    assert d["role"] == "noc_n1" and {x["name"] for x in d["permissions"]} == {"tenant:read", "inventory:read", "incidents:read", "diagnostics:quality_read", "diagnostics:quality_run"}
     assert all(set(x) == {"name", "risk", "description"} for x in d["permissions"])
 
 

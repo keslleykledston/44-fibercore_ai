@@ -27,6 +27,9 @@ FEATURES: dict[str, bool] = {
     "ont_config": False,                      # ADR-0034 (v2.4): configuração/capacidades/formulários da ONT, SOMENTE LEITURA nesta entrega; o dono liga por provedor
     "erp_hubsoft": False,                     # ADR-0033: conexão HubSoft (P0, somente leitura); só o dono liga, por provedor, depois de configurar o segredo no servidor
     "speed_diagnostics": False,               # ADR-0038: teste de banda TR-143 da ONT (somente bancada nesta fase; o gate de escrita é o de bancada, a flag só mostra/esconde)
+    "quality_diagnostics": False,             # ADR-0039: leitura de qualidade do serviço da ONT (RÁPIDO passivo); o COMPLETO e os testes ativos têm flags próprias
+    "quality_active_tests": False,            # ADR-0039/ADR-0030 emenda: ping/DNS (escrevem no CPE; só bancada; ainda não implementado)
+    "quality_full": False,                    # ADR-0039: leitura completa (referencia o SD-001)
     "smart_diagnostics_copilot": False,       # bloqueada até ADR-0015 / ADR-SD-006
 }
 
