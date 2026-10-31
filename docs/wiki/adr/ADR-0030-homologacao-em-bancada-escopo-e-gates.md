@@ -77,7 +77,7 @@ O autorizador distinto do solicitante e do aprovador, hoje só convenção da vi
 ## Emenda (2026-10-31, ADR-0038): teste de banda TR-143 no catálogo de bancada
 Entram duas linhas no catálogo do item 4, sem abrir mais nada: **`speed_test_download`** e **`speed_test_upload`** (R2, TR-069, só o CPE de bancada). Parâmetros e valores permitidos: `target` = id lógico de destino (`^[a-z0-9][a-z0-9-]{1,30}$`; nunca URL nem endereço) e `profile` ∈ {`10mb`, `50mb`, `200mb`}; qualquer outro parâmetro ou valor é recusado no preview, no gate e no Edge. A autorização de uso único cobre operação + CPE + hash dos dois parâmetros. Aprovação: 1, como nas demais. Condição extra do gate para estas operações: evidência de que o destino não pode ser trocado (`speed_test_redirect_probe` ou `speed_test_egress_acl` no registro, com evidência; sem ela, `redirect_unverified`). Resultado incerto ou falha de verdade trava o alvo (item 6); erro de diagnóstico reportado pelo aparelho é resultado, não falha de escrita. As operações só podem ser autorizadas/despachadas quando a metade do Edge existir (`bench.SPEED_EDGE_SUPPORT`, falso até o PR 2). **Cada** execução real continua exigindo nova autorização do responsável e evidência no formato do item 7.
 
-## Emenda PROPOSTA (2026-10-31, ADR-0039) — aguarda aprovação do responsável: `ping_test`, `dns_test` e mais de um modelo na lista fechada
+## Emenda APROVADA (2026-10-31, ADR-0039): `ping_test`, `dns_test` e mais de um modelo na lista fechada
 **1. Duas linhas novas no catálogo (item 4), ambas R1, só CPE de bancada, TR-069:**
 | Fase | Operação | Parâmetros e valores permitidos | Aprovação | Janela e limites |
 |---|---|---|---|---|
@@ -88,4 +88,4 @@ Traceroute **não** entra nesta emenda. Valem as mesmas garantias das demais man
 **3. Identidades candidatas (H1 de leitura, nenhuma autorizada ainda):**
 - **Nokia G-1426G-A** (serial `…C7DE`; vínculo por igualdade de serial depois de decodificar o prefixo ASCII). Autorizar esta identidade para a lista fechada: ☐ sim ☐ não (o item 2 continua valendo: vínculo `confirmed` registrado antes de `bench-target-add`).
 - **ZTE F670L** (serial TR-069 `…9122`, GPON SN `…A1A3`): **não há caixa de aprovação**. O vínculo ONU↔CPE NÃO está confirmado; só se abre uma aprovação depois de um H1 novo que registre a evidência física do vínculo (item 2a). Esta emenda NÃO autoriza a ZTE.
-**Aprovado por:** ______________________  **Data:** ____/____/______
+**Aprovado por:** o responsável do projeto, pelo chat da sessão, 2026-10-31 ("aprovado ADR 0030"). Itens 1 e 2 (catálogo `ping_test`/`dns_test` e a regra de admissão de identidades) aprovados. **Item 3 (identidades): nenhuma foi autorizada nominalmente**: a caixa da Nokia continua em branco e a ZTE segue sem caixa; `bench-target-add` só depois da autorização escrita da identidade e do vínculo `confirmed`.
