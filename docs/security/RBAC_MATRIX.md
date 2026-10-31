@@ -22,6 +22,8 @@
 | `devices:act:set_wifi_ssid` | R2 | não | sim | Pedir, pela tela do CPE, a troca do nome do Wi-Fi (nasce bloqueado até a homologação) |
 | `bench:authorize` | R3 | sim | não | Autorizar UMA manobra de bancada (uso único, janela curta, só o alvo de bancada); o autorizador não pode ser quem pede nem quem aprova |
 | `olt_query:run` | R0 | não | sim | Pedir uma consulta somente leitura à OLT (catálogo fechado; a fila e a cota protegem o equipamento) |
+| `erp:manage` | R3 | sim | não | Cadastrar e desativar a conexão com o ERP do provedor (guarda só a referência do segredo, nunca o segredo) |
+| `erp:test` | R2 | não | não | Testar a conexão com o ERP (autentica e nada mais; somente leitura) |
 | `diagnostics:run` | R0 | não | sim | Rodar diagnósticos (somente leitura) |
 | `members:read` | R1 | não | não | Ver os membros do provedor e o estado do MFA de cada um |
 | `members:manage` | R3 | sim | não | Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite) |
@@ -52,6 +54,8 @@
 | `devices:act:set_wifi_ssid` | ✔ | ✔ |  |  |  |  |  |  |  |
 | `bench:authorize` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `olt_query:run` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
+| `erp:manage` | ✔ |  |  |  |  |  |  |  |  |
+| `erp:test` | ✔ |  |  |  |  |  |  |  |  |
 | `diagnostics:run` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `members:read` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `members:manage` | ✔ |  |  |  |  |  |  |  | ✔ |
@@ -114,6 +118,11 @@
 | GET | `/v1/incidents` | `incidents:read` |
 | GET | `/v1/incidents/{incident_id}` | `incidents:read` |
 | POST | `/v1/incidents/{incident_id}/ack` | `incidents:ack` |
+| GET | `/v1/integrations/erp` | `erp:test` |
+| POST | `/v1/integrations/erp` | `erp:manage` |
+| POST | `/v1/integrations/erp/{connection_id}/disable` | `erp:manage` |
+| POST | `/v1/integrations/erp/{connection_id}/enable` | `erp:manage` |
+| POST | `/v1/integrations/erp/{connection_id}/test` | `erp:test` |
 | GET | `/v1/invites/{token}` | (pública ou usa credencial no corpo) |
 | POST | `/v1/invites/{token}/accept` | (pública ou usa credencial no corpo) |
 | GET | `/v1/jobs` | `jobs:read` |

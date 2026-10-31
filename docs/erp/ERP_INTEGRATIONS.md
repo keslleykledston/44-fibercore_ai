@@ -27,3 +27,6 @@ Polling incremental se API permitir, snapshot inicial paginado e idempotente, de
 ## Primeira entrega
 
 CSV + REST genérica documentada + fixtures; decidir qual ERP concreto é primeiro após disponibilidade de acesso e contrato API. IXC/SGP prioridade de descoberta, não inventar conformidade nem suporte sem homologação.
+
+## v2.3.1 — HubSoft primeiro (ADR-0033)
+Ordem de homologação: **HubSoft (P0) → IXC (P1) → SGP (P2)**. Entregue (somente contra mocks, NÃO homologado): registro de provedores, tabela `erp_connections` (migração 0030), `/v1/integrations/erp` (listar, criar, testar, ligar, desligar), segredo por referência em arquivo 0600 por tenant, guarda de URL/SSRF e token OAuth com cache e política 401/403/429/5xx. Próximo: HS-03 (consulta de cliente, valores de `busca` confirmados na instância autorizada), HS-04 a HS-08. Operação: criar `ERP_SECRETS_DIR/<tenant_id>/<ref>.json` (0600; `client_id`, `client_secret`, `username`, `password`) e definir `ERP_ALLOWED_HOSTS`; ligar o flag `erp_hubsoft` do tenant (`app.cli feature-set`). Nunca enviar segredo por chat.

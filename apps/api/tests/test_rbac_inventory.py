@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[3]
 EXPECTED = {
     "isp_admin": {"customers:read", "customers:import", "associations:review", "incidents:read", "incidents:ack", "jobs:read", "jobs:request",
                   "jobs:approve", "inventory:read", "tenant:read", "audit:read", "members:read", "edge:read", "members:mfa_reset", "diagnostics:run",
-                  "members:manage", "roles:read", "platform:delegate", "devices:act:reboot_cpe", "devices:act:set_wifi_ssid", "bench:authorize", "olt_query:run"},
+                  "members:manage", "roles:read", "platform:delegate", "devices:act:reboot_cpe", "devices:act:set_wifi_ssid", "bench:authorize", "olt_query:run", "erp:manage", "erp:test"},
     "access_manager": {"tenant:read", "members:read", "members:manage", "roles:read", "audit:read"},
     "engineer": {"customers:read", "associations:review", "incidents:read", "incidents:ack", "jobs:read", "jobs:request", "inventory:read",
                  "tenant:read", "edge:read", "diagnostics:run", "devices:act:reboot_cpe", "devices:act:set_wifi_ssid", "bench:authorize", "olt_query:run"},

@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     mfa_recent_seconds: int = Field(default=600, ge=60, le=3600)
     trusted_proxy: bool = False  # trust X-Forwarded-For (set only behind our own reverse proxy)
     job_signing_key: str = Field(default="", repr=False)  # base64 Ed25519 seed; empty => dispatch disabled (fail closed)
+    # ADR-0033 (ERP Hub): where the operator places each connection's credentials (<dir>/<tenant_id>/<secret_ref>.json, mode 0600) and which ERP hosts may be
+    # reached. Both empty = no ERP connection can be created or tested (fail closed).
+    erp_secrets_dir: str = ""
+    erp_allowed_hosts: str = ""   # comma-separated: exact hosts or *.suffix
     pii_hmac_key: str = Field(default="", repr=False)  # HMAC key for customer documents; import fails closed without it
 
     @field_validator("jwt_secret", "jwt_secret_previous", "pii_hmac_key")

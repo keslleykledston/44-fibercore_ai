@@ -156,3 +156,12 @@ Estado hoje: 8 papéis FIXOS no código (`ROLE_PERMISSIONS` em `apps/api/app/cor
 
 ## Plano ADR-0032 (captura das demais consultas da OLT + banco local) — autorizado pelo responsável em 2026-10-30
 Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edge (`olt_capture`, saída crua só no Edge 0700/0600, autoapaga em 24 h) + emenda do orçamento agregado (8/sessão, 30/h por classe: 20 sob demanda + 6 rotinas + 4 captura) → reimplantar → **lote 1** (`olt.time`, `olt.sync`, `olt.temperature`, `olt.alarm.active`, `olt.autofind`) numa janela; (2) fixtures sanitizadas + parsers + `Validated` (Edge e nuvem); (3) tabelas `olt_query_latest`/`olt_metric_samples`, rota de ingestão do Edge, cache primeiro na API/tela; (4) rotinas no Edge com o lote 1; (5) lotes 2 (placas), 3 (PON, só a de bancada), 4 (ONU, só a de bancada), 5 (histórico), repetindo (1)–(2) e (4).
+
+## Pendência — 2ª ONU de bancada (ZTE F670L, GPON `5A544547D1EDA1A3`, 0/0/14 ONT-ID 11 pela captura de 28/10) — anotada em 2026-10-31
+- Responsável vai reiniciar a ZTE manualmente (forçar Inform) e avisar; então conferir no ACS (id OUI-classe-serial, Inform aceito, CR funciona).
+- A bancada (ADR-0030) é ancorada em CPE do ACS (`bench_targets.cpe_id`); a ZTE só entra depois do 1º Inform. Reinício pela OLT da ZTE exige emenda ADR-0030 (lista de bancada, vínculo serial GPON hex × serial TR-069 `ZTEG…`, `bench.olt` como lista) ou alvo só-OLT: decisão futura, com Codex.
+- Reconfirmar o ONT-ID com a captura `pon.ont.info` (PON 0/14) depois do lote 1.
+
+## Prioridade de produto (2026-10-31): ERP HubSoft primeiro — ADR-0033
+- Entregue em PR 96 (mocks): HS-01 registro/flag/conexões, HS-02 token OAuth. Próximos: HS-03 (consulta de cliente; valores de `busca` só confirmados em instância autorizada), HS-04 vínculo por evidência, HS-05 UI (Lovable) + ajuda `/ajuda/integracoes/hubsoft`, HS-06 ensaio real com autorização, HS-07 observabilidade, HS-08 Codex.
+- Do dono antes de qualquer teste real: criar `ERP_SECRETS_DIR/<tenant_id>/<ref>.json` (0600) no servidor, definir `ERP_ALLOWED_HOSTS`, URL e versão da instância, perfil read-only, ligar `erp_hubsoft` do tenant. Nunca por chat.
