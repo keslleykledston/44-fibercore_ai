@@ -95,7 +95,7 @@ def request_query(
             return {"outcome": "cached", "cached": hit}
     if body.refresh:   # one refresh at a time per OLT: the count below and the audit row that spends the quota are one step (the lock lives until the commit)
         conn.execute(text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": f"olt_refresh:{olt_id}"})
-    view = jobs.preview(jobs.PreviewIn(operation="olt_query", target_id=olt_id, params={"query_id": query_id, **body.params}), idempotency_key, p, conn)
+    view = jobs.create_preview(jobs.PreviewIn(operation="olt_query", target_id=olt_id, params={"query_id": query_id, **body.params}), idempotency_key, p, conn)
     if view["status"] != "PREVIEWED":  # the same request again: nothing new is created, nothing is spent
         return {"outcome": "existing", "job": view}
     if body.refresh:

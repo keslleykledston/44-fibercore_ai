@@ -151,6 +151,8 @@ def gate(conn: Connection, tenant_id: UUID, job, *, mode: str, by: UUID | None =
     cpe = profile_for(conn, tenant_id, job.target_id, spec.protocol)
     if cpe is None or not (cpe.vendor and cpe.model and cpe.firmware):
         return "capability_not_observed"
+    if job.operation in SPEED_OPS and not features.enabled(conn, tenant_id, "speed_diagnostics"):
+        return "speed_disabled"   # the flag hides the feature AND stops what was requested before it was turned off
     if job.operation in SPEED_OPS:   # ADR-0038: the test node must not be able to steer the CPE elsewhere (3xx probe, or the confirmed egress ACL)
         from app.core import speed  # local: speed.py is independent of this module's load order
         if not speed.redirect_verified(conn, tenant_id, cpe.vendor, cpe.model, cpe.firmware):

@@ -90,7 +90,7 @@ def _request(operation: str):
             raise HTTPException(409, reason or "not_available")  # no job exists for an action the screen would not have offered
         if bench.BENCH_OPS[operation].params and not bench.params_valid(operation, body.params):
             raise HTTPException(422, "parameters outside the bench catalog")
-        view = jobs.preview(jobs.PreviewIn(operation=operation, target_id=cpe_id, params=body.params), idempotency_key, p, conn)
+        view = jobs.create_preview(jobs.PreviewIn(operation=operation, target_id=cpe_id, params=body.params), idempotency_key, p, conn)
         if view["status"] != "PREVIEWED":  # the same request again (retry after a lost answer, double click): nothing new is created
             if view["status"] in ("CANCELLED", "EXPIRED"):  # it ended without running: say so, with the reason recorded when it was blocked
                 why = conn.execute(

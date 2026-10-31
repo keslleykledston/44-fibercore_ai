@@ -151,7 +151,7 @@ def request_run(
     params = {"target": body.endpoint_id, "profile": body.profile}
     # the same key again (a lost answer, a double click) returns what it created; a key reused for a different test is the engine's own 409
     if conn.execute(text("SELECT 1 FROM jobs WHERE idempotency_key = :k"), {"k": idempotency_key}).first():
-        view = jobs.preview(jobs.PreviewIn(operation=operation, target_id=cpe_id, params=params), idempotency_key, p, conn)
+        view = jobs.create_preview(jobs.PreviewIn(operation=operation, target_id=cpe_id, params=params), idempotency_key, p, conn)
         run = _run_by_job(conn, UUID(view["id"]))
         response.status_code = 200
         return {"outcome": "existing", "reason": None if run else "cancelled", "run": run}
@@ -178,7 +178,7 @@ def request_run(
     busy = speed.busy_reason(conn, p.tenant_id, cpe_id, pon)   # takes the per-tenant slot lock, held to the end of this transaction
     if busy:
         return _blocked(conn, p, response, cpe_id, busy, body)
-    view = jobs.preview(jobs.PreviewIn(operation=operation, target_id=cpe_id, params=params), idempotency_key, p, conn)
+    view = jobs.create_preview(jobs.PreviewIn(operation=operation, target_id=cpe_id, params=params), idempotency_key, p, conn)
     try:
         view = jobs.submit(UUID(view["id"]), p, conn)
     except HTTPException as exc:   # the write gate (or anything the engine refuses): the request ends here, visibly, and leaves no live job

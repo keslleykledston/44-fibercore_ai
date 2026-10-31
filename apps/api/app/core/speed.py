@@ -112,6 +112,16 @@ def compute(direction: str, profile: str, c: dict) -> Computed:
     return Computed("partial" if short else "completed", mbps, n, int(dt * 1000), ("too_short" if dt < MIN_RELIABLE_S else "short_transfer") if short else None, basis)
 
 
+_DETAIL_RE = re.compile(r"[a-z][a-z0-9_]{0,39}")
+
+
+def safe_detail(detail) -> str | None:
+    """What the Edge says about a speed job is kept only as a short code; anything else (a sentence, an address, a URL) becomes `edge_error`."""
+    if detail is None:
+        return None
+    return detail if isinstance(detail, str) and _DETAIL_RE.fullmatch(detail) else "edge_error"
+
+
 def pon_of(conn: Connection, tenant_id: UUID, cpe_id: UUID) -> UUID | None:
     """The PON of a CPE, only through the ONE confirmed ONU<->CPE link (a suggestion is not a fact); None when it cannot be resolved to exactly one."""
     rows = conn.execute(

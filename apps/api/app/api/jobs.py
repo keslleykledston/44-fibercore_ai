@@ -89,7 +89,7 @@ def _write_gate(conn: Connection, tenant_id: UUID, row, mode: str, by: UUID | No
         return reason
     refusal = bench.gate(conn, tenant_id, row, mode=mode, by=by)
     # flag off, or no Edge support yet: the bench path is not visible, the global reason stays
-    return "operation_not_homologated" if refusal in ("bench_writes_disabled", "edge_support_missing") else refusal
+    return "operation_not_homologated" if refusal in ("bench_writes_disabled", "edge_support_missing", "speed_disabled") else refusal
 
 
 def _query_gate(conn: Connection, tenant_id: UUID, params: dict) -> str | None:
@@ -147,6 +147,13 @@ def preview(
     p: Principal = Depends(require("jobs:request")),
     conn: Connection = TENANT_CONN,
 ) -> dict:
+    if body.operation in bench.SPEED_OPS:  # ADR-0038: the speed test has its own entry (flag, endpoint health, PON/CPE/tenant limits, run record); never the generic one
+        raise HTTPException(409, "use_speed_api")
+    return create_preview(body, idempotency_key, p, conn)
+
+
+def create_preview(body: PreviewIn, idempotency_key: str, p: Principal, conn: Connection) -> dict:
+    """The preview itself, for the HTTP route above and for the endpoints that own an operation's extra rules (device actions, OLT queries, speed tests)."""
     op = OPERATIONS.get(body.operation)
     if op is None:
         raise HTTPException(422, "unknown operation")
@@ -443,6 +450,9 @@ def job_result(
         raise HTTPException(403, "job belongs to another edge")
     to = {"accepted": "ACCEPTED", "failed": "FAILED"}.get(body.state) or ("SUCCEEDED" if body.postcheck_ok else "UNKNOWN")
     detail, res = body.detail, {"detail": body.detail, "postcheck_ok": body.postcheck_ok}
+    if row.operation in bench.SPEED_OPS:  # ADR-0038: free text from the Edge could carry an address; only a short code is kept (and later shown)
+        detail = speed.safe_detail(body.detail)
+        res = {"detail": detail, "postcheck_ok": body.postcheck_ok}
     if body.data is not None and row.operation != "olt_query" and row.operation not in bench.SPEED_OPS:
         raise HTTPException(422, "data only exists on olt_query and speed test results")
     counters = None

@@ -228,14 +228,51 @@ def test_without_redirect_evidence_the_operation_is_not_eligible(client, seed, i
     assert client.get(f"/v1/cpes/{cpe}/speed/capabilities", headers=h).json()["directions"]["download"]["offered"] is True
 
 
-def test_the_gate_itself_refuses_without_redirect_evidence_even_if_the_screen_was_bypassed(client, seed, inv, migrated):
+def test_the_gate_itself_refuses_without_redirect_evidence_even_if_the_screen_check_were_bypassed(client, seed, inv, migrated, monkeypatch):
     _flag(migrated, seed["A"]); _speed_flag(migrated, seed["A"]); _endpoint(migrated, seed)
     cpe = _cpe(client, inv, seed)
     _bench(migrated, seed, inv, cpe, op="speed_test_download", params=PARAMS)
-    h = hdr(client, "alice", seed, "A")
-    jid = client.post("/v1/jobs/preview", headers={**h, **idem()}, json={"operation": "speed_test_download", "target_id": cpe, "params": PARAMS}).json()["id"]
-    r = client.post(f"/v1/jobs/{jid}/submit", headers=h)
-    assert r.status_code == 409 and r.json()["detail"] == "redirect_unverified"
+    _link(migrated, seed, inv, cpe)
+    real, calls = speed.redirect_verified, {"n": 0}
+
+    def first_call_lies(*a):
+        calls["n"] += 1
+        return True if calls["n"] == 1 else real(*a)   # the request's own check is fooled; the gate's is not
+    monkeypatch.setattr(speed, "redirect_verified", first_call_lies)
+    r = _post(client, hdr(client, "alice", seed, "A"), cpe)
+    assert r.status_code == 409 and r.json()["reason"] == "redirect_unverified" and calls["n"] >= 2
+    assert _rows(migrated, "SELECT status FROM jobs WHERE operation = 'speed_test_download'")[0].status == "CANCELLED"
+
+
+def test_the_generic_jobs_api_never_creates_a_speed_job(client, seed, inv, migrated):
+    cpe = _ready(client, seed, inv, migrated)
+    _link(migrated, seed, inv, cpe)
+    for op in ("speed_test_download", "speed_test_upload"):
+        r = client.post("/v1/jobs/preview", headers={**hdr(client, "alice", seed, "A"), **idem()}, json={"operation": op, "target_id": cpe, "params": PARAMS})
+        assert r.status_code == 409 and r.json()["detail"] == "use_speed_api"
+    assert _rows(migrated, "SELECT 1 FROM jobs WHERE operation LIKE 'speed_test_%'") == []
+
+
+def test_turning_the_flag_off_stops_a_request_made_before(client, seed, inv, migrated):
+    cpe, h, run, _ = _dispatched(client, seed, inv, migrated)    # dispatched already; a second job in the queue would be refused at its next gate
+    with migrated.begin() as c:
+        c.execute(text("UPDATE tenant_features SET enabled = false WHERE feature = 'speed_diagnostics'"))
+    from app.api import jobs as jobs_mod
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        row = jobs_mod._load(c, run["job_id"])
+        assert bench.gate(c, seed["A"], row, mode="dispatch") == "speed_disabled"
+
+
+@pytest.mark.parametrize("detail,kept", [("timeout", "timeout"), ("no_response_from_http://10.1.2.3/f", "edge_error"), ("failed to reach 10.1.2.3:8080", "edge_error"), ("", "edge_error"), (None, None)])
+def test_free_text_from_the_edge_never_reaches_the_stored_result_or_the_history(client, seed, inv, migrated, detail, kept):
+    cpe, h, run, _ = _dispatched(client, seed, inv, migrated)
+    body = {"state": "failed", **({"detail": detail} if detail is not None else {})}
+    assert client.post(f"/v1/edge/jobs/{run['job_id']}/result", headers=agent(client, inv, "a1"), json=body).status_code == 204
+    stored = _rows(migrated, "SELECT result FROM jobs WHERE id = :j", j=run["job_id"])[0].result
+    assert stored["detail"] == kept and "10.1.2.3" not in str(stored)
+    got = client.get(f"/v1/cpes/{cpe}/speed/runs/{run['id']}", headers=h).json()
+    assert got["status"] == "failed" and got["reason"] == kept and "10.1.2.3" not in str(got)
 
 
 # ---- the request path -----------------------------------------------------------------------------------------------------------------------------
