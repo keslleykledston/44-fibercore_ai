@@ -280,3 +280,7 @@
 ## Unreleased — PR 101 (ONU Quick Inspector, UX 2.2, ADR-0035)
 - Web: resumo rápido da ONU em painel direito não modal (≥1024 px; <1024 px a gaveta modal) aberto pela lista de Rede, com miniatura genérica, Registro PON (OLT) e Comunicação ACS separados, RX com origem e sem severidade inventada, OLT/PON, cliente só se autorizado e confirmado, frescor e "Abrir Visão 360°". Trocar de ONU cancela o pedido anterior. BFF `GET /bff/onus/[id]/quick` compõe as rotas existentes (nenhum endpoint novo). Flag `onu_quick_inspector` (desligada; desligada = resumo antigo idêntico). `DeviceThumbnail` compartilhada com o sidebar de configuração do aparelho.
 - Demo/seed: `OLT-QUICK-01/02` (DEMOQ0001 recente, DEMOQ0002 com coleta de 3 h) e a flag ligada; `app.spec.ts` ajustado ao painel novo. Ajuda `rede/resumo-da-onu` em rascunho. Playwright: projeto `inspetor`.
+
+## Unreleased — ONT Configuration Manager, pré-visualização (FC24-03)
+- ADR-0036; migração 0033 `cpe_config_changes`; `POST/GET /v1/cpes/{id}/ont-config/changes/*` (pré-visualização, leitura, submissão que sempre bloqueia). Permissões `ont_config:request` e `ont_config:request_high`. Nada executa em equipamento; flag `ont_config` segue desligada.
+

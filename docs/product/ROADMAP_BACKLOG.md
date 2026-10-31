@@ -125,7 +125,7 @@ Fonte: `docs/addenda/v2.2/` (pacote intacto). Análise: `docs/addenda/v2.2/GAP_A
 | FC24-00 | P0 | [x] GAP (`docs/addenda/v2.4/GAP_ANALYSIS.md`) + ADR-0034 + backlog | — |
 | FC24-01 | P0 | [x] leitura: catálogo fechado, ingestão `cpe-config`, `configuration` / `capabilities` / `form-schema`, perfis sintéticos; **só mocks, nada lido de ONT real** | FC22-002 |
 | FC24-02 | P0 | [~] PR 100: sidebar direito recolhível não modal na ONU 360° (miniatura, abas Resumo/Wi-Fi/LAN/WAN, seletor de rede real, óptica RO, formulários só leitura), e2e + a11y; **ajuda `ont/consultar-configuracao` em rascunho: falta a captura real** (seed com perfil sintético já no `seed_demo.py`) | 01 |
-| FC24-03 | P0 | [ ] preview/policy/jobs por capacidade (`If-Match`, diff redigido, risco, aprovação) com mocks | 01, jobs |
+| FC24-03 | P0 | [~] ADR-0036: pré-visualização (`If-Match`, diff redigido, risco, aprovações exigidas, bloqueios em ordem fixa) e submissão que SEMPRE bloqueia, com mocks; sem job nem executor (restam: aprovação real, travas por dispositivo, despacho em FC24-04) | 01, jobs |
 | FC24-04 | P0 | [ ] adaptador GenieACS seguro no Edge (leitura ampla; escrita só em laboratório autorizado; SSID/enable primeiro numa combinação) | 03 |
 | FC24-05 | P1 | [ ] Wi-Fi abrangente (senha write-only por `secret_ref`, canal, largura, potência certificada) | 04 |
 | FC24-06 | P1 | [ ] LAN e WAN (R3: OOB, janela, dupla aprovação) | 04 |

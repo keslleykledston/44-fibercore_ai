@@ -13,10 +13,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import Connection, text
 
-from app.api.deps import TENANT_CONN, Principal, require
+from app.api.deps import TENANT_CONN, Principal, mfa_is_recent, require
 from app.api.inventory import CpeBinding, _bound_edge, _capabilities, _check_observed
 from app.api.routes import audit
 from app.core import features, ont_config
+from app.core import ont_config_changes as chg
+from app.core.settings import Settings, get_settings
 
 router = APIRouter()
 
@@ -192,3 +194,111 @@ def health(p: Principal = Depends(require("inventory:read")), conn: Connection =
     on = features.enabled(conn, p.tenant_id, "ont_config")
     n = conn.execute(text("SELECT count(DISTINCT cpe_id) FROM cpe_config_fields")).scalar() if on else 0
     return {"enabled": on, "writes_enabled": ont_config.WRITES_ENABLED, "cpes_with_configuration": n, "catalog_fields": len(ont_config.FIELDS)}
+
+
+# ---- FC24-03: preview of a change (ADR-0036). Nothing is sent to any device; every request ends BLOCKED while there is no certified capability, no enabled write and no executor.
+class PreviewIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    capability: str = Field(max_length=40)
+    instance_key: str = Field(max_length=16)
+    params: dict[str, bool | int | float | str] = Field(max_length=8)
+    if_match: str = Field(pattern=r"^[0-9a-f]{16}$")   # the `form_revision` the user was looking at
+
+
+def _need_high(p: Principal, settings: Settings, capability: str) -> None:
+    """R3 (LAN/WAN) needs its own permission and a recent second factor, like every other R3 act. Checked here because the tier depends on the capability in the body."""
+    if chg.high_risk(capability):
+        if not p.can("ont_config:request_high"):
+            raise HTTPException(403, "forbidden")
+        if settings.mfa_recent_enforce and p.kind == "user" and not mfa_is_recent(p, settings):
+            raise HTTPException(403, "mfa_recent_required")
+
+
+def _change_out(r, cpe_id: UUID, now: datetime) -> dict:
+    expired = r["expires_at"] <= now
+    return {"id": str(r["id"]), "cpe_id": str(cpe_id), "capability": r["capability"], "instance_key": r["instance_key"], "diff": r["diff"], "risk": r["risk"],
+            "approvals": r["approvals"], "status": "expired" if expired and r["status"] == "previewed" else r["status"], "blockers": r["blockers"],
+            "submittable": False, "base_revision": r["base_revision"], "intent_hash": r["intent_hash"], "created_at": r["created_at"].isoformat(),
+            "expires_at": r["expires_at"].isoformat(), "policy_version": chg.POLICY_VERSION, "executes": False}
+
+
+@router.post("/v1/cpes/{cpe_id}/ont-config/changes/preview", status_code=201)
+def preview_change(cpe_id: UUID, body: PreviewIn, p: Principal = Depends(require("ont_config:request")), settings: Settings = Depends(get_settings),
+                   conn: Connection = TENANT_CONN) -> dict:
+    """Validate and describe a change: from -> to per field, risk, who would have to approve, and every reason it cannot go yet. Records the preview for audit."""
+    _gate(conn, p)
+    if body.capability not in chg.WRITE_FIELDS:
+        raise HTTPException(422, "unknown_capability")
+    _need_high(p, settings, body.capability)
+    c = _cpe_or_404(conn, cpe_id)
+    code = chg.validate(body.capability, body.instance_key, body.params)
+    if code:
+        raise HTTPException(422, code)
+    rows = _rows(conn, cpe_id)
+    if not chg.observed(rows, body.capability, body.instance_key):
+        raise HTTPException(422, "instance_not_observed")
+    rev = ont_config.revision(rows)
+    if body.if_match != rev:
+        raise HTTPException(409, "stale_revision")
+    diff = chg.build_diff(rows, body.capability, body.instance_key, body.params)
+    if not any(d["changes"] for d in diff):
+        raise HTTPException(422, "no_change")
+    now = datetime.now(UTC)
+    fp = {"vendor": c.vendor, "model": c.model, "firmware": c.firmware}
+    caps = ont_config.build_capabilities(rows, fp, _protocol(rows), _capabilities(conn, p.tenant_id, "cpe", c.vendor, c.model, c.firmware))
+    bl = chg.blockers(body.capability, body.instance_key, rows, caps, rev, now)
+    risk = chg.CAPS[body.capability].risk
+    row = conn.execute(
+        text("INSERT INTO cpe_config_changes (tenant_id, cpe_id, capability, instance_key, params, diff, base_revision, intent_hash, risk, approvals, blockers, requested_by, expires_at) "
+             "VALUES (:t,:c,:cap,:i,CAST(:p AS jsonb),CAST(:d AS jsonb),:r,:h,:k,CAST(:a AS jsonb),CAST(:b AS jsonb),:u,:e) "
+             "RETURNING id, capability, instance_key, diff, risk, approvals, status, blockers, base_revision, intent_hash, created_at, expires_at"),
+        {"t": p.tenant_id, "c": cpe_id, "cap": body.capability, "i": body.instance_key, "p": json.dumps(body.params, sort_keys=True), "d": json.dumps(diff), "r": rev,
+         "h": chg.intent_hash(p.tenant_id, cpe_id, body.capability, body.instance_key, body.params, rev), "k": risk, "a": json.dumps(chg.APPROVALS[risk]),
+         "b": json.dumps(bl), "u": p.id, "e": chg.expiry(now)}).mappings().one()
+    audit(conn, p, "ont_config.change_previewed", "cpe", str(cpe_id), {"change_id": str(row["id"]), "capability": body.capability, "instance": body.instance_key,
+                                                                       "fields": sorted(body.params), "risk": risk, "blockers": bl})
+    return _change_out(row, cpe_id, now) | {"submittable": not bl}
+
+
+def _own_change(conn: Connection, p: Principal, cpe_id: UUID, change_id: UUID):
+    r = conn.execute(
+        text("SELECT id, capability, instance_key, diff, risk, approvals, status, blockers, base_revision, intent_hash, created_at, expires_at, requested_by FROM cpe_config_changes "
+             "WHERE id = :i AND cpe_id = :c"), {"i": change_id, "c": cpe_id}).mappings().first()
+    if r is None:
+        raise HTTPException(404, "change not found")
+    return r
+
+
+@router.get("/v1/cpes/{cpe_id}/ont-config/changes/{change_id}")
+def get_change(cpe_id: UUID, change_id: UUID, p: Principal = Depends(require("ont_config:request")), conn: Connection = TENANT_CONN) -> dict:
+    _gate(conn, p)
+    r = _own_change(conn, p, cpe_id, change_id)
+    return _change_out(r, cpe_id, datetime.now(UTC))
+
+
+@router.post("/v1/cpes/{cpe_id}/ont-config/changes/{change_id}/submit")
+def submit_change(cpe_id: UUID, change_id: UUID, p: Principal = Depends(require("ont_config:request")), settings: Settings = Depends(get_settings),
+                  conn: Connection = TENANT_CONN) -> dict:
+    """Ask for the change to go. Today it NEVER executes: the answer is 409 with the first reason, and the request is recorded as blocked (audited)."""
+    _gate(conn, p)
+    r = _own_change(conn, p, cpe_id, change_id)
+    if r["requested_by"] != p.id:
+        raise HTTPException(403, "forbidden")
+    _need_high(p, settings, r["capability"])
+    now = datetime.now(UTC)
+    if r["expires_at"] <= now:
+        raise HTTPException(410, "preview_expired")
+    c = _cpe_or_404(conn, cpe_id)
+    rows = _rows(conn, cpe_id)
+    fp = {"vendor": c.vendor, "model": c.model, "firmware": c.firmware}
+    caps = ont_config.build_capabilities(rows, fp, _protocol(rows), _capabilities(conn, p.tenant_id, "cpe", c.vendor, c.model, c.firmware))
+    bl = chg.blockers(r["capability"], r["instance_key"], rows, caps, r["base_revision"], now)
+    conn.execute(text("UPDATE cpe_config_changes SET status = 'blocked', blockers = CAST(:b AS jsonb), submitted_at = now() WHERE id = :i"), {"b": json.dumps(bl), "i": change_id})
+    audit(conn, p, "ont_config.change_blocked", "cpe", str(cpe_id), {"change_id": str(change_id), "capability": r["capability"], "blockers": bl})
+    # the 409 must carry the reason, but the audit row and the status above have to COMMIT first: raising here would roll them back
+    return _blocked(bl)
+
+
+def _blocked(bl: list[str]):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=409, content={"detail": bl[0] if bl else "executor_not_available", "blockers": bl, "executed": False})

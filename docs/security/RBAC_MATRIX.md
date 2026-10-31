@@ -22,6 +22,8 @@
 | `devices:act:set_wifi_ssid` | R2 | não | sim | Pedir, pela tela do CPE, a troca do nome do Wi-Fi (nasce bloqueado até a homologação) |
 | `bench:authorize` | R3 | sim | não | Autorizar UMA manobra de bancada (uso único, janela curta, só o alvo de bancada); o autorizador não pode ser quem pede nem quem aprova |
 | `olt_query:run` | R0 | não | sim | Pedir uma consulta somente leitura à OLT (catálogo fechado; a fila e a cota protegem o equipamento) |
+| `ont_config:request` | R2 | não | sim | Pedir a mudança de Wi-Fi do aparelho (risco R1/R2; nasce bloqueada até a homologação) |
+| `ont_config:request_high` | R3 | sim | sim | Pedir a mudança de LAN ou WAN do aparelho (risco R3; exige plano de recuperação; nasce bloqueada) |
 | `erp:manage` | R3 | sim | não | Cadastrar e desativar a conexão com o ERP do provedor (guarda só a referência do segredo, nunca o segredo) |
 | `erp:test` | R2 | não | não | Testar a conexão com o ERP (autentica e nada mais; somente leitura) |
 | `diagnostics:run` | R0 | não | sim | Rodar diagnósticos (somente leitura) |
@@ -54,6 +56,8 @@
 | `devices:act:set_wifi_ssid` | ✔ | ✔ |  |  |  |  |  |  |  |
 | `bench:authorize` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `olt_query:run` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
+| `ont_config:request` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
+| `ont_config:request_high` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `erp:manage` | ✔ |  |  |  |  |  |  |  |  |
 | `erp:test` | ✔ |  |  |  |  |  |  |  |  |
 | `diagnostics:run` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
@@ -100,6 +104,9 @@
 | POST | `/v1/cpes/{cpe_id}/actions/set_wifi_ssid` | `devices:act:set_wifi_ssid` |
 | GET | `/v1/cpes/{cpe_id}/capabilities` | `inventory:read` |
 | GET | `/v1/cpes/{cpe_id}/ont-config/capabilities` | `inventory:read` |
+| POST | `/v1/cpes/{cpe_id}/ont-config/changes/preview` | `ont_config:request` |
+| GET | `/v1/cpes/{cpe_id}/ont-config/changes/{change_id}` | `ont_config:request` |
+| POST | `/v1/cpes/{cpe_id}/ont-config/changes/{change_id}/submit` | `ont_config:request` |
 | GET | `/v1/cpes/{cpe_id}/ont-config/configuration` | `inventory:read` |
 | GET | `/v1/cpes/{cpe_id}/ont-config/form-schema` | `inventory:read` |
 | GET | `/v1/cpes/{cpe_id}/state` | `inventory:read` |
