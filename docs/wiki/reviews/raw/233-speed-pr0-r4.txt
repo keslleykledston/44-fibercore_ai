@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a190e9-311a-7c73-b55a-4faabd4ee019).
+[codex] Turn started (01a190e9-3156-7a00-bbbe-ec61517d21d4).
+[codex] Assistant message captured: Vou comparar o diff da branch com `main` e concentrar a revisão no novo checklist, verificand...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/addenda/v2.2-speed/ROL...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/addenda/v2.2-speed/ROL... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/addenda/v2.2-speed/ROLL_OUT_FIBERCORE.md && git diff --no-ext-diff...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/addenda/v2.2-speed/ROLL_OUT_FIBERCORE.md && git diff --no-ext-diff... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o checklist exige registrar o comp...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o checklist exige registrar o comportamento 3xx por combinação, mas não vincula esse registro a evidência verificável no cadastro de capacidades.
+
+Findings:
+- [medium] Registro de 3xx sem evidência rastreável por firmware (docs/addenda/v2.2-speed/ROLL_OUT_FIBERCORE.md:8)
+  A linha exige anotar se o CPE segue redirecionamentos e descreve um teste de laboratório, mas não exige guardar a referência do teste nem associá-la à combinação de modelo e firmware. Assim, a ativação pode satisfazer o item com uma anotação sem comprovação de que o teste foi executado naquele firmware; a inferência é que isso enfraquece a homologação por combinação que o checklist pretende exigir. Exija uma referência de evidência verificável, associada à combinação e ao resultado observado.
+  Recommendation: Exigir que o resultado 3xx tenha `evidence_ref` e `verified_at` no registro de capacidades da combinação modelo/firmware, incluindo o resultado observado.
