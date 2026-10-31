@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19405-7543-7563-8e56-1e0bace2a6eb).
+[codex] Turn started (01a19405-77a3-7823-838e-356d458d0085).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e ler os ADRs citados e os documentos de bancada ao redor, ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- docs/operations/SPEED_HOMOL...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- docs/operations/SPEED_HOMOL... (exit 0)
+[codex] Assistant message captured: O guia já sinaliza `too_short` e limita a conclusão a uma execução parcial. Estou verificando...
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/bench/H-speed_test_download-1a-execucao-real-2026-10-31.md; r...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/wiki/bench/H-speed_test_download-1a-execucao-real-2026-10-31.md; r... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --unified=4 main...HEAD -- docs/wiki/CHANGELOG.md; rg -n "speed_test_...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=4 main...HEAD -- docs/wiki/CHANGELOG.md; rg -n "speed_test_... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não promover ainda: a própria evidência diz que a con...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não promover ainda: a própria evidência diz que a confirmação formal do responsável está pendente, enquanto o changelog afirma que `speed_test_download` já foi promovido a `observed` com evidência checada. Isso não demonstra o gate documental exigido pelo ADR-0030.
+
+Findings:
+- [high] Promoção a `observed` não está sustentada pelo aceite registrado (docs/wiki/bench/H-speed_test_download-1a-execucao-real-2026-10-31.md:17)
+  O documento afirma que o aceite formal para promover além de `observed` está pendente e cita apenas autorização no chat da sessão. O ADR-0030 exige que o aceite do responsável esteja registrado e que o owner CLI só insira `observed` após aceitar a evidência completa. Em paralelo, o changelog declara que a operação foi promovida. Se esse estado já foi gravado, a capacidade pode passar a ser tratada como homologada sem o gate documental demonstrado; se não foi, o changelog é incorreto. Registre o aceite formal no formato exigido e comprove a promoção, ou remova a afirmação até então.
+  Recommendation: Alinhe o registro de capacidade e o changelog ao estado verificável do aceite. Só declare `observed` após registrar o aceite formal e confirmar que o owner CLI aceitou a evidência conforme ADR-0030.

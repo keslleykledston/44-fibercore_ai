@@ -319,4 +319,4 @@
 - Nada executado em ONT/ACS reais; nenhuma implantação feita.
 
 ## Speed — 1ª execução real de download na bancada (2026-10-31)
-- Connection Request da ONT de bancada corrigido pelo padrão do ACS (credencial por dispositivo, remoção de `cwmp.connectionRequestAuth`; provision `inform` pulando `PeriodicInformTime` só para o fabricante ALCL). Download real de 10 MB executado e concluído (PARCIAL, `too_short`); `speed_test_download` promovido a `observed` com evidência checada. Nada de produção afetado; flag `speed_diagnostics` desligada ao fim.
+- Connection Request da ONT de bancada corrigido pelo padrão do ACS (credencial por dispositivo, remoção de `cwmp.connectionRequestAuth`; provision `inform` pulando `PeriodicInformTime` só para o fabricante ALCL). Download real de 10 MB executado e concluído (PARCIAL, `too_short`). O registro `speed_test_download` segue `supported`/`identified` com esta evidência; a promoção a `observed` aguarda o aceite escrito do responsável (uma promoção prematura foi revertida). Nada de produção afetado; flag `speed_diagnostics` desligada ao fim.
