@@ -2,11 +2,11 @@
 
 Só entra aqui o que já passou por `olt_query.check_result` (a saída crua do equipamento nunca chega à nuvem). A hora do dado é a hora da NUVEM ao receber o resultado
 do Edge (`observed_at`), nunca a hora da OLT, que vive só dentro de `data`. Um valor só substitui outro de (owner_epoch, observed_at) maior ou igual: um resultado de dono
-anterior ou atrasado não regride o cache."""
+anterior, ou de uma pergunta mais antiga que a guardada (resultado atrasado), não regride o cache."""
 from __future__ import annotations
 
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import Connection, text
@@ -30,15 +30,15 @@ def params_key(params: dict) -> str:
     return ",".join(parts)
 
 
-def store_latest(conn: Connection, tenant_id: UUID, olt_id: UUID, query_id: str, key: str, data: dict, owner_epoch: int, source: str = "job") -> bool:
-    """Upsert; False when an equal-or-newer (owner_epoch, observed_at) value is already there (nothing changes)."""
+def store_latest(conn: Connection, tenant_id: UUID, olt_id: UUID, query_id: str, key: str, data: dict, owner_epoch: int, asked_at: datetime, source: str = "job") -> bool:
+    """Upsert; False when a value of an equal-or-newer (owner_epoch, asked_at) is already there: a late result of an OLDER question never renews the age of the cache."""
     r = conn.execute(
-        text("INSERT INTO olt_query_latest (tenant_id, olt_id, query_id, params_key, data, observed_at, owner_epoch, source) "
-             "VALUES (:t, :o, :q, :k, CAST(:d AS jsonb), now(), :e, :s) "
-             "ON CONFLICT (tenant_id, olt_id, query_id, params_key) DO UPDATE SET data = EXCLUDED.data, observed_at = EXCLUDED.observed_at, received_at = now(), "
+        text("INSERT INTO olt_query_latest (tenant_id, olt_id, query_id, params_key, data, observed_at, asked_at, owner_epoch, source) "
+             "VALUES (:t, :o, :q, :k, CAST(:d AS jsonb), now(), :a, :e, :s) "
+             "ON CONFLICT (tenant_id, olt_id, query_id, params_key) DO UPDATE SET data = EXCLUDED.data, observed_at = EXCLUDED.observed_at, asked_at = EXCLUDED.asked_at, received_at = now(), "
              "owner_epoch = EXCLUDED.owner_epoch, source = EXCLUDED.source, version = olt_query_latest.version + 1 "
-             "WHERE (EXCLUDED.owner_epoch, EXCLUDED.observed_at) >= (olt_query_latest.owner_epoch, olt_query_latest.observed_at) RETURNING version"),
-        {"t": tenant_id, "o": olt_id, "q": query_id, "k": key, "d": json.dumps(data), "e": owner_epoch, "s": source}).first()
+             "WHERE (EXCLUDED.owner_epoch, EXCLUDED.asked_at) >= (olt_query_latest.owner_epoch, olt_query_latest.asked_at) RETURNING version"),
+        {"t": tenant_id, "o": olt_id, "q": query_id, "k": key, "d": json.dumps(data), "a": asked_at, "e": owner_epoch, "s": source}).first()
     return r is not None
 
 

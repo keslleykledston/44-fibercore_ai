@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18faa-a154-7a41-93b8-1f82d98be8ee).
+[codex] Turn started (01a18faa-a483-7b60-bbcd-d66472f86898).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os caminhos de cache, autorização e cotas até onde...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/app/api/olt_querie...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/app/api/olt_querie... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: o cache de resultado permanece leg...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: o cache de resultado permanece legível após revogação do recurso e o limite de refresh pode ser ultrapassado em concorrência; também há risco de idade reiniciada por resultado atrasado do mesmo owner.
+
+Findings:
+- [high] GET latest ignora rollout e feature flag (apps/api/app/api/olt_queries.py:60-72)
+  `latest_result` autoriza pelo papel e pela visibilidade da OLT, mas não verifica `olt_query.ROLLOUT` nem a flag `olt_query`. Assim, um usuário autorizado que conhece a rota pode continuar lendo dados guardados de consultas após a consulta ser retirada do rollout ou desativada para o tenant. Isso contraria o gate aplicado ao pedido e mantém dados operacionais acessíveis após revogação funcional. Aplicar o gate antes de buscar o cache (ou definir explicitamente uma política de leitura independente e validá-la contra a autorização).
+  Recommendation: Exigir os mesmos gates de feature/rollout usados na solicitação antes de retornar cache, com teste para flag desligada e query fora do rollout.
+- [high] Cota de refresh não é atômica (apps/api/app/api/olt_queries.py:93-102)
+  A cota conta eventos de auditoria e só grava `olt_query.refresh` depois de criar/submeter o job. Duas ou mais requisições concorrentes podem observar contagem abaixo de 3, todas passar e criar refreshes, excedendo o limite por OLT. Reenvios idempotentes também podem retornar `existing` antes de auditar o refresh, tornando a cota inconsistente com pedidos aceitos. O limite anunciado pode ser burlado sob concorrência e a OLT pode receber mais consultas forçadas do que o permitido. Reserve a cota atomicamente, vinculada ao idempotency key/job, dentro da mesma transação.
+  Recommendation: Substituir count-then-audit por reserva atômica de quota por OLT/hora e tornar retries idempotentes sem consumir reservas extras.
+- [medium] Resultado atrasado do mesmo owner renova indevidamente o TTL (apps/api/app/core/olt_cache.py:35-40)
+  O upsert usa `now()` no momento de recebimento como `observed_at` e aceita qualquer resultado do mesmo `owner_epoch` que chegue depois. Se uma consulta antiga ficar atrasada na fila ou no transporte e for reportada após uma consulta mais nova, ela substituirá o valor mais recente e receberá idade zero, apesar do comentário dizer que resultados atrasados não regridem o cache. O consumidor então pode servir dado antigo como fresco durante todo o TTL. `seq` existe na tabela, mas não participa da ordenação; não há timestamp original de captura no valor armazenado.
+  Recommendation: Ordenar por sequência/tempo de observação confiável do Edge para a mesma época, ou armazenar idade desde a coleta e rejeitar resultados anteriores ao valor já guardado.

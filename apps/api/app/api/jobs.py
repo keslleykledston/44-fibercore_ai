@@ -425,7 +425,7 @@ def _cache_result(conn: Connection, p: Principal, row, data: dict) -> None:
     if own is None or own.edge_id != p.edge_id:
         return
     qid = str(prm.get("query_id", ""))
-    olt_cache.store_latest(conn, p.tenant_id, row.target_id, qid, olt_cache.params_key({k: prm[k] for k in ("slot", "port", "ont") if k in prm}), data, own.owner_epoch)
+    olt_cache.store_latest(conn, p.tenant_id, row.target_id, qid, olt_cache.params_key({k: prm[k] for k in ("slot", "port", "ont") if k in prm}), data, own.owner_epoch, row.created_at)
     olt_cache.store_samples(conn, p.tenant_id, row.target_id, qid, data)
 
 

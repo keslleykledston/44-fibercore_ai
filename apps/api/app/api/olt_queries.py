@@ -64,6 +64,9 @@ def latest_result(olt_id: UUID, query_id: str, slot: int | None = None, port: in
     if not p.can("inventory:read"):
         raise HTTPException(403, "forbidden")
     _olt_or_404(conn, olt_id)
+    reason = jobs._query_gate(conn, p.tenant_id, {"query_id": query_id})   # the same gates as a request: a withdrawn query or a feature turned off hides its stored values too
+    if reason is not None:
+        raise HTTPException(409, reason)
     given = {k: v for k, v in (("slot", slot), ("port", port), ("ont", ont)) if v is not None}
     key = olt_cache.params_key(_scope_params(query_id, given))
     hit = olt_cache.latest(conn, olt_id, query_id, key)
@@ -84,20 +87,22 @@ def request_query(
     if "query_id" in body.params:
         raise HTTPException(422, "fields_do_not_match_scope")  # the query is the one in the path, for the intent and for the audit alike
     # cache first (ADR-0032): a fresh value answers without touching the equipment. Only under the SAME gates a job would face (flag, rollout, channel).
-    if jobs._query_gate(conn, p.tenant_id, {"query_id": query_id}) is None and query_id in olt_query.BY_ID:
-        key = olt_cache.params_key(_scope_params(query_id, body.params))
+    gated = jobs._query_gate(conn, p.tenant_id, {"query_id": query_id}) is None and query_id in olt_query.BY_ID
+    key = olt_cache.params_key(_scope_params(query_id, body.params)) if gated else ""
+    if gated:
         hit = olt_cache.latest(conn, olt_id, query_id, key)
         if hit is not None and not hit["stale"] and not body.refresh:
             return {"outcome": "cached", "cached": hit}
-        if body.refresh:
-            used = conn.execute(text("SELECT count(*) FROM audit_log WHERE action = 'olt_query.refresh' AND target_id = :o AND created_at > now() - interval '1 hour'"), {"o": str(olt_id)}).scalar()
-            if used >= olt_cache.REFRESH_PER_HOUR:
-                raise HTTPException(429, "olt_query_refresh_quota")
+    if body.refresh:   # one refresh at a time per OLT: the count below and the audit row that spends the quota are one step (the lock lives until the commit)
+        conn.execute(text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": f"olt_refresh:{olt_id}"})
     view = jobs.preview(jobs.PreviewIn(operation="olt_query", target_id=olt_id, params={"query_id": query_id, **body.params}), idempotency_key, p, conn)
-    if view["status"] != "PREVIEWED":  # the same request again: nothing new is created
+    if view["status"] != "PREVIEWED":  # the same request again: nothing new is created, nothing is spent
         return {"outcome": "existing", "job": view}
+    if body.refresh:
+        used = conn.execute(text("SELECT count(*) FROM audit_log WHERE action = 'olt_query.refresh' AND target_id = :o AND created_at > now() - interval '1 hour'"), {"o": str(olt_id)}).scalar()
+        if used >= olt_cache.REFRESH_PER_HOUR:
+            raise HTTPException(429, "olt_query_refresh_quota")   # the preview created above rolls back with the request
+        audit(conn, p, "olt_query.refresh", "olt", str(olt_id), {"query_id": query_id})
     view = jobs.submit(UUID(view["id"]), p, conn)
     audit(conn, p, "olt_query.requested", "olt", str(olt_id), {"query_id": query_id, "job_id": view["id"]})
-    if body.refresh:
-        audit(conn, p, "olt_query.refresh", "olt", str(olt_id), {"query_id": query_id})
     return {"outcome": "submitted", "job": view}
