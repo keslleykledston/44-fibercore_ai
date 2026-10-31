@@ -97,6 +97,15 @@ test("resumo rápido: o BFF compõe só leitura e devolve o formato fechado (est
   expect(los.pon).toMatchObject({ tone: "bad" });
   expect(JSON.stringify([fresh, stale, los])).not.toMatch(/password|senha|psk/i);
   expect((await page.request.get("/bff/onus/nao-e-uuid/quick")).status()).toBe(400);
+  // um resumo de OUTRA ONU (resposta adulterada ou trocada) nunca é usado pelo painel
+  await row(page, "DEMOQ0001").click();
+  await page.route("**/bff/onus/*/quick", async (r) => {
+    const real = await (await r.fetch()).json();
+    await r.fulfill({ json: { model: { ...real.model, onu: { ...real.model.onu, id: ids["DEMOC0000"] } } } });
+  });
+  await row(page, "DEMOQ0002").click();
+  await expect(page.getByTestId("onu-quick-error")).toContainText("Não foi possível carregar o resumo");
+  await expect(page.getByTestId("onu-quick")).not.toContainText("Origem: OLT");
   expect((await page.request.get("/bff/onus/00000000-0000-0000-0000-000000000000/quick")).status()).toBe(404);
 });
 

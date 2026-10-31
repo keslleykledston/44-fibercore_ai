@@ -52,10 +52,12 @@ export function buildQuick(o: Onu360, customer: { status: number; data: OnuCusto
 
 const NAME = /^[^\x00-\x1f\x7f]{0,200}$/;
 /** O que a tela aceita do BFF: formato fechado, texto sem controle, tons conhecidos. */
-export function readQuick(d: unknown): QuickModel | null {
+export function readQuick(d: unknown, expectId?: string): QuickModel | null {
   const m = d as QuickModel | null;
   const tones = ["ok", "warn", "bad", "neutral"];
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!m || typeof m !== "object" || !m.onu || !m.pon || !m.acs || !m.optical || !m.association) return null;
+  if (typeof m.onu.id !== "string" || !uuid.test(m.onu.id) || (expectId !== undefined && m.onu.id.toLowerCase() !== expectId.toLowerCase())) return null;   // o resumo é da ONU pedida ou não é usado
   const strs = [m.onu.id, m.onu.serial, m.onu.olt_name, m.pon.label, m.acs.label, m.optical.label, m.association.label];
   if (!strs.every((s) => typeof s === "string" && NAME.test(s))) return null;
   if (!tones.includes(m.pon.tone) || !tones.includes(m.acs.tone)) return null;

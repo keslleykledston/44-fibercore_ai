@@ -9,7 +9,7 @@ import type { Onu } from "@/lib/types";
 
 type State = { id: string; kind: "loading" } | { id: string; kind: "ready"; model: QuickModel } | { id: string; kind: "error"; code: string };
 const ERR: Record<string, string> = {
-  forbidden: "Seu papel não permite ver o inventário.", not_found: "Esta ONU não existe mais.", session: "Sua sessão expirou. Recarregue a página e entre de novo.",
+  forbidden: "Seu papel não permite ver o inventário.", disabled: "O resumo rápido está desligado para este provedor.", not_found: "Esta ONU não existe mais.", session: "Sua sessão expirou. Recarregue a página e entre de novo.",
   failed: "Não foi possível carregar o resumo",
 };
 const TONE_CLASS: Record<string, string> = { ok: "text-ok", warn: "text-warn", bad: "text-danger", neutral: "text-text" };
@@ -82,7 +82,7 @@ export function OnuQuickInspector({ row, oltName, onClose }: { row: Onu | null; 
     setState({ id, kind: "loading" });
     fetch(`/bff/onus/${id}/quick`, { cache: "no-store", signal: ctl.signal }).then(async (r) => {
       const j = (await r.json().catch(() => ({}))) as { model?: unknown; error?: string };
-      const model = r.ok ? readQuick(j.model) : null;
+      const model = r.ok ? readQuick(j.model, id) : null;
       setState(model ? { id, kind: "ready", model } : { id, kind: "error", code: j.error && ERR[j.error] ? j.error : "failed" });
     }).catch((e) => { if ((e as Error).name !== "AbortError") setState({ id, kind: "error", code: "failed" }); });
     return () => ctl.abort();   // trocar de ONU cancela o pedido da anterior
