@@ -26,6 +26,8 @@ test("gestão: matriz de PONs com resumo em texto, árvore e trilha; a célula l
   await expect(los).toContainText("0/1/1");
   await expect(los).toContainText("Perda de sinal óptico (LOS)");     // o estado também vem em texto (cor não é o único indicador)
   await expect(los).toContainText("10 fora");
+  await expect(los).toContainText("10 LOS");                          // todas as causas observadas aparecem, não só a de maior prioridade
+  await expect(page.getByTestId("pon-tree")).toContainText("10 fora · 10 LOS");
   await expect(matrix.locator('[data-testid="pon-cell"][data-state="fora"]')).toContainText("0/1/0");   // as 2 B offline: fora do ar, sem causa
   const tree = page.getByTestId("pon-tree");
   await expect(tree).toContainText("PON 0/1/1");

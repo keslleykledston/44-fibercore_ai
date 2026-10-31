@@ -83,7 +83,7 @@ export function miniLeds(fp: DeviceFaceplate): FaceplateLed[] {
 /* ---------- Matriz de PONs (painel frontal da OLT) ---------- */
 export type PonState = "ok" | "fora" | "energia" | "los" | "sem-leitura";
 export const PON_STATE_LABEL: Record<PonState, string> = { ok: "Sem ONUs fora", fora: "ONUs fora do ar", energia: "Queda de energia", los: "Perda de sinal óptico (LOS)", "sem-leitura": "Sem leitura" };
-export type PonSummary = { path: string; total: number; down: number; state: PonState };
+export type PonSummary = { path: string; total: number; down: number; los: number; power: number; state: PonState };
 const DOWN = new Set(["offline", "los", "dying_gasp"]);
 
 /** Prioridade do que a célula pode afirmar: LOS > energia > fora > ok > sem leitura. PON só com dado velho ou sem coleta é "sem leitura", nunca "fora". */
@@ -95,7 +95,10 @@ export function summarizePons(onus: { pon_path: string | null; status: string; f
     const fresh = list.filter((o) => o.freshness === "fresh" && o.status !== "unknown");
     const down = fresh.filter((o) => DOWN.has(o.status));
     const state: PonState = fresh.length === 0 ? "sem-leitura" : fresh.some((o) => o.status === "los") ? "los" : fresh.some((o) => o.status === "dying_gasp") ? "energia" : down.length ? "fora" : "ok";
-    out.push({ path, total: list.length, down: down.length, state });
+    out.push({ path, total: list.length, down: down.length, los: fresh.filter((o) => o.status === "los").length, power: fresh.filter((o) => o.status === "dying_gasp").length, state });
   }
   return out.sort((a, b) => a.path.localeCompare(b.path, "pt-BR", { numeric: true }));
 }
+
+/** Texto das causas observadas numa PON (todas as presentes, não só a de maior prioridade): "3 LOS · 1 energia". Vazio se nenhuma causa foi observada. */
+export const causesText = (p: PonSummary) => [p.los ? `${p.los} LOS` : "", p.power ? `${p.power} energia` : ""].filter(Boolean).join(" · ");

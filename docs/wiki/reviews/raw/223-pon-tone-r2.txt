@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19096-8cfa-70a3-bf07-ec3463a1efa6).
+[codex] Turn started (01a19096-8d37-7350-9587-b6f0f4118ef9).
+[codex] Assistant message captured: Vou ler o diff contra `main` e o contexto dos componentes para procurar regressões específica...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Pon...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Pon... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "summarizePons|type PonState|PON_STATE_LABEL|dying_gasp|border-dashed|ro...
+[codex] Command completed: /bin/bash -lc 'rg -n "summarizePons|type PonState|PON_STATE_LABEL|dying_gasp|border-dashed|ro... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não envie ainda: a árvore omite causas quando uma PON...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não envie ainda: a árvore omite causas quando uma PON tem mais de um tipo de falha, apesar de agora apresentar o motivo como se fosse completo.
+
+Findings:
+- [medium] A causa exibida na árvore some quando há falhas mistas (apps/web/src/components/PonTree.tsx:27)
+  A árvore escolhe um único motivo a partir de `p.state`. `summarizePons` define `los` antes de `energia`; portanto, numa PON com ONUs em LOS e em `dying_gasp`, o estado agregado é `los` e o rótulo mostra apenas “LOS”, embora também exista queda de energia. Isso pode direcionar o diagnóstico para uma causa incompleta. Exponha contagens por causa no resumo e mostre todos os motivos presentes na árvore, ou indique explicitamente que o motivo exibido é apenas prioritário.
+  Recommendation: Inclua no `PonSummary` contagens independentes para LOS e energia e componha o rótulo da árvore com todas as causas observadas.
