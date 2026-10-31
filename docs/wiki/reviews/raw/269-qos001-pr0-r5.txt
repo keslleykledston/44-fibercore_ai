@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192f1-d838-7ff2-9664-1dca836950c4).
+[codex] Turn started (01a192f1-d874-7e03-a6f0-19fb64c4625a).
+[codex] Assistant message captured: Vou conferir o diff completo contra `main`, priorizando afirmações de status normativo e veri...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=4 main...HEAD -- docs/addenda/v2.2-qos docs/w...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=4 main...HEAD -- docs/addenda/v2.2-qos docs/w... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n -i \"decid|aprov|proposta|pendente|ADR-0039|decisão do responsável|recom...
+[codex] Command completed: /bin/bash -lc "rg -n -i \"decid|aprov|proposta|pendente|ADR-0039|decisão do responsável|recom... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/addenda/v2.2-qos/README.md; nl -ba docs/addenda/v2.2-qos/GAP_MAP.m...
+[codex] Command failed: /bin/bash -lc "nl -ba docs/addenda/v2.2-qos/README.md; nl -ba docs/addenda/v2.2-qos/GAP_MAP.m... (exit 2)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"A menção ao ADR-0039 no README agora está corretament...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+A menção ao ADR-0039 no README agora está corretamente marcada como proposta pendente. Ainda há conflito: o plano e o GAP_MAP apresentam `quality_runs` e seus endpoints como desenho já definido antes da decisão formal.
+
+Findings:
+- [medium] Plano trata o desenho pendente como implementação definida (docs/addenda/v2.2-qos/IMPLEMENTATION_PLAN.md:14-15)
+  O README diz que `quality_runs` e os endpoints por CPE são proposta pendente de ADR-0039 e aprovação. Porém, o plano já especifica a migração e a API como entregas do PR A, e o GAP_MAP as classifica como extensão a fazer. Como o ADR ainda pode alterar essa proposta, implementadores podem tratar o desenho como decidido apesar do pré-requisito formal.
+  Recommendation: Marque essas entregas como condicionais à aprovação do ADR-0039 e alinhe GAP_MAP C3/C4; deixe explícito que o ADR pode alterar ou rejeitar tabela e endpoints antes de iniciar o PR A.

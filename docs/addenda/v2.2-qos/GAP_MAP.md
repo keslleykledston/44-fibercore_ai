@@ -32,8 +32,8 @@ Classificação: **JÁ** = implementado, reutilizar sem mudança · **ESTENDER**
 |---|---|---|---|
 | C1 | Reusar SD-001, **sem segundo motor TR-143** | **JÁ** | `POST /v1/cpes/{id}/speed/runs`; o QoS só guarda `speed_run_group_id` |
 | C2 | Banda executável hoje | **BLOQUEADO** | gate `redirect_unverified` (EG8145V5 segue 3xx): precisa de ACL de saída real ou emenda do ADR-0038; COMPLETO mostra `speed=not_available` e preserva a parte rápida (Q10) |
-| C3 | Entidade de suite (`QualityRun`) | **ESTENDER** (nova tabela filha aditiva) | `quality_runs` (RLS forçada, imutável como `diagnostic_jobs`): modo, estado, métricas normalizadas, hipóteses, ids de jobs e do grupo de speed |
-| C4 | API | **ESTENDER** | `POST/GET /v1/cpes/{id}/quality/runs` no mesmo estilo de `app/api/speed.py`; **sem** endpoint genérico duplicado |
+| C3 | Entidade de suite (`QualityRun`) | **ESTENDER — PROPOSTA, condicionada ao ADR-0039** (o ADR pode alterar ou rejeitar) | `quality_runs` (RLS forçada, imutável como `diagnostic_jobs`): modo, estado, métricas normalizadas, hipóteses, ids de jobs e do grupo de speed |
+| C4 | API | **ESTENDER — PROPOSTA, condicionada ao ADR-0039** | `POST/GET /v1/cpes/{id}/quality/runs` no mesmo estilo de `app/api/speed.py`; **sem** endpoint genérico duplicado |
 | C5 | Sem nova fila/worker/broker | **JÁ** | usa os jobs assinados e o outbox atuais |
 
 ## D. Interpretação

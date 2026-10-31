@@ -9,6 +9,7 @@
 3. **Banda no COMPLETO.** Depende de resolver o `redirect_unverified` do SD-001 (ACL de saída real ou emenda); o QoS não contorna isso.
 
 ## PR A — backend, capacidade e Edge (migração 0036 aditiva)
+> **Tudo abaixo é PROPOSTA.** A tabela `quality_runs`, os endpoints e as operações `ping_test`/`dns_test` só valem depois do ADR-0039, da emenda ao ADR-0030 e da aprovação do responsável; esses documentos podem alterar ou rejeitar o desenho antes de qualquer código.
 **Pré-requisitos, nesta ordem, antes de qualquer código de escrita:** (1) emenda ao ADR-0030 incluindo `ping_test` e `dns_test` no catálogo fechado (parâmetros permitidos, autorização, evidência de homologação) e ADR-0039 do QoS; (2) aprovação do responsável para as duas.
 - `apps/api/app/core/quality.py` (puro, sem relógio/banco/rede): contrato de medição, TTLs por grupo, estados sem zero falso, hipóteses determinísticas.
 - Migração `quality_runs` (+ `speed_endpoints.target_kind` aceita `DNS`), RLS forçada, imutável, idempotência por `(tenant, usuário, Idempotency-Key)`.
