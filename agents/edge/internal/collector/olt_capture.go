@@ -198,6 +198,8 @@ func (c *Capture) Do(ctx context.Context, src OLTSource, raw olt.Session, cloudI
 	if len(pending) == 0 {
 		return 0
 	}
+	// The aggregate bound of the session is the EXECUTION count (8: on-demand + captures, persisted and enforced by Store.Claim/ReserveCapture); each class
+	// also has its own command and byte ceiling, so the post-snapshot reads never exceed (5+2) x queryCommandsEach commands and 2 x queryMaxBytes bytes.
 	sess := olt.NewBudget(olt.ReadOnlySession{Inner: raw, Allowed: src.Driver.Allowed}, queryCommandsEach*oltquery.CapturesPerSession, queryMaxBytes)
 	for _, it := range pending {
 		if files >= captureMaxFiles || size >= captureMaxBytes {
