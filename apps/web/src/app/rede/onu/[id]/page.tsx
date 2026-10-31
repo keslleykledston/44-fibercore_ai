@@ -6,6 +6,7 @@ import { SourceChip } from "@/components/SourceChip";
 import { DataFreshness, ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
 import { CapabilityGate } from "@/components/CapabilityGate";
+import { OntSidebar } from "@/components/OntSidebar";
 import { humanHours } from "@/lib/offline";
 import type { Capability, Onu360, OnuCustomer, OnuHistory } from "@/lib/types";
 
@@ -31,6 +32,7 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
   if (!o) return <AppShell active="/rede" user="1"><ErrorState title="Falha ao carregar a ONU" hint="Tente novamente em instantes." /></AppShell>;
   const caps = await apiSafe<Capability[]>(`/v1/olts/${o.olt.id}/capabilities`);  // perfil da OLT da ONU (registro de capacidades)
   const hist = await apiSafe<OnuHistory>(`/v1/onus/${id}/history?days=30&limit=12`);
+  const ontCfg = o.cpe?.link === "confirmed" && o.cpe.device ? await apiSafe<{ enabled: boolean }>("/v1/ont-config/health") : null;   // o botão só existe com o recurso ligado
   return (
     <AppShell active="/rede" user="1">
       <PageHeader title={`ONU ${o.serial}`} subtitle="Visão completa de uma ONU, com a origem de cada dado" helpSlug="rede/onu-360">
@@ -112,11 +114,16 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
             {cpeDone && <p role="status" className="mb-2 text-sm text-ok">{cpeDone === "confirm" ? "Vínculo confirmado." : "Sugestão rejeitada."}</p>}
             {cpeFail && <p role="alert" className="mb-2 text-sm text-danger">{cpeErr[cpeFail] ?? "Não foi possível concluir a revisão."}</p>}
             {o.cpe.link === "confirmed" && o.cpe.device ? (
-              <dl>
-                <Row k="Equipamento">{o.cpe.device.vendor ?? "—"} {o.cpe.device.model ?? ""}{o.cpe.device.firmware ? ` · ${o.cpe.device.firmware}` : ""}</Row>
-                <Row k="Gerência">{o.cpe.device.protocols.length ? o.cpe.device.protocols.join(", ").toUpperCase() : "—"}</Row>
-                {o.cpe.provenance && <Row k="Origem do dado"><SourceChip p={o.cpe.provenance} /></Row>}
-              </dl>
+              <>
+                <dl>
+                  <Row k="Equipamento">{o.cpe.device.vendor ?? "—"} {o.cpe.device.model ?? ""}{o.cpe.device.firmware ? ` · ${o.cpe.device.firmware}` : ""}</Row>
+                  <Row k="Gerência">{o.cpe.device.protocols.length ? o.cpe.device.protocols.join(", ").toUpperCase() : "—"}</Row>
+                  {o.cpe.provenance && <Row k="Origem do dado"><SourceChip p={o.cpe.provenance} /></Row>}
+                </dl>
+                {ontCfg?.data?.enabled && (
+                  <OntSidebar key={o.cpe.device.id} cpeId={o.cpe.device.id} identity={`${o.cpe.device.vendor ?? ""} ${o.cpe.device.model ?? ""}${o.cpe.device.firmware ? ` · ${o.cpe.device.firmware}` : ""}`.trim() || "Aparelho"} />
+                )}
+              </>
             ) : o.cpe.link === "suggested" ? (
               <ul className="space-y-3 text-sm">
                 {o.cpe.suggestions.map((s) => (

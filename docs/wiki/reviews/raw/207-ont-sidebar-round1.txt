@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19006-a8a5-7f12-adb7-3cad2db6c36b).
+[codex] Turn started (01a19006-ab93-7490-b9a8-9e82eaf4fd77).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os fluxos de autorização, busca e renderização ...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Ont...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Ont... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "ont-config|form-schema|apiSafe|function reply|export.*reply|tenant|orga...
+[codex] Command completed: /bin/bash -lc 'rg -n "ont-config|form-schema|apiSafe|function reply|export.*reply|tenant|orga... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"ont_config|ont-config|form_schema|form-schema\" apps/api/app; nl -ba a...
+[codex] Command completed: /bin/bash -lc "rg -n \"ont_config|ont-config|form_schema|form-schema\" apps/api/app; nl -ba a... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/ont_config.py | sed -n '110,210p'; nl -ba apps/api/app...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/ont_config.py | sed -n '110,210p'; nl -ba apps/api/app... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: ao trocar de CPE com o painel aber...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: ao trocar de CPE com o painel aberto, a configuração anterior pode aparecer sob a identidade do novo aparelho enquanto a nova leitura carrega.
+
+Findings:
+- [medium] A configuração anterior permanece visível durante a troca de CPE (apps/web/src/components/OntSidebar.tsx:53-69)
+  `load` não é limpo quando `cpeId` muda. Até o efeito iniciar a próxima busca e definir `loading`, `form` continua apontando para a leitura já carregada; a renderização combina esses dados com `identity` do novo aparelho. Isso pode levar alguém a atribuir SSID, LAN ou WAN ao CPE errado. Limpe o formulário sincronamente ao mudar o CPE, ou associe cada resultado ao `cpeId` consultado e só o renderize quando corresponder ao atual.
+  Recommendation: Vincule o estado `ready` ao `cpeId` da resposta e oculte dados quando ele não corresponder ao prop atual; redefina também o estado de carregamento ao trocar de aparelho.
+
+Next steps:
+- Corrigir a associação entre leitura carregada e CPE atual antes de liberar a troca de aparelho no painel.
