@@ -301,3 +301,8 @@
 - Edge (Go): `internal/speed` (catálogo local de destinos com validação SSRF, perfis fechados, sonda de saúde, três URLs fixas), `internal/nbi/speed.go` (um único `setParameterValues`, leitura só do objeto TR-143, sem reenvio, resultado antigo ignorado), ramo de teste de banda no `bench.Runner` (lease, identidade no ACS, pacing em disco, claim durável), envelope `speed_test_*` verificado com nomes lógicos e hash de intenção, seção `speed` da configuração, relatório de saúde dos nós, `data` no resultado do job.
 - Nuvem: `bench.SPEED_EDGE_SUPPORT = True` (flag `speed_diagnostics` segue desligada); migração 0035 (cada destino é vinculado a um Edge dono; o Edge atualiza só `health`/`health_at` dos seus); `POST /v1/edge/speed-health`; CLI `speed-endpoint-set --edge`; nó só "pronto" com palavra `ok` recente (30 min); contrato `job-envelope.schema.json` com as operações e o formato `{target, profile}`.
 - Docs: seção "Metade do Edge" no ADR-0038 e `docs/addenda/v2.2-speed/EDGE_CONFIG.md`. Nenhum Edge reimplantado; nada executado em ONT/ACS reais.
+
+## Unreleased — Speed Diagnostics TR-143, UX, ajuda e homologação (PR 3, ADR-0038)
+- Web: aba **Teste de banda** no painel da ONU e cartão na ONU 360° (`SpeedTestSection`), atrás da flag `speed_diagnostics`; rotas BFF `/bff/cpes/{id}/speed` e `/speed/runs` (formato fechado, só nomes lógicos); estado indisponível com motivo; resultado com confiabilidade; "—" no lugar de zero.
+- Ajuda: artigo `rede/testar-banda` + manifesto (capturas reais do estado indisponível e capturas de cenário rotuladas como simuladas); `docs/operations/SPEED_HOMOLOGACAO.md` (guia e planilha vazia). `scripts/seed_demo.py` liga a flag só no demo (a tela), sem liberar teste.
+- Nada executado em ONT/ACS reais; nenhuma implantação feita.

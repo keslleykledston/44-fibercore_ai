@@ -63,6 +63,16 @@ articles:
   - assets/rede/onu-360/mobile.png
   e2e_test: onu-workspace.spec.ts (inspetor); captura real no LAB (ONU de bancada)
   last_verified: '2026-10-31'
+- slug: rede/testar-banda
+  ui_route: /rede
+  status: published
+  images:
+  - assets/rede/testar-banda/desktop.png
+  - assets/rede/testar-banda/mobile.png
+  - assets/rede/testar-banda/cenario-aguardando.png
+  - assets/rede/testar-banda/cenario-resultado.png
+  e2e_test: help-speed.spec.ts (desktop/mobile reais; cenario-* simulados e rotulados); speed.spec.ts
+  last_verified: '2026-10-31'
 - slug: assinantes/visao-360
   ui_route: /assinantes/[id]
   status: published

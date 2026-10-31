@@ -21,6 +21,7 @@ export default async function Rede({ searchParams }: { searchParams: Promise<{ s
   const quick = await featuresOn("onu_quick_inspector");
   const serialQ = serial && /^[A-Za-z0-9._-]{1,64}$/.test(serial) ? `&serial=${encodeURIComponent(serial.toUpperCase())}` : "";
   const ontConfig = quick ? await featuresOn("ont_config") : false;
+  const speed = quick ? await featuresOn("speed_diagnostics") : false;   // ADR-0038: desligada, a aba "Teste de banda" não existe
 
   if (!quick) {   // caminho legado (flag desligada): exatamente como era
     const [olts, onus] = await Promise.all([apiSafe<Olt[]>("/v1/olts?limit=200"), apiSafe<Onu[]>(`/v1/onus?limit=200${serialQ}`)]);
@@ -116,7 +117,7 @@ export default async function Rede({ searchParams }: { searchParams: Promise<{ s
               {olt && !bySerial && <PonMatrix oltId={olt.id} oltName={olt.name} model={olt.model} pons={pons} {...(pon ? { activePon: pon } : {})} truncated={truncated} />}
               {truncated && <p role="status" className="mb-3 rounded-btn bg-warn-soft px-4 py-3 text-sm text-warn" data-testid="onu-truncated">Mostrando as primeiras {READ_LIMIT} ONUs: há mais ONUs do que o limite de leitura. Use a busca por serial para as demais.</p>}
               {rows.length === 0 && bySerial ? <EmptyState title="Nenhuma ONU encontrada" hint="Confira o serial informado." /> : (
-                <OnuWorkspace key={`${bySerial ? serialQ : ""}|${olt?.id ?? ""}|${pon ?? ""}`} ontConfig={ontConfig} onus={rows} oltNames={names}
+                <OnuWorkspace key={`${bySerial ? serialQ : ""}|${olt?.id ?? ""}|${pon ?? ""}`} ontConfig={ontConfig} speed={speed} onus={rows} oltNames={names}
                   tree={bySerial || !olt ? undefined : <PonTree olts={list} oltId={olt.id} pons={pons} {...(pon ? { ponId: pon } : {})} />} />
               )}
             </>
