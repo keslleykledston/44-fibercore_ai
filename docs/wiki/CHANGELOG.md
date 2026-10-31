@@ -320,3 +320,6 @@
 
 ## Speed — 1ª execução real de download na bancada (2026-10-31)
 - Connection Request da ONT de bancada corrigido pelo padrão do ACS (credencial por dispositivo, remoção de `cwmp.connectionRequestAuth`; provision `inform` pulando `PeriodicInformTime` só para o fabricante ALCL). Download real de 10 MB executado e concluído (PARCIAL, `too_short`). O registro `speed_test_download` segue `supported`/`identified` com esta evidência; a promoção a `observed` aguarda o aceite escrito do responsável (uma promoção prematura foi revertida). Nada de produção afetado; flag `speed_diagnostics` desligada ao fim.
+
+## Speed — `speed_test_download` observed e 1ª medição confiável (2026-10-31)
+- Aceite do responsável registrado ("aceito download") e `speed_test_download` promovido a `observed` para Huawei EG8145V5 `V5R019C10S350`. Download de 200 MB na bancada: 331,15 Mbps em 4,96 s, `completed`. Faltam repetições, referência cabeada e upload. Flag `speed_diagnostics` desligada; nada de produção afetado.

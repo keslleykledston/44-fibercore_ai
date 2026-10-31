@@ -14,7 +14,7 @@ O download TR-143 foi executado pela ONT de bancada contra o nó de teste e o Ed
 - **Versões:** Edge `0.1.0-lab-853e99e` (seção `speed`); firmware da ONT `V5R019C10S350`; nuvem no alembic 0037; GenieACS 1.2.16.
 - **Aprovador:** conta de serviço `lab-speed-req` (pedido) e `lab-speed-appr` (aprovação), ambas `isp_admin`, diferentes entre si; autorização de uso único registrada pelo owner CLI em nome do responsável (chat da sessão: "vamos seguir com a Nokia e Huawei", precedido de "em seguida vamos pra o teste de bancada real").
 - **Horário:** 2026-10-31 22:10:05 UTC a 22:10:25 UTC (job: APPROVED 22:10:15, SUCCEEDED 22:10:25).
-- **Aceite do responsável:** PENDENTE. O responsável autorizou a janela e a execução no chat da sessão, mas ainda NÃO aceitou esta evidência para promover `speed_test_download` a `observed`. Uma promoção feita antes do aceite foi REVERTIDA no mesmo dia: o registro continua `supported`/`identified` (evidência: este arquivo) até o aceite escrito.
+- **Aceite do responsável:** REGISTRADO. O responsável aceitou esta evidência no chat da sessão em 2026-10-31 ("aceito download") para promover `speed_test_download` a `observed` neste modelo e firmware. Uma promoção feita antes do aceite tinha sido revertida; esta é a promoção com o aceite.
 
 ## Observações
 - A origem pública que chegou ao nó foi um único endereço, o mesmo da lista permitida (conferido por captura de SYNs no host do nó; endereço não registrado aqui).
