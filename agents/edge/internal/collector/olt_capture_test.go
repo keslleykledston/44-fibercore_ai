@@ -2,9 +2,11 @@ package collector
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -270,5 +272,50 @@ func TestTwoOLTsAndTwoScopesNeverShareAFileOrAMarker(t *testing.T) {
 	files, _ := filepath.Glob(filepath.Join(cp.Dir, "*.txt"))
 	if len(files) != 3 {
 		t.Fatalf("3 captures, %d files: %v", len(files), files)
+	}
+}
+
+func TestConcurrentOLTsCannotBothPassTheCapacityCheck(t *testing.T) {
+	// two Do calls at once on a directory with room for one more file: exactly one capture runs, the other is told the directory is full
+	store := &oltquery.Store{Path: filepath.Join(t.TempDir(), "q.json")}
+	drv := olt.HuaweiR015{Queries: olt.QueryPolicy{Enabled: map[string]bool{"olt.time": true}}}
+	cloudB := "9a14e45f-ceea-467a-9a36-4a1b5c3d2e11"
+	var mu sync.Mutex
+	var outcomes []string
+	cp := &Capture{Dir: filepath.Join(t.TempDir(), "captures"), Store: store, Lease: fakeLease{qCloud: 1, cloudB: 1}, Run: drv.RunQueryInConfig,
+		Items: map[string][]CaptureItem{qCloud: {{QueryID: "olt.time"}}, cloudB: {{QueryID: "olt.time"}}},
+		OnCapture: func(_ string, _ int, _ time.Duration, o string) {
+			mu.Lock()
+			outcomes = append(outcomes, o)
+			mu.Unlock()
+		}}
+	if err := os.MkdirAll(cp.Dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < captureMaxFiles-1; i++ {
+		_ = os.WriteFile(filepath.Join(cp.Dir, fmt.Sprintf("f%d.txt", i)), []byte("x"), 0o600)
+	}
+	sess := &qSession{inner: r015Session{}, extra: map[string]string{"display time": rawTime}}
+	src := OLTSource{Name: "OLT-R015", Driver: drv}
+	var wg sync.WaitGroup
+	for i, id := range []string{qCloud, cloudB} {
+		wg.Add(1)
+		go func(i int, id string) {
+			defer wg.Done()
+			cp.Do(context.Background(), src, &qSession{inner: r015Session{}, extra: sess.extra}, id, fmt.Sprintf("s%d", i))
+		}(i, id)
+	}
+	wg.Wait()
+	ok, full := 0, 0
+	for _, o := range outcomes {
+		switch o {
+		case "ok":
+			ok++
+		case "captures_dir_full":
+			full++
+		}
+	}
+	if ok != 1 || full != 1 {
+		t.Fatalf("outcomes %v", outcomes)
 	}
 }

@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18f4b-a6a7-7cc0-b0ca-7128692a94d3).
+[codex] Turn started (01a18f4b-a6dd-7eb3-9421-811b8b066bdc).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os caminhos de orçamento, persistência e coleta em...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt_capture.go; nl -ba agents/edge/inter...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt_capture.go; nl -ba agents/edge/inter... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"sessionID|SessionID|Capture.Do|Queries\" agents/edge/internal/collecto...
+[codex] Command completed: /bin/bash -lc "rg -n \"sessionID|SessionID|Capture.Do|Queries\" agents/edge/internal/collecto... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: capturas concorrentes em OLTs dife...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: capturas concorrentes em OLTs diferentes podem ultrapassar o limite do diretório depois de já executar comandos, descartando a saída bruta sem repetir a captura.
+
+Findings:
+- [high] A verificação de capacidade não reserva espaço antes da execução (agents/edge/internal/collector/olt_capture.go:199-225)
+  `Do` verifica quantidade e tamanho do diretório sem `c.mu`, depois executa a consulta e só serializa a gravação dentro de `store`. Como sessões de OLTs diferentes podem chamar `Do` ao mesmo tempo, ambas podem observar espaço disponível e executar. `store` reconta os arquivos, mas só rejeita ao atingir `captureMaxFiles`; não verifica o limite de bytes. Se a gravação for rejeitada ou exceder o teto, o marcador `done.json` já foi persistido antes do comando, então a saída não é salva e a captura não será tentada novamente. Isso pode causar estouro do teto de bytes e perda irreversível de evidência. Reserve capacidade de forma sincronizada antes de executar, incluindo bytes máximos por captura, e torne a reserva e a gravação consistentes com os marcadores.
+  Recommendation: Serializar a checagem e a reserva de capacidade entre OLTs antes de chamar `Run`; contabilizar o pior caso de bytes reservado e liberar a reserva apenas após salvar ou registrar explicitamente uma falha recuperável.

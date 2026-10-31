@@ -26,7 +26,7 @@ type Capture struct {
 	Run   func(ctx context.Context, s olt.Session, queryID string, p olt.Params) (olt.QueryResult, error)
 	Lease LeaseChecker
 	Now   func() time.Time
-	mu    sync.Mutex // one capture writes at a time: capacity check, name choice and rename are one step
+	mu    sync.Mutex // one batch of captures at a time across OLTs: capacity check, marker update, run and write are one step
 	// OnCapture is told how each capture ended: id, bytes, duration and a CATEGORY (never the content). The Edge log shows only this.
 	OnCapture func(queryID string, bytes int, took time.Duration, outcome string)
 }
@@ -171,6 +171,8 @@ func (c *Capture) Do(ctx context.Context, src OLTSource, raw olt.Session, cloudI
 	if c == nil || c.Store == nil || c.Run == nil || c.Lease == nil || cloudID == "" || len(c.Items[cloudID]) == 0 {
 		return 0
 	}
+	c.mu.Lock() // across OLTs: the capacity checked below is still there when the output is written, and done.json has one writer
+	defer c.mu.Unlock()
 	report := func(it CaptureItem, n int, took time.Duration, outcome string) {
 		if c.OnCapture != nil {
 			c.OnCapture(it.QueryID, n, took, outcome)
@@ -248,10 +250,8 @@ func (c *Capture) Do(ctx context.Context, src OLTSource, raw olt.Session, cloudI
 	return ran
 }
 
-// store writes the raw output under a name that is not taken yet (never overwrites), serialised across OLTs so the capacity check and the write are one step.
+// store writes the raw output under a name that is not taken yet (never overwrites). The caller holds c.mu.
 func (c *Capture) store(it CaptureItem, cloudID string, res olt.QueryResult) (int, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	files, _, err := c.sweep() // the size cap is checked before each run; one capture is at most queryMaxBytes, so the directory stays within cap + one capture
 	if err != nil {
 		return 0, err
