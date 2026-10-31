@@ -18,14 +18,14 @@ async function openDrawer(page: import("@playwright/test").Page) {
   await login(page);
   await page.goto("/rede");
   await page.getByTestId("olt-queries-open").first().click();
-  await expect(page.getByTestId("olt-queries")).toBeVisible();
+  await expect(page.locator('[data-testid="olt-queries"]:visible')).toBeVisible();
 }
 
 test("consultas da OLT: com a flag desligada nada é oferecido e o motivo aparece (sem violações de acessibilidade)", async ({ page }) => {
   await page.route("**/bff/olts/*/queries", (r) => r.fulfill({ json: CATALOG_OFF }));
   await openDrawer(page);
   await expect(page.getByTestId("olt-queries-none")).toBeVisible();
-  await expect(page.getByTestId("olt-queries")).toContainText("desligada para este provedor");
+  await expect(page.locator('[data-testid="olt-queries"]:visible')).toContainText("desligada para este provedor");
   await expect(page.getByRole("button", { name: "Pedir consulta" })).toHaveCount(0);
   const a11y = await new AxeBuilder({ page: page as never }).include("dialog").analyze();
   expect(a11y.violations.filter((v) => ["serious", "critical"].includes(v.impact ?? ""))).toEqual([]);
@@ -108,7 +108,9 @@ test("consultas da OLT: fechar a gaveta para o polling e reabrir retoma o MESMO 
   await page.clock.fastForward(11_000);
   await expect.poll(() => polls).toBe(1);
   await page.keyboard.press("Escape");
-  await expect(page.getByTestId("entity-drawer")).toBeHidden();
+  await expect(page.locator("dialog[open]")).toBeHidden();
+  await page.evaluate(() => Promise.resolve());   // deixa o React aplicar o fechamento (e limpar o intervalo) antes de adiantar o relógio falso
+  await page.evaluate(() => Promise.resolve());
   await page.clock.fastForward(60_000);
   expect(polls).toBe(1);                                       // closed: nobody is asking
   await page.getByTestId("olt-queries-open").first().click();

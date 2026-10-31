@@ -284,3 +284,6 @@
 ## Unreleased — ONT Configuration Manager, pré-visualização (FC24-03)
 - ADR-0036; migração 0033 `cpe_config_changes`; `POST/GET /v1/cpes/{id}/ont-config/changes/*` (pré-visualização, leitura, submissão que sempre bloqueia). Permissões `ont_config:request` e `ont_config:request_high`. Nada executa em equipamento; flag `ont_config` segue desligada.
 
+## Unreleased — Gestão de ONUs (ADR-0037)
+- Rede reconstruída no padrão do protótipo Lovable: matriz de PONs, árvore OLT/PON, lista com filtros e painel de detalhes ao lado (nunca sobreposto), abas Resumo/Aparelho/Histórico, painéis frontais conceituais; ONU 360° com trilha e painel frontal. BFF `GET /bff/onus/{id}/history`. Atrás da flag `onu_quick_inspector`.
+

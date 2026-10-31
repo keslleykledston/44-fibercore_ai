@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1908c-a515-77a0-8de9-0d12ffeb186f).
+[codex] Turn started (01a1908c-a550-7180-9f76-1585ef347398).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e rastrear os fluxos focados: history do BFF, formulário/ab...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/app/bff/onus/'...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/app/bff/onus/'... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/components/OntConfigView.tsx; nl -ba apps/web/src/componen...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/components/OntConfigView.tsx; nl -ba apps/web/src/componen... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/app/bff/cpes/'[id]'/ont-config/route.ts; nl -ba apps/web/s...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/app/bff/cpes/'[id]'/ont-config/route.ts; nl -ba apps/web/s... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: as abas e os filtros com papéis AR...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: as abas e os filtros com papéis ARIA não implementam a navegação por teclado exigida pelo padrão; usuários de teclado podem não conseguir operar os controles como abas ou grupo de opções.
+
+Findings:
+- [medium] Abas e filtros ARIA não têm navegação por teclado (apps/web/src/components/OntConfigView.tsx:82-85)
+  Os botões recebem `role="tab"` e `role="radio"`, mas só respondem a clique e não implementam setas, foco móvel ou ativação conforme os padrões ARIA. Leitores de tela anunciam esses controles como abas e opções, enquanto usuários de teclado ficam sem a navegação esperada; no grupo de filtros, cada opção também permanece na sequência de Tab. Implemente navegação por setas e foco roving nos dois conjuntos, ou use controles nativos sem esses papéis.
+  Recommendation: Adicionar navegação por teclado e foco roving às abas de configuração, às abas do painel em `OnuQuickInspector` e ao grupo de filtros em `OnuWorkspace`; alternativamente, remover os papéis ARIA e usar controles nativos compatíveis.
+
+Next steps:
+- Corrigir o padrão de teclado dos controles ARIA e revisar os fluxos com teclado antes de liberar.

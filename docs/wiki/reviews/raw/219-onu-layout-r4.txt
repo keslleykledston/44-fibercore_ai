@@ -1,0 +1,30 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1908f-2698-7721-9a0d-10fd22d7c816).
+[codex] Turn started (01a1908f-28d5-7cc2-b657-38d38ed21048).
+[codex] Assistant message captured: Vou comparar a branch com `main` e seguir os fluxos que você destacou: histórico via BFF, tro...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/app/bff/onus/'...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/app/bff/onus/'... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"useOntForm|history|ontConfig|fetch\\(|POST|PUT|PATCH|DELETE\" apps/web...
+[codex] Command completed: /bin/bash -lc "rg -n \"useOntForm|history|ontConfig|fetch\\(|POST|PUT|PATCH|DELETE\" apps/web... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/components/OntConfigView.tsx | sed -n '1,180p'; nl -ba app...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/components/OntConfigView.tsx | sed -n '1,180p'; nl -ba app... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"export async function apiSafe|function apiSafe|/history\\?days|feature...
+[codex] Command completed: /bin/bash -lc "rg -n \"export async function apiSafe|function apiSafe|/history\\?days|feature... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/lib/api.ts | sed -n '1,100p'; nl -ba apps/web/src/app/rede...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/lib/api.ts | sed -n '1,100p'; nl -ba apps/web/src/app/rede... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: desligar a flag não restaura por c...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: desligar a flag não restaura por completo a experiência anterior da ONU 360°; os demais fluxos destacados não mostraram risco material confirmado.
+
+Findings:
+- [medium] Flag desligada não reverte as mudanças da ONU 360° (apps/web/src/app/rede/onu/[id]/page.tsx:37-43)
+  A flag `onu_quick_inspector` controla o novo layout em `/rede`, mas a ONU 360° recebe a nova trilha e o painel frontal incondicionalmente. Assim, desligar a flag não cumpre o rollback descrito no ADR: usuários continuam vendo mudanças desta entrega nessa rota, mesmo com a gestão nova desativada. Isso pode deixar a experiência parcialmente migrada durante rollback.
+  Recommendation: Condicione as alterações visuais da ONU 360° à flag ou atualize o ADR e o mecanismo de rollback para explicitar que a flag reverte apenas `/rede`.
+
+Next steps:
+- Alinhar o comportamento da ONU 360° ao rollback documentado antes de liberar.

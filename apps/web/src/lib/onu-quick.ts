@@ -10,6 +10,7 @@ export type QuickModel = {
   acs: { label: string; tone: Tone; observed_at: string | null; source: "acs" | null; vendor_model: string | null };
   optical: { rx_dbm: number | null; label: string; observed_at: string | null; source: "olt"; severity: "unknown" };
   association: { state: "confirmed" | "low" | "unassociated" | "restricted" | "error"; label: string; customer: string | null };
+  cpe: { id: string; identity: string } | null;   // só com vínculo CONFIRMADO: é o que habilita a aba "Aparelho"
   can_open_360: true;
 };
 
@@ -47,6 +48,7 @@ export function buildQuick(o: Onu360, customer: { status: number; data: OnuCusto
     pon, acs,
     optical: { rx_dbm: o.rx_dbm, label: o.rx_dbm === null ? "RX não disponível" : `RX ${o.rx_dbm.toLocaleString("pt-BR")} dBm`, observed_at: o.rx_dbm === null ? null : o.observed_at, source: "olt", severity: "unknown" },
     association, can_open_360: true,
+    cpe: cpe && cpe.link === "confirmed" && cpe.device ? { id: cpe.device.id, identity: [cpe.device.vendor, cpe.device.model, cpe.device.firmware ? `· ${cpe.device.firmware}` : null].filter(Boolean).join(" ") } : null,
   };
 }
 
@@ -64,5 +66,7 @@ export function readQuick(d: unknown, expectId?: string): QuickModel | null {
   if (m.optical.rx_dbm !== null && typeof m.optical.rx_dbm !== "number") return null;
   if (!["confirmed", "low", "unassociated", "restricted", "error"].includes(m.association.state)) return null;
   if (m.association.customer !== null && !(typeof m.association.customer === "string" && NAME.test(m.association.customer))) return null;
+  if (m.cpe === undefined) m.cpe = null;
+  if (m.cpe !== null && !(typeof m.cpe === "object" && typeof m.cpe.id === "string" && uuid.test(m.cpe.id) && typeof m.cpe.identity === "string" && NAME.test(m.cpe.identity))) return null;
   return m;
 }

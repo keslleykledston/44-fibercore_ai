@@ -1,0 +1,30 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1908b-1575-79c2-8a92-9bd58d6fb3fd).
+[codex] Turn started (01a1908b-15b1-7d10-8358-161e8c86890e).
+[codex] Assistant message captured: Vou comparar o branch com `main` e seguir os fluxos de URL/seleção, histórico BFF, truncament...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=60 main...HEAD -- apps/web/src/app/bff/onus/'...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=60 main...HEAD -- apps/web/src/app/bff/onus/'... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/app/rede/page.tsx | sed -n '50,180p'; nl -ba apps/web/src/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/app/rede/page.tsx | sed -n '50,180p'; nl -ba apps/web/src/... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "limit=|serial=|olt_id|quick/route|apiSafe" apps/web/src/app/bff/onus ap...
+[codex] Command completed: /bin/bash -lc 'rg -n "limit=|serial=|olt_id|quick/route|apiSafe" apps/web/src/app/bff/onus ap... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"def list_onus|@router.get\\(\\\"/v1/onus|serial:.*Query|limit:.*Query\...
+[codex] Command completed: /bin/bash -lc "rg -n \"def list_onus|@router.get\\(\\\"/v1/onus|serial:.*Query|limit:.*Query\... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '358,410p' apps/api/app/api/inventory.py; cat apps/web/src/lib/api.ts"
+[codex] Command completed: /bin/bash -lc "sed -n '358,410p' apps/api/app/api/inventory.py; cat apps/web/src/lib/api.ts" (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: URL inválida ou desatualizada pode ex...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: URL inválida ou desatualizada pode exibir uma seleção incoerente e, ao navegar entre recortes, o painel pode continuar mostrando outra ONU.
+
+Findings:
+- [medium] Recortes da URL não validam a seleção exibida (apps/web/src/app/rede/page.tsx:64-73)
+  Um `olt` ausente ou inválido cai silenciosamente em `list[0]`; um `pon` sintaticamente válido, mas inexistente nessa OLT, continua no título e na trilha enquanto a lista fica vazia. Links compartilhados ou URLs antigas, portanto, podem abrir uma OLT/PON diferente da pedida ou apresentar um recorte sem explicar que a seleção não existe. Valide `olt` contra o inventário e `pon` contra as PONs carregadas; limpe ou rejeite recortes inválidos com estado explícito.
+  Recommendation: Resolver os parâmetros da URL como uma seleção válida antes de renderizar; para OLT/PON inexistente, mostrar estado de seleção inválida ou redirecionar para um recorte canônico.
+- [medium] Painel da ONU permanece selecionado ao mudar o recorte (apps/web/src/components/OnuWorkspace.tsx:24-29)
+  A seleção `sel` vive apenas no estado local do `OnuWorkspace`. Quando a navegação por OLT/PON atualiza `onus` sem desmontar o workspace, esse estado não é reconciliado com as novas linhas; o inspetor continua aberto para a ONU do recorte anterior. Isso pode fazer o operador interpretar detalhes de outra OLT/PON como parte da seleção atual. Limpe a seleção quando a ONU deixar de existir em `onus` ou amarre a seleção ao recorte da URL.
+  Recommendation: Ao receber novas `onus`, verifique se `sel.id` ainda pertence ao conjunto; se não, limpe seleção e estado associado. Considere incluir OLT/PON no estado de seleção.
