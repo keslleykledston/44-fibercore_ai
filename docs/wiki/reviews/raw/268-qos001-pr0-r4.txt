@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192f1-4da0-7403-8158-c6c944be7d53).
+[codex] Turn started (01a192f1-4dd9-7991-82d7-36a875a2a0e5).
+[codex] Assistant message captured: Vou comparar a branch com `main` e verificar especialmente se os banners cobrem os cinco docu...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=3 main...HEAD -- docs/addend...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=3 main...HEAD -- docs/addend... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --unified=1 main...HEAD -- docs/addenda/v2.2-qos/README.md docs/adden...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=1 main...HEAD -- docs/addenda/v2.2-qos/README.md docs/adden... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "Referência recebida|tabela de suite|diagnostic_jobs|quality_runs|endpoi...
+[codex] Command completed: /bin/bash -lc 'rg -n "Referência recebida|tabela de suite|diagnostic_jobs|quality_runs|endpoi... (exit 0)
+[codex] Running command: /bin/bash -lc "rg --files docs | rg 'ADR-0039|ADR-003|11_RUNBOOK|reference/.+md"'$'"' | head ...
+[codex] Command completed: /bin/bash -lc "rg --files docs | rg 'ADR-0039|ADR-003|11_RUNBOOK|reference/.+md"'$'"' | head ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: os cinco banners e a justificativa...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: os cinco banners e a justificativa da tabela filha estão presentes, mas o README afirma que a decisão consta no ADR-0039, arquivo que não existe nesta branch. Isso pode fazer uma proposta do plano parecer uma decisão já aprovada.
+
+Findings:
+- [medium] A divergência cita um ADR-0039 inexistente como decisão registrada (docs/addenda/v2.2-qos/README.md:15)
+  A tabela de divergências apresenta `quality_runs` e os endpoints por CPE como decisão registrada no ADR-0039, mas a busca na árvore `docs/` não encontra esse ADR; o próprio plano o lista como pré-requisito futuro antes do código. A redação pode levar implementadores a tratar o desenho como aprovado sem a decisão e a aprovação indicadas no plano.
+  Recommendation: Trocar “Ponto de decisão registrado” por “proposta pendente de ADR-0039/aprovação” até o ADR existir e estar aprovado.
+
+Next steps:
+- Corrigir a referência ao ADR-0039 e manter a tabela filha/endpoints como proposta até a decisão formal.
