@@ -40,6 +40,3 @@ O vínculo é **inferido** e permanece **não confirmado e não registrado**: h�
 2. `bench-target-add` e entrada da ZTE em `bench.devices` do Edge (hoje ela só está em `bench.read_only_onus`).
 3. Registro de capacidades por fabricante, modelo e firmware (o firmware da ZTE ainda não foi lido para a nuvem), com a evidência de cada operação.
 4. Para o teste de banda: rota da WAN de serviço, origem no nó de teste, sonda de 3xx e aceite do risco, como na Huawei.
-
-## Fora do escopo deste H1
-O estado do Connection Request da ZTE e do restante do ACS é tratado em `H-connection-request-diagnostico-eg8145v5-2026-10-31.md` e nas notas de estado; não faz parte da evidência de vínculo.
