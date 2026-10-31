@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Typed results of the validated queries (ADR-0029 item 4): the raw device output NEVER leaves the Edge. A parser builds a closed object from fields it
@@ -26,7 +27,13 @@ var (
 )
 
 // HasParser says whether a query can return a typed result.
-func HasParser(queryID string) bool { return queryID == "olt.version" || queryID == "olt.board" }
+func HasParser(queryID string) bool {
+	switch queryID {
+	case "olt.version", "olt.board", "olt.time", "olt.sync", "olt.temperature":
+		return true
+	}
+	return false
+}
 
 // ParseResult turns the device output of a validated query into its typed result (compact JSON).
 func ParseResult(queryID, out string) (json.RawMessage, error) {
@@ -35,6 +42,12 @@ func ParseResult(queryID, out string) (json.RawMessage, error) {
 		return parseVersion(out)
 	case "olt.board":
 		return parseBoard(out)
+	case "olt.time":
+		return parseTime(out)
+	case "olt.sync":
+		return parseSync(out)
+	case "olt.temperature":
+		return parseTemperature(out)
 	}
 	return nil, ErrNoParser
 }
@@ -118,4 +131,91 @@ func parseBoard(out string) (json.RawMessage, error) {
 		return nil, ErrBadOutput
 	}
 	return json.Marshal(map[string]any{"boards": boards, "empty_slots": empty})
+}
+
+// ---- lot 1 of the supervised capture (ADR-0032): shapes seen on the real MA5608T (MA5600V800R015C00), nothing else is guessed.
+
+var (
+	reDeviceTime = regexp.MustCompile(`^\s*(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})([+-]\d{2}):(\d{2})\s*$`)
+	reTempRow    = regexp.MustCompile(`^\s*SlotID:\s*(\d{1,2})\s+BoardName:\s*([A-Za-z0-9]{3,20})\s+Temperature:\s*(-?\d{1,3})C\(\s*-?\d{1,3}F\)\s*$`)
+)
+
+// isEcho tells the lines that only repeat the command or carry the prompt: they hold no data.
+func isEcho(l string) bool {
+	t := strings.TrimSpace(l)
+	return t == "" || t == "Command:" || strings.HasPrefix(t, "display ") || strings.HasSuffix(t, "#") || strings.HasSuffix(t, ">")
+}
+
+// parseTime: the OLT's wall clock WITH its UTC offset. It is the device's own clock (it can be minutes off): the Cloud keeps it inside `data` and never uses it as the observation time.
+func parseTime(out string) (json.RawMessage, error) {
+	var found string
+	for _, line := range strings.Split(out, "\n") {
+		if isEcho(line) {
+			continue
+		}
+		m := reDeviceTime.FindStringSubmatch(strings.TrimRight(line, "\r"))
+		if m == nil || found != "" {
+			return nil, ErrBadOutput
+		}
+		t, err := time.Parse("2006-01-02T15:04:05-07:00", m[1]+"T"+m[2]+m[3]+":"+m[4])
+		if err != nil || t.Year() < 2000 || t.Year() > 2100 {
+			return nil, ErrBadOutput
+		}
+		found = t.Format(time.RFC3339)
+	}
+	if found == "" {
+		return nil, ErrBadOutput
+	}
+	return json.Marshal(map[string]any{"time": found})
+}
+
+// parseSync: the only answer seen is the single-control-board one. Any other wording is refused rather than guessed (another firmware, or a standby board present,
+// answers differently and needs its own capture before it can be called valid).
+func parseSync(out string) (json.RawMessage, error) {
+	seen := false
+	for _, line := range strings.Split(out, "\n") {
+		if isEcho(line) {
+			continue
+		}
+		if strings.TrimSpace(line) != "Standby board fault or not exist" || seen {
+			return nil, ErrBadOutput
+		}
+		seen = true
+	}
+	if !seen {
+		return nil, ErrBadOutput
+	}
+	return json.Marshal(map[string]any{"standby": "absent_or_fault"})
+}
+
+type tempRow struct {
+	Slot    int    `json:"slot"`
+	Name    string `json:"name"`
+	Celsius int    `json:"celsius"`
+}
+
+func parseTemperature(out string) (json.RawMessage, error) {
+	rows := []tempRow{}
+	seen := map[int]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		l := strings.TrimRight(line, "\r")
+		if isEcho(l) {
+			continue
+		}
+		m := reTempRow.FindStringSubmatch(l)
+		if m == nil {
+			return nil, ErrBadOutput
+		}
+		slot, _ := strconv.Atoi(m[1])
+		c, _ := strconv.Atoi(m[3])
+		if seen[slot] || slot > maxSlot || c < -40 || c > 150 {
+			return nil, ErrBadOutput
+		}
+		seen[slot] = true
+		rows = append(rows, tempRow{Slot: slot, Name: m[2], Celsius: c})
+	}
+	if len(rows) == 0 {
+		return nil, ErrBadOutput
+	}
+	return json.Marshal(map[string]any{"boards": rows})
 }

@@ -123,7 +123,7 @@ func TestADeviceRefusalEndsTheBatchAndNeverTheCollection(t *testing.T) {
 func TestAQueryWithoutParserNeverReachesTheDevice(t *testing.T) {
 	sess := &qSession{inner: r015Session{}}
 	o, store := queryRig(t, sess)
-	enqueue(t, store, "job-x", "olt.time") // in the catalog, not validated: no parser
+	enqueue(t, store, "job-x", "olt.alarm.history") // in the catalog, not validated: no parser
 	enqueue(t, store, "job-v", "olt.version")
 	if _, err := o.Collect(context.Background()); err != nil {
 		t.Fatal(err)
@@ -131,7 +131,7 @@ func TestAQueryWithoutParserNeverReachesTheDevice(t *testing.T) {
 	if e, _, _ := store.Get("job-x"); e.State != oltquery.Failed || e.Reason != "no_parser" {
 		t.Fatalf("%+v", e)
 	}
-	if strings.Contains(strings.Join(sess.sent, "|"), "display time") {
+	if strings.Contains(strings.Join(sess.sent, "|"), "display alarm history") {
 		t.Fatalf("sent to the device: %v", sess.sent)
 	}
 	if e, _, _ := store.Get("job-v"); e.State != oltquery.Executed {

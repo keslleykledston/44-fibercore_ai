@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { EntityDetailDrawer } from "@/components/EntityDetailDrawer";
-import { QUERY_ERROR, QUERY_FAILED, QUERY_UNAVAILABLE, readBoard, readVersion, uptimeText, type OltQueryItem } from "@/lib/olt-queries";
+import { QUERY_ERROR, QUERY_FAILED, QUERY_UNAVAILABLE, oltClockText, readBoard, readSync, readTemperature, readTime, readVersion, uptimeText, type OltQueryItem } from "@/lib/olt-queries";
 
 type Phase = { kind: "idle" } | { kind: "waiting"; jobId: string; since: number; queryId: string } | { kind: "done"; queryId: string; data: unknown } | { kind: "failed"; reason: string };
 const POLL_MS = 10_000;
@@ -32,6 +32,32 @@ function Result({ queryId, data }: { queryId: string; data: unknown }) {
           <tbody>{b.boards.map((x) => <tr key={x.slot} className="border-t border-line"><td className="py-1 pr-3">{x.slot}</td><td className="pr-3 font-mono">{x.name}</td><td>{x.status}</td></tr>)}</tbody>
         </table>
         {b.empty_slots.length > 0 && <p className="text-muted">Slots vazios: {b.empty_slots.join(", ")}</p>}
+      </div>
+    );
+  }
+  if (queryId === "olt.time") {
+    const t = readTime(data);
+    if (!t) return <p>O resultado não tinha o formato esperado e não foi mostrado.</p>;
+    return (
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1" data-testid="olt-query-result">
+        <dt className="text-muted">Hora da OLT</dt><dd>{oltClockText(t.time)}</dd>
+      </dl>
+    );
+  }
+  if (queryId === "olt.sync") {
+    if (!readSync(data)) return <p>O resultado não tinha o formato esperado e não foi mostrado.</p>;
+    return <p data-testid="olt-query-result">Sem placa de controle reserva (ausente ou com falha). A OLT roda só com a placa principal.</p>;
+  }
+  if (queryId === "olt.temperature") {
+    const t = readTemperature(data);
+    if (!t) return <p>O resultado não tinha o formato esperado e não foi mostrado.</p>;
+    return (
+      <div data-testid="olt-query-result">
+        <table className="w-full text-left">
+          <caption className="sr-only">Temperatura das placas</caption>
+          <thead><tr className="text-muted"><th scope="col" className="py-1 pr-3">Slot</th><th scope="col" className="pr-3">Placa</th><th scope="col">Temperatura</th></tr></thead>
+          <tbody>{t.boards.map((x) => <tr key={x.slot} className="border-t border-line"><td className="py-1 pr-3">{x.slot}</td><td className="pr-3 font-mono">{x.name}</td><td>{x.celsius} °C</td></tr>)}</tbody>
+        </table>
       </div>
     );
   }

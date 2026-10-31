@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Literal
 from uuid import UUID
 
@@ -33,14 +33,14 @@ class Query:
 # Same ids, scopes and flags as agents/edge/internal/olt/query.go (tests/test_olt_query.py compares them).
 CATALOG: tuple[Query, ...] = (
     Query("olt.version", "Software, patch e uptime", "global", True),
-    Query("olt.time", "Hora e fuso da OLT", "global", False),
+    Query("olt.time", "Hora e fuso da OLT", "global", True),
     Query("olt.board", "Placas e estado", "global", True),
     Query("olt.alarm.active", "Alarmes ativos", "global", False),
     Query("olt.alarm.history", "Histórico de alarmes (lista)", "global", False),
     Query("olt.event.history", "Histórico de eventos (lista)", "global", False),
     Query("olt.autofind", "ONTs detectadas e não confirmadas", "global", False),
-    Query("olt.temperature", "Temperatura", "global", False),
-    Query("olt.sync", "Sincronismo de controladoras", "global", False),
+    Query("olt.temperature", "Temperatura", "global", True),
+    Query("olt.sync", "Sincronismo de controladoras", "global", True),
     Query("slot.board", "Detalhe da placa", "slot", False),
     Query("slot.cpu", "CPU da placa", "slot", False),
     Query("slot.mem", "Memória da placa", "slot", False),
@@ -62,7 +62,7 @@ BY_ID = {q.id: q for q in CATALOG}
 
 # ADR-0029 item 7: the rollout is by steps. Only these are offered by the cloud now (the global, already validated ones); the PON ones come after a
 # supervised rehearsal in the LAB. Being in the catalog is not being offered.
-ROLLOUT: frozenset[str] = frozenset({"olt.version", "olt.board"})
+ROLLOUT: frozenset[str] = frozenset({"olt.version", "olt.board", "olt.time", "olt.sync", "olt.temperature"})
 
 # the Edge side of the channel (queue, lease, parsers) exists; the tenant flag and the Edge's own configuration still decide whether anything runs
 EDGE_SUPPORT = True
@@ -116,6 +116,7 @@ _PRODUCT = re.compile(r"^[A-Z0-9][A-Z0-9-]{1,23}$")
 _RELEASE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{1,39}$")
 _BOARD = re.compile(r"^[A-Za-z0-9]{3,20}$")
 _STATUS = re.compile(r"^[A-Za-z_]{3,24}$")
+_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$")
 
 
 def _is_slot(v) -> bool:
@@ -142,4 +143,23 @@ def check_result(query_id: str, data) -> bool:
             slots.append(x["slot"])
         slots += list(e)
         return all(_is_slot(s) for s in slots) and len(set(slots)) == len(slots) and len(b) > 0
+    if query_id == "olt.time":
+        t = data.get("time")
+        if set(data) != {"time"} or not isinstance(t, str) or not _TIME.match(t):
+            return False
+        try:
+            return 2000 <= datetime.fromisoformat(t).year <= 2100
+        except ValueError:
+            return False
+    if query_id == "olt.sync":
+        return data == {"standby": "absent_or_fault"}
+    if query_id == "olt.temperature":
+        rows = data.get("boards")
+        if set(data) != {"boards"} or not isinstance(rows, list) or not 1 <= len(rows) <= LIMITS["slot"] + 1:
+            return False
+        for x in rows:
+            if not (isinstance(x, dict) and set(x) == {"slot", "name", "celsius"} and _is_slot(x["slot"]) and isinstance(x["name"], str) and _BOARD.match(x["name"])
+                    and _is_int(x["celsius"]) and -40 <= x["celsius"] <= 150):
+                return False
+        return len({x["slot"] for x in rows}) == len(rows)
     return False

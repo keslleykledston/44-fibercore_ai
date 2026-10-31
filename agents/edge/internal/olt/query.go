@@ -52,14 +52,14 @@ type Query struct {
 var queryCatalog = []Query{
 	// global
 	{"olt.version", "Software, patch e uptime", ScopeGlobal, "display version", true, "3"},
-	{"olt.time", "Hora e fuso da OLT", ScopeGlobal, "display time", false, "2"},
+	{"olt.time", "Hora e fuso da OLT", ScopeGlobal, "display time", true, "2"},
 	{"olt.board", "Placas e estado", ScopeGlobal, "display board 0", true, "3"},
 	{"olt.alarm.active", "Alarmes ativos", ScopeGlobal, "display alarm active all", false, "2"},
 	{"olt.alarm.history", "Histórico de alarmes (lista)", ScopeGlobal, "display alarm history all list", false, "2"},
 	{"olt.event.history", "Histórico de eventos (lista)", ScopeGlobal, "display event history all list", false, "3"},
 	{"olt.autofind", "ONTs detectadas e não confirmadas", ScopeGlobal, "display ont autofind all", false, "2"},
-	{"olt.temperature", "Temperatura", ScopeGlobal, "display temperature 0", false, "3"},
-	{"olt.sync", "Sincronismo de controladoras", ScopeGlobal, "display data sync state", false, "3"},
+	{"olt.temperature", "Temperatura", ScopeGlobal, "display temperature 0", true, "3"},
+	{"olt.sync", "Sincronismo de controladoras", ScopeGlobal, "display data sync state", true, "3"},
 	// per slot
 	{"slot.board", "Detalhe da placa", ScopeSlot, "display board 0/%[1]d", false, "3"},
 	{"slot.cpu", "CPU da placa", ScopeSlot, "display cpu 0/%[1]d", false, "3"},

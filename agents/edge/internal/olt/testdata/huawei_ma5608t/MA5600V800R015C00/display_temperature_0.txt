@@ -1,0 +1,3 @@
+  SlotID:  0      BoardName: H805GPFD       Temperature:   45C( 113F)
+  SlotID:  1      BoardName: H805GPFD       Temperature:   45C( 113F)
+  SlotID:  2      BoardName: H801MCUD1      Temperature:   43C( 109F)
