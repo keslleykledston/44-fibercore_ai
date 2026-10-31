@@ -197,3 +197,43 @@ test("flag speed_diagnostics desligada: sem aba, sem cartão na ONU 360° e o BF
   const r = await page.request.get(`/bff/cpes/${CPE}/speed`);
   expect([403, 404]).toContain(r.status());
 });
+
+test("teste de banda (cenário): pedido aceito que a leitura não mostra NUNCA destrava pelo relógio; só uma leitura que mostre a execução", async ({ page, request }) => {
+  await confirmDemoA2(request);
+  let showRun = false;
+  await page.route("**/bff/cpes/*/speed", (r) => r.fulfill({ json: { caps: CAPS(), runs: showRun ? [RUN({ status: "awaiting_approval" })] : [] } }));
+  let posts = 0;
+  await page.route("**/bff/cpes/*/speed/runs", (r) => { posts += 1; return r.fulfill({ status: 201, json: { ok: true, outcome: "submitted" } }); });
+  await openTab(page);
+  await page.clock.install();
+  await page.getByTestId("speed-start-download").click();
+  await expect(page.getByTestId("speed-pending")).toBeVisible();
+  await page.clock.fastForward("21:00");                                                                               // passa o prazo de vida do pedido (e do que o relógio local sabe)
+  await expect(page.getByTestId("speed-pending")).toContainText("a leitura ainda não mostra a execução");
+  await expect(page.getByTestId("speed-start-download")).toBeDisabled();
+  await expect(page.getByTestId("speed-start-upload")).toBeDisabled();
+  showRun = true;
+  await page.getByTestId("speed-pending-refresh").click();
+  await expect(page.getByTestId("speed-active")).toContainText("Aguardando aprovação");
+  await expect(page.getByTestId("speed-pending")).toHaveCount(0);
+  expect(posts).toBe(1);
+});
+
+test("teste de banda (cenário): sessão expirada durante o acompanhamento para de consultar e oferece entrar de novo", async ({ page, request }) => {
+  test.setTimeout(60_000);
+  await confirmDemoA2(request);
+  let reads = 0;
+  await page.route("**/bff/cpes/*/speed", (r) => {
+    reads += 1;
+    return reads <= 2 ? r.fulfill({ json: { caps: CAPS(), runs: [] } }) : r.fulfill({ status: 401, json: { error: "session" } });
+  });
+  await page.route("**/bff/cpes/*/speed/runs", (r) => r.fulfill({ status: 201, json: { ok: true, outcome: "submitted" } }));
+  await openTab(page);
+  await page.getByTestId("speed-start-download").click();                                                                // a leitura seguinte (a 2ª, logo após o pedido, ainda vem vazia; a 3ª, do acompanhamento, responde 401)
+  await expect(page.getByTestId("speed-error")).toContainText("Sua sessão expirou", { timeout: 15_000 });
+  await expect(page.getByRole("link", { name: "Entrar de novo" })).toHaveAttribute("href", "/login");
+  await expect(page.getByTestId("speed-start-download")).toHaveCount(0);
+  const seen = reads;
+  await page.waitForTimeout(5000);                                                                                       // mais de um ciclo de acompanhamento
+  expect(reads).toBe(seen);                                                                                              // parou de consultar
+});

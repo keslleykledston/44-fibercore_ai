@@ -37,7 +37,9 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
   const [refusal, setRefusal] = useState<string | null>(null);
   // Um pedido ACEITO pela API é lembrado à parte do último retrato das execuções: se a leitura seguinte falha ou chega velha, a tela continua dizendo que há um pedido em curso
   // e os botões continuam travados (senão um novo clique geraria outro tráfego). Sai quando uma leitura mostra uma execução nova, ou depois do prazo de vida do pedido.
-  const [pending, setPending] = useState<{ known: string[]; until: number } | null>(null);
+  // `certain` = a resposta da API foi sucesso (a execução EXISTE no servidor, que só responde depois de gravar): só uma leitura que a mostre destrava, nunca o relógio. `certain: false` = a
+  // resposta se perdeu: pode ter chegado ou não; destrava só por uma leitura bem-sucedida FEITA DEPOIS do prazo que não mostre execução nova.
+  const [pending, setPending] = useState<{ known: string[]; until: number; certain: boolean } | null>(null);
   const [refreshFailed, setRefreshFailed] = useState(false);
   const alive = useRef(true);
   const seq = useRef(0);   // cada leitura leva um número: só a MAIS RECENTE pode atualizar a tela (uma resposta lenta e antiga nunca esconde um teste ativo nem reabilita os botões)
@@ -45,12 +47,14 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
   // uma leitura que falha NÃO apaga o que a tela já sabe: só a primeira carga vira erro; depois disso a tela avisa e tenta de novo
   const hasData = useRef(false);
   const keepOrFail = useCallback((code: string) => {
+    if (code === "session" || code === "disabled" || code === "not_found") { setPending(null); setRefreshFailed(false); setLoad({ kind: "error", code }); return; }   // não se recupera sozinho: para de consultar e diz o que fazer
     if (hasData.current) setRefreshFailed(true);
     else setLoad({ kind: "error", code });
   }, []);
 
   const fetchAll = useCallback(async (signal?: AbortSignal) => {
     const mine = ++seq.current;
+    const startedAt = Date.now();
     try {
       const r = await fetch(`/bff/cpes/${cpeId}/speed`, { cache: "no-store", signal });
       const j = (await r.json().catch(() => ({}))) as { caps?: unknown; runs?: unknown; error?: string };
@@ -60,7 +64,7 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
         hasData.current = true;
         setRefreshFailed(false);
         setLoad({ kind: "ready", caps, runs });
-        setPending((p) => (p && (runs.some((x) => !p.known.includes(x.id)) || Date.now() > p.until) ? null : p));
+        setPending((p) => (p && (runs.some((x) => !p.known.includes(x.id)) || (!p.certain && startedAt > p.until)) ? null : p));
       } else keepOrFail(j.error && LOAD_ERROR[j.error] ? j.error : "failed");
     } catch (e) { if ((e as Error).name !== "AbortError" && alive.current && mine === seq.current) keepOrFail("failed"); }
   }, [cpeId, keepOrFail]);
@@ -79,6 +83,7 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
     return (
       <div role="alert" className="grid gap-2 text-sm" data-testid="speed-error">
         <p className="text-danger">{LOAD_ERROR[load.code]}</p>
+        {load.code === "session" && <a href="/login" className="min-h-touch w-fit rounded-btn border border-line px-3 py-2 text-accent">Entrar de novo</a>}
         {load.code === "failed" && <button type="button" onClick={() => { setLoad({ kind: "loading" }); void fetchAll(); }} className="min-h-touch w-fit rounded-btn border border-line px-3">Tentar novamente</button>}
       </div>
     );
@@ -102,11 +107,11 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
         body: JSON.stringify({ key: crypto.randomUUID(), direction, endpoint_id: endpoint.id, profile, ...(group ? { group_id: group } : {}) }),
       });
       const j = (await r.json().catch(() => ({}))) as { error?: string; reason?: string };
-      if (r.ok) setPending({ known: runs.map((x) => x.id), until: Date.now() + PENDING_MS });   // aceito: lembrado até uma leitura mostrar a execução
+      if (r.ok) setPending({ known: runs.map((x) => x.id), until: Date.now() + PENDING_MS, certain: true });   // aceito: lembrado até uma leitura mostrar a execução
       else setRefusal(j.error === "blocked" && j.reason ? BLOCKED_TEXT[j.reason] ?? "O pedido foi recusado." : j.error === "forbidden" ? BLOCKED_TEXT.not_permitted! : "Não foi possível pedir o teste agora.");
       await fetchAll();
     } catch {   // o pedido pode ter chegado: não se sabe. Trava por pouco tempo e deixa a leitura dizer
-      setPending({ known: runs.map((x) => x.id), until: Date.now() + UNCERTAIN_MS });
+      setPending({ known: runs.map((x) => x.id), until: Date.now() + UNCERTAIN_MS, certain: false });
       setRefusal("Não foi possível confirmar o pedido. Aguarde a atualização antes de pedir de novo.");
     } finally { setBusy(false); }
   };
@@ -160,7 +165,14 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
       )}
       {refusal && <p role="alert" className="text-sm text-danger" data-testid="speed-refusal">{refusal}</p>}
       {refreshFailed && <p role="status" className="text-xs text-warn" data-testid="speed-refresh-failed">Não foi possível atualizar agora. O que aparece pode estar desatualizado; tentando de novo.</p>}
-      {pending && !active && <p role="status" className="rounded-card border border-line p-3 text-sm" data-testid="speed-pending">Pedido enviado. Aguardando a confirmação da leitura; os botões ficam travados até lá.</p>}
+      {pending && !active && (
+        <div role="status" className="grid gap-2 rounded-card border border-line p-3 text-sm" data-testid="speed-pending">
+          <p>{pending.certain && Date.now() > pending.until
+            ? "O pedido foi aceito, mas a leitura ainda não mostra a execução. Não peça de novo: use Atualizar. Se continuar assim, chame quem administra o Edge."
+            : "Pedido enviado. Aguardando a confirmação da leitura; os botões ficam travados até lá."}</p>
+          <button type="button" onClick={() => void fetchAll()} data-testid="speed-pending-refresh" className="min-h-touch w-fit rounded-btn border border-line px-3">Atualizar agora</button>
+        </div>
+      )}
       {active && (
         <div role="status" className="rounded-card border border-line p-3 text-sm" data-testid="speed-active">
           {runs.filter((r) => ACTIVE.has(r.status)).map((r) => <p key={r.id}>{DIRECTION_TEXT[r.direction]}: {STATUS_TEXT[r.status]}</p>)}
