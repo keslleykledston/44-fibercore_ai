@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1928f-4991-7eb1-80c9-56c94e945344).
+[codex] Turn started (01a1928f-4cdb-7c03-9087-ab5a801f598e).
+[codex] Assistant message captured: Vou inspecionar o diff completo contra `main`, com foco nos cenários de falha operacional e n...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- ops/watchdog/watchdog.py ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- ops/watchdog/watchdog.py ap... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba ops/watchdog/watchdog.py | sed -n '90,235p'; nl -ba apps/api/app/events...
+[codex] Command completed: /bin/bash -lc "nl -ba ops/watchdog/watchdog.py | sed -n '90,235p'; nl -ba apps/api/app/events... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: há risco de reiniciar serviços de ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: há risco de reiniciar serviços de estado sem distinguir falha transitória, e falhas de consulta podem resolver alertas como se os problemas tivessem sumido.
+
+Findings:
+- [high] Reinicia Postgres e NATS ao primeiro estado unhealthy (ops/watchdog/watchdog.py:144-160)
+  Qualquer contêiner do projeto em execução com `(unhealthy)` recebe `docker restart`, sem exceção para Postgres ou NATS, nem confirmação de que a dependência voltou. Um healthcheck transitório pode reiniciar serviços com estado persistente e interromper gravações/publicações; o limite de três ações por hora limita a frequência, mas não evita a primeira reinicialização nem perda de disponibilidade. Exclua serviços com estado ou exija uma condição persistente e uma verificação segura antes de reiniciá-los.
+  Recommendation: Use uma política explícita por serviço: não reinicie Postgres/NATS automaticamente sem uma verificação adicional e procedimento que preserve o estado; alerte para intervenção quando a saúde estiver degradada.
+- [high] Falha de consultas pode apagar alertas ativos (ops/watchdog/watchdog.py:131-142)
+  `check_outbox` não marca `outbox` ativo quando SQL falha ou retorna texto inesperado. Além disso, `containers()` converte falha de `docker ps` em lista vazia. `run_all` então passa esses resultados incompletos a `resolve_missing`, que remove alertas anteriores e emite `resolvido`. Uma indisponibilidade do banco ou Docker pode, assim, silenciar um alerta ainda válido e registrar uma recuperação falsa. A falha do banco também pode resolver `outbox` após `check_edge` marcar apenas `db`.
+  Recommendation: Diferencie estado desconhecido de condição saudável: em falha de coleta, preserve as chaves anteriores e não execute resolução para os subsistemas cuja coleta falhou.
+- [medium] Consumer toca heartbeat mesmo com banco indisponível (apps/api/app/events/consumer.py:66-82)
+  `consume_batch` captura exceções de processamento por mensagem, envia NAK/termina a mensagem e retorna normalmente; `run` toca o heartbeat após esse retorno. Se o banco estiver fora, as mensagens podem falhar repetidamente enquanto o healthcheck segue saudável, impedindo o watchdog de detectar o consumer degradado. O mesmo ocorre quando o lote fica vazio: não há verificação de conectividade com o banco, embora o batimento seja renovado.
+  Recommendation: Faça `consume_batch` comunicar falhas de dependência ao laço e só renove o heartbeat após uma verificação apropriada de saúde do banco e do consumo; mantenha falhas de mensagens individuais distinguíveis de indisponibilidade sistêmica.

@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19290-f9ad-7080-b864-e9ae57666dfe).
+[codex] Turn started (01a19290-f9e9-7803-8573-016154e78b8d).
+[codex] Assistant message captured: Vou ler o diff contra `main` e seguir os caminhos de unhealthy, coleta, resolução de alertas ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- ops/watchdog/watchdog.py ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- ops/watchdog/watchdog.py ap... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/tests/test_watchdo...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/tests/test_watchdo... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba ops/watchdog/watchdog.py | sed -n '145,225p'; git status --short; git d...
+[codex] Command completed: /bin/bash -lc "nl -ba ops/watchdog/watchdog.py | sed -n '145,225p'; git status --short; git d... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviaria ainda: as proteções contra reinício e ba...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviaria ainda: as proteções contra reinício e batimento parecem corrigidas, mas uma falha do Docker pode resolver alertas de contêiner sem coleta válida e manter o contador unhealthy entre ciclos desconhecidos.
+
+Findings:
+- [medium] Falha na coleta Docker pode resolver alertas de contêiner (ops/watchdog/watchdog.py:151-155)
+  Quando `docker ps` falha, o código marca `unknown` como `container` e retorna. `resolve_missing` só preserva chaves iguais a `container` ou que comecem com `container:` quando `unknown` contém o prefixo `container:`; portanto alertas existentes como `container:api-core` são removidos e emitem `resolvido` mesmo sem uma coleta válida. Isso contradiz a regra de que estado desconhecido preserva alertas e pode ocultar um serviço ainda falhando. Use a chave `container:` como escopo desconhecido ou preserve explicitamente todas as chaves `container:*` quando a consulta Docker falhar.
+  Recommendation: Ajuste a correspondência de escopos desconhecidos para cobrir `container:*` e acrescente um caso de regressão com alerta ativo seguido de falha em `docker ps`.
+- [medium] Contador unhealthy não é reiniciado após ciclo de coleta desconhecido (ops/watchdog/watchdog.py:151-155)
+  O contador só é limpo no final de uma coleta Docker bem-sucedida (linhas 193–194). Se `docker ps` falhar, o retorno antecipado mantém a contagem anterior. Quando a coleta volta e encontra o serviço unhealthy, o incremento conta esse ciclo como consecutivo e pode reiniciar o contêiner apesar da interrupção desconhecida entre observações. Isso enfraquece a condição de dois ciclos seguidos e pode provocar reinício por evidência incompleta.
+  Recommendation: Ao falhar a coleta, invalide os contadores de unhealthy ou registre a validade/identidade dos ciclos para que um ciclo desconhecido quebre a sequência.
