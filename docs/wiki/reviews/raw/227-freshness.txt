@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a190a2-55dd-7220-86f1-3ba8b69bb224).
+[codex] Turn started (01a190a2-58e0-7e23-9501-24a8be94a5f8).
+[codex] Assistant message captured: Vou revisar o diff contra `main`, rastreando os consumidores da janela de frescor e os testes...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/api/a...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/api/a... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"FRESH_FOR|freshness|EVAL_FRESH_FOR|stale\" apps/api/app apps/web/src -...
+[codex] Command completed: /bin/bash -lc "rg -n \"FRESH_FOR|freshness|EVAL_FRESH_FOR|stale\" apps/api/app apps/web/src -... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '320,500p' apps/api/app/api/inventory.py && sed -n '560,615p' apps/api/...
+[codex] Command completed: /bin/bash -lc "sed -n '320,500p' apps/api/app/api/inventory.py && sed -n '560,615p' apps/api/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: a janela foi ampliada globalmente, ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: a janela foi ampliada globalmente, embora a justificativa seja específica à coleta da OLT; dados de CPE também podem passar a ser apresentados como recentes por mais tempo.
+
+Findings:
+- [medium] A janela de 35 min também se aplica à frescura dos CPEs (apps/api/app/api/inventory.py:27)
+  `_fresh()` usa `FRESH_FOR` como padrão, e esse helper é usado tanto nas leituras de OLT/ONU quanto nas rotas de CPE. Assim, o diff também muda a classificação de dados de CPE com 15–35 min de idade para `fresh`, apesar de a justificativa e o intervalo declarado serem específicos da OLT. Se a coleta de CPE tiver uma cadência menor, a interface e a proveniência podem afirmar que esses dados estão atualizados quando já deveriam aparecer como defasados. A revisão não encontrou evidência de que os consumidores de CPE tenham a mesma cadência de 15 min.
+  Recommendation: Separe o TTL de OLT/ONU do TTL de CPE, ou passe um TTL específico nos caminhos de CPE; acrescente um teste que confirme a classificação de CPE após 15 min.
+
+Next steps:
+- Verificar a cadência real de coleta de CPE e manter sua janela independente da janela da OLT.

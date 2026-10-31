@@ -286,4 +286,5 @@
 
 ## Unreleased — Gestão de ONUs (ADR-0037)
 - Rede reconstruída no padrão do protótipo Lovable: matriz de PONs, árvore OLT/PON, lista com filtros e painel de detalhes ao lado (nunca sobreposto), abas Resumo/Aparelho/Histórico, painéis frontais conceituais; ONU 360° com trilha e painel frontal. BFF `GET /bff/onus/{id}/history`. Atrás da flag `onu_quick_inspector`.
+- Inventário: janela de dado recente da OLT de 15 para 35 min (2 coletas + folga; CPE/ACS seguem 15 min); coleta de 25 min atrás é recente, de 40 min é defasada.
 

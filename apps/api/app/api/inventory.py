@@ -21,6 +21,10 @@ from app.events import outbox
 
 router = APIRouter()
 
+# A OLT real só é consultada a cada 15 min no mínimo (proteção do equipamento): a janela de "dado recente" precisa cobrir DUAS coletas e uma folga, senão o inventário
+# vira "defasado" na metade do tempo mesmo com o Edge saudável (a matriz de PONs ficava toda "sem leitura"). 15 min de intervalo x 2 + 5 min de folga.
+OLT_COLLECT_INTERVAL = timedelta(minutes=15)
+OLT_FRESH_FOR = 2 * OLT_COLLECT_INTERVAL + timedelta(minutes=5)   # só para o que vem da OLT; CPE/ACS seguem a janela padrão abaixo (a cadência deles é outra)
 FRESH_FOR = timedelta(minutes=15)
 MAX_FUTURE_SKEW = timedelta(minutes=5)
 LEVEL_ORDER = {"identified": 0, "observed": 1, "certified": 2}
@@ -324,7 +328,7 @@ def ingest_cpe_snapshot(
 def _prov(source: str, observed_at: datetime | None, ttl: timedelta | None = None) -> dict:
     """Provenance envelope (ADR-0020): where a block came from, when it was observed, and how fresh that is NOW.
     quality is fresh|stale|unknown; `conflict` is reserved for a second source disagreeing and is never produced from a single source."""
-    return {"source": source, "observed_at": observed_at.isoformat() if observed_at else None, "quality": _fresh(observed_at, ttl)}
+    return {"source": source, "observed_at": observed_at.isoformat() if observed_at else None, "quality": _fresh(observed_at, ttl or (OLT_FRESH_FOR if source.startswith("olt") else None))}
 
 
 def _fresh(ts: datetime | None, ttl: timedelta | None = None) -> str:
@@ -350,7 +354,7 @@ def list_olts(
     return [
         {"id": str(r.id), "name": r.name, "vendor": r.vendor, "model": r.model, "firmware": r.firmware,
          "support_level": r.support_level, "edge_id": str(r.edge_id), "onu_count": r.onu_count,
-         "observed_at": r.observed_at.isoformat() if r.observed_at else None, "freshness": _fresh(r.observed_at)}
+         "observed_at": r.observed_at.isoformat() if r.observed_at else None, "freshness": _fresh(r.observed_at, OLT_FRESH_FOR)}
         for r in rows
     ]
 
@@ -375,7 +379,7 @@ def list_onus(
     return [
         {"id": str(r.id), "olt_id": str(r.olt_id), "serial": r.serial, "pon_path": r.pon_path,
          "status": r.status, "rx_dbm": float(r.rx_dbm) if r.rx_dbm is not None else None,
-         "observed_at": r.observed_at.isoformat() if r.observed_at else None, "freshness": _fresh(r.observed_at)}
+         "observed_at": r.observed_at.isoformat() if r.observed_at else None, "freshness": _fresh(r.observed_at, OLT_FRESH_FOR)}
         for r in rows
     ]
 
@@ -460,7 +464,7 @@ def list_offline_onus(
             "LEFT JOIN pon_ports pp ON pp.id = u.pon_id AND pp.tenant_id = u.tenant_id "
             "WHERE u.status IN ('offline','los','dying_gasp') AND (CAST(:o AS uuid) IS NULL OR u.olt_id = :o) "
             "AND (CAST(:pp AS text) IS NULL OR pp.pon_path = :pp)")
-    args = {"o": olt_id, "pp": pon_path, "fs": FRESH_FOR.total_seconds()}
+    args = {"o": olt_id, "pp": pon_path, "fs": OLT_FRESH_FOR.total_seconds()}
     due = f"{ref} IS NOT NULL AND {ref} <= now() - make_interval(secs => :s)"
     unknown = conn.execute(text(f"SELECT count(*) {base} AND {ref} IS NULL"), args).scalar_one()  # noqa: S608
     stale = 0 if include_stale else conn.execute(text(f"SELECT count(*) {base} AND {due} AND NOT {fresh}"), {**args, "s": int(min_hours * 3600)}).scalar_one()  # noqa: S608
@@ -482,7 +486,7 @@ def list_offline_onus(
                       else "olt_reported" if r.olt_down_at is not None else "since_last_online"),
             "last_online_at": r.last_online_at.isoformat() if r.last_online_at else None,
             "observed_at": r.observed_at.isoformat() if r.observed_at else None,
-            "olt_observed_at": r.olt_observed_at.isoformat() if r.olt_observed_at else None, "freshness": _fresh(oldest),
+            "olt_observed_at": r.olt_observed_at.isoformat() if r.olt_observed_at else None, "freshness": _fresh(oldest, OLT_FRESH_FOR),
             "drops_30d": avail.get(r.id, {}).get("drops", 0), "offline_hours_30d": round(avail.get(r.id, {}).get("down_seconds", 0.0) / 3600, 1),
         })
     if format == "csv":
@@ -576,7 +580,7 @@ def onu_360(
         # the counts are the LAST KNOWN state of the port, so they carry the age of the newest observation they rest on
         pon_seen = t.seen
         pon = {"path": u.pon_path, "onus": t.total, "online": t.online,
-               "observed_at": t.seen.isoformat() if t.seen else None, "freshness": _fresh(t.seen)}
+               "observed_at": t.seen.isoformat() if t.seen else None, "freshness": _fresh(t.seen, OLT_FRESH_FOR)}
     can_incidents = p.can("incidents:read")
     inc = conn.execute(
         text(
@@ -593,12 +597,12 @@ def onu_360(
     return {
         **extra,
         "id": str(u.id), "serial": u.serial, "status": u.status, "rx_dbm": float(u.rx_dbm) if u.rx_dbm is not None else None,
-        "observed_at": u.observed_at.isoformat() if u.observed_at else None, "freshness": _fresh(u.observed_at),
+        "observed_at": u.observed_at.isoformat() if u.observed_at else None, "freshness": _fresh(u.observed_at, OLT_FRESH_FOR),
         "last_online_at": u.last_online_at.isoformat() if u.last_online_at else None,
         "down_since": u.down_since.isoformat() if u.down_since else None,
         "olt": {"id": str(u.olt_id), "name": u.olt_name, "vendor": u.vendor, "model": u.model, "firmware": u.firmware,
                 "support_level": u.support_level, "observed_at": u.olt_observed_at.isoformat() if u.olt_observed_at else None,
-                "freshness": _fresh(u.olt_observed_at)},
+                "freshness": _fresh(u.olt_observed_at, OLT_FRESH_FOR)},
         "pon": pon,
         "incident": ({"id": str(inc.id), "kind": inc.kind, "suspected_cause": inc.suspected_cause,
                       "opened_at": inc.opened_at.isoformat()} if inc else None),
