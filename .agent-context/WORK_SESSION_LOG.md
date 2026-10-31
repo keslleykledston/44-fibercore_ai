@@ -68,3 +68,7 @@ Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetido
 ## 2026-10-31 (cont.) — PRs 99, 100, 101 no LAB
 - PR 99 ONT Config (leitura, FC24-00/01, ADR-0034, migração 0032, flag `ont_config`); PR 100 sidebar de configuração do aparelho (FC24-02); PR 101 ONU Quick Inspector (UX 2.2, ADR-0035, flag `onu_quick_inspector`). Todas as flags DESLIGADAS no LAB. Sem dado real de ONT lido; só perfis sintéticos rotulados.
 - Pendências: ligar flags por tenant + capturas reais da ajuda (`ont/consultar-configuracao`, `rede/resumo-da-onu`); FC24-03 (preview/jobs), FC24-04 (Edge lê/escreve, só lab autorizado); lote 2 da captura da OLT em andamento; ZTE aguardando reinício do responsável; HubSoft HS-03+ aguardando credenciais/instância.
+
+## 2026-10-31 (cont.) — PR 102 no LAB
+- PR 102 ONT Config FC24-03 (ADR-0036, migração 0033 `cpe_config_changes`, Codex 5 rodadas, approve na 5ª): pré-visualização com diff/risco/aprovações/bloqueios em ordem fixa; submissão SEMPRE 409 (`executed:false`), idempotente, sem job. Permissões `ont_config:request`/`ont_config:request_high` (NOC N1 não pede). MFA recente segue a política única da plataforma (contestado no Codex r1). Suíte API completa PASS, ruff e secrets-scan rc=0. LAB: Alembic 0033, backup `fibercore-20261031T044411Z.dump` antes do deploy; flag `ont_config` segue desligada.
+- Próximo: lote 2 da captura da OLT (conferir `cap_fetch.py`), FC24-04 só com autorização de laboratório; UI de pedido de mudança só junto com o executor.
