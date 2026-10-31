@@ -185,3 +185,19 @@ def test_every_write_capability_has_a_closed_field_list_inside_the_catalog():
     for cap, (names, _) in chg.WRITE_FIELDS.items():
         assert set(names) <= set(ont_config.FIELDS), cap
         assert not any(n.startswith("optical.") for n in names)
+
+
+def test_r3_asks_for_a_recent_second_factor_when_the_platform_enforces_it(client, seed, cpe, monkeypatch):
+    from app.core import settings
+    body = ("lan.ipv4.write", "lan/1", {"lan.ipv4_address": "10.10.0.1", "lan.netmask": "255.255.255.0"})
+    rev = _rev(client, seed, cpe)
+    monkeypatch.setenv("MFA_RECENT_ENFORCE", "true")
+    settings.get_settings.cache_clear()
+    try:
+        r = _preview(client, seed, cpe, *body, rev=rev)
+        assert (r.status_code, r.json()["detail"]) == (403, "mfa_recent_required")
+        # R1/R2 (Wi-Fi) do not need it
+        assert _preview(client, seed, cpe, "wifi.ssid.write", "ssid/1", {"wifi.ssid": "Nova"}, rev=rev).status_code == 201
+    finally:
+        monkeypatch.setenv("MFA_RECENT_ENFORCE", "false")
+        settings.get_settings.cache_clear()
