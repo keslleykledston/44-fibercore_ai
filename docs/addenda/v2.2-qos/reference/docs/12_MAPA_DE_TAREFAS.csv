@@ -1,0 +1,13 @@
+ID,Prioridade,Tipo,Tarefa,Depende_de,Criterio_de_aceite
+QOS-00,P0,Inventario,Inventariar SD-001 e componentes reais,none,CURRENT_STATE e GAP_MAP com paths
+QOS-01,P0,Backend,Mapear capabilities TR-181 e IGD por firmware,QOS-00,Disponibilidade sem assumptividade
+QOS-02,P0,Backend,Coletar WAN Ethernet e telemetria existente,QOS-01,Status fonte e timestamp por campo
+QOS-03,P0,Backend,Executar Ping e DNS homologados no Edge,QOS-01,Stale e HTTP202 tratados
+QOS-04,P0,Integracao,Agregar SD-001 preexistente no COMPLETO,QOS-00,RunId original e controle de concorrencia
+QOS-05,P0,Seguranca,Testar tenant RBAC allowlist locks e flags,QOS-03,Testes negativos e sem NBI exposto
+QOS-06,P0,UX,Adicionar cartao ao drawer existente,QOS-02,Duas acoes e detalhes recolhiveis
+QOS-07,P1,Correlacao,Regras deterministicas de hipoteses,QOS-02,Cada hipotese aponta evidencias
+QOS-08,P1,UX,Historico e Copilot apenas interpretativo,QOS-06,Sem manobras automaticas
+QOS-09,P0,QA,Executar matriz Q01-Q22 e regressao SD-001,QOS-04,CI e evidencias
+QOS-10,P0,Docs,How-to com screenshots reais e changelog,QOS-06,Central de Ajuda atualizada
+QOS-11,P0,Rollout,Canario flag OFF antes de autorizacao,QOS-09,GO NO-GO NOC e rollback

@@ -1,0 +1,63 @@
+{
+  "id": "qos_lab_unsupported",
+  "deviceId": "ont_lab_001",
+  "mode": "QUICK",
+  "state": "partial",
+  "requestedAt": "2026-10-31T15:34:30Z",
+  "completedAt": "2026-10-31T15:35:00Z",
+  "metrics": [
+    {
+      "id": "wan.status",
+      "group": "WAN",
+      "status": "valid",
+      "value": "Up",
+      "source": "TR069_READ",
+      "scope": "SERVICE_WAN",
+      "unit": null,
+      "collectedAt": "2026-10-31T15:35:00Z",
+      "evidenceRef": "cwmp_lab_5",
+      "note": null
+    },
+    {
+      "id": "ip.rtt_avg_ms",
+      "group": "CORE",
+      "status": "not_supported",
+      "value": null,
+      "source": "TR069_ACTIVE",
+      "scope": "SERVICE_WAN",
+      "unit": null,
+      "collectedAt": null,
+      "evidenceRef": null,
+      "note": null
+    },
+    {
+      "id": "wifi.clients",
+      "group": "WIFI",
+      "status": "not_available",
+      "value": null,
+      "source": "ACS_CACHE",
+      "scope": "WIFI",
+      "unit": null,
+      "collectedAt": null,
+      "evidenceRef": null,
+      "note": null
+    },
+    {
+      "id": "optical.rx_dbm",
+      "group": "OPTICAL",
+      "status": "not_supported",
+      "value": null,
+      "source": "TR069_READ",
+      "scope": "PON",
+      "unit": null,
+      "collectedAt": null,
+      "evidenceRef": null,
+      "note": null
+    }
+  ],
+  "hypotheses": [],
+  "speedRunIds": [],
+  "warnings": [
+    "Firmware sem IPPing homologado; telemetria disponível preservada"
+  ]
+}

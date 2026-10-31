@@ -1,0 +1,63 @@
+{
+  "id": "qos_lab_bridge",
+  "deviceId": "ont_bridge_lab",
+  "mode": "QUICK",
+  "state": "partial",
+  "requestedAt": "2026-10-31T15:34:30Z",
+  "completedAt": "2026-10-31T15:35:00Z",
+  "metrics": [
+    {
+      "id": "wan.management_status",
+      "group": "WAN",
+      "status": "valid",
+      "value": "Up",
+      "source": "ACS_CACHE",
+      "scope": "MGMT_WAN",
+      "unit": null,
+      "collectedAt": "2026-10-31T15:27:00Z",
+      "evidenceRef": null,
+      "note": "Somente ACS/gerência"
+    },
+    {
+      "id": "ip.rtt_avg_ms",
+      "group": "CORE",
+      "status": "inconclusive",
+      "value": null,
+      "source": "TR069_ACTIVE",
+      "scope": "MGMT_WAN",
+      "unit": null,
+      "collectedAt": null,
+      "evidenceRef": null,
+      "note": "Não medido: WAN do serviço não identificada"
+    },
+    {
+      "id": "optical.rx_dbm",
+      "group": "OPTICAL",
+      "status": "valid",
+      "value": -20.1,
+      "source": "OLT_ADAPTER",
+      "scope": "PON",
+      "unit": "dBm",
+      "collectedAt": "2026-10-31T15:35:00Z",
+      "evidenceRef": "olt_lab_3",
+      "note": null
+    },
+    {
+      "id": "wifi.clients",
+      "group": "WIFI",
+      "status": "not_applicable",
+      "value": null,
+      "source": "ACS_CACHE",
+      "scope": "WIFI",
+      "unit": null,
+      "collectedAt": null,
+      "evidenceRef": null,
+      "note": null
+    }
+  ],
+  "hypotheses": [],
+  "speedRunIds": [],
+  "warnings": [
+    "WAN de serviço não comprovada; não executar teste de qualidade do serviço na interface ACS"
+  ]
+}

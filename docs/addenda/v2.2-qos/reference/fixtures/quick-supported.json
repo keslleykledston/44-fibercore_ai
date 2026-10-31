@@ -1,0 +1,107 @@
+{
+  "id": "qos_lab_001",
+  "deviceId": "ont_lab_001",
+  "mode": "QUICK",
+  "state": "completed",
+  "requestedAt": "2026-10-31T15:34:30Z",
+  "completedAt": "2026-10-31T15:35:00Z",
+  "metrics": [
+    {
+      "id": "wan.status",
+      "group": "WAN",
+      "status": "valid",
+      "value": "Up",
+      "source": "TR069_READ",
+      "scope": "SERVICE_WAN",
+      "unit": null,
+      "collectedAt": "2026-10-31T15:35:00Z",
+      "evidenceRef": "cwmp_lab_run_1",
+      "note": null
+    },
+    {
+      "id": "ip.rtt_avg_ms",
+      "group": "CORE",
+      "status": "valid",
+      "value": 4.5,
+      "source": "TR069_ACTIVE",
+      "scope": "SERVICE_WAN",
+      "unit": "ms",
+      "collectedAt": "2026-10-31T15:35:00Z",
+      "evidenceRef": "ping_lab_1",
+      "note": null
+    },
+    {
+      "id": "ip.loss_pct",
+      "group": "CORE",
+      "status": "valid",
+      "value": 0,
+      "source": "TR069_ACTIVE",
+      "scope": "SERVICE_WAN",
+      "unit": "%",
+      "collectedAt": "2026-10-31T15:35:00Z",
+      "evidenceRef": "ping_lab_1",
+      "note": null
+    },
+    {
+      "id": "optical.rx_dbm",
+      "group": "OPTICAL",
+      "status": "valid",
+      "value": -23.5,
+      "source": "OLT_ADAPTER",
+      "scope": "PON",
+      "unit": "dBm",
+      "collectedAt": "2026-10-31T15:35:00Z",
+      "evidenceRef": "olt_lab_1",
+      "note": "Fonte OLT, não TR-069"
+    },
+    {
+      "id": "eth.lan1_speed_mbps",
+      "group": "ETHERNET",
+      "status": "valid",
+      "value": 100,
+      "source": "TR069_READ",
+      "scope": "LAN",
+      "unit": "Mbps",
+      "collectedAt": "2026-10-31T15:35:00Z",
+      "evidenceRef": "cwmp_lab_1",
+      "note": null
+    },
+    {
+      "id": "wifi.clients",
+      "group": "WIFI",
+      "status": "not_applicable",
+      "value": null,
+      "source": "TR069_READ",
+      "scope": "WIFI",
+      "unit": null,
+      "collectedAt": "2026-10-31T15:35:00Z",
+      "evidenceRef": null,
+      "note": "ONU sem rádio Wi-Fi"
+    },
+    {
+      "id": "dns.avg_ms",
+      "group": "CORE",
+      "status": "valid",
+      "value": 12,
+      "source": "TR069_ACTIVE",
+      "scope": "SERVICE_WAN",
+      "unit": "ms",
+      "collectedAt": "2026-10-31T15:35:00Z",
+      "evidenceRef": "dns_lab_1",
+      "note": null
+    }
+  ],
+  "hypotheses": [
+    {
+      "code": "LAN_LINK_100M",
+      "label": "Porta LAN potencialmente limitante",
+      "confidence": "medium",
+      "evidenceMetricIds": [
+        "eth.lan1_speed_mbps"
+      ],
+      "recommendedCheck": "Verificar a capacidade da porta e o cabeamento do equipamento conectado"
+    }
+  ],
+  "speedRunIds": [],
+  "warnings": []
+}

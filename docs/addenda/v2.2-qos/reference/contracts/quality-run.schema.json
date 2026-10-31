@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/fibercore/qos-001/quality-run.schema.json",
+  "title": "FiberCore QoS-001 - QualityRun example contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "deviceId", "mode", "state", "requestedAt", "metrics", "warnings", "speedRunIds"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "deviceId": {"type": "string", "minLength": 1},
+    "mode": {"enum": ["QUICK", "COMPLETE"]},
+    "state": {"enum": ["queued", "dispatched", "running", "collecting", "completed", "partial", "failed", "timeout"]},
+    "requestedAt": {"type": "string", "format": "date-time"},
+    "completedAt": {"type": ["string", "null"], "format": "date-time"},
+    "metrics": {"type": "array", "items": {"$ref": "#/$defs/metric"}},
+    "hypotheses": {"type": "array", "items": {"$ref": "#/$defs/hypothesis"}},
+    "speedRunIds": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "warnings": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "metric": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "group", "status", "value", "source", "scope", "collectedAt"],
+      "properties": {
+        "id": {"type": "string"},
+        "group": {"enum": ["WAN", "CORE", "INTERNET", "OPTICAL", "ETHERNET", "WIFI", "CPE"]},
+        "status": {"enum": ["valid", "stale", "not_supported", "not_available", "not_applicable", "failed", "inconclusive"]},
+        "value": {"type": ["number", "string", "boolean", "null"]},
+        "unit": {"type": ["string", "null"]},
+        "source": {"enum": ["TR069_READ", "TR069_ACTIVE", "ACS_CACHE", "OLT_ADAPTER", "SD001"]},
+        "scope": {"enum": ["SERVICE_WAN", "MGMT_WAN", "PON", "LAN", "WIFI"]},
+        "collectedAt": {"type": ["string", "null"], "format": "date-time"},
+        "evidenceRef": {"type": ["string", "null"]},
+        "note": {"type": ["string", "null"]}
+      }
+    },
+    "hypothesis": {
+      "type": "object", "additionalProperties": false,
+      "required": ["code", "label", "confidence", "evidenceMetricIds"],
+      "properties": {
+        "code": {"type": "string"},
+        "label": {"type": "string"},
+        "confidence": {"enum": ["low", "medium"]},
+        "evidenceMetricIds": {"type": "array", "items": {"type": "string"}},
+        "recommendedCheck": {"type": "string"}
+      }
+    }
+  }
+}

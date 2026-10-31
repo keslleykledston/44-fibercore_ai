@@ -1,0 +1,65 @@
+{
+  "catalogVersion": "qos-001.1.1",
+  "note": "Inventário de paths POSSÍVEIS. Não autoriza escrita ou coleta indiscriminada; requer discovery da árvore real + homologação por modelo/firmware/WAN.",
+  "statusAllowed": ["homologated", "partial", "present_unverified", "unsupported", "unknown", "not_applicable"],
+  "groups": [
+    {
+      "id": "ping", "kind": "active", "required": true,
+      "tr181": "Device.IP.Diagnostics.IPPing.", "tr098": "InternetGatewayDevice.IPPingDiagnostics.",
+      "requestedFields": ["Interface", "Host", "NumberOfRepetitions", "Timeout", "DiagnosticsState"],
+      "resultFields": ["DiagnosticsState", "SuccessCount", "FailureCount", "AverageResponseTime", "MinimumResponseTime", "MaximumResponseTime"],
+      "canWriteOnlyIf": "homologated & serviceWANVerified & allowlistedHost & RBAC"
+    },
+    {
+      "id": "dns", "kind": "active", "required": false,
+      "tr181": "Device.DNS.Diagnostics.NSLookupDiagnostics.", "tr098": "InternetGatewayDevice.NSLookupDiagnostics.",
+      "requestedFields": ["HostName", "NumberOfRepetitions", "DiagnosticsState"],
+      "resultFields": ["DiagnosticsState", "SuccessCount", "Result.{i}.Status", "Result.{i}.ResponseTime"],
+      "canWriteOnlyIf": "homologated & serviceWANVerified/routeVerified & allowlistedHost & RBAC"
+    },
+    {
+      "id": "trace", "kind": "active_optional", "required": false,
+      "tr181": "Device.IP.Diagnostics.TraceRoute.", "tr098": "InternetGatewayDevice.TraceRouteDiagnostics.",
+      "requestedFields": ["Host", "DiagnosticsState"],
+      "resultFields": ["DiagnosticsState", "ResponseTime", "RouteHops.{i}.HostAddress"],
+      "canWriteOnlyIf": "homologated & serviceWANVerified & allowlistedHost & RBAC & explicitOption"
+    },
+    {
+      "id": "wan", "kind": "read", "required": true,
+      "tr181": "Device.IP.Interface.{i}.", "tr098": "InternetGatewayDevice.WANDevice.{i}.WANConnectionDevice.{i}.WANIPConnection.{i}.",
+      "notes": "Mapear WAN PPP e IP pela topologia real; não confundir WAN ACS e WAN de serviço."
+    },
+    {
+      "id": "ppp", "kind": "read", "required": false,
+      "tr181": "Device.PPP.Interface.{i}.", "tr098": "InternetGatewayDevice.WANDevice.{i}.WANConnectionDevice.{i}.WANPPPConnection.{i}.",
+      "notes": "PPPoE em bridge pode estar fora da ONT."
+    },
+    {
+      "id": "ethernet", "kind": "read", "required": true,
+      "tr181": "Device.Ethernet.Interface.{i}.", "tr098": "InternetGatewayDevice.LANDevice.{i}.LANEthernetInterfaceConfig.{i}.",
+      "notes": "Velocidade de link negociada e contadores; delta requer duas amostras."
+    },
+    {
+      "id": "wifi", "kind": "read", "required": false,
+      "tr181": "Device.WiFi.AccessPoint.{i}.AssociatedDevice.{i}.", "tr098": "InternetGatewayDevice.LANDevice.{i}.WLANConfiguration.{i}.",
+      "notes": "Taxas PHY não representam throughput. Sanitizar MAC/SSID e desabilitar scans automáticos."
+    },
+    {
+      "id": "optical", "kind": "read", "required": false,
+      "tr181": "Device.Optical.Interface.{i}.", "tr098": null,
+      "resultFields": ["OpticalSignalLevel", "TransmitOpticalLevel"],
+      "notes": "Se ausente, consultar adapter OLT existente. OpticalSignalLevel TR-181 em dBm x1000; outros vendors precisam mapeamento validado."
+    },
+    {
+      "id": "resources", "kind": "read", "required": false,
+      "tr181": "Device.DeviceInfo.ProcessStatus.CPUUsage", "tr098": null,
+      "notes": "CPUUsage só se implementado; memória Device.DeviceInfo.MemoryStatus, sem limiar rígido."
+    },
+    {
+      "id": "speed", "kind": "existing_sd001", "required": false,
+      "tr181": "Device.IP.Diagnostics.DownloadDiagnostics./UploadDiagnostics.",
+      "tr098": "InternetGatewayDevice.DownloadDiagnostics./UploadDiagnostics.",
+      "notes": "Referenciar serviço e runIds EXISTENTES do SD-001, nunca emitir tarefa TR-143 neste adendo."
+    }
+  ]
+}

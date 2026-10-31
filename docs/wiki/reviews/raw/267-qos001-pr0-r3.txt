@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192f0-c164-73c1-be0c-c3058d42af08).
+[codex] Turn started (01a192f0-c19e-7c41-a65a-6796d802a94c).
+[codex] Assistant message captured: Vou revisar o diff real contra `main`, conferir o README com os artefatos de referência e ras...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff -- docs/addenda/v2.2-qos/README.md mai...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff -- docs/addenda/v2.2-qos/README.md mai... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff main...HEAD -- docs/addenda/v2.2-qos/README.md docs/addenda/v2.2-qos/...
+[codex] Command completed: /bin/bash -lc 'git diff main...HEAD -- docs/addenda/v2.2-qos/README.md docs/addenda/v2.2-qos/... (exit 0)
+[codex] Running command: /bin/bash -lc "cat docs/wiki/reviews/raw/266-qos001-pr0-r2.txt && cat docs/addenda/v2.2-qos/R...
+[codex] Command completed: /bin/bash -lc "cat docs/wiki/reviews/raw/266-qos001-pr0-r2.txt && cat docs/addenda/v2.2-qos/R... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/addenda/v2.2-qos/README.md && nl -ba docs/addenda/v2.2-qos/referen...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/addenda/v2.2-qos/README.md && nl -ba docs/addenda/v2.2-qos/referen... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda. O README documenta a precedência e...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda. O README documenta a precedência e o plano corrige o lock compartilhado, mas o pacote de referência mantém instruções conflitantes e há uma divergência arquitetural importante não listada.
+
+Findings:
+- [medium] A referência ainda instrui reuso direto do lock (docs/addenda/v2.2-qos/reference/prompts/CLAUDE_CODE_ADENDO.md:13)
+  O README ajuda quem lê a pasta inteira, mas `reference/` é mantida sem alterações e o prompt mestre ainda manda usar o mesmo lock de ONT/PON. A referência de segurança também diz que COMPLETO herda os limites do SD-001 sem explicar que o lock atual só consulta `speed_test_runs`. Um implementador que use esses trechos diretamente pode deixar ping/DNS concorrer com banda no `DiagnosticsState` do mesmo CPE. Assim, a precedência documentada reduz o risco, mas não elimina a instrução contraditória que motivou o achado da r2.
+  Recommendation: Atualize o prompt e a referência de segurança para exigir explicitamente a reserva compartilhada do GAP_MAP B5, ou marque nesses arquivos que são referência histórica e aponte para o plano vigente.
+- [medium] Divergência sobre estender o mecanismo atual versus criar tabela e API novas (docs/addenda/v2.2-qos/reference/docs/09_ROADMAP_PULL_REQUESTS.md:9-10)
+  A referência pede acrescentar campos ao mecanismo de diagnóstico atual, preferir extensão de schema e não criar API duplicada. O plano local, porém, propõe `quality_runs` e `POST/GET /v1/cpes/{id}/quality/runs`. Essa escolha pode ser correta, mas é uma diferença material de arquitetura não registrada na tabela de divergências; deixar a referência como instrução sem ressalva pode levar a implementação a seguir dois desenhos incompatíveis ou a criar uma superfície de API sem decisão explícita.
+  Recommendation: Registre essa divergência no README e explique por que o plano vigente escolhe a tabela filha e os endpoints específicos, incluindo a relação com `diagnostic_jobs` e o requisito de não duplicar o mecanismo de execução.
