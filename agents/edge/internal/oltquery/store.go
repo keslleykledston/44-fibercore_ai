@@ -289,20 +289,20 @@ func (s *Store) Claim(oltRef, sessionID string) (Entry, error) {
 		if len(keep) >= PerHour {
 			return ErrNothingToDo
 		}
-		inSession := 0
+		inSession, anyOLT := 0, 0 // this OLT's executions of the session, and every OLT's (the aggregate cap is per session, whatever the OLT)
 		var cand []*Entry
 		for _, e := range f.Entries {
-			if e.Intent.OLTRef != oltRef {
-				continue
+			if e.SessionID == sessionID && e.State != Queued {
+				anyOLT++
+				if e.Intent.OLTRef == oltRef {
+					inSession++
+				}
 			}
-			switch {
-			case e.SessionID == sessionID && e.State != Queued:
-				inSession++
-			case e.State == Queued && e.ExpiresAt.After(now):
+			if e.Intent.OLTRef == oltRef && e.State == Queued && e.ExpiresAt.After(now) {
 				cand = append(cand, e)
 			}
 		}
-		if inSession >= PerSession || inSession+f.CaptureSess[sessionID].N >= MaxPerSession || len(cand) == 0 { // captures of the session count toward the aggregate cap too
+		if inSession >= PerSession || anyOLT+f.CaptureSess[sessionID].N >= MaxPerSession || len(cand) == 0 { // captures of the session count toward the aggregate cap too
 			return ErrNothingToDo
 		}
 		sort.Slice(cand, func(i, j int) bool {

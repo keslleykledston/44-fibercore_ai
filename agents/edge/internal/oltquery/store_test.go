@@ -487,3 +487,34 @@ func TestCapturesOfTheSessionCountTowardTheAggregateCapOfOnDemandClaims(t *testi
 		t.Fatalf("%d on-demand + %d captures pass the aggregate cap %d", n, CapturesPerSession, MaxPerSession)
 	}
 }
+
+func TestTheAggregateCapIsPerSessionAcrossOLTs(t *testing.T) {
+	s, c := newStore(t)
+	for i := 0; i < PerSession; i++ {
+		enq(t, s, c, fmt.Sprintf("a%d", i), olt1)
+	}
+	for i := 0; i < PerSession; i++ {
+		if _, err := s.Claim(olt1, "S"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// the same session id used for another OLT (an alias or a shared id): 5 already ran, 2 captures fit (7), a 3rd execution of any kind does not pass 8
+	for i := 0; i < CapturesPerSession; i++ {
+		if err := s.ReserveCapture(olt2, "S"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 4; i++ {
+		enq(t, s, c, fmt.Sprintf("b%d", i), olt2)
+	}
+	n := 0
+	for {
+		if _, err := s.Claim(olt2, "S"); err != nil {
+			break
+		}
+		n++
+	}
+	if PerSession+CapturesPerSession+n > MaxPerSession {
+		t.Fatalf("session total %d passes the cap %d", PerSession+CapturesPerSession+n, MaxPerSession)
+	}
+}
