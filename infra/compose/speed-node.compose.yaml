@@ -1,0 +1,26 @@
+# Nó de teste de banda do Speed Diagnostics (ADR-0038). Projeto próprio: `docker compose -p fibercore-speed -f infra/compose/speed-node.compose.yaml --env-file build/speed-node.env up -d --build`.
+# `build/speed-node.env` (0600, fora do Git) define SPEED_NODE_LISTEN=<ip>:<porta> e SPEED_NODE_ALLOW=<prefixos de origem>. Nenhum endereço fica neste arquivo.
+# network_mode host: o nó enxerga o endereço de origem real do CPE/Edge (a lista de origens depende disso) e liga SÓ no endereço nomeado (curinga é recusado).
+services:
+  speed-node:
+    build: ../../tools/speed-node
+    image: fibercore-speed-node:local
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      SPEED_NODE_LISTEN: ${SPEED_NODE_LISTEN:?defina SPEED_NODE_LISTEN em build/speed-node.env}
+      SPEED_NODE_ALLOW: ${SPEED_NODE_ALLOW:?defina SPEED_NODE_ALLOW em build/speed-node.env}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options: {max-size: "1m", max-file: "2"}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - \"http://$${SPEED_NODE_LISTEN}/health\" | grep -qx ok"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

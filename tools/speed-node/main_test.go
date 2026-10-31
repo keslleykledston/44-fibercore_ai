@@ -183,3 +183,19 @@ func TestOverARealSocket(t *testing.T) {
 		t.Fatalf("socket dl: %d got=%d cl=%d te=%v", resp.StatusCode, got, resp.ContentLength, resp.TransferEncoding)
 	}
 }
+
+// The container's own healthcheck must not depend on the node's address being in the allow-list; the exemption is /health only.
+func TestHealthFromThisHostNeedsNoAllowEntryButTransfersDo(t *testing.T) {
+	n := testNode(t, 2) // allow-list is 10.20.0.0/16 only
+	if rr := do(n, "GET", "/health", "127.0.0.1:50000", nil); rr.Code != 200 {
+		t.Fatalf("self health: %d", rr.Code)
+	}
+	for _, p := range []string{"/dl/10mb", "/ul/10mb"} {
+		if rr := do(n, "GET", p, "127.0.0.1:50000", nil); rr.Code != 403 {
+			t.Fatalf("%s from self must still follow the allow-list: %d", p, rr.Code)
+		}
+	}
+	if rr := do(n, "GET", "/health", "192.0.2.9:50000", nil); rr.Code != 403 {
+		t.Fatalf("a foreign source is still refused: %d", rr.Code)
+	}
+}
