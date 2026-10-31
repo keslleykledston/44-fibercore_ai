@@ -9,6 +9,7 @@ import { featuresOn } from "@/lib/features";
 import { CapabilityGate } from "@/components/CapabilityGate";
 import { FaceplateCard } from "@/components/Faceplate";
 import { OntSidebar } from "@/components/OntSidebar";
+import { QualitySection } from "@/components/QualitySection";
 import { SpeedTestSection } from "@/components/SpeedTestSection";
 import { humanHours } from "@/lib/offline";
 import type { Capability, Onu360, OnuCustomer, OnuHistory } from "@/lib/types";
@@ -37,6 +38,7 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
   const hist = await apiSafe<OnuHistory>(`/v1/onus/${id}/history?days=30&limit=12`);
   const newUx = await featuresOn("onu_quick_inspector");   // trilha e painel frontal (ADR-0037) seguem a mesma flag da Rede: desligada, a tela é a anterior
   const speedOn = newUx && o.cpe?.link === "confirmed" && !!o.cpe.device ? await featuresOn("speed_diagnostics") : false;   // ADR-0038: o bloco só existe com o recurso ligado e roteador vinculado
+  const qualityOn = newUx && o.cpe?.link === "confirmed" && !!o.cpe.device ? await featuresOn("quality_diagnostics") : false;   // ADR-0039: idem, com a flag própria
   const ontCfg = o.cpe?.link === "confirmed" && o.cpe.device ? await apiSafe<{ enabled: boolean }>("/v1/ont-config/health") : null;   // o botão só existe com o recurso ligado
   return (
     <AppShell active="/rede" user="1">
@@ -165,6 +167,11 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
         {speedOn && o.cpe?.device && (
           <Card title="Teste de banda" testid="onu360-speed">
             <SpeedTestSection key={o.cpe.device.id} cpeId={o.cpe.device.id} />
+          </Card>
+        )}
+        {qualityOn && o.cpe?.device && (
+          <Card title="Qualidade do serviço" testid="onu360-quality">
+            <QualitySection key={o.cpe.device.id} cpeId={o.cpe.device.id} />
           </Card>
         )}
         <Card title="Ações" testid="onu360-actions">

@@ -1,0 +1,36 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19339-0e81-7ff2-9437-35db7802178b).
+[codex] Turn started (01a19339-0ebf-77b2-aec5-da4cfde1cf15).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir especialmente os caminhos de leitura degradada, fi...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/app/bff/cpes/'...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/app/bff/cpes/'... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- apps/web/src/components/Onu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- apps/web/src/components/Onu... (exit 0)
+[codex] Assistant message captured: Já apareceu um risco concreto na leitura dos formatos: alguns campos apresentados como “fecha...
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/lib/quality.ts | sed -n '20,90p'; nl -ba apps/web/src/app/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/lib/quality.ts | sed -n '20,90p'; nl -ba apps/web/src/app/... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"function apiSafe|export async function apiSafe|apiSafe<\" apps/web/src...
+[codex] Command completed: /bin/bash -lc "rg -n \"function apiSafe|export async function apiSafe|apiSafe<\" apps/web/src... (exit 0)
+[codex] Assistant message captured: O backend confirma `WAN_UNCLASSIFIED` como escopo de métrica, e o frontend preserva esse avis...
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/quality.py | sed -n '110,260p'; nl -ba apps/web/src/a...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/quality.py | sed -n '110,260p'; nl -ba apps/web/src/a... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"function featuresOn|featuresOn\" apps/web/src/lib/features.ts; nl -ba ...
+[codex] Command completed: /bin/bash -lc "rg -n \"function featuresOn|featuresOn\" apps/web/src/lib/features.ts; nl -ba ... (exit 0)
+[codex] Running command: /bin/bash -lc "cat apps/web/src/lib/features.ts; nl -ba apps/web/e2e/help-quality.spec.ts | s...
+[codex] Command completed: /bin/bash -lc "cat apps/web/src/lib/features.ts; nl -ba apps/web/e2e/help-quality.spec.ts | s... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: o leitor BFF não valida formatos fech...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: o leitor BFF não valida formatos fechados de vários campos que a UI exibe, permitindo injetar conteúdo arbitrário no diagnóstico; além disso, leitura de uma das duas rotas pode mascarar 401/403 da outra.
+
+Findings:
+- [high] Formato de métricas aceita e renderiza valores e escopos não fechados (apps/web/src/lib/quality.ts:34-45)
+  `readMetric` valida apenas o padrão do ID e status; `group`, `source`, `scope` e `instance` aceitam qualquer string (truncada), e números aceitam `NaN`/infinito. A UI renderiza esses campos diretamente (`group` como cabeçalho e `scope`/`instance`/valor nos detalhes). Assim, resposta fora do contrato pode expor texto arbitrário ou informação que o formato fechado deveria excluir; a filtragem não cumpre o limite de confiança anunciado para o BFF.
+  Recommendation: Validar cada campo com enums/formatos permitidos por métrica e grupo, exigir números finitos e datas válidas, e rejeitar a resposta inteira quando qualquer campo violar o contrato.
+- [medium] 401/403 de uma rota podem ser mascarados pelo resultado da outra (apps/web/src/app/bff/cpes/[id]/quality/route.ts:11-20)
+  O GET chama capabilities e runs em paralelo, mas escolhe o status usando `c.status !== 200 ? c.status : r.status`. Se capabilities responder 200 e runs responder 401, o BFF devolve 502; inversamente, um 403 de capabilities pode virar `disabled` mesmo quando a falha real de runs é autenticação. A UI então mostra erro genérico ou flag desligada, escondendo expiração de sessão ou falta de permissão no histórico.
+  Recommendation: Tratar cada resultado explicitamente, priorizando 401/403 reais e preservando a origem do erro; só mapear 403 para `disabled` quando a resposta de capabilities ou runs indicar comprovadamente `feature_disabled`.
