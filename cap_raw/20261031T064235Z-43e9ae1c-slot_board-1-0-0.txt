@@ -1,0 +1,1059 @@
+  ---------------------------------------                
+  Board Name          : H805GPFD                    
+  Board Status        : Normal                       
+  ---------------------------------------
+
+  ------------------------------------------------------------------------------
+  Power Status      Power-off cause                    Power-off Time
+  ------------------------------------------------------------------------------
+  POWER-ON          -                                  -
+  ------------------------------------------------------------------------------
+  -------------------------------------------------------------
+    Port   Port   min-distance   max-distance   Optical-module
+           type       (km)           (km)           status
+  -------------------------------------------------------------
+    0     GPON        0              20             Online
+    1     GPON        0              20             Online
+    2     GPON        0              20             Online
+    3     GPON        0              20             Online
+    4     GPON        0              20             Online
+    5     GPON        0              20             Online
+    6     GPON        0              20             Online
+    7     GPON        0              20             Online
+    8     GPON        0              20             Online
+    9     GPON        0              20             Online
+   10     GPON        0              20             Online
+   11     GPON        0              20             Online
+   12     GPON        0              20             Online
+   13     GPON        0              20             Online
+   14     GPON        0              20             Online
+   15     GPON        0              20             Online
+  -------------------------------------------------------------
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 1/0    0  485754435D13D2A7  active      offline  initial  initial  no 
+  0/ 1/0    1  414C434CFCD29E9D  active      online   normal   match    no 
+  0/ 1/0    2  5A544547D872FE7D  active      online   normal   match    no 
+  0/ 1/0    3  485754434E9075B1  active      online   normal   match    no 
+  0/ 1/0    4  485754439C3E8AB0  active      online   normal   match    no 
+  0/ 1/0    5  485754435823BDB1  active      online   normal   mismatch no 
+  0/ 1/0    6  48575443C2394493  active      online   normal   mismatch no 
+  0/ 1/0    7  485754436C0789A6  active      online   normal   mismatch no 
+  0/ 1/0    8  48575443A05AFD9B  active      offline  initial  initial  no 
+  0/ 1/0    9  5A544547C4BDA427  active      online   normal   match    no 
+  0/ 1/0   10  48575443B6215BB2  active      offline  initial  initial  no 
+  0/ 1/0   11  4857544331E42282  active      online   normal   mismatch no 
+  0/ 1/0   12  5A544547C4A24839  active      offline  initial  initial  no 
+  0/ 1/0   13  5A544547DB060FF4  active      online   normal   match    no 
+  0/ 1/0   14  5A544547DA0C1B5F  active      online   normal   match    no 
+  0/ 1/0   15  485754435CAE80A7  active      online   normal   mismatch no 
+  0/ 1/0   16  48575443E224F8A5  active      online   normal   mismatch no 
+  0/ 1/0   20  48575443484D59AD  active      online   normal   match    no 
+  0/ 1/0   24  485754439C4550B0  active      offline  initial  initial  no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 1/0       0   45
+  0/ 1/0       1   108
+  0/ 1/0       2   548
+  0/ 1/0       3   107
+  0/ 1/0       4   107
+  0/ 1/0       5   107
+  0/ 1/0       6   erasmo5535@4wnet.com.br
+  0/ 1/0       7   107
+  0/ 1/0       8   simone4466@4wnet.com.br
+  0/ 1/0       9   rejane225@airnet.com.br
+  0/ 1/0      10   45
+  0/ 1/0      11   eurisvania958@tixus.com.br
+  0/ 1/0      12   65
+  0/ 1/0      13   517
+  0/ 1/0      14   727
+  0/ 1/0      15   107
+  0/ 1/0      16   370
+  0/ 1/0      20   45
+  0/ 1/0      24   45
+  -----------------------------------------------------------------------------
+  In port 0/ 1/0 , the total of ONTs are: 19, online: 14
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 1/1    0  485754436103789F  active      online   normal   mismatch no 
+  0/ 1/1    1  5A544547D4252BDD  active      online   normal   match    no 
+  0/ 1/1    2  5A544547DA0C0F3C  active      online   normal   match    no 
+  0/ 1/1    3  4857544397103CAE  active      online   normal   match    no 
+  0/ 1/1    4  5A544547D1EDA323  active      online   normal   match    no 
+  0/ 1/1    5  4857544318D6ACA1  active      online   normal   match    no 
+  0/ 1/1    7  48575443FC6F3DAA  active      offline  initial  initial  no 
+  0/ 1/1    8  485754439EB095A5  active      offline  initial  initial  no 
+  0/ 1/1    9  5A544547CCEBC329  active      online   normal   match    no 
+  0/ 1/1   10  5A544547CCEC51F1  active      offline  initial  initial  no 
+  0/ 1/1   12  5A544547D42CCAAA  active      online   normal   match    no 
+  0/ 1/1   13  485754435C9E6DA7  active      online   normal   match    no 
+  0/ 1/1   15  48575443B17F52A3  active      offline  initial  initial  no 
+  0/ 1/1   19  48575443141AFEA5  active      offline  initial  initial  no 
+  0/ 1/1   23  5A544547D2ABED6B  active      online   normal   match    no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 1/1       0   37
+  0/ 1/1       1   637
+  0/ 1/1       2   65
+  0/ 1/1       3   45
+  0/ 1/1       4   947
+  0/ 1/1       5   107
+  0/ 1/1       7   45
+  0/ 1/1       8   45
+  0/ 1/1       9   197
+  0/ 1/1      10   45
+  0/ 1/1      12   65
+  0/ 1/1      13   45
+  0/ 1/1      15   299
+  0/ 1/1      19   45
+  0/ 1/1      23   65
+  -----------------------------------------------------------------------------
+  In port 0/ 1/1 , the total of ONTs are: 15, online: 10
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 1/2    0  48575443DB0F887E  active      offline  initial  initial  no 
+  0/ 1/2    1  4857544347629878  active      online   normal   match    no 
+  0/ 1/2    2  48575443A9746942  active      offline  initial  initial  no 
+  0/ 1/2    3  5A544547D363AD52  active      online   normal   match    no 
+  0/ 1/2    4  48575443E55E51AF  active      online   normal   match    no 
+  0/ 1/2   10  48575443A04E3C9B  active      online   normal   mismatch no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 1/2       0   luciana7336@4wnet.com.br
+  0/ 1/2       1   joverlando2253@4wnet.com.br
+  0/ 1/2       2   amplomed@uplink.com.br
+  0/ 1/2       3   39
+  0/ 1/2       4   45
+  0/ 1/2      10   daiane5850@4wnet.com.br
+  -----------------------------------------------------------------------------
+  In port 0/ 1/2 , the total of ONTs are: 6, online: 4
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 1/3    0  48575443E22422A5  active      offline  initial  initial  no 
+  0/ 1/3    1  5A544547D4B14789  active      offline  initial  initial  no 
+  0/ 1/3    2  5A544547D872FC49  active      online   normal   match    no 
+  0/ 1/3    3  5A544547D4B147E5  active      online   normal   match    no 
+  0/ 1/3    4  5A544547C4A238F0  active      offline  initial  initial  no 
+  0/ 1/3    5  5A544547C4A26B1F  active      online   normal   match    no 
+  0/ 1/3    6  5A544547D4251E0F  active      online   normal   match    no 
+  0/ 1/3    7  5A544547D64E73E6  active      online   normal   match    no 
+  0/ 1/3    8  48575443A04DCD9B  active      online   normal   mismatch no 
+  0/ 1/3    9  485754432094119B  active      online   normal   mismatch no 
+  0/ 1/3   10  485754439716C4AE  active      offline  initial  initial  no 
+  0/ 1/3   11  48575443C2719BAD  active      offline  initial  initial  no 
+  0/ 1/3   12  485754435D4CDEA7  active      online   normal   match    no 
+  0/ 1/3   13  5A544547C4A23AB2  active      online   normal   match    no 
+  0/ 1/3   14  5A544547C4A23B34  active      online   normal   match    no 
+  0/ 1/3   15  414C434CFCD282B5  active      online   normal   match    no 
+  0/ 1/3   16  5A544547D4B142E1  active      offline  initial  initial  no 
+  0/ 1/3   17  5A544547D4B41BD9  active      online   normal   match    no 
+  0/ 1/3   19  5A544547DA0CBD6F  active      online   normal   match    no 
+  0/ 1/3   20  5A544547D1EDA2E3  active      online   normal   match    no 
+  0/ 1/3   21  5A544547D1EDA338  active      online   normal   match    no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 1/3       0   102
+  0/ 1/3       1   548
+  0/ 1/3       2   548
+  0/ 1/3       3   39
+  0/ 1/3       4   65
+  0/ 1/3       5   339
+  0/ 1/3       6   626
+  0/ 1/3       7   517
+  0/ 1/3       8   edison100@4wnet.com.br
+  0/ 1/3       9   kelly819@tixus.com.br
+  0/ 1/3      10   45
+  0/ 1/3      11   45
+  0/ 1/3      12   107
+  0/ 1/3      13   65
+  0/ 1/3      14   65
+  0/ 1/3      15   666
+  0/ 1/3      16   548
+  0/ 1/3      17   65
+  0/ 1/3      19   915
+  0/ 1/3      20   980
+  0/ 1/3      21   102
+  -----------------------------------------------------------------------------
+  In port 0/ 1/3 , the total of ONTs are: 21, online: 15
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 1/4    0  48575443293C6A9B  active      offline  initial  initial  no 
+  0/ 1/4    1  48575443318F3382  active      online   normal   mismatch no 
+  0/ 1/4    2  5A544547D8706582  active      offline  initial  initial  no 
+  0/ 1/4    3  48575443318A8D82  active      offline  initial  initial  no 
+  0/ 1/4    4  48575443E4A7089C  active      offline  initial  initial  no 
+  0/ 1/4    5  5A544547CCEBC338  active      online   normal   match    no 
+  0/ 1/4    6  48575443318CBE82  active      offline  initial  initial  no 
+  0/ 1/4    7  485754430FC630AF  active      online   normal   mismatch no 
+  0/ 1/4    8  48575443FEA8ECA5  active      online   normal   mismatch no 
+  0/ 1/4    9  5A544547D07EE7C4  active      offline  initial  initial  no 
+  0/ 1/4   10  5A544547D2BD510C  active      online   normal   match    no 
+  0/ 1/4   11  5A544547C4A25316  active      online   normal   match    no 
+  0/ 1/4   12  5A544547C4A253F8  active      online   normal   match    no 
+  0/ 1/4   13  48575443CE2CF1A8  active      online   normal   mismatch no 
+  0/ 1/4   14  5A544547C4A23AAB  active      offline  initial  initial  no 
+  0/ 1/4   15  5A544547C4A239DD  active      online   normal   match    no 
+  0/ 1/4   16  485754432146A2B3  active      offline  initial  initial  no 
+  0/ 1/4   17  5A544547D3640076  active      online   normal   match    no 
+  0/ 1/4   18  5A544547C4A23394  active      online   normal   match    no 
+  0/ 1/4   19  5A544547C4A9D593  active      online   normal   match    no 
+  0/ 1/4   20  5A544547DA0CA017  active      online   normal   match    no 
+  0/ 1/4   21  485754435D0E7AA7  active      online   normal   mismatch no 
+  0/ 1/4   22  5A544547D4B14739  active      offline  initial  initial  no 
+  0/ 1/4   23  5A544547D70FAAAA  active      online   normal   match    no 
+  0/ 1/4   24  5A544547D42CD386  active      online   normal   match    no 
+  0/ 1/4   25  5A544547D4B14785  active      offline  initial  initial  no 
+  0/ 1/4   26  5A544547C4AA0959  active      online   normal   match    no 
+  0/ 1/4   27  5A544547D07EE794  active      offline  initial  initial  no 
+  0/ 1/4   28  5A544547DB05EFF5  active      offline  initial  initial  no 
+  0/ 1/4   29  5A544547C4AA0CB1  active      online   normal   match    no 
+  0/ 1/4   30  5A544547D5F9338D  active      offline  initial  initial  no 
+  0/ 1/4   31  5A544547DA0CA06E  active      online   normal   match    no 
+  0/ 1/4   32  5A544547D2303B0B  active      online   normal   match    no 
+  0/ 1/4   33  5A544547D986F394  active      online   normal   match    no 
+  0/ 1/4   34  48575443581405B1  active      offline  initial  initial  no 
+  0/ 1/4   35  5A544547D2BCFE16  active      online   normal   match    no 
+  0/ 1/4   36  5A544547D1F73683  active      online   normal   match    no 
+  0/ 1/4   37  5A544547D70FA9ED  active      offline  initial  initial  no 
+  0/ 1/4   38  4857544362C1F9A3  active      offline  initial  initial  no 
+  0/ 1/4   39  5A544547D70FA98C  active      online   normal   match    no 
+  0/ 1/4   40  5A544547DB05F028  active      online   normal   match    no 
+  0/ 1/4   41  5A544547D64E7B1D  active      online   normal   match    no 
+  0/ 1/4   42  5A544547DB05BDA6  active      offline  initial  initial  no 
+  0/ 1/4   43  5A544547DB060D28  active      online   normal   match    no 
+  0/ 1/4   44  5A544547D872EDDC  active      offline  initial  initial  no 
+  0/ 1/4   45  4857544372765AB3  active      online   normal   mismatch no 
+  0/ 1/4   46  5A544547DA0CB92C  active      online   normal   mismatch no 
+  0/ 1/4   47  5A544547D1EDA19D  active      online   normal   match    no 
+  0/ 1/4   48  5A544547D986F1D6  active      offline  initial  initial  no 
+  0/ 1/4   49  5A544547DA0C54E5  active      online   normal   match    no 
+  0/ 1/4   50  5A544547D1FB8DB6  active      online   normal   match    no 
+  0/ 1/4   51  48575443E22484A5  active      online   normal   match    no 
+  0/ 1/4   52  5A544547D8705A7F  active      online   normal   match    no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 1/4       0   erica7088@4wnet.com.br
+  0/ 1/4       1   16403525204@4wnet.com.br
+  0/ 1/4       2   517
+  0/ 1/4       3   133
+  0/ 1/4       4   ana5172@4wnet.com.br
+  0/ 1/4       5   45
+  0/ 1/4       6   2
+  0/ 1/4       7   107
+  0/ 1/4       8   107
+  0/ 1/4       9   517
+  0/ 1/4      10   517
+  0/ 1/4      11   65
+  0/ 1/4      12   65
+  0/ 1/4      13   107
+  0/ 1/4      14   65
+  0/ 1/4      15   65
+  0/ 1/4      16   45
+  0/ 1/4      17   107
+  0/ 1/4      18   65
+  0/ 1/4      19   5
+  0/ 1/4      20   517
+  0/ 1/4      21   107
+  0/ 1/4      22   39
+  0/ 1/4      23   517
+  0/ 1/4      24   517
+  0/ 1/4      25   548
+  0/ 1/4      26   548
+  0/ 1/4      27   517
+  0/ 1/4      28   517
+  0/ 1/4      29   624
+  0/ 1/4      30   548
+  0/ 1/4      31   517
+  0/ 1/4      32   517
+  0/ 1/4      33   517
+  0/ 1/4      34   107
+  0/ 1/4      35   65
+  0/ 1/4      36   517
+  0/ 1/4      37   517
+  0/ 1/4      38   37
+  0/ 1/4      39   517
+  0/ 1/4      40   517
+  0/ 1/4      41   517
+  0/ 1/4      42   517
+  0/ 1/4      43   517
+  0/ 1/4      44   548
+  0/ 1/4      45   107
+  0/ 1/4      46   548
+  0/ 1/4      47   964
+  0/ 1/4      48   517
+  0/ 1/4      49   517
+  0/ 1/4      50   517
+  0/ 1/4      51   133
+  0/ 1/4      52   517
+  -----------------------------------------------------------------------------
+  In port 0/ 1/4 , the total of ONTs are: 53, online: 34
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 1/5    1  48575443391B499D  active      offline  initial  initial  no 
+  0/ 1/5    3  55424E54B906DDA3  active      offline  initial  initial  no 
+  0/ 1/5    5  485754432015C19B  active      offline  initial  initial  no 
+  0/ 1/5    6  5A544547D1BC2903  active      offline  initial  initial  no 
+  0/ 1/5   10  48575443E22476A5  active      online   normal   mismatch no 
+  0/ 1/5   13  48575443E4A93F9C  active      offline  initial  initial  no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 1/5       1   30
+  0/ 1/5       3   30
+  0/ 1/5       5   30
+  0/ 1/5       6   495
+  0/ 1/5      10   394
+  0/ 1/5      13   urcilandia8385@4wnet.com.br
+  -----------------------------------------------------------------------------
+  In port 0/ 1/5 , the total of ONTs are: 6, online: 1
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 1/6    0  5A544547D2303AED  active      online   normal   match    no 
+  0/ 1/6    1  48575443971FB5AE  active      online   normal   match    no 
+  0/ 1/6    2  5A544547D363FFDB  active      online   normal   match    no 
+  0/ 1/6    3  5A544547DA0C0E9F  active      online   normal   match    no 
+  0/ 1/6    4  48575443318F1182  active      offline  initial  initial  no 
+  0/ 1/6    5  48575443835814A6  active      online   normal   mismatch no 
+  0/ 1/6    6  5A544547DB061033  active      online   normal   match    no 
+  0/ 1/6    7  485754435E22C875  active      offline  initial  initial  no 
+  0/ 1/6    8  48575443CE3782A8  active      online   normal   mismatch no 
+  0/ 1/6    9  4857544348546DAD  active      offline  initial  initial  no 
+  0/ 1/6   10  485754432104AE9B  active      offline  initial  initial  no 
+  0/ 1/6   11  414C434CFCD296A4  active      online   normal   match    no 
+  0/ 1/6   12  48575443A8C03942  active      online   normal   match    no 
+  0/ 1/6   13  5A544547D4B1480F  active      offline  initial  initial  no 
+  0/ 1/6   14  5A544547D36404D3  active      online   normal   match    no 
+  0/ 1/6   15  5A544547C4A23A5F  active      online   normal   match    no 
+  0/ 1/6   16  5A544547C4A239E6  active      online   normal   match    no 
+  0/ 1/6   17  5A544547D4B41D10  active      online   normal   mismatch no 
+  0/ 1/6   18  5A544547D5F94810  active      online   normal   match    no 
+  0/ 1/6   19  5A544547D1EDA30F  active      online   normal   match    no 
+  0/ 1/6   20  48575443B17F6FA3  active      online   normal   mismatch no 
+  0/ 1/6   21  48575443B17F6AA3  active      offline  initial  initial  no 
+  0/ 1/6   22  5A544547C4A23B13  active      online   normal   match    no 
+  0/ 1/6   23  48575443485D22AD  active      online   normal   match    no 
+  0/ 1/6   24  5A544547D70FAA93  active      online   normal   match    no 
+  0/ 1/6   25  5A544547D8705A36  active      online   normal   match    no 
+  0/ 1/6   26  5A544547CCEC4C8B  active      online   normal   match    no 
+  0/ 1/6   27  5A544547D4252A97  active      online   normal   mismatch no 
+  0/ 1/6   28  5A544547D70FA9EE  active      online   normal   match    no 
+  0/ 1/6   29  5A544547D8706554  active      online   normal   match    no 
+  0/ 1/6   30  5A544547DB05EF8C  active      offline  initial  initial  no 
+  0/ 1/6   31  5A544547C4A23A9E  active      offline  initial  initial  no 
+  0/ 1/6   32  5A544547C4A23B12  active      offline  initial  initial  no 
+  0/ 1/6   33  48575443CE4BF3A8  active      offline  initial  initial  no 
+  0/ 1/6   34  5A544547C4A238DF  active      offline  initial  initial  no 
+  0/ 1/6   35  5A544547DB05EFF1  active      online   normal   match    no 
+  0/ 1/6   36  5A544547DAD12719  active      online   normal   match    no 
+  0/ 1/6   37  5A544547D4252A4D  active      offline  initial  initial  no 
+  0/ 1/6   38  5A544547D2BD385D  active      online   normal   match    no 
+  0/ 1/6   39  5A544547DB05BDCB  active      online   normal   match    no 
+  0/ 1/6   40  5A544547DA0CAB20  active      online   normal   match    no 
+  0/ 1/6   41  5A544547D1F73CBF  active      online   normal   match    no 
+  0/ 1/6   42  5A544547DB0608BB  active      online   normal   match    no 
+  0/ 1/6   43  5A544547D8706541  active      online   normal   match    no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 1/6       0   517
+  0/ 1/6       1   37
+  0/ 1/6       2   65
+  0/ 1/6       3   517
+  0/ 1/6       4   thamires024@4wnet.com.br
+  0/ 1/6       5   107
+  0/ 1/6       6   517
+  0/ 1/6       7   84046457000208@4wnet.net.br
+  0/ 1/6       8   37
+  0/ 1/6       9   37
+  0/ 1/6      10   clariceaparecida014@tixus.com.br
+  0/ 1/6      11   674
+  0/ 1/6      12   00376437000809@uplink.com.br
+  0/ 1/6      13   548
+  0/ 1/6      14   503
+  0/ 1/6      15   65
+  0/ 1/6      16   65
+  0/ 1/6      17   649
+  0/ 1/6      18   37
+  0/ 1/6      19   929
+  0/ 1/6      20   191
+  0/ 1/6      21   208
+  0/ 1/6      22   65
+  0/ 1/6      23   45
+  0/ 1/6      24   517
+  0/ 1/6      25   517
+  0/ 1/6      26   548
+  0/ 1/6      27   350
+  0/ 1/6      28   517
+  0/ 1/6      29   517
+  0/ 1/6      30   517
+  0/ 1/6      31   65
+  0/ 1/6      32   65
+  0/ 1/6      33   37
+  0/ 1/6      34   39
+  0/ 1/6      35   517
+  0/ 1/6      36   985
+  0/ 1/6      37   65
+  0/ 1/6      38   65
+  0/ 1/6      39   517
+  0/ 1/6      40   517
+  0/ 1/6      41   517
+  0/ 1/6      42   517
+  0/ 1/6      43   517
+  -----------------------------------------------------------------------------
+  In port 0/ 1/6 , the total of ONTs are: 44, online: 32
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 1/7    0  5A544547D70FAA82  active      offline  initial  initial  no 
+  0/ 1/7    1  48575443B906DBEB  active      offline  initial  initial  no 
+  0/ 1/7    2  48575443C5EB2DB0  active      offline  initial  initial  no 
+  0/ 1/7    3  48575443E4A8049C  active      offline  initial  initial  no 
+  0/ 1/7    4  48575443E4A83A9C  active      offline  initial  initial  no 
+  0/ 1/7    5  4857544331EE6D82  active      online   normal   match    no 
+  0/ 1/7    6  4857544392C9334B  active      online   normal   mismatch no 
+  0/ 1/7    7  4857544392693E4B  active      offline  initial  initial  no 
+  0/ 1/7    8  48575443980A0F9E  active      offline  initial  initial  no 
+  0/ 1/7   10  5A544547C8EDF44F  active      offline  initial  initial  no 
+  0/ 1/7   11  48575443100751B0  active      offline  initial  initial  no 
+  0/ 1/7   12  485754433F8CD1A6  active      online   normal   mismatch no 
+  0/ 1/7   13  48575443FEB523A4  active      offline  initial  initial  no 
+  0/ 1/7   14  5A544547C4A23BEF  active      offline  initial  initial  no 
+  0/ 1/7   15  5A544547C4A9D13A  active      online   normal   match    no 
+  0/ 1/7   16  48575443BB80B342  active      online   normal   match    no 
+  0/ 1/7   17  5A544547D872FE98  active      offline  initial  initial  no 
+  0/ 1/7   18  485754434E9105B1  active      online   normal   match    no 
+  0/ 1/7   19  5A544547D4251D43  active      online   normal   mismatch no 
+  0/ 1/7   20  5A544547D4252A47  active      offline  initial  initial  no 
+  0/ 1/7   21  5A544547D3640065  active      offline  initial  initial  no 
+  0/ 1/7   22  5A544547D64E7A93  active      offline  initial  initial  no 
+  0/ 1/7   23  5A544547D4B3C61C  active      online   normal   match    no 
+  0/ 1/7   24  5A544547DB0608D4  active      online   normal   mismatch no 
+  0/ 1/7   25  48575443E22436A5  active      online   normal   mismatch no 
+  0/ 1/7   26  5A544547D363F8D4  active      offline  initial  initial  no 
+  0/ 1/7   27  5A544547C4A9D711  active      online   normal   match    no 
+  0/ 1/7   28  4857544397208DAE  active      offline  initial  initial  no 
+  0/ 1/7   29  48575443FE8F00A4  active      online   normal   match    no 
+  0/ 1/7   30  5A544547D4251D45  active      offline  initial  initial  no 
+  0/ 1/7   31  5A544547D4251D49  active      online   normal   mismatch no 
+  0/ 1/7   32  5A544547D4252BFC  active      online   normal   match    no 
+  0/ 1/7   33  48575443A2DBD5B1  active      offline  initial  initial  no 
+  0/ 1/7   34  5A544547DB0608AF  active      online   normal   match    no 
+  0/ 1/7   35  48575443E4A9339C  active      offline  initial  initial  no 
+  0/ 1/7   36  48575443C5EEC9B0  active      offline  initial  initial  no 
+  0/ 1/7   37  5A544547D986F2A4  active      offline  initial  initial  no 
+  0/ 1/7   38  5A544547D4252A08  active      online   normal   match    no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 1/7       0   517
+  0/ 1/7       1   osmar529@netfast.com.br
+  0/ 1/7       2   45
+  0/ 1/7       3   juciane8470@4wnet.com.br
+  0/ 1/7       4   rubenita5095@4wnet.com.br
+  0/ 1/7       5   391
+  0/ 1/7       6   joana767@airnet.com.br
+  0/ 1/7       7   adaiza523@tixus.com.br
+  0/ 1/7       8   45
+  0/ 1/7      10   495
+  0/ 1/7      11   107
+  0/ 1/7      12   paulo018@airnet.com.br
+  0/ 1/7      13   45
+  0/ 1/7      14   65
+  0/ 1/7      15   102
+  0/ 1/7      16   00376437000639@uplink.com.br
+  0/ 1/7      17   548
+  0/ 1/7      18   65
+  0/ 1/7      19   151
+  0/ 1/7      20   517
+  0/ 1/7      21   369
+  0/ 1/7      22   517
+  0/ 1/7      23   107
+  0/ 1/7      24   517
+  0/ 1/7      25   2
+  0/ 1/7      26   107
+  0/ 1/7      27   356
+  0/ 1/7      28   37
+  0/ 1/7      29   45
+  0/ 1/7      30   143
+  0/ 1/7      31   365
+  0/ 1/7      32   144
+  0/ 1/7      33   45
+  0/ 1/7      34   517
+  0/ 1/7      35   ozimar7068@4wnet.com.br
+  0/ 1/7      36   913
+  0/ 1/7      37   517
+  0/ 1/7      38   516
+  -----------------------------------------------------------------------------
+  In port 0/ 1/7 , the total of ONTs are: 38, online: 16
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 1/8    0  485754439A2158AD  active      online   normal   match    no 
+  0/ 1/8    1  485754434E84E0B1  active      online   normal   mismatch no 
+  0/ 1/8    2  5A544547D5F93A33  active      online   normal   match    no 
+  0/ 1/8    3  485754434225DBB3  active      online   normal   mismatch no 
+  0/ 1/8    4  485754434773B478  active      offline  initial  initial  no 
+  0/ 1/8    5  4857544321818354  active      online   normal   match    no 
+  0/ 1/8    6  48575443318F9982  active      online   normal   mismatch no 
+  0/ 1/8    7  5A544547C4A9AC91  active      online   normal   match    no 
+  0/ 1/8    8  48575443A04D2F9B  active      online   normal   mismatch no 
+  0/ 1/8    9  5A544547D64E7921  active      online   normal   match    no 
+  0/ 1/8   10  414C434CFCD28FA0  active      online   normal   match    no 
+  0/ 1/8   11  48575443B740B8A4  active      online   normal   mismatch no 
+  0/ 1/8   13  5A544547D70FAA1D  active      online   normal   match    no 
+  0/ 1/8   14  5A544547D8705A51  active      offline  initial  initial  no 
+  0/ 1/8   15  48575443352D2BAD  active      online   normal   match    no 
+  0/ 1/8   16  5A544547CCEBC57B  active      online   normal   match    no 
+  0/ 1/8   17  5A544547DB05EF7D  active      offline  initial  initial  no 
+  0/ 1/8   18  5A544547D4B147FF  active      online   normal   match    no 
+  0/ 1/8   19  48575443E223E6A5  active      online   normal   mismatch no 
+  0/ 1/8   20  48575443E22472A5  active      online   normal   mismatch no 
+  0/ 1/8   21  5A544547D8705AB0  active      online   normal   match    no 
+  0/ 1/8   22  5A544547C4A9ADCF  active      online   normal   match    no 
+  0/ 1/8   23  5A544547D3640165  active      online   normal   match    no 
+  0/ 1/8   24  485754439C4555B0  active      offline  initial  initial  no 
+  0/ 1/8   25  5A544547D8706575  active      offline  initial  initial  no 
+  0/ 1/8   26  5A544547DA0C6A48  active      online   normal   match    no 
+  0/ 1/8   27  5A544547D5F935D7  active      online   normal   match    no 
+  0/ 1/8   28  5A544547D64E7857  active      online   normal   match    no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 1/8       0   495
+  0/ 1/8       1   107
+  0/ 1/8       2   517
+  0/ 1/8       3   649
+  0/ 1/8       4   claudenir623@4wnet.com.br
+  0/ 1/8       5   leonardo960@airnet.com.br
+  0/ 1/8       6   rachel005@4wnet.com.br
+  0/ 1/8       7   343
+  0/ 1/8       8   maria806@4wnet.com.br
+  0/ 1/8       9   517
+  0/ 1/8      10   671
+  0/ 1/8      11   maria738@airnet.com.br
+  0/ 1/8      13   517
+  0/ 1/8      14   517
+  0/ 1/8      15   45
+  0/ 1/8      16   387
+  0/ 1/8      17   517
+  0/ 1/8      18   548
+  0/ 1/8      19   358
+  0/ 1/8      20   401
+  0/ 1/8      21   517
+  0/ 1/8      22   406
+  0/ 1/8      23   539
+  0/ 1/8      24   45
+  0/ 1/8      25   517
+  0/ 1/8      26   517
+  0/ 1/8      27   45
+  0/ 1/8      28   517
+  -----------------------------------------------------------------------------
+  In port 0/ 1/8 , the total of ONTs are: 28, online: 23
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 1/9    0  5A544547C4A9D7BE  active      online   normal   match    no 
+  0/ 1/9    1  4857544391F6B14B  active      offline  initial  initial  no 
+  0/ 1/9    2  5A544547D986FADE  active      online   normal   match    no 
+  0/ 1/9    3  485754435C9ED6A7  active      offline  initial  initial  no 
+  0/ 1/9    4  48575443BB3EE342  active      online   normal   match    no 
+  0/ 1/9    5  48575443E4AB179C  active      offline  initial  initial  no 
+  0/ 1/9    6  5A544547D4251DE5  active      offline  initial  initial  no 
+  0/ 1/9    7  485754430731CBA6  active      offline  initial  initial  no 
+  0/ 1/9    8  48575443F8A59CA5  active      online   normal   mismatch no 
+  0/ 1/9    9  48575443DB095B7E  active      offline  initial  initial  no 
+  0/ 1/9   10  48575443B17F65A3  active      offline  initial  initial  no 
+  0/ 1/9   11  5A544547D64E73CD  active      online   normal   match    no 
+  0/ 1/9   12  5A544547D3640161  active      online   normal   match    no 
+  0/ 1/9   13  5A544547C4A1E7A1  active      offline  initial  initial  no 
+  0/ 1/9   14  5A544547CCE79B48  active      online   normal   match    no 
+  0/ 1/9   15  5A544547CF534B92  active      online   normal   match    no 
+  0/ 1/9   16  48575443F4D06BA8  active      online   normal   match    no 
+  0/ 1/9   17  4857544347722478  active      offline  initial  initial  no 
+  0/ 1/9   18  5A544547D4B1466A  active      offline  initial  initial  no 
+  0/ 1/9   19  5A544547DB05EF05  active      online   normal   match    no 
+  0/ 1/9   20  5A544547D4200585  active      online   normal   mismatch no 
+  0/ 1/9   21  5A544547C4AA08E0  active      online   normal   match    no 
+  0/ 1/9   22  48575443476DB078  active      online   normal   match    no 
+  0/ 1/9   23  48575443FB6746A8  active      offline  initial  initial  no 
+  0/ 1/9   24  414C434CFCD29754  active      online   normal   match    no 
+  0/ 1/9   25  5A544547CBA3158B  active      offline  initial  initial  no 
+  0/ 1/9   26  5A544547D1FB8DCA  active      online   normal   match    no 
+  0/ 1/9   27  485754437284A2B3  active      offline  initial  initial  no 
+  0/ 1/9   28  5A544547D4B433A5  active      online   normal   match    no 
+  0/ 1/9   29  485754435ECD88B1  active      offline  initial  initial  no 
+  0/ 1/9   30  5A544547D1ED9972  active      online   normal   match    no 
+  0/ 1/9   31  485754432CA8C19B  active      offline  initial  initial  no 
+  0/ 1/9   32  485754433DAC3BA8  active      offline  initial  initial  no 
+  0/ 1/9   33  5A544547D4252BB5  active      online   normal   match    no 
+  0/ 1/9   55  48575443E4A95C9C  active      offline  initial  initial  no 
+  0/ 1/9   59  48575443DB0F337E  active      online   normal   mismatch no 
+  0/ 1/9   60  48575443C23BCE93  active      online   normal   mismatch no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 1/9       0   45
+  0/ 1/9       1   narwin706@vianet.com.br
+  0/ 1/9       2   517
+  0/ 1/9       3   igo008@vianet.com.br
+  0/ 1/9       4   00376437000477@uplink.com.br
+  0/ 1/9       5   maria658@4wnet.com.br
+  0/ 1/9       6   109
+  0/ 1/9       7   45
+  0/ 1/9       8   60
+  0/ 1/9       9   jessica0325@4wnet.com.br
+  0/ 1/9      10   5
+  0/ 1/9      11   517
+  0/ 1/9      12   39
+  0/ 1/9      13   65
+  0/ 1/9      14   39
+  0/ 1/9      15   339
+  0/ 1/9      16   45
+  0/ 1/9      17   45
+  0/ 1/9      18   39
+  0/ 1/9      19   517
+  0/ 1/9      20   37
+  0/ 1/9      21   548
+  0/ 1/9      22   317
+  0/ 1/9      23   45
+  0/ 1/9      24   654
+  0/ 1/9      25   37
+  0/ 1/9      26   517
+  0/ 1/9      27   107
+  0/ 1/9      28   65
+  0/ 1/9      29   107
+  0/ 1/9      30   929
+  0/ 1/9      31   guilherme7970@4wnet.com.br
+  0/ 1/9      32   37
+  0/ 1/9      33   517
+  0/ 1/9      55   sebastiana0393@4wnet.com.br
+  0/ 1/9      59   jose2340@4wnet.com.br
+  0/ 1/9      60   maria0777@4nwet.com.br
+  -----------------------------------------------------------------------------
+  In port 0/ 1/9 , the total of ONTs are: 37, online: 20
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 1/10   0  48575443100E9DB0  active      online   normal   match    no 
+  0/ 1/10   3  48575443484CE2AD  active      online   normal   mismatch no 
+  0/ 1/10   4  485754435CAA8A80  active      online   normal   match    no 
+  0/ 1/10   5  48575443F4CD91A8  active      online   normal   match    no 
+  0/ 1/10   6  4857544341E65E73  active      online   normal   match    no 
+  0/ 1/10   7  4857544341E60473  active      offline  initial  initial  no 
+  0/ 1/10   8  48575443630B919B  active      offline  initial  initial  no 
+  0/ 1/10   9  5A544547CCEBD1B0  active      offline  initial  initial  no 
+  0/ 1/10  10  5A544547C4A9AB54  active      offline  initial  initial  no 
+  0/ 1/10  11  48575443A04D999B  active      offline  initial  initial  no 
+  0/ 1/10  12  5A544547C4A9AD17  active      offline  initial  initial  no 
+  0/ 1/10  13  5A544547D4B147E3  active      online   normal   match    no 
+  0/ 1/10  14  48575443E2227FA5  active      online   normal   mismatch no 
+  0/ 1/10  15  5A544547D872FE87  active      offline  initial  initial  no 
+  0/ 1/10  17  5A544547D4B147F2  active      online   normal   match    no 
+  0/ 1/10  18  5A544547D4B147D2  active      online   normal   match    no 
+  0/ 1/10  19  5A544547D42529F1  active      online   normal   mismatch no 
+  0/ 1/10  20  5A544547D4B14645  active      online   normal   match    no 
+  0/ 1/10  21  5A544547D4B14795  active      online   normal   match    no 
+  0/ 1/10  22  5A544547D363CE20  active      online   normal   match    no 
+  0/ 1/10  23  5A544547D07EC0E9  active      offline  initial  initial  no 
+  0/ 1/10  25  5A544547D42CCBBD  active      online   normal   match    no 
+  0/ 1/10  26  5A544547DB05EF9C  active      online   normal   match    no 
+  0/ 1/10  27  5A544547D1EDA336  active      online   normal   match    no 
+  0/ 1/10  28  5A544547D1EDA34D  active      online   normal   match    no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 1/10      0   292
+  0/ 1/10      3   495
+  0/ 1/10      4   45
+  0/ 1/10      5   45
+  0/ 1/10      6   84046457000399@4wnet.net.br
+  0/ 1/10      7   LINK-VLX
+  0/ 1/10      8   benedito0175@4wnet.com.br
+  0/ 1/10      9   45
+  0/ 1/10     10   195
+  0/ 1/10     11   292
+  0/ 1/10     12   196
+  0/ 1/10     13   548
+  0/ 1/10     14   232
+  0/ 1/10     15   548
+  0/ 1/10     17   548
+  0/ 1/10     18   548
+  0/ 1/10     19   557
+  0/ 1/10     20   548
+  0/ 1/10     21   548
+  0/ 1/10     22   92
+  0/ 1/10     23   517
+  0/ 1/10     25   195
+  0/ 1/10     26   517
+  0/ 1/10     27   928
+  0/ 1/10     28   923
+  -----------------------------------------------------------------------------
+  In port 0/ 1/10, the total of ONTs are: 25, online: 17
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 1/11   0  5A544547C4A9ABD0  active      offline  initial  initial  no 
+  0/ 1/11   1  48575443DB0F227E  active      offline  initial  initial  no 
+  0/ 1/11   2  485754433DACF8A8  active      offline  initial  initial  no 
+  0/ 1/11   3  5A544547C4A21B9B  active      online   normal   match    no 
+  0/ 1/11   4  48575443E224F2A5  active      online   normal   match    no 
+  0/ 1/11   5  5A544547CCEBDBF2  active      online   normal   match    no 
+  0/ 1/11   6  485754436CC383A6  active      offline  initial  initial  no 
+  0/ 1/11   7  5A544547D4252C03  active      online   normal   match    no 
+  0/ 1/11   8  48575443BB552C42  active      online   normal   match    no 
+  0/ 1/11   9  5A544547CCEBBDEF  active      offline  initial  initial  no 
+  0/ 1/11  10  48575443A9893942  active      online   normal   match    no 
+  0/ 1/11  11  5A544547C4AA0648  active      offline  initial  initial  no 
+  0/ 1/11  12  5A544547D7A05526  active      online   normal   match    no 
+  0/ 1/11  13  48575443CE2BBDA8  active      offline  initial  initial  no 
+  0/ 1/11  14  5A544547D4B41D23  active      online   normal   match    no 
+  0/ 1/11  15  5A544547CCEBD2B3  active      online   normal   match    no 
+  0/ 1/11  16  5A544547C4A278B5  active      online   normal   match    no 
+  0/ 1/11  17  5A544547C4AA0602  active      online   normal   match    no 
+  0/ 1/11  18  5A544547C4AA0848  active      online   normal   match    no 
+  0/ 1/11  19  5A544547CCEBD270  active      online   normal   match    no 
+  0/ 1/11  20  5A544547DA0C550F  active      online   normal   match    no 
+  0/ 1/11  21  5A544547D36400A4  active      online   normal   match    no 
+  0/ 1/11  22  5A544547D4251E46  active      online   normal   match    no 
+  0/ 1/11  23  5A544547D42529F6  active      online   normal   match    no 
+  0/ 1/11  24  485754439E8D2DA5  active      offline  initial  initial  no 
+  0/ 1/11  25  5A544547D4B14743  active      online   normal   match    no 
+  0/ 1/11  26  5A544547D4B14756  active      offline  initial  initial  no 
+  0/ 1/11  27  5A544547D5F9320D  active      offline  initial  initial  no 
+  0/ 1/11  28  48575443A70E61A8  active      online   normal   mismatch no 
+  0/ 1/11  29  5A544547CD63A327  active      online   normal   mismatch no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 1/11      0   322
+  0/ 1/11      1   rodrigo964@tixus.com.br
+  0/ 1/11      2   hugopeixoto@uplink.com.br
+  0/ 1/11      3   503
+  0/ 1/11      4   318
+  0/ 1/11      5   257
+  0/ 1/11      6   45
+  0/ 1/11      7   730
+  0/ 1/11      8   detroidfort@uplink.com.br
+  0/ 1/11      9   39
+  0/ 1/11     10   00376437000124@uplink.com.br
+  0/ 1/11     11   39
+  0/ 1/11     12   45
+  0/ 1/11     13   45
+  0/ 1/11     14   322
+  0/ 1/11     15   39
+  0/ 1/11     16   37
+  0/ 1/11     17   39
+  0/ 1/11     18   39
+  0/ 1/11     19   39
+  0/ 1/11     20   548
+  0/ 1/11     21   39
+  0/ 1/11     22   65
+  0/ 1/11     23   39
+  0/ 1/11     24   548
+  0/ 1/11     25   548
+  0/ 1/11     26   548
+  0/ 1/11     27   548
+  0/ 1/11     28   37
+  0/ 1/11     29   495
+  -----------------------------------------------------------------------------
+  In port 0/ 1/11, the total of ONTs are: 30, online: 20
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 1/12   0  4857544331AA1882  active      online   normal   match    no 
+  0/ 1/12   1  5A544547CCEBFA63  active      online   normal   match    no 
+  0/ 1/12   2  5A544547D4B14211  active      online   normal   match    no 
+  0/ 1/12   3  5A544547C4A23979  active      online   normal   match    no 
+  0/ 1/12   4  5A544547CCEBD1E0  active      online   normal   match    no 
+  0/ 1/12   5  5A544547D363AEFF  active      offline  initial  initial  no 
+  0/ 1/12   6  5A544547C4A990F8  active      online   normal   match    no 
+  0/ 1/12   7  5A544547CCEC4C8F  active      online   normal   match    no 
+  0/ 1/12   8  5A544547DA0C0F57  active      online   normal   match    no 
+  0/ 1/12   9  5A544547D1EDA16C  active      online   normal   match    no 
+  0/ 1/12  33  48575443318D4682  active      online   normal   mismatch no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 1/12      0   269
+  0/ 1/12      1   280
+  0/ 1/12      2   548
+  0/ 1/12      3   39
+  0/ 1/12      4   39
+  0/ 1/12      5   675
+  0/ 1/12      6   82565260253@4wnet.com.br
+  0/ 1/12      7   548
+  0/ 1/12      8   321
+  0/ 1/12      9   280
+  0/ 1/12     33   antonia0746@4wnet.com.br
+  -----------------------------------------------------------------------------
+  In port 0/ 1/12, the total of ONTs are: 11, online: 10
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 1/13   0  48575443F1088C9C  active      online   normal   match    no 
+  0/ 1/13   1  5A544547D07ED0F0  active      online   normal   match    no 
+  0/ 1/13   2  48575443B7452CA4  active      offline  initial  initial  no 
+  0/ 1/13   3  5A544547D4252A9E  active      offline  initial  initial  no 
+  0/ 1/13   4  48575443BB38B842  active      online   normal   match    no 
+  0/ 1/13   5  5A544547D4B41B85  active      online   normal   match    no 
+  0/ 1/13   6  5A544547D5F935D1  active      offline  initial  initial  no 
+  0/ 1/13   7  48575443A96DB8AC  active      offline  initial  initial  no 
+  0/ 1/13   8  485754437099FCA3  active      online   normal   match    no 
+  0/ 1/13   9  5A544547D70FA9DF  active      online   normal   match    no 
+  0/ 1/13  10  485754433176E582  active      online   normal   mismatch no 
+  0/ 1/13  11  5A544547D87059FD  active      online   normal   match    no 
+  0/ 1/13  12  5A544547DA0C0ED9  active      offline  initial  initial  no 
+  0/ 1/13  13  5A544547D1EDA162  active      online   normal   match    no 
+  0/ 1/13  14  5A544547CCEBD333  active      online   normal   match    no 
+  0/ 1/13  15  5A544547D872FE97  active      online   normal   match    no 
+  0/ 1/13  16  5A544547D4252C3F  active      online   normal   match    no 
+  0/ 1/13  17  48575443B4132C42  active      online   normal   match    no 
+  0/ 1/13  18  5A544547D9855ED3  active      online   normal   match    no 
+  0/ 1/13  19  5A544547D4B41C0A  active      online   normal   match    no 
+  0/ 1/13  20  5A544547D5F93394  active      offline  initial  initial  no 
+  0/ 1/13  21  48575443FC71FAAA  active      offline  initial  initial  no 
+  0/ 1/13  22  48575443E60D3DAE  active      online   normal   mismatch no 
+  0/ 1/13  23  5A544547DB06218E  active      online   normal   match    no 
+  0/ 1/13  24  414C434CFCD28B54  active      offline  initial  initial  no 
+  0/ 1/13  25  414C434CFCD2A00E  active      offline  initial  initial  no 
+  0/ 1/13  26  5A544547D70FAA19  active      online   normal   match    no 
+  0/ 1/13  27  5A544547D8706529  active      online   normal   match    no 
+  0/ 1/13  28  5A544547D1EDA187  active      offline  initial  initial  no 
+  0/ 1/13  29  5A544547D872FE2C  active      offline  initial  initial  no 
+  0/ 1/13  30  48575443A04D359B  active      online   normal   mismatch no 
+  0/ 1/13  31  48575443CE2B93A8  active      offline  initial  initial  no 
+  0/ 1/13  32  48575443013E50AD  active      online   normal   mismatch no 
+  0/ 1/13  33  5A544547D1EDA1BC  active      online   normal   match    no 
+  0/ 1/13  34  48575443CBE69D88  active      offline  initial  initial  no 
+  0/ 1/13  35  5A544547D363DA03  active      online   normal   match    no 
+  0/ 1/13  37  5A544547D1BC46E8  active      online   normal   match    no 
+  0/ 1/13  39  5A544547D4B1473B  active      online   normal   match    no 
+  0/ 1/13  44  48575443A04F0D9B  active      online   normal   mismatch no 
+  0/ 1/13  45  5A544547D4B14012  active      offline  initial  initial  no 
+  0/ 1/13  46  5A544547D4B1431B  active      online   normal   match    no 
+  0/ 1/13  47  5A544547D4B147BC  active      offline  initial  initial  no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 1/13      0   jose838@tixus.com.br
+  0/ 1/13      1   517
+  0/ 1/13      2   otavio_airnet
+  0/ 1/13      3   25
+  0/ 1/13      4   00376437000205@uplink.com.br
+  0/ 1/13      5   65
+  0/ 1/13      6   107
+  0/ 1/13      7   45
+  0/ 1/13      8   37
+  0/ 1/13      9   517
+  0/ 1/13     10   simone696@airnet.com.br
+  0/ 1/13     11   517
+  0/ 1/13     12   726
+  0/ 1/13     13   953
+  0/ 1/13     14   194
+  0/ 1/13     15   548
+  0/ 1/13     16   718
+  0/ 1/13     17   00376437000710@uplink.com.br
+  0/ 1/13     18   517
+  0/ 1/13     19   644
+  0/ 1/13     20   37
+  0/ 1/13     21   45
+  0/ 1/13     22   699
+  0/ 1/13     23   517
+  0/ 1/13     24   661
+  0/ 1/13     25   663
+  0/ 1/13     26   517
+  0/ 1/13     27   517
+  0/ 1/13     28   927
+  0/ 1/13     29   548
+  0/ 1/13     30   rosileide5207@4wnet.com.br
+  0/ 1/13     31   37
+  0/ 1/13     32   495
+  0/ 1/13     33   996
+  0/ 1/13     34   339
+  0/ 1/13     35   39
+  0/ 1/13     37   339
+  0/ 1/13     39   548
+  0/ 1/13     44   joice5702@4wnet.com.br
+  0/ 1/13     45   548
+  0/ 1/13     46   548
+  0/ 1/13     47   548
+  -----------------------------------------------------------------------------
+  In port 0/ 1/13, the total of ONTs are: 42, online: 27
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 1/14   0  485754438142A4B3  active      offline  initial  initial  no 
+  0/ 1/14   1  485754430A3F59AD  active      offline  initial  initial  no 
+  0/ 1/14   2  485754434C580AA4  active      online   normal   match    no 
+  0/ 1/14   3  4857544331B3FD82  active      offline  initial  initial  no 
+  0/ 1/14   4  48575443E22489A5  active      online   normal   mismatch no 
+  0/ 1/14   5  5A544547D021EE15  active      online   normal   match    no 
+  0/ 1/14   6  5A544547C4A9ABDC  active      online   normal   match    no 
+  0/ 1/14   7  48575443E2247CA5  active      offline  initial  initial  no 
+  0/ 1/14   8  5A544547D64E7B5B  active      online   normal   match    no 
+  0/ 1/14   9  5A544547D64E7B2E  active      offline  initial  initial  no 
+  0/ 1/14  10  5A544547C4D9FFC6  active      offline  initial  initial  no 
+  0/ 1/14  11  48575443B17F60A3  active      offline  initial  initial  no 
+  0/ 1/14  12  5A544547DA0CAB1C  active      offline  initial  initial  no 
+  0/ 1/14  13  5A544547D4B41CC8  active      online   normal   match    no 
+  0/ 1/14  14  48575443E2EB9A9A  active      online   normal   mismatch no 
+  0/ 1/14  15  414C434CFCD29603  active      offline  initial  initial  no 
+  0/ 1/14  16  5A544547D5F932F2  active      offline  initial  initial  no 
+  0/ 1/14  17  485754438B1BAEAC  active      online   normal   match    no 
+  0/ 1/14  18  5A544547D4B42D80  active      online   normal   match    no 
+  0/ 1/14  19  5A544547D4B4245E  active      online   normal   match    no 
+  0/ 1/14  20  5A544547D8706568  active      online   normal   match    no 
+  0/ 1/14  21  5A544547D70FAA5D  active      online   normal   match    no 
+  0/ 1/14  22  5A544547DA0CA092  active      offline  initial  initial  no 
+  0/ 1/14  23  5A544547DA0C68C6  active      online   normal   match    no 
+  0/ 1/14  24  48575443C5EBA6B0  active      offline  initial  initial  no 
+  0/ 1/14  25  5A544547DA0C18BD  active      online   normal   match    no 
+  0/ 1/14  26  5A544547D64E7890  active      online   normal   match    no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 1/14      0   45
+  0/ 1/14      1   45
+  0/ 1/14      2   37
+  0/ 1/14      3   ana008@tixus.com.br
+  0/ 1/14      4   wellington060@4wnet.com.br
+  0/ 1/14      5   39
+  0/ 1/14      6   64
+  0/ 1/14      7   435
+  0/ 1/14      8   517
+  0/ 1/14      9   517
+  0/ 1/14     10   37
+  0/ 1/14     11   510
+  0/ 1/14     12   517
+  0/ 1/14     13   517
+  0/ 1/14     14   eliane6299@4wnet.com.br
+  0/ 1/14     15   331
+  0/ 1/14     16   107
+  0/ 1/14     17   107
+  0/ 1/14     18   517
+  0/ 1/14     19   435
+  0/ 1/14     20   517
+  0/ 1/14     21   517
+  0/ 1/14     22   517
+  0/ 1/14     23   517
+  0/ 1/14     24   37
+  0/ 1/14     25   548
+  0/ 1/14     26   517
+  -----------------------------------------------------------------------------
+  In port 0/ 1/14, the total of ONTs are: 27, online: 15
+  -----------------------------------------------------------------------------
+  F/S/P   ONT         SN         Control     Run      Config   Match    Protect
+          ID                     flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 1/15   0  414C434CFCD29587  active      online   normal   match    no 
+  0/ 1/15   1  485754432919C742  active      online   normal   match    no 
+  0/ 1/15   2  485754436EAF86AA  active      online   normal   match    no 
+  0/ 1/15   3  4857544386CD80A3  active      online   normal   match    no 
+  0/ 1/15   4  48575443B63BF4AD  active      online   normal   match    no 
+  0/ 1/15   5  48575443BE5145AD  active      offline  initial  initial  no 
+  0/ 1/15   6  5A544547C4A99081  active      online   normal   match    no 
+  0/ 1/15   7  5A544547C4A9B41B  active      online   normal   match    no 
+  0/ 1/15   8  414C434CFCD29549  active      offline  initial  initial  no 
+  0/ 1/15   9  48575443E6E8E5AC  active      online   normal   match    no 
+  0/ 1/15  10  5A544547C4BD8F45  active      offline  initial  initial  no 
+  0/ 1/15  11  5A544547CBA300BC  active      online   normal   match    no 
+  0/ 1/15  12  5A544547DB05CF86  active      offline  initial  initial  no 
+  0/ 1/15  13  5A544547D4251E2C  active      online   normal   match    no 
+  0/ 1/15  14  5A544547C4BD8D7D  active      online   normal   match    no 
+  0/ 1/15  15  485754431006C1B0  active      online   normal   match    no 
+  0/ 1/15  16  5A544547DB0621C7  active      online   normal   match    no 
+  0/ 1/15  17  5A544547D64E73D2  active      online   normal   match    no 
+  0/ 1/15  18  5A544547D42CD29A  active      offline  initial  initial  no 
+  0/ 1/15  19  5A544547D986F39C  active      online   normal   match    no 
+  0/ 1/15  20  5A544547D4251E42  active      online   normal   match    no 
+  0/ 1/15  21  5A544547D4252A98  active      online   normal   match    no 
+  0/ 1/15  22  485754431CDB54A4  active      online   normal   match    no 
+  0/ 1/15  23  414C434CFCD2C536  active      online   normal   match    no 
+  0/ 1/15  24  5A544547D2303AF5  active      online   normal   match    no 
+  0/ 1/15  25  5A544547D8706491  active      online   normal   match    no 
+  0/ 1/15  26  5A544547D872F1D8  active      offline  initial  initial  no 
+  0/ 1/15  27  485754436954ACAA  active      online   normal   mismatch no 
+  0/ 1/15  28  5A544547D70FAA27  active      offline  initial  initial  no 
+  0/ 1/15  29  5A544547C4BDD04B  active      offline  initial  initial  no 
+  0/ 1/15  30  5A544547D5F93258  active      online   normal   match    no 
+  0/ 1/15  31  5A544547D9856BD6  active      online   normal   match    no 
+  0/ 1/15  32  5A544547D70FA9C5  active      online   normal   match    no 
+  0/ 1/15  33  5A544547DA0C8291  active      online   normal   mismatch no 
+  0/ 1/15  34  5A544547D70FAA2B  active      online   normal   match    no 
+  0/ 1/15  35  5A544547D70FAA36  active      online   normal   match    no 
+  0/ 1/15  36  5A544547D1EDA340  active      online   normal   match    no 
+  0/ 1/15  37  5A544547DA0C2855  active      online   normal   match    no 
+  0/ 1/15  38  5A544547D1EDA16F  active      online   normal   match    no 
+  0/ 1/15  39  5A544547D07EBD17  active      online   normal   match    no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 1/15      0   689
+  0/ 1/15      1   679
+  0/ 1/15      2   107
+  0/ 1/15      3   107
+  0/ 1/15      4   37
+  0/ 1/15      5   45
+  0/ 1/15      6   506
+  0/ 1/15      7   323
+  0/ 1/15      8   656
+  0/ 1/15      9   107
+  0/ 1/15     10   65
+  0/ 1/15     11   37
+  0/ 1/15     12   517
+  0/ 1/15     13   65
+  0/ 1/15     14   339
+  0/ 1/15     15   925
+  0/ 1/15     16   517
+  0/ 1/15     17   517
+  0/ 1/15     18   517
+  0/ 1/15     19   517
+  0/ 1/15     20   529
+  0/ 1/15     21   516
+  0/ 1/15     22   107
+  0/ 1/15     23   716
+  0/ 1/15     24   517
+  0/ 1/15     25   517
+  0/ 1/15     26   548
+  0/ 1/15     27   495
+  0/ 1/15     28   517
+  0/ 1/15     29   45
+  0/ 1/15     30   517
+  0/ 1/15     31   517
+  0/ 1/15     32   517
+  0/ 1/15     33   548
+  0/ 1/15     34   517
+  0/ 1/15     35   517
+  0/ 1/15     36   974
+  0/ 1/15     37   548
+  0/ 1/15     38   977
+  0/ 1/15     39   517
+  -----------------------------------------------------------------------------
+  In port 0/ 1/15, the total of ONTs are: 40, online: 32
