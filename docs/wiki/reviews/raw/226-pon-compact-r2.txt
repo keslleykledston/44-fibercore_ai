@@ -1,0 +1,16 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1909d-1dae-7ad3-810b-a58c7414c87f).
+[codex] Turn started (01a1909d-1de7-7952-b830-b95d5920f8ed).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e rastrear o uso das roles/labels no contexto do painel par...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Ont...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Ont... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"A correção remove `role=\"tabpanel\"` e `aria-labelledby` qua...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+A correção remove `role="tabpanel"` e `aria-labelledby` quando só há uma aba; não encontrei outro risco material no diff.
+
+No material findings.
