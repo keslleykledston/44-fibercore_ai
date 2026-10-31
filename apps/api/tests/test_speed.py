@@ -98,6 +98,7 @@ def test_a_short_interval_or_a_short_transfer_is_partial_never_reliable():
     ({"seconds": 0.0}, "invalid_duration"), ({"seconds": 0.0004}, "invalid_duration"),    # 0.4 ms would truncate to a stored duration of 0 ({"seconds": -3.0}, "invalid_duration"), ({"seconds": 601.0}, "invalid_duration"),
     ({"test_bytes_received": 0}, "no_bytes"), ({"test_bytes_received": None}, "no_bytes"),
     ({"seconds": 3.0, "test_bytes_received": 10**12}, "bytes_exceed_profile"),
+    ({"seconds": 0.001, "test_bytes_received": 10_500_000}, "implausible_rate"),         # the shortest accepted interval with the largest accepted counter
     ({"seconds": 8.0, "test_bytes_received": 10_500_001}, "bytes_exceed_profile"),    # just over the 5 % tolerance of a 10 MB profile
     ({"seconds": 8.0, "test_bytes_received": 10_500_000}, None),
 ])
@@ -405,6 +406,16 @@ def test_a_report_re_sent_after_a_lost_acknowledgement_changes_nothing(client, s
     again = {**rep, "data": counters(seconds=1.0)}
     assert client.post(f"/v1/edge/jobs/{run['job_id']}/result", headers=agent(client, inv, "a1"), json=again).status_code == 204
     assert client.get(f"/v1/cpes/{cpe}/speed/runs/{run['id']}", headers=h).json()["mbps"] == 10.0
+
+
+def test_the_most_extreme_accepted_report_is_acknowledged_and_stored_as_inconclusive(client, seed, inv, migrated):
+    """The smallest interval with the largest counter must not overflow the table: the job commits and the run has no figure (the Edge is never left re-sending)."""
+    cpe, h, run, _ = _dispatched(client, seed, inv, migrated)
+    d = counters(seconds=0.001, test_bytes_received=10_500_000)
+    assert client.post(f"/v1/edge/jobs/{run['job_id']}/result", headers=agent(client, inv, "a1"), json={"state": "succeeded", "postcheck_ok": True, "data": d}).status_code == 204
+    assert _rows(migrated, "SELECT status FROM jobs WHERE id = :j", j=run["job_id"])[0].status == "SUCCEEDED"
+    got = client.get(f"/v1/cpes/{cpe}/speed/runs/{run['id']}", headers=h).json()
+    assert got["status"] == "inconclusive" and got["mbps"] is None and got["reason"] == "implausible_rate"
 
 
 def test_a_device_error_is_a_clear_result_not_a_failed_write(client, seed, inv, migrated):

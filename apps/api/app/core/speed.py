@@ -29,6 +29,7 @@ MIN_RELIABLE_S = 3.0          # a measurement shorter than this is `partial`: TC
 MIN_DURATION_S = 0.001        # the smallest interval the run row can store (duration_ms > 0)
 MAX_DURATION_S = 600.0        # a test that "lasted" longer than the Edge's own ceiling is not a measurement
 MIN_BYTES_RATIO = 0.95        # a transfer that moved less than this share of the profile is `partial`
+MAX_PLAUSIBLE_MBPS = 10_000   # 10 Gbit/s: above the line rate of any ONT or XGS-PON (and far below the column range): the counters or the clock are wrong
 MAX_BYTES_RATIO = 1.05        # a counter above the profile by more than this tolerance is not THIS test: inconclusive, never a credible-looking figure
 
 # one test per ONT, one per PON, two per provider (ADR-0038 item 8; the package's limits)
@@ -110,6 +111,8 @@ def compute(direction: str, profile: str, c: dict) -> Computed:
     if n > MAX_BYTES_RATIO * PROFILE_BYTES[profile]:
         return Computed("inconclusive", None, None, int(dt * 1000), "bytes_exceed_profile", basis)
     mbps = round(8 * n / dt / 1e6, 2)
+    if mbps > MAX_PLAUSIBLE_MBPS:
+        return Computed("inconclusive", None, None, int(dt * 1000), "implausible_rate", basis)
     if mbps <= 0:   # so few bytes that the figure rounds to 0.00: that is "no throughput measured", never a stored 0
         return Computed("inconclusive", None, None, int(dt * 1000), "negligible_rate", basis)
     short = dt < MIN_RELIABLE_S or n < MIN_BYTES_RATIO * PROFILE_BYTES[profile]
