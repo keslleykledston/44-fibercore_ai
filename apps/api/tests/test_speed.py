@@ -606,3 +606,22 @@ def test_a_group_never_holds_the_same_direction_twice_even_after_the_first_ended
         with migrated.begin() as c:
             c.execute(text("INSERT INTO speed_test_runs (tenant_id, cpe_id, job_id, group_id, direction, endpoint_id, profile, pon_id, requested_by) "
                            "SELECT tenant_id, cpe_id, job_id, group_id, direction, endpoint_id, profile, pon_id, requested_by FROM speed_test_runs LIMIT 1"))
+
+
+def test_two_identical_requests_at_once_give_one_run_and_one_existing_never_a_busy(client, seed, inv, migrated):
+    import threading
+
+    cpe = _ready(client, seed, inv, migrated)
+    _link(migrated, seed, inv, cpe)
+    h = hdr(client, "alice", seed, "A")
+    key, out, gate = uuid4().hex, [], threading.Barrier(2)
+
+    def go():
+        gate.wait()
+        r = _post(client, h, cpe, key=key)
+        out.append((r.status_code, r.json()["outcome"], r.json()["reason"]))
+    ts = [threading.Thread(target=go) for _ in range(2)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert sorted(out) == [(200, "existing", None), (201, "submitted", None)], out
+    assert len(_rows(migrated, "SELECT 1 FROM speed_test_runs")) == 1

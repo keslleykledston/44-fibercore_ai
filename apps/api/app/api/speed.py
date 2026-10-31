@@ -149,6 +149,9 @@ def request_run(
     c = _cpe_or_404(conn, cpe_id)
     operation = speed.DIRECTIONS[body.direction]
     params = {"target": body.endpoint_id, "profile": body.profile}
+    # the same key arriving twice at once: the second waits here for the first to COMMIT and then finds its run, instead of reaching the slot check first and
+    # being refused as busy by the very run it is a retry of (the engine takes the same lock again, which is harmless; order is always key -> slots)
+    conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"job-idempotency|{p.tenant_id}|{idempotency_key}"})
     # the same key again (a lost answer, a double click) returns what it created; a key reused for a different test is the engine's own 409
     if conn.execute(text("SELECT 1 FROM jobs WHERE idempotency_key = :k"), {"k": idempotency_key}).first():
         view = jobs.create_preview(jobs.PreviewIn(operation=operation, target_id=cpe_id, params=params), idempotency_key, p, conn)
