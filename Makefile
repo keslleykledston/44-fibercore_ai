@@ -39,7 +39,8 @@ test-api: venv  ## sobe Postgres descartável, roda pytest, remove SÓ o que est
 	NATS=$$(docker run -d --label fibercore.test-run=api -p 127.0.0.1:$(TEST_NATS_PORT):4222 nats:2.11-alpine -js); \
 	PG=$$(docker run -d --label fibercore.test-run=api --tmpfs /var/lib/postgresql/data -e POSTGRES_USER=fibercore -e POSTGRES_PASSWORD=test_admin_pw_only \
 	  -e POSTGRES_DB=fibercore_test -p 127.0.0.1:$(TEST_PG_PORT):5432 postgres:17-alpine); \
-	until docker exec $$PG pg_isready -U fibercore >/dev/null 2>&1; do sleep 1; done; sleep 2; \
+	for i in $$(seq 1 90); do docker exec "$$PG" pg_isready -U fibercore >/dev/null 2>&1 && break; [ "$$(docker inspect -f '{{.State.Running}}' "$$PG" 2>/dev/null)" = true ] || { echo 'Postgres de teste parou antes de ficar pronto' >&2; exit 1; }; sleep 1; done; \
+	docker exec "$$PG" pg_isready -U fibercore >/dev/null 2>&1 || { echo 'Postgres de teste não ficou pronto em 90 s' >&2; exit 1; }; sleep 2; \
 	cd apps/api && TEST_NATS_URL=nats://127.0.0.1:$(TEST_NATS_PORT) TEST_ADMIN_DATABASE_URL=postgresql://fibercore:test_admin_pw_only@127.0.0.1:$(TEST_PG_PORT)/fibercore_test \
 	  ../../$(PY) -m pytest -q
 
