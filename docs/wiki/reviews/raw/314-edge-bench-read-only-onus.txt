@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19424-5449-7393-a4e6-5fea13bfb849).
+[codex] Turn started (01a19424-5772-7341-a3c5-95fb031effe3).
+[codex] Assistant message captured: Vou conferir o caminho de validação e execução das capturas para ver se o novo cadastro realm...
+[codex] Running command: /bin/bash -lc "git diff --unified=80 main...HEAD -- agents/edge/internal/config/config.go age...
+[codex] Command completed: /bin/bash -lc "git diff --unified=80 main...HEAD -- agents/edge/internal/config/config.go age... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/config/config.go | sed -n '284,315p;374,390p;700,7...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/config/config.go | sed -n '284,315p;374,390p;700,7... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não deve ser enviado ainda: a validação permite que u...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não deve ser enviado ainda: a validação permite que uma entrada read-only autorize captura de toda a PON, incluindo dados de assinantes não cadastrados como bancada.
+
+Findings:
+- [high] ONU read-only autoriza captura PON com dados de terceiros (agents/edge/internal/config/config.go:713-715)
+  `benchOwnsCapture` trata qualquer correspondência de OLT/slot/porta com `read_only_onus` como suficiente para escopo PON, sem verificar `ont_id`. Assim, cadastrar uma ONU de bancada permite configurar `pon.ont.info`, `pon.ont.optical` ou `pon.ont.autofind`, cujas consultas abrangem ONUs da porta. A saída crua fica local, mas pode incluir seriais, estado ou dados ópticos de assinantes na mesma PON. Os testes aprovam explicitamente uma captura PON com uma entrada read-only e não cobrem essa exposição.
+  Recommendation: Não permita que `read_only_onus` autorize escopo PON; exija escopo ONU e correspondência exata de OLT/slot/porta/ONT. Se capturas PON forem necessárias para `bench.olt`, mantenha essa autorização separada e explícita.
