@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FaceplateMini } from "@/components/Faceplate";
 import { EntityDetailDrawer } from "@/components/EntityDetailDrawer";
 import { OnuHistoryTab } from "@/components/OnuHistoryTab";
+import { QualitySection } from "@/components/QualitySection";
 import { SpeedTestSection } from "@/components/SpeedTestSection";
 import { OntFormBody, ago, useOntForm } from "@/components/OntConfigView";
 import { rovingKeys } from "@/lib/roving";
@@ -85,14 +86,14 @@ function DeviceTab({ cpeId }: { cpeId: string }) {
   );
 }
 
-const TABS: Record<string, string> = { resumo: "Resumo", aparelho: "Aparelho", banda: "Teste de banda", historico: "Histórico" };
+const TABS: Record<string, string> = { resumo: "Resumo", aparelho: "Aparelho", banda: "Teste de banda", qualidade: "Qualidade", historico: "Histórico" };
 
 /** Conteúdo do painel de gestão: abas Resumo (PON/ACS/RX/cliente), Aparelho (configuração somente leitura, só com roteador vinculado e o recurso ligado) e Histórico (30 dias). Uma aba por vez; trocar a ONU volta para Resumo. */
-function Pane({ row, state, oltName, retry, ontConfig, speed }: { row: Onu; state: State | null; oltName: string; retry: () => void; ontConfig: boolean; speed: boolean }) {
+function Pane({ row, state, oltName, retry, ontConfig, speed, quality }: { row: Onu; state: State | null; oltName: string; retry: () => void; ontConfig: boolean; speed: boolean; quality: boolean }) {
   const [tab, setTab] = useState("resumo");
   useEffect(() => { setTab("resumo"); }, [row.id]);
   const m = state && state.id === row.id && state.kind === "ready" ? state.model : null;
-  const tabs = ["resumo", ...(ontConfig && m?.cpe ? ["aparelho"] : []), ...(speed && m?.cpe ? ["banda"] : []), "historico"];
+  const tabs = ["resumo", ...(ontConfig && m?.cpe ? ["aparelho"] : []), ...(speed && m?.cpe ? ["banda"] : []), ...(quality && m?.cpe ? ["qualidade"] : []), "historico"];
   const active = tabs.includes(tab) ? tab : "resumo";
   return (
     <div className="grid gap-4">
@@ -106,6 +107,7 @@ function Pane({ row, state, oltName, retry, ontConfig, speed }: { row: Onu; stat
         {active === "resumo" && <Body row={row} state={state} oltName={oltName} retry={retry} />}
         {active === "aparelho" && m?.cpe && <DeviceTab key={m.cpe.id} cpeId={m.cpe.id} />}
         {active === "banda" && m?.cpe && <SpeedTestSection key={m.cpe.id} cpeId={m.cpe.id} />}
+        {active === "qualidade" && m?.cpe && <QualitySection key={m.cpe.id} cpeId={m.cpe.id} />}
         {active === "historico" && <OnuHistoryTab key={row.id} onuId={row.id} />}
       </div>
     </div>
@@ -114,7 +116,7 @@ function Pane({ row, state, oltName, retry, ontConfig, speed }: { row: Onu; stat
 
 /** Painel de gestão da ONU selecionada (UX 2.2 / ADR-0037). Largo (≥1024 px): coluna ao lado da lista (a lista NUNCA fica escondida atrás dele) e segue a rolagem; estreito: gaveta modal.
  *  Trocar a ONU mantém o painel e nunca mostra o conteúdo da anterior. */
-export function OnuQuickInspector({ row, oltName, onClose, ontConfig = false, speed = false }: { row: Onu | null; oltName: string; onClose: () => void; ontConfig?: boolean; speed?: boolean }) {
+export function OnuQuickInspector({ row, oltName, onClose, ontConfig = false, speed = false, quality = false }: { row: Onu | null; oltName: string; onClose: () => void; ontConfig?: boolean; quality?: boolean; speed?: boolean }) {
   const wide = useWide();
   const [state, setState] = useState<State | null>(null);
   const [tries, setTries] = useState(0);
@@ -153,7 +155,7 @@ export function OnuQuickInspector({ row, oltName, onClose, ontConfig = false, sp
       </aside>
     ) : null;
   }
-  const body = <Pane row={row} state={state} oltName={oltName} retry={() => setTries((n) => n + 1)} ontConfig={ontConfig} speed={speed} />;
+  const body = <Pane row={row} state={state} oltName={oltName} retry={() => setTries((n) => n + 1)} ontConfig={ontConfig} speed={speed} quality={quality} />;
   if (!wide) return <EntityDetailDrawer open onClose={onClose} title={`ONU ${row.serial}`}><div data-testid="onu-quick" data-mode="sheet">{body}</div></EntityDetailDrawer>;
   const m = state?.id === row.id && state.kind === "ready" ? state.model : null;
   return (

@@ -73,6 +73,16 @@ articles:
   - assets/rede/testar-banda/cenario-resultado.png
   e2e_test: help-speed.spec.ts (desktop/mobile reais; cenario-* simulados e rotulados); speed.spec.ts
   last_verified: '2026-10-31'
+- slug: rede/qualidade-do-servico
+  ui_route: /rede
+  status: published
+  images:
+  - assets/rede/qualidade-do-servico/desktop.png
+  - assets/rede/qualidade-do-servico/mobile.png
+  - assets/rede/qualidade-do-servico/cenario-atencao.png
+  - assets/rede/qualidade-do-servico/cenario-leitura-antiga.png
+  e2e_test: help-quality.spec.ts (desktop/mobile reais; cenario-* simulados e rotulados); quality.spec.ts
+  last_verified: '2026-10-31'
 - slug: assinantes/visao-360
   ui_route: /assinantes/[id]
   status: published

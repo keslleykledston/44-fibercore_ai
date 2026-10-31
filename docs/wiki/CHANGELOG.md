@@ -312,3 +312,8 @@
 
 ## QoS-001 PR A — leitura de qualidade passiva (ADR-0039, flag OFF)
 - `GET /v1/cpes/{id}/quality/capabilities`, `POST|GET /v1/cpes/{id}/quality/runs[/{run}]`; migração 0037 `quality_runs` (imutável, RLS forçada); permissões `diagnostics:quality_*`; flags `quality_diagnostics|quality_full|quality_active_tests` (todas OFF). Só dados já retidos (ACS em cache, OLT); o COMPLETO referencia um grupo do SD-001, não inicia teste. Sem ping/DNS/traceroute nesta entrega.
+
+## QoS-001 PR B — aba "Qualidade" e ajuda (ADR-0039, flag OFF)
+- Web: aba **Qualidade** no painel da ONU e cartão na ONU 360° (`QualitySection`, `lib/quality.ts`) atrás da flag `quality_diagnostics`; rotas BFF `/bff/cpes/{id}/quality` e `/quality/runs` (formato fechado, só a chave de idempotência sai do navegador). Estado geral em três valores, quatro indicadores, hipóteses com ressalva e "Ver detalhes por camada"; sem dado = "Sem leitura" (nunca zero); leitura antiga marcada como antiga; nível óptico sem perfil homologado aparece como "sem faixa de referência", não como "ok". A leitura COMPLETA continua só na API.
+- Ajuda: artigo `rede/qualidade-do-servico` + manifesto (capturas reais e capturas de cenário rotuladas como simuladas); `docs/operations/QUALITY_HOMOLOGACAO.md` (guia e planilha vazia). `scripts/seed_demo.py` liga a flag só nos dados sintéticos.
+- Nada executado em ONT/ACS reais; nenhuma implantação feita.

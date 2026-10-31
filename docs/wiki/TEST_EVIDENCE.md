@@ -471,3 +471,8 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 ## QoS-001 PR A
 - API: `pytest` 810 passed (39 novos: 20 puros em `test_quality.py` — Q03, Q04, Q05, Q11, Q12, Q16, Q17, regras de hipótese, contrato sem zero falso; 13 de API em `test_quality_api.py` — flag, RBAC, tenant, idempotência, referência ao SD-001 sem criar job, auditoria sem valores, imutabilidade, varredura do fonte; 4 expectativas de RBAC atualizadas). `ruff` limpo.
 - NÃO verificado: aplicação no LAB (após o merge); leitura contra dados reais; Q12 com perfil óptico homologado; Q13/Q14/Q20 (dependem de equipamento).
+
+## QoS-001 PR B
+- Web: `tsc --noEmit` e `next build` sem erro. Playwright (pilha efêmera, dados sintéticos): `quality.spec.ts` 6 passed + 1 skipped (o da flag desligada foi rodado à parte com `QUALITY_FLAG_OFF=1` e a flag desligada: passed) — leitura REAL sem dados do aparelho = "Dados insuficientes" e óptica "sem faixa de referência"; cenários simulados: anomalia + hipótese com ressalva, leitura antiga, sem permissão, sem leitura feita, corpo do POST só com a chave; axe sem violações. Regressão `speed.spec.ts` + `onu-quick.spec.ts`: 23 passed, 2 skipped. `help-quality.spec.ts`: 3 capturas geradas. `tests/validate_help.py`: PASS (23 artigos).
+- Achado do próprio teste: o BFF devolvia o formato já lido e a tela o lia de novo no formato da API (502 "falhou"); corrigido com um único formato.
+- NÃO verificado: aba sobre ONT real do LAB; `app.spec.ts` completo com o seed do Compose; a flag no LAB continua desligada.
