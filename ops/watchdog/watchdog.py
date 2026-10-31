@@ -5,7 +5,9 @@ Roda a cada minuto pelo cron (uma instância, `flock`). Só biblioteca padrão. 
 
 Recupera (com limite de MAX_ACTIONS por contêiner por hora, depois só avisa):
   - contêiner do projeto parado que deveria estar de pé  -> `docker start`
-  - contêiner `unhealthy`                                -> `docker restart`
+  - contêiner `unhealthy` por UNHEALTHY_CYCLES ciclos seguidos -> `docker restart`
+  - NUNCA reinicia serviço com estado (postgres, nats) por estar `unhealthy`: só avisa (reiniciar interromperia gravações/publicações).
+Falha ao coletar (docker, banco) é estado DESCONHECIDO: os alertas daquele assunto ficam como estão, nunca viram `resolvido`.
 Só avisa (não há o que reiniciar daqui):
   - Edge sem heartbeat há mais de EDGE_STALE_S (padrão 300 s)
   - evento do outbox sem publicar há mais de OUTBOX_STALE_S (padrão 300 s)
@@ -30,6 +32,8 @@ HOME = Path(os.environ.get("FC_WATCHDOG_DIR", str(Path.home() / "fibercore-watch
 BACKUP_DIR = Path(os.environ.get("FIBERCORE_BACKUP_DIR", str(Path.home() / "fibercore-backups")))
 POSTGRES = os.environ.get("FC_WATCHDOG_POSTGRES", f"{PROJECT}-postgres-1")
 ONESHOT = {"migrate"}  # serviços que terminam com código 0 de propósito
+STATEFUL = {"postgres", "nats"}  # unhealthy => só avisa
+UNHEALTHY_CYCLES = 2  # ciclos seguidos (~2 min) antes de reiniciar
 MAX_ACTIONS = 3
 ACTION_WINDOW_S = 3600
 ALERT_COOLDOWN_S = 3600
@@ -62,10 +66,10 @@ class Watchdog:
         try:
             s = json.loads(self.state_path.read_text())
             if isinstance(s, dict):
-                return {"actions": s.get("actions", {}), "alerts": s.get("alerts", {})}
+                return {"actions": s.get("actions", {}), "alerts": s.get("alerts", {}), "unhealthy": s.get("unhealthy", {})}
         except (OSError, ValueError):
             pass
-        return {"actions": {}, "alerts": {}}
+        return {"actions": {}, "alerts": {}, "unhealthy": {}}
 
     def save(self) -> None:
         tmp = self.state_path.with_suffix(".tmp")
@@ -112,8 +116,9 @@ class Watchdog:
         self.log("alert", text, key=key)
         self.webhook(f"[FiberCore LAB] {text}")
 
-    def resolve_missing(self, active: set[str]) -> None:
-        for key in [k for k in self.state["alerts"] if k not in active]:
+    def resolve_missing(self, active: set[str], unknown: set[str]) -> None:
+        # chave de assunto cuja coleta falhou: preserva (não se sabe se a condição sumiu)
+        for key in [k for k in self.state["alerts"] if k not in active and not any(k == u or k.startswith(u + ":") for u in unknown)]:
             del self.state["alerts"][key]
             self.log("info", "resolvido", key=key)
             self.webhook(f"[FiberCore LAB] resolvido: {key}")
@@ -128,11 +133,11 @@ class Watchdog:
         recent.append(t)
         return True
 
-    def containers(self) -> list[dict]:
+    def containers(self) -> list[dict] | None:
         rc, out = self.run(["docker", "ps", "-a", "--filter", f"label=com.docker.compose.project={PROJECT}", "--format", "{{json .}}"])
         if rc != 0:
             self.log("error", "docker ps falhou", rc=rc)
-            return []
+            return None
         rows = []
         for line in out.splitlines():
             try:
@@ -141,8 +146,15 @@ class Watchdog:
                 continue
         return rows
 
-    def check_containers(self, active: set[str]) -> None:
-        for c in self.containers():
+    def check_containers(self, active: set[str], unknown: set[str]) -> None:
+        rows = self.containers()
+        if rows is None:
+            unknown.add("container")
+            active.add("docker")
+            self.alert("docker", "watchdog não consegue consultar o Docker")
+            return
+        seen_unhealthy: set[str] = set()
+        for c in rows:
             name = c.get("Names", "")
             svc = name.removeprefix(PROJECT + "-").rsplit("-", 1)[0]
             state, status = c.get("State", ""), c.get("Status", "")
@@ -152,6 +164,16 @@ class Watchdog:
                     continue
                 action = "start"
             elif "(unhealthy)" in status:
+                seen_unhealthy.add(name)
+                n = self.state["unhealthy"].get(name, 0) + 1
+                self.state["unhealthy"][name] = n
+                key = f"container:{svc}"
+                if svc in STATEFUL:
+                    active.add(key)
+                    self.alert(key, f"{svc} está unhealthy; serviço com estado não é reiniciado sozinho, precisa de pessoa")
+                    continue
+                if n < UNHEALTHY_CYCLES:
+                    continue
                 action = "restart"
             if not action:
                 continue
@@ -168,24 +190,37 @@ class Watchdog:
             else:
                 active.add(key)
                 self.alert(key, f"{svc} continua {'parado' if action == 'start' else 'unhealthy'} depois de {MAX_ACTIONS} reinícios em 1 h; precisa de pessoa")
+        for n in [n for n in self.state["unhealthy"] if n not in seen_unhealthy]:
+            del self.state["unhealthy"][n]
 
     # ---------- consultas ao banco (só contagem/idade) ----------
     def sql(self, q: str) -> str | None:
         rc, out = self.run(["docker", "exec", "-i", POSTGRES, "sh", "-c", 'psql -U "${POSTGRES_USER:-fibercore}" -d "${POSTGRES_DB:-fibercore}" -tAc "$0"', q])
         return out.strip() if rc == 0 else None
 
-    def check_edge(self, active: set[str]) -> None:
+    def check_edge(self, active: set[str], unknown: set[str]) -> None:
         v = self.sql("select coalesce(max(extract(epoch from now()-last_heartbeat_at))::bigint, -1) from edges where status <> 'revoked'")
         if v is None:
-            active.add("db"); self.alert("db", "watchdog não consegue consultar o banco"); return
-        age = int(v or -1)
+            unknown.update({"edge", "outbox"})
+            active.add("db")
+            self.alert("db", "watchdog não consegue consultar o banco")
+            return
+        try:
+            age = int(v)
+        except ValueError:
+            unknown.add("edge")
+            return
         if age == -1 or age > EDGE_STALE_S:
             active.add("edge"); self.alert("edge", "Edge sem heartbeat" + ("" if age == -1 else f" há {age // 60} min"))
 
-    def check_outbox(self, active: set[str]) -> None:
+    def check_outbox(self, active: set[str], unknown: set[str]) -> None:
         v = self.sql(f"select count(*) from events_outbox where published_at is null and created_at < now() - interval '{OUTBOX_STALE_S} seconds'")
-        if v and v.isdigit() and int(v) > 0:
-            active.add("outbox"); self.alert("outbox", f"{v} evento(s) do outbox sem publicar há mais de {OUTBOX_STALE_S // 60} min")
+        if v is None or not v.isdigit():
+            unknown.add("outbox")
+            return
+        if int(v) > 0:
+            active.add("outbox")
+            self.alert("outbox", f"{v} evento(s) do outbox sem publicar há mais de {OUTBOX_STALE_S // 60} min")
 
     def check_backup_and_disk(self, active: set[str]) -> None:
         done = sorted(self.backup_dir.glob("fibercore-prod-*.dump.done"), key=lambda p: p.stat().st_mtime) if self.backup_dir.exists() else []
@@ -201,14 +236,16 @@ class Watchdog:
 
     def run_all(self) -> None:
         active: set[str] = set()
-        self.check_containers(active)
-        self.check_edge(active)
-        self.check_outbox(active)
+        unknown: set[str] = set()
+        self.check_containers(active, unknown)
+        self.check_edge(active, unknown)
+        if "outbox" not in unknown:
+            self.check_outbox(active, unknown)
         self.check_backup_and_disk(active)
         # chaves ":recuperado" são avisos de um evento só: somem no ciclo seguinte sem emitir "resolvido"
         for k in [k for k in self.state["alerts"] if k.endswith(":recuperado") and k not in active]:
             del self.state["alerts"][k]
-        self.resolve_missing(active)
+        self.resolve_missing(active, unknown)
         self.save()
 
 

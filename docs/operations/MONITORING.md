@@ -6,9 +6,10 @@ O que acontece quando um módulo falha, quem recupera e quem avisa. Para operar:
 | Falha | Mecanismo | Limite |
 |---|---|---|
 | Processo de um contêiner morre | `restart: unless-stopped` do Docker | — |
-| Contêiner `unhealthy` (api-core, web, postgres, nats, **outbox-relay, event-consumer**) | watchdog: `docker restart` | 3 ações por contêiner por hora; depois só avisa (`precisa de pessoa`) |
+| Contêiner `unhealthy` sem estado (api-core, web, **outbox-relay, event-consumer**) por 2 ciclos seguidos (~2 min) | watchdog: `docker restart` | 3 ações por contêiner por hora; depois só avisa (`precisa de pessoa`) |
+| `postgres` ou `nats` `unhealthy` | **não reinicia**: só avisa (reiniciar interromperia gravações e publicações) | pessoa decide |
 | Contêiner parado que deveria estar de pé | watchdog: `docker start` (`migrate` terminado com código 0 é normal) | idem |
-| Relay ou consumer vivos mas travados | batimento: o laço toca `/tmp/hb` a cada iteração bem-sucedida; o healthcheck falha se o arquivo tiver mais de 60 s | o watchdog reinicia |
+| Relay ou consumer vivos mas travados | batimento: o laço toca `/tmp/hb` só em iteração bem-sucedida (relay sem exceção; consumer com lote sem falha de handler **e** banco alcançável); o healthcheck falha se o arquivo tiver mais de 60 s | o watchdog reinicia |
 | Evento perdido no barramento | `python -m app.workers.relay replay <ts>`; consumidores idempotentes | manual |
 | Edge cai | `cron` + `flock` no host do GenieACS religa em ≤ 1 min | — |
 | Nó de teste de banda cai | a sonda de saúde do Edge marca `down`; a nuvem deixa de oferecer o teste | volta sozinho com o nó |
@@ -19,6 +20,8 @@ O que acontece quando um módulo falha, quem recupera e quem avisa. Para operar:
 - Nenhum backup concluído nas últimas 26 h.
 - Disco (`/` ou `/var/lib/docker`) com menos de 10% livre.
 - Watchdog sem acesso ao banco.
+
+Falha ao coletar (Docker ou banco indisponível) é estado **desconhecido**: os alertas daquele assunto ficam como estão e nunca viram `resolvido`; só uma coleta saudável resolve.
 
 Cada chave de alerta repete no máximo 1 vez por hora e emite `resolvido` quando a condição some. Uma recuperação automática bem-sucedida gera um aviso de uma vez só.
 

@@ -57,7 +57,9 @@ async def ensure_consumer(js, durable: str, filter_subject: str = f"{bus.SUBJECT
     )
 
 
-async def consume_batch(sub, js, engine: Engine, consumer: str, handler: Handler, *, batch: int = 10, timeout: float = 1.0) -> int:
+async def consume_batch(
+    sub, js, engine: Engine, consumer: str, handler: Handler, *, batch: int = 10, timeout: float = 1.0, stats: dict | None = None
+) -> int:
     """Fetch and process one batch. Returns number of messages handled (including duplicates)."""
     try:
         msgs = await sub.fetch(batch, timeout=timeout)
@@ -72,6 +74,8 @@ async def consume_batch(sub, js, engine: Engine, consumer: str, handler: Handler
             await asyncio.to_thread(process_envelope, engine, consumer, envelope, handler)
             await msg.ack()
         except Exception:
+            if stats is not None:
+                stats["failed"] = stats.get("failed", 0) + 1
             delivered = msg.metadata.num_delivered
             log.exception("handler failed (delivery %d)", delivered)
             if delivered >= MAX_DELIVER:
@@ -93,6 +97,15 @@ def audit_handler(conn: Connection, envelope: dict) -> None:
     )
 
 
+def _db_ok(engine: Engine) -> bool:
+    try:
+        with engine.connect() as c:
+            c.execute(text("SELECT 1"))
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 async def run() -> None:  # pragma: no cover - process entrypoint
     logging.basicConfig(level=logging.INFO)
     engine = make_engine(os.environ["DATABASE_URL"])
@@ -101,8 +114,11 @@ async def run() -> None:  # pragma: no cover - process entrypoint
     sub = await ensure_consumer(js, "audit-projection")
     while True:
         try:
-            await consume_batch(sub, js, engine, "audit-projection", audit_handler)
-            beat()
+            stats: dict = {}
+            await consume_batch(sub, js, engine, "audit-projection", audit_handler, stats=stats)
+            # batimento só com lote sem falha de handler E banco alcançável: consumer vivo mas sem conseguir trabalhar não pode parecer saudável
+            if not stats.get("failed") and await asyncio.to_thread(_db_ok, engine):
+                beat()
         except Exception:
             log.exception("consume iteration failed")
             await asyncio.sleep(1)

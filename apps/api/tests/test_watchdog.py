@@ -65,14 +65,88 @@ def test_healthy_stack_does_nothing(env):
     assert f.actions() == [] and env[2] == []
 
 
-def test_unhealthy_container_is_restarted_and_announced_once(env):
+def test_unhealthy_container_is_restarted_only_after_two_cycles(env):
     f = Fake([row("outbox-relay", status="Up 1 hour (unhealthy)")])
     now = [1_000_000.0]
     w = make(env, f, now)
     os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
     w.run_all()
+    assert f.actions() == []  # 1º ciclo: pode ser transitório
+    now[0] += 60
+    os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
+    w.run_all()
     assert f.actions() == [["restart", f"{P}-outbox-relay-1"]]
     assert any("reiniciado" in m for m in env[2])
+
+
+def test_a_blip_that_recovers_resets_the_unhealthy_counter(env):
+    f = Fake([row("web", status="Up (unhealthy)")])
+    now = [1_000_000.0]
+    w = make(env, f, now)
+    os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
+    w.run_all()
+    f.rows = [row("web")]
+    now[0] += 60
+    os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
+    w.run_all()
+    f.rows = [row("web", status="Up (unhealthy)")]
+    now[0] += 60
+    os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
+    w.run_all()
+    assert f.actions() == []  # contagem recomeçou: ainda é o 1º ciclo seguido
+
+
+def test_stateful_services_are_never_restarted_for_unhealthy_only_alert(env):
+    f = Fake([row("postgres", status="Up (unhealthy)"), row("nats", status="Up (unhealthy)")])
+    now = [1_000_000.0]
+    w = make(env, f, now)
+    for _ in range(5):
+        now[0] += 60
+        os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
+        w.run_all()
+    assert f.actions() == []
+    assert any("postgres está unhealthy" in m for m in env[2]) and any("nats está unhealthy" in m for m in env[2])
+    # parado (não unhealthy) é outra coisa: `docker start` é seguro
+    f.rows = [row("postgres", "exited", "Exited (1) 1 minute ago")]
+    now[0] += 60
+    w.run_all()
+    assert f.actions() == [["start", f"{P}-postgres-1"]]
+
+
+def test_unknown_state_never_resolves_alerts(env):
+    now = [1_000_000.0]
+    f = Fake([row("api-core", status="Up (unhealthy)")], edge_age="900", outbox="3", action_rc=1)
+    w = make(env, f, now)
+    os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
+    w.run_all()
+    now[0] += 60
+    os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
+    w.run_all()
+    assert set(w.state["alerts"]) >= {"edge", "outbox", "container:api-core"}
+    n = len(env[2])
+
+    class Blind(Fake):  # docker e banco indisponíveis neste ciclo
+        def __call__(self, cmd, timeout=30):
+            return 1, "x"
+
+    w.run = Blind([])
+    now[0] += 60
+    os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
+    w.run_all()
+    assert set(w.state["alerts"]) >= {"edge", "outbox", "container:api-core"}  # preservados
+    assert not any("resolvido" in m for m in env[2][n:])
+    # banco responde mas o outbox devolve lixo: continua desconhecido
+    w.run = Fake([row("api-core")], edge_age="900", outbox="garbage")
+    now[0] += 60
+    os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
+    w.run_all()
+    assert "outbox" in w.state["alerts"]
+    # só uma coleta saudável resolve
+    w.run = Fake([row("api-core")], edge_age="10", outbox="0")
+    now[0] += 60
+    os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
+    w.run_all()
+    assert not ({"edge", "outbox", "container:api-core", "docker", "db"} & set(w.state["alerts"]))
 
 
 def test_stopped_container_is_started_but_oneshot_exit0_is_not(env):
@@ -97,7 +171,7 @@ def test_restart_loop_is_capped_and_escalates(env):
     now = [1_000_000.0]
     w = make(env, f, now)
     os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
-    for _ in range(6):
+    for _ in range(8):
         now[0] += 60
         os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
         w.run_all()
@@ -114,6 +188,9 @@ def test_failed_restart_alerts_and_alert_has_cooldown_then_resolves(env):
     f = Fake([row("web", status="Up 1 minute (unhealthy)")], action_rc=1)
     now = [1_000_000.0]
     w = make(env, f, now)
+    os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
+    w.run_all()
+    now[0] += 60
     os.utime(env[1] / "fibercore-prod-20261031T000000Z.dump.done", (now[0], now[0]))
     w.run_all()
     assert any("falhou" in m for m in env[2])
@@ -162,6 +239,8 @@ def test_state_and_log_are_private_and_contain_no_secrets(env):
     now = [1_000_000.0]
     f = Fake([row("web", status="Up (unhealthy)")])
     w = make(env, f, now)
+    w.run_all()
+    now[0] += 60
     w.run_all()
     for name in ("state.json", "watchdog.log"):
         p = env[0] / "w" / name
