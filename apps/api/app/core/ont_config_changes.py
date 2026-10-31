@@ -56,6 +56,17 @@ def _effective(rows: list[dict], instance: str, params: dict, name: str):
     return params[name] if name in params else current_value(rows, name, instance)[0]
 
 
+def _range_problem(net, gw: str, lo: str, hi: str) -> str | None:
+    """The DHCP range [lo, hi] against a subnet and its gateway: inside the subnet, clear of network and broadcast, not covering the gateway."""
+    g, a, b = (int(ipaddress.ip_address(x)) for x in (gw, lo, hi))
+    if any(ipaddress.ip_address(x) not in net or ipaddress.ip_address(x) in (net.network_address, net.broadcast_address) or ipaddress.ip_address(x) == ipaddress.ip_address(gw)
+           for x in (lo, hi)):
+        return "dhcp_range_outside_subnet"
+    if a <= g <= b or int(net.network_address) in range(a, b + 1) or int(net.broadcast_address) in range(a, b + 1):
+        return "dhcp_range_contains_gateway" if a <= g <= b else "dhcp_range_outside_subnet"
+    return None
+
+
 def _lan_error(rows: list[dict], instance: str, params: dict) -> str | None:
     """LAN: contiguous mask, a host address (neither network nor broadcast); DHCP range ordered, inside the subnet and clear of network, broadcast and the gateway itself.
     Pure numeric coherence: the real topology is the homologation's business."""
@@ -80,11 +91,7 @@ def _lan_error(rows: list[dict], instance: str, params: dict) -> str | None:
             return "dhcp_range_inverted"
         if net is None:
             return "lan_address_not_observed"   # cannot prove the range fits a subnet nobody reported
-        if any(ipaddress.ip_address(x) not in net or ipaddress.ip_address(x) in (net.network_address, net.broadcast_address, ipaddress.ip_address(gw))
-               for x in (lo, hi)):
-            return "dhcp_range_outside_subnet"
-        if int(ipaddress.ip_address(lo)) <= int(ipaddress.ip_address(gw)) <= int(ipaddress.ip_address(hi)):
-            return "dhcp_range_contains_gateway"
+        return _range_problem(net, gw, lo, hi)
     return None
 
 
@@ -92,9 +99,10 @@ def warnings_for(rows: list[dict], capability: str, instance: str, params: dict)
     """Not refusals: facts the operator must see. A new LAN subnet that leaves the CURRENT DHCP range outside it would strand the clients."""
     if capability != "lan.ipv4.write":
         return []
-    net = _net(params["lan.ipv4_address"], params["lan.netmask"])
+    gw, mask = params["lan.ipv4_address"], params["lan.netmask"]
+    net = _net(gw, mask)
     lo, hi = current_value(rows, "lan.dhcp_min", instance)[0], current_value(rows, "lan.dhcp_max", instance)[0]
-    if net is not None and lo and hi and any(ipaddress.ip_address(x) not in net for x in (lo, hi)):
+    if net is not None and lo and hi and _range_problem(net, gw, lo, hi):
         return ["dhcp_range_outside_new_subnet"]
     return []
 

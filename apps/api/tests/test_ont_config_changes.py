@@ -103,6 +103,8 @@ def test_even_with_everything_else_ready_the_missing_executor_still_blocks(clien
     ("lan.ipv4.write", "lan/1", {"lan.ipv4_address": "10.0.0.1"}, "fields_must_come_together"),
     ("lan.ipv4.write", "lan/1", {"lan.ipv4_address": "10.0.0.255", "lan.netmask": "255.255.255.0"}, "address_not_a_host"),
     ("lan.ipv4.write", "lan/1", {"lan.ipv4_address": "10.0.0.1", "lan.netmask": "255.0.255.0"}, "netmask_not_contiguous"),
+    ("lan.ipv4.write", "lan/1", {"lan.ipv4_address": "10.0.0.1", "lan.netmask": "255.255.255.254"}, "address_not_a_host"),
+    ("lan.ipv4.write", "lan/1", {"lan.ipv4_address": "10.0.0.1", "lan.netmask": "255.255.255.255"}, "address_not_a_host"),
     ("lan.dhcp.write", "lan/1", {"lan.dhcp_min": "10.0.0.50", "lan.dhcp_max": "10.0.0.10"}, "dhcp_range_inverted"),
     ("lan.dhcp.write", "lan/1", {"lan.dhcp_min": "192.168.2.10", "lan.dhcp_max": "192.168.2.50"}, "dhcp_range_outside_subnet"),
     ("lan.dhcp.write", "lan/1", {"lan.dhcp_min": "192.168.1.1", "lan.dhcp_max": "192.168.1.50"}, "dhcp_range_outside_subnet"),
@@ -240,3 +242,11 @@ def test_changing_one_dhcp_end_needs_the_other_end_known(client, seed, cpe, migr
     assert r.status_code == 422 and r.json()["detail"] == "dhcp_range_incomplete"
     ok = _preview(client, seed, cpe, "lan.dhcp.write", "lan/1", {"lan.dhcp_min": "192.168.1.20", "lan.dhcp_max": "192.168.1.90"})
     assert ok.status_code == 201
+
+
+@pytest.mark.parametrize("addr,mask", [("192.168.1.100", "255.255.255.0"),      # the new gateway sits INSIDE the current range
+                                       ("192.168.1.129", "255.255.255.128"),    # the whole current range falls outside the new subnet
+                                       ("192.168.1.1", "255.255.255.128")])     # range 20-90 fits, but the old end 200 does not
+def test_a_new_subnet_that_breaks_the_current_dhcp_range_is_flagged(client, seed, cpe, addr, mask):
+    w = _preview(client, seed, cpe, "lan.ipv4.write", "lan/1", {"lan.ipv4_address": addr, "lan.netmask": mask})
+    assert w.status_code == 201 and w.json()["warnings"] == ["dhcp_range_outside_new_subnet"], w.text

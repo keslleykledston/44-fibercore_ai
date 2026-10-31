@@ -1,0 +1,33 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19042-4b5a-72b2-bbbe-f04cdae8a1fb).
+[codex] Turn started (01a19042-4b96-7512-8699-1cb80ae8c11f).
+[codex] Assistant message captured: Vou ler a diff completa contra `main` e seguir os fluxos alterados, excluindo explicitamente ...
+[codex] Running command: /bin/bash -lc 'git diff --find-renames --find-copies --unified=80 main...HEAD -- apps/api/ale...
+[codex] Command completed: /bin/bash -lc 'git diff --find-renames --find-copies --unified=80 main...HEAD -- apps/api/ale... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --unified=25 main...HEAD -- apps/api/app/api/ont_config.py apps/api/a...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=25 main...HEAD -- apps/api/app/api/ont_config.py apps/api/a... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/ont_config_changes.py | sed -n '35,155p'; nl -ba apps...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/ont_config_changes.py | sed -n '35,155p'; nl -ba apps... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,110p' apps/api/app/core/ont_config.py; sed -n '145,170p' apps/api/ap...
+[codex] Command completed: /bin/bash -lc "sed -n '1,110p' apps/api/app/core/ont_config.py; sed -n '145,170p' apps/api/ap... (exit 0)
+[codex] Assistant message captured: Encontrei dois pontos de consistência fora dos itens excluídos: validação incompleta ao mudar...
+[codex] Running command: /bin/bash -lc "git diff --unified=30 main...HEAD -- apps/api/tests/test_ont_config_changes.py...
+[codex] Command completed: /bin/bash -lc "git diff --unified=30 main...HEAD -- apps/api/tests/test_ont_config_changes.py... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/ont_config_changes.py | sed -n '91,100p'; rg -n \"003...
+[codex] Command failed: /bin/bash -lc "nl -ba apps/api/app/core/ont_config_changes.py | sed -n '91,100p'; rg -n \"003... (exit 2)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: mudança de sub-rede pode gerar uma...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: mudança de sub-rede pode gerar uma prévia sem alerta sobre a faixa DHCP que ficará inválida, e a validação do novo endereço pode aceitar um gateway de broadcast.
+
+Findings:
+- [high] Trocar a sub-rede pode deixar a faixa DHCP inválida sem aviso (apps/api/app/core/ont_config_changes.py:91-98)
+  `warnings_for` compara a faixa DHCP observada com a nova sub-rede, mas não verifica se a faixa contém o novo gateway nem se inclui os endereços de rede ou broadcast. Por exemplo, mudar para `192.168.1.128/25` com faixa atual `192.168.1.20–192.168.1.90` não dispara o aviso, embora toda a faixa fique fora da nova sub-rede. A prévia ainda pode ser submetida para bloqueio sem revelar essa incompatibilidade ao operador. Inclua essas verificações na análise da nova sub-rede e informe alertas explícitos quando não puder rejeitar a combinação de alterações.
+  Recommendation: Ao calcular avisos para `lan.ipv4.write`, validar a faixa observada contra a nova rede, incluindo gateway, endereços de rede e broadcast; cobrir esses casos com testes.
+- [medium] Endereço LAN pode ser o broadcast da sub-rede (apps/api/app/core/ont_config_changes.py:63-69)
+  A checagem rejeita o endereço de rede/broadcast apenas quando `prefixlen <= 30`; para prefixos `/31` e `/32`, porém, ela aceita qualquer endereço, inclusive o broadcast de uma rede `/31`. Assim, uma prévia de LAN pode descrever um gateway inválido como endereço de host. A proteção existente contra prefixos extremos não justifica aceitar esses endereços: rejeite essas máscaras para esse uso ou valide o endereço segundo a semântica de host pretendida.
+  Recommendation: Defina e aplique uma regra explícita para prefixos `/31` e `/32` em gateways LAN — por exemplo, rejeitá-los — e adicione casos de validação correspondentes.
