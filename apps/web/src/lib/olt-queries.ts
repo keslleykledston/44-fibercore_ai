@@ -18,6 +18,7 @@ export const QUERY_ERROR: Record<string, string> = {
   query_not_enabled: "Esta consulta ainda não foi liberada.",
   olt_without_edge: "Esta OLT não tem um Edge associado.",
   olt_query_quota: "Limite de consultas por hora atingido. Tente mais tarde.",
+  olt_query_refresh_quota: "Limite de atualizações forçadas por hora atingido para esta OLT. O dado mostrado é o último guardado.",
   not_permitted: "Seu papel não pede consultas à OLT.",
   forbidden: "Seu papel não permite esta consulta.",
   session: "Sua sessão expirou. Recarregue a página e entre de novo.",
@@ -82,4 +83,12 @@ export function oltClockText(iso: string): string {
   const [date, rest] = iso.split("T");
   const [y, m, d] = date.split("-");
   return `${d}/${m}/${y} ${rest.slice(0, 8)} (fuso ${rest.slice(8)})`;
+}
+
+/** Idade do dado guardado em palavras; o dado nunca é apresentado como atual. */
+export function ageText(seconds: number): string {
+  if (seconds < 90) return "há menos de 2 min";
+  if (seconds < 5400) return `há ${Math.round(seconds / 60)} min`;
+  if (seconds < 172800) return `há ${Math.round(seconds / 3600)} h`;
+  return `há ${Math.round(seconds / 86400)} d`;
 }

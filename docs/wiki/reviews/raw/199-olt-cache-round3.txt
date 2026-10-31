@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18fad-4995-7800-b997-cfc71028254f).
+[codex] Turn started (01a18fad-49e2-7202-b943-a7fd0f61cbd2).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir o caminho de despacho, persistência da época, r...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/jobs.py ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/jobs.py ap... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "def cas|owner_epoch|olt_query" apps/api/app/api/jobs.py apps/api/app/co...
+[codex] Command completed: /bin/bash -lc 'rg -n "def cas|owner_epoch|olt_query" apps/api/app/api/jobs.py apps/api/app/co... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '100,145p' apps/api/app/api/jobs.py; sed -n '1,120p' apps/api/tests/tes...
+[codex] Command completed: /bin/bash -lc "sed -n '100,145p' apps/api/app/api/jobs.py; sed -n '1,120p' apps/api/tests/tes... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/olt_queries.py | sed -n '48,108p'; nl -ba apps/api/app...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/olt_queries.py | sed -n '48,108p'; nl -ba apps/api/app... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: a época protege a gravação de resulta...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: a época protege a gravação de resultados atrasados, mas o cache existente continua servindo valores da geração anterior após transferência da OLT.
+
+Findings:
+- [high] Cache da geração anterior continua sendo servido após transferência da OLT (apps/api/app/api/olt_queries.py:70-75)
+  `_cache_result` recusa corretamente gravar um resultado quando a época ou o Edge já mudou, mas as leituras de `/latest` e do atalho `cached` consultam apenas OLT, consulta e parâmetros; não comparam a época armazenada com a época atual da OLT nem invalidam valores antigos. Depois de uma transferência, uma entrada ainda dentro do TTL pode, portanto, ser apresentada como atual e responder a novos pedidos sem consultar o novo Edge. Isso contorna a proteção de época no cenário mais importante de troca de dono.
+  Recommendation: Ao ler o cache, compare `olt_query_latest.owner_epoch` com `olts.owner_epoch` e não sirva entradas de outra geração; aplique a mesma regra ao caminho de resposta em cache de `request_query`.
+
+Next steps:
+- Adicionar cobertura para cache populado, incremento de `owner_epoch` e leitura/pedido subsequentes; ambos devem ignorar o valor da geração antiga.

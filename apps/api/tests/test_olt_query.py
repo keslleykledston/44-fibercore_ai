@@ -258,6 +258,7 @@ def _dispatched(client, seed, inv, olt, qid="olt.version"):
 
 
 VERSION = {"product": "MA5608T", "version": "MA5600V800R015C00", "patch": "SPC100 HP1013", "uptime_seconds": 88838745}
+TEMPS = {"boards": [{"slot": 0, "name": "H805GPFD", "celsius": 45}, {"slot": 2, "name": "H801MCUD1", "celsius": 43}]}
 BOARD = {"boards": [{"slot": 0, "name": "H805GPFD", "status": "Normal"}, {"slot": 2, "name": "H801MCUD1", "status": "Active_normal"}], "empty_slots": [3]}
 
 

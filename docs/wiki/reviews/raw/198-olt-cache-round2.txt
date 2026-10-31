@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18fac-5385-7b10-97c6-97b6383ff48f).
+[codex] Turn started (01a18fac-53bf-7f12-b169-e1d155ae3e73).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de autorização, cota e gravação con...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=70 main...HEAD -- apps/api/app/api/jobs.py ap...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=70 main...HEAD -- apps/api/app/api/jobs.py ap... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/app/api/olt_querie...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/app/api/olt_querie... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "owner_epoch|def preview|created_at|def audit|def job_result|olt_query" ...
+[codex] Command completed: /bin/bash -lc 'rg -n "owner_epoch|def preview|created_at|def audit|def job_result|olt_query" ... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '135,245p' apps/api/app/api/jobs.py; sed -n '1,45p' apps/api/app/api/ro...
+[codex] Command completed: /bin/bash -lc "sed -n '135,245p' apps/api/app/api/jobs.py; sed -n '1,45p' apps/api/app/api/ro... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '417,432p'; nl -ba apps/api/app/core/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '417,432p'; nl -ba apps/api/app/core/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: resultado de job antigo pode ser ca...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: resultado de job antigo pode ser carimbado com a época de ownership atual e reaparecer como cache recém-atualizado após uma transferência da OLT.
+
+Findings:
+- [high] Resultado de uma época antiga pode renovar o cache após transferência (apps/api/app/api/jobs.py:424-429)
+  O job só é aceito para o cache se o Edge que reporta ainda for o owner atual; em seguida, porém, a gravação usa `own.owner_epoch` lido agora. Se a OLT sair desse Edge e depois voltar a ele enquanto um job antigo ainda pode reportar, a igualdade de `edge_id` passa e o resultado da época anterior recebe a época nova. Com `asked_at` antigo, ele ainda pode substituir um cache de época anterior e definir `observed_at = now()`, fazendo dado atrasado parecer recente. A comparação por época e pergunta só funciona se a época gravada identificar a época em que o job foi despachado.
+  Recommendation: Vincule cada job à `owner_epoch` incluída no envelope no despacho e, ao receber o resultado, exija que essa época ainda corresponda à OLT antes de gravar; nunca carimbe o resultado com uma época lida apenas no momento do reporte.
