@@ -19,9 +19,9 @@ Consulta somente leitura ao banco da nuvem do LAB (escopo do provedor da bancada
 SELECT count(*) AS onus,
        count(*) FILTER (WHERE o.serial LIKE '5A544547%') AS prefixo_zteg,
        count(*) FILTER (WHERE o.serial LIKE '414C434C%') AS prefixo_alcl,
-       count(DISTINCT o.observed_at) AS instantes_distintos
-FROM onus o JOIN pon_ports p ON p.id = o.pon_id AND p.tenant_id = o.tenant_id
-WHERE p.pon_path = '0/0/14'
+       count(DISTINCT o.observed_at) AS instantes, count(DISTINCT o.pon_id) AS pons, count(DISTINCT o.olt_id) AS olts
+FROM onus o JOIN pon_ports p ON p.id = o.pon_id AND p.tenant_id = o.tenant_id AND p.olt_id = o.olt_id
+WHERE p.pon_path = '0/0/14' AND o.tenant_id = '<id-do-provedor-da-bancada>'
   AND date_trunc('second', o.observed_at) = timestamptz '2026-10-31 16:59:01+00';
 ```
-Saída agregada verificada em 2026-10-31: `onus = 12`, `prefixo_zteg = 5`, `prefixo_alcl = 2`, `instantes_distintos = 1` (todas as linhas da PON pertencem a essa única coleta). A família vem dos 4 primeiros bytes do GPON SN em hex lidos como ASCII. Não há exportação versionada (seriam seriais de ONUs). O resultado vale para esse instante; outra coleta pode ter outros números.
+Saída agregada verificada em 2026-10-31: `onus = 12`, `prefixo_zteg = 5`, `prefixo_alcl = 2`, `instantes = 1`, `pons = 1`, `olts = 1` (uma única PON, de uma única OLT, numa única coleta). A família vem dos 4 primeiros bytes do GPON SN em hex lidos como ASCII. Não há exportação versionada (seriam seriais de ONUs). O resultado vale para esse instante; outra coleta pode ter outros números.
