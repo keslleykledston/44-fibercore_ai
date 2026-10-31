@@ -741,3 +741,14 @@ def test_without_every_first_run_condition_the_request_is_refused_with_the_regis
     assert client.get(f"/v1/cpes/{cpe}/speed/capabilities", headers=h).json()["directions"]["download"]["offered"] is False, why
     r = _post(client, h, cpe)
     assert r.status_code == 409 and r.json()["reason"] == "capability_not_observed", why
+
+
+def test_a_first_run_authorization_for_another_destination_or_profile_is_not_offered_nor_usable(client, seed, inv, migrated):
+    cpe, h = _first_run_setup(client, seed, inv, migrated)    # authorization is for {core-sp-1, 10mb}
+    assert client.get(f"/v1/cpes/{cpe}/speed/capabilities", headers=h).json()["directions"]["download"]["offered"] is True
+    r = _post(client, h, cpe, profile="50mb")                  # same destination, another profile: the authorization does not cover it
+    assert r.status_code == 409 and r.json()["reason"] == "capability_not_observed"
+    _endpoint(migrated, seed, inv, eid="core-sp-2")
+    r = _post(client, h, cpe, endpoint_id="core-sp-2")         # another destination
+    assert r.status_code == 409 and r.json()["reason"] == "capability_not_observed"
+    assert _post(client, h, cpe).status_code == 201            # the exact one still works

@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1931a-132d-7f51-92bf-3f512e07b694).
+[codex] Turn started (01a1931a-1614-7881-8b6e-70ba184e53e5).
+[codex] Assistant message captured: Vou verificar o diff contra o código de `bench.gate`, o modelo de autorização e o endpoint de...
+[codex] Running command: /bin/bash -lc "git status --short && git diff main...HEAD -- apps/api/app/api/speed.py apps/a...
+[codex] Command completed: /bin/bash -lc "git status --short && git diff main...HEAD -- apps/api/app/api/speed.py apps/a... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '115,210p' apps/api/app/core/bench.py && sed -n '160,250p' apps/api/app...
+[codex] Command failed: /bin/bash -lc "sed -n '115,210p' apps/api/app/core/bench.py && sed -n '160,250p' apps/api/app... (exit 2)
+[codex] Running command: /bin/bash -lc "sed -n '200,245p' apps/api/app/cli.py; sed -n '450,490p' apps/api/tests/test_j...
+[codex] Command completed: /bin/bash -lc "sed -n '200,245p' apps/api/app/cli.py; sed -n '450,490p' apps/api/tests/test_j... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: a listagem pode anunciar execução f...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: a listagem pode anunciar execução first_run quando a autorização aberta não cobre o destino/perfil do teste; o gate bloqueia depois, criando um falso positivo visível.
+
+Findings:
+- [medium] A capacidade ignora os parâmetros vinculados à autorização first_run (apps/api/app/api/speed.py:72-77)
+  `bench.gate` só aceita uma autorização cujo `params_hash` corresponde exatamente a `{"target": endpoint_id, "profile": profile}`. `_first_run_open` verifica tenant, CPE, operação, estado, flag e janela, mas não compara esse hash. Assim, uma autorização first_run válida para outro destino ou perfil faz `/speed/capabilities` marcar a direção como `offered: true` (e pode tornar `ready: true`); ao solicitar o teste com parâmetros diferentes, `bench.gate` recusa. O bloqueio evita o envio indevido, mas a interface promete uma capacidade que não pode ser usada e a resposta diverge do gate que decide o envio. Inclua endpoint/perfil nos dados usados para calcular `offered` (ou indique disponibilidade sem parâmetros como não confirmada) e cubra mismatch de destino e perfil nos testes.
+  Recommendation: Faça a verificação da autorização corresponder ao `params_hash` exato de cada combinação destino/perfil, e teste que uma autorização incompatível não aparece como utilizável.
