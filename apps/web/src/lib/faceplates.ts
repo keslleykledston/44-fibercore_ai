@@ -54,24 +54,23 @@ const usable = (r: Reported) => r.freshness === "fresh" && r.status !== "unknown
 export type LedReading = { leds: Record<string, LedState>; summary: string; lastKnown: boolean };
 export function readLeds(fp: DeviceFaceplate, r: Reported): LedReading {
   const lastKnown = !usable(r);
-  const firstLan = fp.leds.find((l) => l.role === "lan")?.id;
+  /** Só vira "aceso/apagado" o que o estado reportado da ONU realmente implica; tudo o mais fica "sem leitura" (a OLT não lê LAN, Wi-Fi nem WPS do aparelho):
+   *  online = registrada e sincronizada na PON (logo energizada); los = sem sincronismo com falha de sinal (a energia é desconhecida: pode ser fibra OU aparelho desligado);
+   *  dying_gasp = falta de energia reportada pelo próprio aparelho; offline sem causa = só o sincronismo é conhecido. */
   const stateOf = (l: FaceplateLed): LedState => {
     if (lastKnown) return "unknown";
-    if (r.status === "dying_gasp") return "off";                                   // sem energia: o painel inteiro está apagado de fato
-    if (r.status === "offline") return l.role === "optical-sync" ? "off" : l.role === "optical-fault" ? "off" : "unknown";   // fora do ar sem causa: só o sincronismo é conhecido
+    if (r.status === "dying_gasp") return "off";
     switch (l.role) {
-      case "power": return "on";
+      case "power": return r.status === "online" ? "on" : "unknown";
       case "optical-sync": return r.status === "online" ? "on" : "off";
-      case "optical-fault": return r.status === "los" ? "blink-fast" : "off";
-      case "lan": return r.status === "online" && l.id === firstLan ? "blink" : "off";
-      case "wireless": return r.status === "online" || r.status === "los" ? "on" : "off";   // equipamento energizado segue servindo Wi-Fi sem fibra
-      case "pairing": return "off";
+      case "optical-fault": return r.status === "los" ? "blink-fast" : r.status === "online" ? "off" : "unknown";
+      default: return "unknown";   // lan, wireless, pairing: sem telemetria específica
     }
   };
   const summary = lastKnown ? (r.status === "unknown" ? "O painel não pode ser preenchido agora: não há coleta ativa." : "O painel não pode ser preenchido agora: o dado está defasado.")
-    : r.status === "online" ? "Energia e sincronismo presentes; há tráfego em uma porta de rede."
-    : r.status === "los" ? "Sem sincronismo óptico com o LED de falha piscando: indício de fibra/LOS."
-    : r.status === "dying_gasp" ? "Nenhum LED aceso: o equipamento está sem energia elétrica."
+    : r.status === "online" ? "Energia e sincronismo presentes (registrada na PON). LAN e Wi-Fi não são lidos pela OLT."
+    : r.status === "los" ? "Sem sincronismo óptico, com perda de sinal (LOS) reportada: indício de fibra/LOS. A energia do equipamento não é conhecida."
+    : r.status === "dying_gasp" ? "Falta de energia reportada pelo próprio equipamento (dying gasp): nenhum LED deve estar aceso."
     : "Sem sincronismo óptico; a causa não foi determinada.";
   return { leds: Object.fromEntries(fp.leds.map((l) => [l.id, stateOf(l)])) as Record<string, LedState>, summary, lastKnown };
 }

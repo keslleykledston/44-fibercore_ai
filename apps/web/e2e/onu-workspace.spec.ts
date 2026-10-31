@@ -161,10 +161,22 @@ test("ONU 360°: trilha até a PON e painel frontal com óptica no alto; LOS apa
   await expect(card).toContainText("Painel frontal");
   await expect(card).toContainText("indício de fibra/LOS");
   await expect(card.getByTestId("faceplate-legend")).toContainText("LOS · Piscando rápido");
+  await expect(card.getByTestId("faceplate-legend")).toContainText("Wi-Fi · Sem leitura");   // a OLT não lê o Wi-Fi do aparelho: nada é afirmado
+  await expect(card.getByTestId("faceplate-legend")).toContainText("Power · Sem leitura");   // LOS não diz se o aparelho está energizado
   await expect(card).toContainText("Sem limiar homologado");                 // óptica sem cor de severidade inventada
   await expect(card).toContainText("derivado do que a OLT reportou");
   const a11y = await new AxeBuilder({ page: page as never }).include("[data-testid=onu360-faceplate]").analyze();
   expect(a11y.violations.filter((v) => ["serious", "critical"].includes(v.impact ?? ""))).toEqual([]);
+  await page.goto("/rede?serial=DEMOA0001");                                 // online: só o que a PON implica é afirmado
+  await row(page, "DEMOA0001").click();
+  await page.getByTestId("onu-360-link").click();
+  const online = page.getByTestId("onu360-faceplate").getByTestId("faceplate-legend");
+  await expect(online).toContainText("Power · Aceso");
+  await expect(online).toContainText("PON · Aceso");
+  await expect(online).toContainText("LOS · Apagado");
+  await expect(online).toContainText("LAN1 · Sem leitura");                  // a OLT não lê porta LAN nem Wi-Fi: nada de "tráfego" inventado
+  await expect(online).toContainText("Wi-Fi · Sem leitura");
+  await expect(page.getByTestId("onu360-faceplate")).not.toContainText("tráfego");
   await page.goto("/rede?serial=DEMOQ0002");                                 // coleta de 3 h atrás
   await row(page, "DEMOQ0002").click();
   await page.getByTestId("onu-360-link").click();

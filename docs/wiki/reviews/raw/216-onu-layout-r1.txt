@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19089-982c-7140-91de-6b7ccba2412c).
+[codex] Turn started (01a19089-9a7e-7d62-b237-03e345beb62f).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os fluxos de seleção, leitura de estado e históric...
+[codex] Running command: /bin/bash -lc "git diff --stat main...HEAD && git diff --unified=5 main...HEAD -- apps/web/sr...
+[codex] Command completed: /bin/bash -lc "git diff --stat main...HEAD && git diff --unified=5 main...HEAD -- apps/web/sr... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/lib/faceplates.ts | sed -n '50,105p'; nl -ba apps/web/src/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/lib/faceplates.ts | sed -n '50,105p'; nl -ba apps/web/src/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não deve ir ao ar ainda: o painel frontal atribui ati...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não deve ir ao ar ainda: o painel frontal atribui atividade específica a LEDs que a OLT não reportou, criando estados operacionais inventados.
+
+Findings:
+- [high] Status online inventa atividade de LAN e Wi‑Fi (apps/web/src/lib/faceplates.ts:63-73)
+  Com qualquer ONU fresca `online`, `readLeds` marca a primeira LAN como piscando e Wi‑Fi como aceso; também deriva Power aceso. O status online só informa o estado geral, não confirma atividade de uma porta ou Wi‑Fi. A tela e o resumo afirmam tráfego em uma porta sem essa leitura, podendo induzir diagnóstico operacional errado.
+  Recommendation: Só apresente esses LEDs como conhecidos quando houver telemetria específica correspondente. Para status geral sem essa telemetria, use `unknown` e remova do resumo afirmações sobre tráfego, Wi‑Fi e energia que não sejam reportadas.
+
+Next steps:
+- Corrigir a derivação dos LEDs para distinguir explicitamente estado reportado de inferência; revisar os resumos e os rótulos do painel pelo mesmo critério.
