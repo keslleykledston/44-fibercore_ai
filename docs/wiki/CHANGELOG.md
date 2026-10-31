@@ -306,3 +306,6 @@
 - Web: aba **Teste de banda** no painel da ONU e cartão na ONU 360° (`SpeedTestSection`), atrás da flag `speed_diagnostics`; rotas BFF `/bff/cpes/{id}/speed` e `/speed/runs` (formato fechado, só nomes lógicos); estado indisponível com motivo; resultado com confiabilidade; "—" no lugar de zero.
 - Ajuda: artigo `rede/testar-banda` + manifesto (capturas reais do estado indisponível e capturas de cenário rotuladas como simuladas); `docs/operations/SPEED_HOMOLOGACAO.md` (guia e planilha vazia). `scripts/seed_demo.py` liga a flag só no demo (a tela), sem liberar teste.
 - Nada executado em ONT/ACS reais; nenhuma implantação feita.
+
+## Speed Diagnostics — aceite do risco de 3xx na bancada (ADR-0038, emenda aprovada em 2026-10-31)
+- Migração 0036 `speed_risk_acceptances` e a opção C no gate (`speed.redirect_basis`): destino CORE nomeado, firmware exato, validade ≤ 90 dias, sonda `unsupported` registrada, revogação serializada com o despacho. Owner CLI `speed-acceptance-set|revoke|audit`. A flag `speed_diagnostics` segue DESLIGADA; nada executado em equipamento por este PR.

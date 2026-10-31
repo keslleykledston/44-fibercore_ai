@@ -1,0 +1,32 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1930c-c305-7751-8bc2-765eeaf858df).
+[codex] Turn started (01a1930c-c340-7fe2-9856-7dcf61a40347).
+[codex] Assistant message captured: Vou revisar o diff contra `main` e seguir os caminhos de gate, aceite, despacho e revogação, ...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/api/a...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/api/a... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/cli.py | sed -n '155,270p'; nl -ba apps/api/app/core/speed...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/cli.py | sed -n '155,270p'; nl -ba apps/api/app/core/speed... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/cli.py | sed -n '268,335p'; nl -ba apps/api/app/core/jobs....
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/cli.py | sed -n '268,335p'; nl -ba apps/api/app/core/jobs.... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '340,405p'; sed -n '1,100p' apps/api/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '340,405p'; sed -n '1,100p' apps/api/... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "CREATE TABLE.*|GRANT SELECT ON|REVOKE.*fibercore_app|ALTER DEFAULT PRIV...
+[codex] Command completed: /bin/bash -lc 'rg -n "CREATE TABLE.*|GRANT SELECT ON|REVOKE.*fibercore_app|ALTER DEFAULT PRIV... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "ALTER DEFAULT PRIVILEGES|GRANT .*ON ALL TABLES|fibercore_app" apps/api/...
+[codex] Command completed: /bin/bash -lc 'rg -n "ALTER DEFAULT PRIVILEGES|GRANT .*ON ALL TABLES|fibercore_app" apps/api/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: o comando de aceite pode ativar um...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: o comando de aceite pode ativar uma decisão antes da data de aceite informada, contrariando o período declarado e permitindo uso antecipado.
+
+Findings:
+- [medium] Aceite futuro entra em vigor imediatamente (apps/api/app/cli.py:277-281)
+  `speed-acceptance-set` valida apenas que `accepted_on < expires_on` e que a validade não excede 90 dias. Como o gate consulta somente `revoked_at` e `expires_on`, um aceite com `accepted_on` no futuro e `expires_on` hoje ou depois já libera o teste antes da data declarada no documento. Isso permite despacho sem aceite vigente. Exija `accepted_on <= hoje` na CLI e, idealmente, inclua a data inicial no critério do gate.
+  Recommendation: Rejeite datas de aceite futuras e faça o gate verificar explicitamente o início e o fim da vigência do aceite.
+
+Next steps:
+- Adicionar validação de data futura no CLI e cobrir o caso no teste de aceite.

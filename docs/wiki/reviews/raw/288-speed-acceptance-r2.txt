@@ -1,0 +1,20 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1930d-7a7d-7fd2-88d4-1e1130c1c17b).
+[codex] Turn started (01a1930d-7d38-7941-bc7e-b57028b24130).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir todos os caminhos que consultam ou registram aceit...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/speed.py ...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/speed.py ... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/app/cli.py apps/ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/app/cli.py apps/ap... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"redirect_verified|redirect_basis|speed_acceptance|gate\\(.*dispatch|mo...
+[codex] Command completed: /bin/bash -lc "rg -n \"redirect_verified|redirect_basis|speed_acceptance|gate\\(.*dispatch|mo... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"Não encontrei abertura indevida no gate: o aceite só vale par...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+Não encontrei abertura indevida no gate: o aceite só vale para datas UTC vigentes, perfil exato e endpoint CORE aceito; a validação é repetida no despacho.
+
+No material findings.

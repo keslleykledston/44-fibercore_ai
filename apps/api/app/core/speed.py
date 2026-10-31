@@ -167,12 +167,66 @@ def store_result(conn: Connection, tenant_id: UUID, job_id: UUID, direction: str
     return r
 
 
-def redirect_verified(conn: Connection, tenant_id: UUID, vendor: str, model: str, firmware: str) -> bool:
-    """The destination cannot be swapped by the node: either the CPE's TR-143 client was observed NOT to follow a 3xx (registry row, with evidence), or the
-    operator confirmed the egress ACL of the service WAN (registry row, with evidence). Neither row, or without evidence = redirects count as followed."""
+def redirect_basis(conn: Connection, tenant_id: UUID, vendor: str, model: str, firmware: str, target: str | None = None) -> str | None:
+    """Why a test may be offered although the CPE's client might follow a 3xx (ADR-0038 item 4 and the 2026-10-31 amendment), or None.
+
+    'probe' / 'acl': a registry row with evidence (the client was observed NOT to follow, or the operator confirmed the egress ACL).
+    'acceptance': option C. ALL of: the probe row says the client DOES follow (the risk is known, not presumed); a non-revoked, unexpired acceptance exists for
+    this exact vendor/model/firmware; the destination is named in it and is a CORE endpoint (never INTERNET: that node is not ours). With `target=None`
+    (the capability listing, before a destination is chosen) it answers whether ANY destination is accepted. Reads only; the decision is the database row."""
     rows = conn.execute(
-        text("SELECT 1 FROM device_capabilities WHERE tenant_id = :t AND lower(vendor) = lower(:v) AND lower(model) = lower(:m) AND firmware = :f "
-             "AND protocol = 'tr069' AND operation = ANY(:ops) AND status = 'supported' AND evidence_ref IS NOT NULL AND verified_at IS NOT NULL "
+        text("SELECT operation, status FROM device_capabilities WHERE tenant_id = :t AND lower(vendor) = lower(:v) AND lower(model) = lower(:m) AND firmware = :f "
+             "AND protocol = 'tr069' AND operation = ANY(:ops) AND evidence_ref IS NOT NULL AND verified_at IS NOT NULL "
              "AND certification IN ('observed', 'certified')"),
-        {"t": tenant_id, "v": vendor.strip(), "m": model.strip(), "f": firmware.strip(), "ops": [REDIRECT_PROBE, EGRESS_ACL]}).first()
-    return rows is not None
+        {"t": tenant_id, "v": vendor.strip(), "m": model.strip(), "f": firmware.strip(), "ops": [REDIRECT_PROBE, EGRESS_ACL]}).all()
+    got = {(r.operation, r.status) for r in rows}
+    if (REDIRECT_PROBE, "supported") in got:
+        return "probe"
+    if (EGRESS_ACL, "supported") in got:
+        return "acl"
+    if (REDIRECT_PROBE, "unsupported") not in got:
+        return None
+    acc = conn.execute(
+        text("SELECT endpoint_ids FROM speed_risk_acceptances WHERE tenant_id = :t AND lower(vendor) = lower(:v) AND lower(model) = lower(:m) AND firmware = :f "
+             "AND revoked_at IS NULL AND accepted_on <= (now() AT TIME ZONE 'UTC')::date AND expires_on >= (now() AT TIME ZONE 'UTC')::date"),
+        {"t": tenant_id, "v": vendor.strip(), "m": model.strip(), "f": firmware.strip()}).all()
+    accepted = {e for r in acc for e in r.endpoint_ids}
+    if not accepted:
+        return None
+    core = {r.id for r in conn.execute(text("SELECT id FROM speed_endpoints WHERE tenant_id = :t AND target_kind = 'CORE'"), {"t": tenant_id})}
+    ok = (accepted & core) if target is None else ({target} & accepted & core)
+    return "acceptance" if ok else None
+
+
+def redirect_verified(conn: Connection, tenant_id: UUID, vendor: str, model: str, firmware: str, target: str | None = None) -> bool:
+    """The destination cannot be swapped by the node: see `redirect_basis`. Neither basis, or without evidence = redirects count as followed."""
+    return redirect_basis(conn, tenant_id, vendor, model, firmware, target) is not None
+
+
+# ---- option C: formal acceptance of the 3xx risk (ADR-0038 amendment, 2026-10-31) -------------------------------------------------------------------------
+ACCEPTANCE_DOC_RE = re.compile(r"ACEITE-risco-3xx-[a-z0-9-]+-[0-9]{4}-[0-9]{2}-[0-9]{2}\.md")
+ACCEPTANCE_MAX_DAYS = 90
+RESIDUAL_PHRASE = "risco residual"
+
+
+def acceptance_doc_gaps(basename: str, text_: str, *, vendor: str, model: str, firmware: str, approved_by: str, accepted_on: str,
+                        endpoint_ids: list[str]) -> list[str]:
+    """What the acceptance document is missing for the owner CLI to record it. The CLI refuses on any gap; the gate never reads the file (it reads the row)."""
+    gaps: list[str] = []
+    if ACCEPTANCE_DOC_RE.fullmatch(basename) is None:
+        gaps.append("file name must be ACEITE-risco-3xx-<model>-<YYYY-MM-DD>.md")
+    for label, value in (("vendor", vendor), ("model", model), ("firmware", firmware), ("approved-by", approved_by)):
+        if not value.strip():
+            gaps.append(f"{label} is empty")
+        elif value.strip() not in text_:
+            gaps.append(f"the document does not state the {label} '{value.strip()}'")
+    if not re.search(r"^\**Aprovado por:\**\s*" + re.escape(approved_by.strip()) + r"\s*$", text_, re.M) and approved_by.strip():
+        gaps.append("the document needs a line 'Aprovado por: <name>' equal to --approved-by")
+    if accepted_on not in text_:
+        gaps.append("the document does not state the acceptance date")
+    for e in endpoint_ids:
+        if e not in text_:
+            gaps.append(f"the document does not name the destination '{e}'")
+    if RESIDUAL_PHRASE not in text_.lower():
+        gaps.append("the document must state the residual risk")
+    return gaps
