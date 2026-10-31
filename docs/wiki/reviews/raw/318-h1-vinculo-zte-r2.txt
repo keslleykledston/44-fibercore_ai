@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19450-c0bc-7a13-9468-7c1308eb09cc).
+[codex] Turn started (01a19450-c0f8-7cd3-abc0-3925f644ab89).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e rastrear se a evidência, horários e identificadores estão...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- .agent-context/NEXT_ACTIONS...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- .agent-context/NEXT_ACTIONS... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=5 main...HEAD -- docs/wiki/CHANGELOG.md docs/...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=5 main...HEAD -- docs/wiki/CHANGELOG.md docs/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Ainda não publicar: a cronologia compara relógios sem...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Ainda não publicar: a cronologia compara relógios sem desvio conhecido, e o documento mantém identificadores que localizam uma ONU específica na rede.
+
+Findings:
+- [medium] A diferença entre os horários não tem limite de incerteza (docs/wiki/bench/H1-vinculo-zte-f670l-2026-10-31.md:32)
+  O documento informa que os relógios da OLT e do ACS não foram comparados, mas ainda usa os horários para inferir um boot por volta de 20:11 UTC e uma diferença de cerca de seis minutos (linha 32). Sem um limite para o desvio entre relógios, essa comparação não sustenta a ordem nem a duração sugeridas; leitores podem tratar a correlação como mais precisa do que é. Remova a diferença calculada até verificar a sincronização ou registre um limite de incerteza que justifique a comparação.
+  Recommendation: Verifique e documente o desvio dos relógios antes de comparar os eventos; se isso não for possível, retire a estimativa de boot e a diferença em minutos.
+- [medium] A localização lógica e o sufixo do serial continuam expostos (docs/wiki/bench/H1-vinculo-zte-f670l-2026-10-31.md:15-16)
+  Apesar de dizer que os identificadores foram reduzidos ao mínimo, o documento publica a PON e o ONT-ID exatos junto com o sufixo do serial GPON (linhas 15–16), repetidos na comparação da linha 31. Essa combinação localiza uma ONU específica na infraestrutura e facilita associá-la a outros registros; a minimização declarada não elimina essa exposição. Mantenha esses dados apenas em registro restrito se não forem necessários na documentação versionada.
+  Recommendation: Generalize a posição e remova o sufixo do serial no documento versionado; preserve os valores completos somente no registro operacional com acesso restrito.
+
+Next steps:
+- Documentar a base e o limite de incerteza dos relógios, ou retirar a correlação temporal entre OLT e ACS.
+- Reduzir os identificadores operacionais publicados ao mínimo necessário para explicar a evidência.

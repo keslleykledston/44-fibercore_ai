@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19450-3cc8-7791-8b86-1eab08b2c365).
+[codex] Turn started (01a19450-3fec-7ca2-b174-897523dd7322).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e ler o documento completo com linhas para avaliar as afirm...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- .agent-context/NEXT_ACTIONS...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- .agent-context/NEXT_ACTIONS... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não publicar ainda: o documento expõe identificadores...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não publicar ainda: o documento expõe identificadores de equipamento e atribui força excessiva a evidências correlacionadas; a cronologia reconhece lacunas, mas não esclarece de onde vêm alguns horários do ACS.
+
+Findings:
+- [high] Identidade do equipamento permanece inferida, mas a conclusão a chama de bem sustentada (docs/wiki/bench/H1-vinculo-zte-f670l-2026-10-31.md:28-33)
+  A conclusão combina tipo informado pela OLT, trecho GPON e SSID/cache, mas o ACS não expõe o GPON SN completo e o trecho do SSID não é uma confirmação independente da identidade física da ONU. Como a própria cronologia não registra um reboot observado na OLT, pode haver associação incorreta entre a ONU da posição indicada e o CPE do ACS. Isso pode levar leitores a tratar uma hipótese de vínculo como identificação confirmada. Reformule como evidência sugestiva/compatível e indique que a identidade física segue não confirmada até uma correlação independente, por exemplo reinício acompanhado.
+  Recommendation: Retirar “forte”/“bem sustentado” ou justificar precisamente a independência das fontes; explicitar que o vínculo continua inferido e não registrado.
+- [medium] Dossiê contém identificadores operacionais detalhados apesar da afirmação de ausência de dado sensível (docs/wiki/bench/H1-vinculo-zte-f670l-2026-10-31.md:3-25)
+  O documento inclui OUI, sufixos dos seriais GPON e TR-069, posição PON/ONT-ID, eventos e horários, distância e estado de gerenciamento. Esses dados não são credenciais nem endereço, mas identificam um equipamento e sua localização lógica; a declaração “sem ... dado de cliente” não esclarece se essa combinação é apropriada para documentação versionada. O registro pode expor detalhes de infraestrutura de bancada. Remova identificadores que não sejam necessários ao argumento ou marque e restrinja explicitamente o documento conforme a política de dados do repositório.
+  Recommendation: Minimizar posição, sufixos, distância e dados operacionais, mantendo apenas evidência indispensável; revisar também os identificadores listados como pendência.
+- [medium] Horários do ACS e a inferência de boot não têm fonte ou margem de incerteza documentadas (docs/wiki/bench/H1-vinculo-zte-f670l-2026-10-31.md:29-30)
+  A narrativa afirma último Inform às 20:08:31, retorno às 22:22 e uptime de 8.542 s às 22:33, inferindo boot por volta de 20:11 e diferença de cerca de seis minutos da subida na OLT. Ela reconhece que a diferença não foi explicada, mas não registra relógios/fusos do ACS, precisão do uptime, nem se 22:22 é horário de recebimento, do evento ou de reconexão. A comparação pode sugerir uma sequência mais precisa do que os dados permitem. Informe a origem e semântica de cada timestamp e qual incerteza impede reconciliá-los, ou reduza a precisão da interpretação.
+  Recommendation: Acrescentar fonte e base temporal dos registros ACS e tratar o boot inferido como aproximado, distinguindo horário do evento de horário de recebimento.

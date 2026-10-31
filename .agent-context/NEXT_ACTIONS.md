@@ -209,3 +209,8 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 - **Nokia**: provision gravou a credencial, mas o Connection Request responde 403 (autenticou e bloqueou): verificar na interface dela o controle de acesso do TR-069/origem. **ZTE**: sem Inform desde 20:08 UTC; o Connection Request dela nunca alcançou a ONT (timeout); não foi tocada por mim (só o provision de ManagementServer e leituras).
 - **A fazer / cuidado**: confirmar amanhã (após 04:18 UTC) que o Connection Request da Huawei sobrevive à regravação diária do provision; rotacionar `cwmp.auth` (o valor foi exposto no histórico da sessão por um erro de máscara, já corrigido no script); apagar `~/.cr_acs_senha` se ainda existir.
 - Backlog de ideias de frontend: `docs/product/BACKLOG_IDEIAS_FRONTEND_2026-10-31.md`.
+
+## Atualização 2026-10-31 (madrugada): ZTE e Nokia
+- ZTE: H1 de vínculo escrito (`docs/wiki/bench/H1-vinculo-zte-f670l-2026-10-31.md`): OLT registra `F670LV9.0` na 0/0/14 ID 11, serial GPON compatível. Falta o aceite/autorização escrita do responsável para cadastrá-la como alvo de bancada (`bench-target-add`, `bench.devices` do Edge, capacidades). Connection Request da ZTE funciona pelo ACS.
+- Edge no LAB com `bench.read_only_onus` (ZTE ONT 11) e `capture` de `onu.info`/`onu.register` da ONT 11: capturas já feitas; DESLIGAR a lista `capture` do Edge (ele não repete: `done.json`), e retirar o que não for mais usado na próxima troca de config.
+- Nokia: Connection Request ainda falha mesmo com a senha salva na interface e dois reboots; lembrar que a Nokia BLOQUEIA temporariamente (403) após tentativas com credencial errada: testar só pelo caminho real do ACS e com intervalos. Leitura da credencial enfileirada às 23:32 UTC para ver o que ela guarda.
