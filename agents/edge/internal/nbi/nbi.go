@@ -73,12 +73,7 @@ var (
 	firmwareVersion = regexp.MustCompile(`^V?[0-9]{1,9}(\.[0-9]{1,9}){1,5}$`)
 	// firmwareBuild is the ZTE build grammar, nothing looser: V, a dotted version, then P<n>N<n> and at most one capital ("V9.0.11P1N10B", "V6.0.10P2N5").
 	// It is a fixed STRUCTURE, not "any capitals and digits": a password-like tail ("V1.2.3ABC123", "V1.2.3ADMIN123") does not fit it.
-	firmwareBuild   = regexp.MustCompile(`^V[0-9]{1,2}(\.[0-9]{1,3}){1,3}P[0-9]{1,3}N[0-9]{1,3}[A-Z]?$`)
-	firmwareToken   = regexp.MustCompile(`^[A-Z][A-Z0-9]{3,31}$`)
-	firmwareVersion = regexp.MustCompile(`^V?[0-9]{1,9}(\.[0-9]{1,9}){1,5}$`)
-	// firmwareBuild is a vendor build id that follows a dotted version ("V9.0.11P1N10B"): a leading V, the dotted numbers, then ONE capital-letter suffix of
-	// capitals and digits. A separator, a lower-case letter or a longer tail ("V1.2.3-Secret12", "V1.2.3Admin1234") is still dropped.
-	firmwareBuild = regexp.MustCompile(`^V[0-9]{1,9}(\.[0-9]{1,9}){1,5}[A-Z][A-Z0-9]{2,15}$`)
+	firmwareBuild = regexp.MustCompile(`^V[0-9]{1,2}(\.[0-9]{1,3}){1,3}P[0-9]{1,3}N[0-9]{1,3}[A-Z]?$`)
 	hasDigit      = regexp.MustCompile(`[0-9]`)
 	hasLetter     = regexp.MustCompile(`[A-Z]`)
 )
