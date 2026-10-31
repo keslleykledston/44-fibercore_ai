@@ -17,7 +17,7 @@ ui_route: "/rede/onu/[id]"
 
 ## Passo a passo
 
-1. Abra a **ONU 360°** (Rede → ONU) e, no cartão **Roteador (CPE)**, clique em **Configuração do aparelho**. O painel abre à direita e a página continua acessível por trás.
+1. Em **Rede**, clique no serial da ONU e abra a aba **Aparelho** do painel de detalhes (ela só existe se a ONU tem roteador com vínculo confirmado). Na **ONU 360°** o mesmo conteúdo abre pelo botão **Configuração do aparelho**, no cartão **Roteador (CPE)**.
 2. Em **Resumo** veja a miniatura do aparelho, o fabricante/modelo/firmware, a **óptica** (potência recebida e transmitida, sempre somente leitura) e quando foi a última leitura.
 3. Use as abas **Wi-Fi**, **LAN** e **WAN**. Elas só aparecem se o aparelho informou aquela parte. Em Wi-Fi, quando há mais de uma rede, escolha a rede em **Rede**: o painel mostra a banda que o **próprio aparelho** informou (se ele não informou, diz “banda não informada”).
 4. Para fechar, clique em **Recolher** ou tecle **Esc**. O foco volta ao botão.
@@ -44,7 +44,7 @@ ui_route: "/rede/onu/[id]"
 
 ## Evidências de documentação
 
-- Build/commit: 3118b85 (LAB, ramo principal após o PR 102)
-- Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844 (tela como o usuário vê, sem rolagem da página)
-- Origem: capturas REAIS do ambiente de laboratório com usuário de leitura (papel NOC N1), usando só a ONU de bancada; nenhuma ONU de cliente aparece
-- Dados: ONU de bancada (Huawei EG8145V5); horários relativos mascarados fora do painel
+- Build/commit: be94359 (LAB, ramo principal após o PR 106)
+- Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844
+- Origem: capturas REAIS do ambiente de laboratório com usuário de leitura (papel NOC N1), só a ONU de bancada (a lista foi filtrada pelo serial; a matriz e a árvore mostram apenas contagens); nenhuma ONU de cliente aparece
+- Dados: ONU de bancada (Huawei EG8145V5); horários relativos mascarados na lista

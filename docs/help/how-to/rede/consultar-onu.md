@@ -17,10 +17,10 @@ ui_route: "/rede"
 
 ## Passo a passo
 
-1. Acesse **Rede** no menu lateral.
-2. Digite o serial na caixa **Buscar ONU por serial** e pressione Enter (ex.: DEMOA0001).
-3. Clique no serial para abrir o resumo e, depois, a **ONU 360** (veja “Como ver a ONU 360”). Confira **Status**, **Rx (dBm)** e a coluna **Dado** (idade da informação).
-4. Na lista de OLTs, confira o **nível de suporte** do driver: Identificado, Observado ou Certificado.
+1. Acesse **Rede** no menu lateral. No topo está o **painel frontal da OLT**: uma célula por PON, com o resumo em texto (quantas ONUs e quantas fora do ar). Clique numa célula, ou numa PON da árvore à esquerda, para ver só as ONUs daquela PON; a trilha **Rede › OLT › PON** mostra onde você está.
+2. Na lista, use **Filtrar por serial** e os filtros **Todas / Fora do ar / Defasadas / Desconhecido** (cada um mostra quantas ONUs há). O total aparece acima da lista.
+3. Clique no serial para abrir o painel de detalhes à direita (a lista continua visível) e, de lá, **Abrir Visão 360°** (veja “Como ver a ONU 360”). Confira **Status**, **Rx (dBm)** e a coluna **Dado** (idade da informação).
+4. No alto da página, confira o **nível de suporte** do driver da OLT: Identificado, Observado ou Certificado. Busca por serial na barra do topo procura em todas as OLTs.
 
 ![Tela em desktop 1440×900 — Como consultar uma ONU](../../assets/rede/consultar-onu/desktop.png)
 
@@ -28,7 +28,7 @@ ui_route: "/rede"
 
 ## Resultado esperado
 
-A tabela mostra uma linha por ONU com status em texto e símbolo (a cor não é o único indicador). **Dados defasados** indicam último estado conhecido.
+A tela tem três colunas lado a lado (árvore, lista e detalhes). A tabela mostra uma linha por ONU com status em texto e símbolo (a cor não é o único indicador). **Dados defasados** indicam último estado conhecido.
 
 ## Permissões necessárias
 
@@ -42,7 +42,7 @@ A tabela mostra uma linha por ONU com status em texto e símbolo (a cor não é 
 
 ## Evidências de documentação
 
-- Build/commit: 1d9fb94 (árvore de trabalho do PR)
+- Build/commit: be94359 (LAB, ramo principal após o PR 106)
 - Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844
-- Caso de teste E2E: help-screenshots.spec.ts › rede/consultar-onu; app.spec.ts › busca por serial
-- Dados: fictícios (seed `scripts/seed_demo.py`); sem informações reais de clientes
+- Origem: capturas REAIS do ambiente de laboratório com usuário de leitura (papel NOC N1), só a ONU de bancada (a lista foi filtrada pelo serial; a matriz e a árvore mostram apenas contagens); nenhuma ONU de cliente aparece
+- Dados: ONU de bancada (Huawei EG8145V5); horários relativos mascarados na lista

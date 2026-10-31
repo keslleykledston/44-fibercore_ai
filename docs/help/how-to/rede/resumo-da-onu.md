@@ -17,10 +17,11 @@ ui_route: "/rede"
 
 ## Passo a passo
 
-1. Acesse **Rede** e clique no serial de uma ONU. O painel abre à direita; em telas largas a lista continua utilizável por trás.
-2. Clique em outra ONU para trocar: o painel mostra o carregamento e depois o resumo da nova ONU, nunca o da anterior.
-3. Leia **Registro PON** (vem da OLT) e **Comunicação ACS** (vem do roteador gerenciado): são fontes **separadas**.
-4. Para ver tudo, clique em **Abrir Visão 360°**. Para fechar, **Fechar detalhes** ou **Esc**; o foco volta à ONU da lista.
+1. Acesse **Rede** e clique no serial de uma ONU. O painel **Gestão da ONU** abre na coluna da direita; a lista continua visível ao lado (em telas estreitas vira uma gaveta).
+2. Use as abas **Resumo**, **Aparelho** (só com roteador vinculado; veja “Como ver a configuração do aparelho”) e **Histórico** (30 dias). Setas, Home e End navegam pelas abas.
+3. Clique em outra ONU para trocar: o painel mostra o carregamento e depois o resumo da nova ONU, nunca o da anterior. Mudar de PON ou de OLT limpa a seleção.
+4. Leia **Registro PON** (vem da OLT) e **Comunicação ACS** (vem do roteador gerenciado): são fontes **separadas**.
+5. Para ver tudo, clique em **Abrir Visão 360°**. Para fechar, **Fechar detalhes** ou **Esc**; o foco volta à ONU da lista.
 
 ## O que cada estado significa
 
@@ -48,7 +49,7 @@ A potência recebida não tem cor de alerta porque ainda não há limiar homolog
 
 ## Evidências de documentação
 
-- Build/commit: 3118b85 (LAB, ramo principal após o PR 102)
-- Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844 (tela como o usuário vê, sem rolagem da página)
-- Origem: capturas REAIS do ambiente de laboratório com usuário de leitura (papel NOC N1), usando só a ONU de bancada; nenhuma ONU de cliente aparece
-- Dados: ONU de bancada (Huawei EG8145V5); horários relativos mascarados fora do painel
+- Build/commit: be94359 (LAB, ramo principal após o PR 106)
+- Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844
+- Origem: capturas REAIS do ambiente de laboratório com usuário de leitura (papel NOC N1), só a ONU de bancada (a lista foi filtrada pelo serial; a matriz e a árvore mostram apenas contagens); nenhuma ONU de cliente aparece
+- Dados: ONU de bancada (Huawei EG8145V5); horários relativos mascarados na lista

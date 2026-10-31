@@ -16,9 +16,8 @@ articles:
   images:
   - assets/rede/consultar-onu/desktop.png
   - assets/rede/consultar-onu/mobile.png
-  e2e_test: help-screenshots.spec.ts › rede/consultar-onu; app.spec.ts › busca por
-    serial
-  last_verified: '2026-10-28'
+  e2e_test: onu-workspace.spec.ts (inspetor); captura real no LAB (ONU de bancada)
+  last_verified: '2026-10-31'
 - slug: rede/onus-offline
   ui_route: /rede/offline
   status: draft
@@ -28,7 +27,7 @@ articles:
   images:
   - assets/rede/resumo-da-onu/desktop.png
   - assets/rede/resumo-da-onu/mobile.png
-  e2e_test: inspetor (e2e/onu-quick.spec.ts); captura real no LAB (ONU de bancada)
+  e2e_test: inspetor (e2e/onu-quick.spec.ts, e2e/onu-workspace.spec.ts); captura real no LAB (ONU de bancada)
   last_verified: '2026-10-31'
 - slug: rede/consultar-olt
   ui_route: /rede
@@ -62,8 +61,8 @@ articles:
   images:
   - assets/rede/onu-360/desktop.png
   - assets/rede/onu-360/mobile.png
-  e2e_test: help-screenshots.spec.ts › rede/onu-360; app.spec.ts › ONU 360
-  last_verified: '2026-10-29'
+  e2e_test: onu-workspace.spec.ts (inspetor); captura real no LAB (ONU de bancada)
+  last_verified: '2026-10-31'
 - slug: assinantes/visao-360
   ui_route: /assinantes/[id]
   status: published
