@@ -59,3 +59,8 @@ Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetido
 - PR 95 (captura) + lote 1 na OLT real: time/sync/temperature ok; alarm.active paginou (Edge recusa saída paginada); autofind espera o orçamento (4/h). PR 96 (ERP HubSoft primeiro, HS-01/HS-02, só mocks, migração 0030). PR 97 (lote 1 validado: fixtures reais, parsers, nuvem, tela; Codex 3 rodadas).
 - LAB: Alembic 0030; Edge `0.1.0-lab-b731997` (implantado antes da nuvem) com `capture`; API+web com catálogo `7e386eb3…`, ROLLOUT = version, board, time, sync, temperature. Backups `fibercore-20261031T011751Z` e `…T014058Z`.
 - Pendências: ZTE (reinício manual do responsável → conferir ACS); autofind (próxima janela após 01:49 UTC) e paginação de alarm.active/history/event.history; HubSoft HS-03+ (precisa de segredo/host/instância do dono); ADR-0032 itens 3–5.
+
+## 2026-10-31 (cont.) — PR 98 no LAB; lote 1 fechado; lote 2 agendado
+- PR 98 (cache primeiro, ADR-0032 item 4; Codex 4 rodadas): migração 0031 no LAB, API+web implantados. Cache alimentado só por jobs; rota de ingestão do Edge + poda de `olt_metric_samples` ficam para o item 5 (rotinas).
+- Lote 1: `olt.autofind` -> "Failure: The automatically found ONTs do not exist" (só o caso vazio visto; fixture guardada, consulta NÃO validada: sem o formato com ONTs não há parser honesto). `olt.alarm.active` paginou (Edge recusa).
+- Lote 2 agendado (config do Edge): slot.cpu/mem/board nos slots 0-2 e pon.ont.summary da PON da bancada (0/14); 4 capturas/h => ~2,5 h. Depois: fixtures, parsers, promoção.
