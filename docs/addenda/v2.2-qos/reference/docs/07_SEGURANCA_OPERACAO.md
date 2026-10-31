@@ -1,3 +1,5 @@
+> **Referência recebida (2026-10-31), mantida como veio. Onde divergir do repositório, vale `docs/addenda/v2.2-qos/{CURRENT_STATE,GAP_MAP,IMPLEMENTATION_PLAN}.md` e a tabela de divergências em `docs/addenda/v2.2-qos/README.md` (lock compartilhado, ADR-0030, WAN de serviço, tabela de suite).**
+
 # Segurança, capacidade de rede e privacidade
 
 ## Reuso da política atual

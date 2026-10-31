@@ -1,3 +1,5 @@
+> **Referência recebida (2026-10-31), mantida como veio. Onde divergir do repositório, vale `docs/addenda/v2.2-qos/{CURRENT_STATE,GAP_MAP,IMPLEMENTATION_PLAN}.md` e a tabela de divergências em `docs/addenda/v2.2-qos/README.md` (lock compartilhado, ADR-0030, WAN de serviço, tabela de suite).**
+
 # PROMPT MESTRE — INTEGRAR QoS-001 AO SD-001 JÁ EM EXECUÇÃO
 
 Você é o agente implementador do projeto **FiberCore 2.2**. Recebeu o **adendo QoS-001 v1.1** junto do pacote SD-001 base (ou o pacote já está no projeto). **NÃO reconstrua nada**: esta é uma melhoria incremental do diagnóstico já sendo feito. O escopo anterior do Speed Diagnostics TR-143 permanece integralmente vigente. Este adendo só acrescenta monitoramento e diagnósticos de qualidade.
