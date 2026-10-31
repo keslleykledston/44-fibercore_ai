@@ -99,6 +99,9 @@
 | POST | `/v1/cpes/{cpe_id}/actions/reboot_cpe` | `devices:act:reboot_cpe` |
 | POST | `/v1/cpes/{cpe_id}/actions/set_wifi_ssid` | `devices:act:set_wifi_ssid` |
 | GET | `/v1/cpes/{cpe_id}/capabilities` | `inventory:read` |
+| GET | `/v1/cpes/{cpe_id}/ont-config/capabilities` | `inventory:read` |
+| GET | `/v1/cpes/{cpe_id}/ont-config/configuration` | `inventory:read` |
+| GET | `/v1/cpes/{cpe_id}/ont-config/form-schema` | `inventory:read` |
 | GET | `/v1/cpes/{cpe_id}/state` | `inventory:read` |
 | GET | `/v1/customers` | `customers:read` |
 | GET | `/v1/customers/{customer_id}/context` | `customers:read` |
@@ -107,6 +110,7 @@
 | GET | `/v1/diagnostics/rules` | `incidents:read` |
 | POST | `/v1/diagnostics/runs` | `diagnostics:run` |
 | GET | `/v1/diagnostics/runs/{run_id}` | `incidents:read` |
+| POST | `/v1/edge/cpe-config` | `inventory:write` |
 | POST | `/v1/edge/cpe-snapshots` | `inventory:write` |
 | POST | `/v1/edge/cpe-state` | `inventory:write` |
 | POST | `/v1/edge/heartbeat` | `edge:heartbeat` |
@@ -140,6 +144,7 @@
 | GET | `/v1/olts/{olt_id}/queries` | `inventory:read` |
 | POST | `/v1/olts/{olt_id}/queries/{query_id}` | `olt_query:run` |
 | GET | `/v1/olts/{olt_id}/queries/{query_id}/latest` | `olt_query:run` |
+| GET | `/v1/ont-config/health` | `inventory:read` |
 | GET | `/v1/onu-cpe-links` | `inventory:read` |
 | POST | `/v1/onu-cpe-links/suggest` | `associations:review` |
 | POST | `/v1/onu-cpe-links/{link_id}/confirm` | `associations:review` |

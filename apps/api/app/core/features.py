@@ -23,6 +23,7 @@ FEATURES: dict[str, bool] = {
     "smart_diagnostics_jobs": False,          # SD-PR-03: diagnostic_jobs passivo/guiado (somente leitura)
     "smart_diagnostics_active_tests": False,  # bloqueada até ADR-SD-003
     "smart_diagnostics_remediation": False,   # propostas/aprovação; execução real só com HOMOLOGATED_WRITES
+    "ont_config": False,                      # ADR-0034 (v2.4): configuração/capacidades/formulários da ONT, SOMENTE LEITURA nesta entrega; o dono liga por provedor
     "erp_hubsoft": False,                     # ADR-0033: conexão HubSoft (P0, somente leitura); só o dono liga, por provedor, depois de configurar o segredo no servidor
     "smart_diagnostics_copilot": False,       # bloqueada até ADR-0015 / ADR-SD-006
 }

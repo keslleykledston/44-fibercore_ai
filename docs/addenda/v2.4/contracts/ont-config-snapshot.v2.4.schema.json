@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.fibercore.local/ont-config-snapshot.v2.4.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "tenant_id",
+    "ont_id",
+    "revision",
+    "fields",
+    "observed_at"
+  ],
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "ont_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "revision": {
+      "type": "string"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "instance_key",
+          "writable",
+          "secret",
+          "source",
+          "quality"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "instance_key": {
+            "type": "string"
+          },
+          "value": {},
+          "writable": {
+            "type": "boolean"
+          },
+          "secret": {
+            "type": "boolean"
+          },
+          "source": {
+            "enum": [
+              "genieacs",
+              "usp",
+              "olt",
+              "simulator"
+            ]
+          },
+          "quality": {
+            "enum": [
+              "fresh",
+              "stale",
+              "unknown",
+              "conflict"
+            ]
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

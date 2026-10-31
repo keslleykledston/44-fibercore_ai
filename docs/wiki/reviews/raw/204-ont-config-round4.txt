@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18ffa-e16c-7e13-b946-573ebe74c978).
+[codex] Turn started (01a18ffa-e1a7-7e81-90d2-9dedcb9cc733).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir especialmente a ordenação/conciliação das obser...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/app/core/ont_confi...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/app/core/ont_confi... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "def _check_observed|def _bound_edge|def _capabilities|cpe_protocol_bind...
+[codex] Command completed: /bin/bash -lc 'rg -n "def _check_observed|def _bound_edge|def _capabilities|cpe_protocol_bind... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/ont_config.py | sed -n '54,115p'; sed -n '20,42p' apps...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/ont_config.py | sed -n '54,115p'; sed -n '20,42p' apps... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não embarcar ainda: o 422 cobre empates dentro do lot...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não embarcar ainda: o 422 cobre empates dentro do lote, mas empates com observações já persistidas são aceitos silenciosamente.
+
+Findings:
+- [medium] Empate conflitante com valor persistido não retorna 422 (apps/api/app/api/ont_config.py:95-101)
+  A detecção de conflito consulta apenas `rows_by_key`, que começa vazio para cada requisição. Se uma observação já estiver no banco e outra requisição trouxer a mesma chave e `captured_at` com valor diferente, o `ON CONFLICT` não atualiza por causa da condição estrita `<`; a API ainda responde 202 como se tivesse aceitado a observação. Isso deixa o resultado dependente da ordem entre requisições e não aplica a regra de conflito fora de um único lote. Compare o empate com o valor persistido e recuse com `conflicting_observations`, inclusive sob concorrência; ajuste a contagem de campos para refletir o que foi aplicado.
+  Recommendation: Adicione detecção atômica de conflito contra a linha existente no banco e retorne 422 quando chave e hora coincidirem, mas o valor divergir; inclua cobertura para requisições separadas e concorrentes.

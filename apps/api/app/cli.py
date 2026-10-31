@@ -74,6 +74,8 @@ def main(argv: list[str] | None = None) -> None:
     otf.add_argument("tenant_id"); otf.add_argument("olt_id")
     fs = sub.add_parser("feature-set", help="turn a per-tenant feature flag on/off (owner-only; overrides the code default)")
     fs.add_argument("tenant_id"); fs.add_argument("feature"); fs.add_argument("state", choices=["on", "off", "default"])
+    oc = sub.add_parser("ont-config-mock", help="ADR-0034: write a SYNTHETIC configuration profile for a CPE (source 'mock', labelled synthetic; lab/demo only; owner-only)")
+    oc.add_argument("tenant_id"); oc.add_argument("cpe_id"); oc.add_argument("profile", help="dualband | multi_ssid | no_wifi | inactive_5g | clear")
     sp = sub.add_parser("set-password", help="set a user's password (owner-only); ends all their sessions")
     sp.add_argument("email"); sp.add_argument("--password-env")
     ul = sub.add_parser("unlock-login"); ul.add_argument("key", help="e-mail, or svc:<client_id>, or ip:<addr>")
@@ -262,6 +264,24 @@ def main(argv: list[str] | None = None) -> None:
                            "VALUES (:t,'olt',:o,'olt.transfer_finished','1',CAST(:p AS jsonb))"),
                       {"t": a.tenant_id, "o": a.olt_id, "p": json.dumps({"owner_epoch": ep})})
             print(f"transfer finished: owner_epoch {ep}")
+        elif a.cmd == "ont-config-mock":
+            from app.core import ont_config_mock
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            if c.execute(text("SELECT 1 FROM cpes WHERE tenant_id = :t AND id = :c"), {"t": a.tenant_id, "c": a.cpe_id}).first() is None:
+                sys.exit("cpe not found for this tenant")
+            c.execute(text("DELETE FROM cpe_config_fields WHERE tenant_id = :t AND cpe_id = :c AND source = 'mock'"), {"t": a.tenant_id, "c": a.cpe_id})
+            n = 0
+            if a.profile != "clear":
+                try:
+                    rows = ont_config_mock.rows_for(a.profile)
+                except ValueError as e:
+                    sys.exit(str(e))
+                for name, inst, value in rows:
+                    n += c.execute(
+                        text("INSERT INTO cpe_config_fields (tenant_id, cpe_id, name, instance_key, value, captured_at, observed_at, data_model, protocol, source) "
+                             "VALUES (:t,:c,:n,:i,CAST(:v AS jsonb),now(),now(),'tr181','tr069','mock') ON CONFLICT DO NOTHING"),
+                        {"t": a.tenant_id, "c": a.cpe_id, "n": name, "i": inst, "v": json.dumps(value)}).rowcount
+            print(f"synthetic configuration: {n} fields ({a.profile})")
         elif a.cmd == "feature-set":
             from app.core.features import FEATURES
             if a.feature not in FEATURES:

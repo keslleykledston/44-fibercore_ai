@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18ff8-f014-7fc1-a809-bb4f6e99a790).
+[codex] Turn started (01a18ff8-f260-72b2-9740-be0f4008dad2).
+[codex] Assistant message captured: Vou revisar o diff contra `main`, seguindo os caminhos de ingestão, persistência, autorização...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=10 main...HEAD -- apps/api/app/api/ont_config...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=10 main...HEAD -- apps/api/app/api/ont_config... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "def _bound_edge|class CpeBinding|def _check_observed|def require|TENANT...
+[codex] Command completed: /bin/bash -lc 'rg -n "def _bound_edge|class CpeBinding|def _check_observed|def require|TENANT... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '20,115p' apps/api/app/api/inventory.py && sed -n '115,150p' apps/api/a...
+[codex] Command completed: /bin/bash -lc "sed -n '20,115p' apps/api/app/api/inventory.py && sed -n '115,150p' apps/api/a... (exit 0)
+[codex] Assistant message captured: O limite principal que estou verificando é a fronteira de confiança da ingestão: o Edge é aut...
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/ont_config.py | sed -n '115,155p'; nl -ba apps/api/ap...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/ont_config.py | sed -n '115,155p'; nl -ba apps/api/ap... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a ingestão aceita timestamps de ca...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a ingestão aceita timestamps de campo adiantados até cinco minutos, que podem bloquear leituras posteriores corretas como antigas.
+
+Findings:
+- [medium] Timestamp futuro pode suprimir observações corretas (apps/api/app/api/ont_config.py:29-31)
+  `captured_at` usa `_check_observed`, que permite até cinco minutos de avanço. A gravação aceita esse valor e só atualiza quando o timestamp recebido é estritamente maior. Um Edge com relógio adiantado ou uma observação malformada pode persistir um valor futuro; leituras posteriores com horário correto serão aceitas com 202, mas ignoradas até ultrapassarem esse timestamp. A API então continua apresentando o dado anterior como atual ou parcialmente atual, dificultando detectar a perda de atualização.
+  Recommendation: Validar `captured_at` contra `observed_at` do snapshot, rejeitar divergências além de uma tolerância explícita e não permitir que timestamps futuros avancem o watermark persistido.

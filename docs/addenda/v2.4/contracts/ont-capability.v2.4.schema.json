@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.fibercore.local/ont-config-capability.v2.4.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "capability",
+    "device_fingerprint",
+    "protocol",
+    "support",
+    "certification",
+    "instances",
+    "write_allowed"
+  ],
+  "properties": {
+    "capability": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.]+$"
+    },
+    "device_fingerprint": {
+      "type": "object",
+      "properties": {
+        "vendor": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "firmware": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "vendor",
+        "model",
+        "firmware"
+      ]
+    },
+    "protocol": {
+      "enum": [
+        "tr069",
+        "tr369",
+        "olt"
+      ]
+    },
+    "support": {
+      "enum": [
+        "supported",
+        "unknown",
+        "unsupported"
+      ]
+    },
+    "certification": {
+      "enum": [
+        "identified",
+        "observed_read",
+        "certified_write"
+      ]
+    },
+    "instances": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "radio_binding": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "write_allowed": {
+      "type": "boolean"
+    },
+    "unit": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "allowed_values": {
+      "type": "array",
+      "items": {}
+    },
+    "constraint_ref": {
+      "type": "string"
+    },
+    "evidence_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "certified_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "certified_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  }
+}
