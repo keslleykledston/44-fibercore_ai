@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1933c-37e9-7fa3-94e0-9db94ce00523).
+[codex] Turn started (01a1933c-3aee-7971-89db-d9f6ae507b49).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os dados da resposta do BFF até a renderização da ...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=70 main...HEAD -- apps/web/src/lib/quality.ts...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=70 main...HEAD -- apps/web/src/lib/quality.ts... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=40 main...HEAD -- 'apps/web/src/app/bff/cpes/...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=40 main...HEAD -- 'apps/web/src/app/bff/cpes/... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/lib/quality.ts | sed -n '35,100p'; nl -ba 'apps/web/src/ap...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/lib/quality.ts | sed -n '35,100p'; nl -ba 'apps/web/src/ap... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,60p' apps/web/src/lib/api.ts; rg -n \"qualityOn|quality=\" apps/web/...
+[codex] Command completed: /bin/bash -lc "sed -n '1,60p' apps/web/src/lib/api.ts; rg -n \"qualityOn|quality=\" apps/web/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o leitor aceita timestamp inválido...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o leitor aceita timestamp inválido e a UI o exibe como uma data de leitura, contrariando o formato fechado e podendo induzir erro operacional.
+
+Findings:
+- [medium] Timestamp inválido é convertido em data visível (apps/web/src/lib/quality.ts:69-70)
+  `readRun` não rejeita `created_at` ausente ou inválido: converte-o em `""` e ainda retorna um run válido. `QualitySection` passa esse valor a `toLocaleString`, que pode mostrar “Invalid Date” como horário da leitura em vez de recusar a resposta. Isso deixa dado malformado chegar à UI apesar da validação de formato fechado. Rejeite o run se `created_at` não for uma string de timestamp válida no formato esperado.
+  Recommendation: Validar tipo e formato de `created_at` e retornar `null` para timestamp inválido; não substituir dado inválido por string vazia.

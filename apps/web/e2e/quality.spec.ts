@@ -136,8 +136,8 @@ test("qualidade (cenário): resposta fora do formato fechado (escopo/grupo/valor
   await confirmDemoA2(request);
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
-  for (const bad of [M({ scope: "<img src=x>" }), M({ group: "DADOS" }), M({ value: "x".repeat(60) }), M({ instance: "a b<c>" }), M({ collected_at: "ontem" })]) {
-    await page.route("**/bff/cpes/*/quality", (r) => r.fulfill({ body: JSON.stringify({ caps: CAPS, runs: [RUN({ metrics: [bad] })] }).replace("null", "null"), contentType: "application/json" }));
+  for (const bad of [null, M({ scope: "<img src=x>" }), M({ group: "DADOS" }), M({ value: "x".repeat(60) }), M({ instance: "a b<c>" }), M({ collected_at: "ontem" })]) {
+    await page.route("**/bff/cpes/*/quality", (r) => r.fulfill({ json: { caps: CAPS, runs: [RUN(bad === null ? { created_at: "ontem" } : { metrics: [bad] })] } }));
     await page.goto("/rede");
     await row(page, "DEMOA0002").click();
     await page.getByRole("tab", { name: "Qualidade" }).click();

@@ -56,6 +56,7 @@ function readMetric(m: QMetric): QMetric | null {
 export function readRun(r: unknown): QRun | null {
   const o = r as QRun | null;
   if (!o || !ID.test(o.id) || (o.mode !== "quick" && o.mode !== "full") || !Array.isArray(o.metrics) || o.metrics.length > 80 || !Array.isArray(o.hypotheses) || o.hypotheses.length > 12) return null;
+  if (typeof o.created_at !== "string" || Number.isNaN(Date.parse(o.created_at))) return null;   // horário de leitura inválido: a resposta inteira é recusada, nunca "Invalid Date" na tela
   const s = o.summary;
   if (!s || !GLOBAL.includes(s.state) || !s.indicators || !Array.isArray(s.observations)) return null;
   const ind = {} as QSummary["indicators"];
@@ -67,7 +68,7 @@ export function readRun(r: unknown): QRun | null {
   const metrics = o.metrics.map(readMetric);
   if (metrics.some((m) => m === null)) return null;
   return {
-    id: o.id, mode: o.mode, created_at: Number.isNaN(Date.parse(String(o.created_at))) ? "" : String(o.created_at),
+    id: o.id, mode: o.mode, created_at: o.created_at,
     metrics: metrics as QMetric[],
     hypotheses: o.hypotheses.filter((h) => h && UP.test(h.code)).map((h) => ({
       code: h.code, label: str(h.label, 200), confidence: CONF.includes(h.confidence) ? h.confidence : "low", recommended_check: str(h.recommended_check, 200),
