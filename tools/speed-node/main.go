@@ -103,6 +103,26 @@ func (n *node) allowed(remote string) bool {
 	return false
 }
 
+// isSelf reports whether the remote address is one of THIS host's own addresses. Only /health accepts that exemption, so the container's local
+// healthcheck does not depend on the node's own IP being in the allow-list; a process on the host can already do anything the node does.
+func isSelf(remote string) bool {
+	ap, err := netip.ParseAddrPort(remote)
+	if err != nil {
+		return false
+	}
+	a := ap.Addr().Unmap()
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return false
+	}
+	for _, x := range addrs {
+		if p, err := netip.ParsePrefix(x.String()); err == nil && p.Addr().Unmap() == a {
+			return true
+		}
+	}
+	return false
+}
+
 func fail(w http.ResponseWriter, code int) {
 	w.Header().Set("Cache-Control", "no-store")
 	http.Error(w, http.StatusText(code), code)
@@ -111,11 +131,11 @@ func fail(w http.ResponseWriter, code int) {
 // ServeHTTP dispatches on the exact path. There is deliberately no http.ServeMux: it redirects unclean paths (301/308), and this node must never
 // answer a 3xx.
 func (n *node) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if !n.allowed(r.RemoteAddr) {
+	path := r.URL.Path
+	if !n.allowed(r.RemoteAddr) && !(path == "/health" && isSelf(r.RemoteAddr)) {
 		fail(w, http.StatusForbidden)
 		return
 	}
-	path := r.URL.Path
 	switch {
 	case path == "/health":
 		if r.Method != http.MethodGet {

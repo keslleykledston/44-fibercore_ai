@@ -36,6 +36,6 @@ Não é um servidor de benchmark certificado: a capacidade do enlace e da CPU do
 # build/speed-node.env (0600, fora do Git): SPEED_NODE_LISTEN=<ip>:<porta> e SPEED_NODE_ALLOW=<este-ip>/32,<origem-do-Edge>/32,<rede-da-ONT>
 docker compose -p fibercore-speed -f infra/compose/speed-node.compose.yaml --env-file build/speed-node.env up -d --build
 ```
-- Inclua o **próprio IP do nó** na lista: o healthcheck do contêiner sai dele.
+- O healthcheck do contêiner (`/health` vindo de um endereço do próprio host) é aceito sem constar na lista; transferências (`/dl`, `/ul`) continuam sujeitas à lista.
 - **Origem do Edge = o endereço que o nó enxerga**, que atrás de NAT é o IP público da rede do Edge, não o interno. Descobrir por captura (`tcpdump -l` na porta, só o SYN) e liberar só esse /32 no firewall do host, para a porta do nó.
 - Firewall do host (UFW): uma regra por origem e porta, nunca a porta aberta para todos. Parar o nó: `docker compose -p fibercore-speed -f infra/compose/speed-node.compose.yaml down`.
