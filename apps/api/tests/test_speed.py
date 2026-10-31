@@ -59,6 +59,21 @@ def test_upload_uses_the_bytes_the_device_sent_when_it_reports_them_else_the_req
     assert (sent.mbps, sent.basis) == (19.8, "test_bytes_sent")
 
 
+def test_every_computed_figure_fits_the_table_it_is_stored_in():
+    """store_result must never be refused by a CHECK (the Edge would re-send a report that can never be accepted): sweep the edges of every input."""
+    for direction in ("download", "upload"):
+        for profile, size in speed.PROFILE_BYTES.items():
+            for seconds in (0.0, 0.0004, 0.001, 0.0015, 0.9999, 2.999, 3.0, 8.0, 599.999, 600.0, 600.001):
+                for n in (0, 1, size // 2, int(size * 0.95), size, int(size * 1.05), int(size * 1.05) + 1):
+                    d = {"direction": direction, "target": EP, "profile": profile, "state": "Completed", "bom": T0.isoformat(),
+                         "eom": (T0 + timedelta(seconds=seconds)).isoformat(),
+                         "test_bytes_received": n if direction == "download" else None, "test_bytes_sent": n if direction == "upload" else None}
+                    c = speed.compute(direction, profile, speed.check_counters(direction, EP, profile, d))
+                    assert (c.mbps is not None) == (c.outcome in ("completed", "partial")), (direction, profile, seconds, n, c)
+                    for v in (c.mbps, c.bytes, c.duration_ms):
+                        assert v is None or v > 0, (direction, profile, seconds, n, c)
+
+
 def test_a_reported_zero_of_bytes_sent_is_not_a_missing_counter():
     c = speed.compute("upload", PF, speed.check_counters("upload", EP, PF, counters("upload", seconds=4.0, test_bytes_sent=0)))
     assert (c.outcome, c.mbps, c.reason, c.basis) == ("inconclusive", None, "no_bytes", "test_bytes_sent")
@@ -80,7 +95,7 @@ def test_a_short_interval_or_a_short_transfer_is_partial_never_reliable():
 
 @pytest.mark.parametrize("kw,reason", [
     ({"bom": None}, "no_timestamps"), ({"eom": None}, "no_timestamps"),
-    ({"seconds": 0.0}, "invalid_duration"), ({"seconds": -3.0}, "invalid_duration"), ({"seconds": 601.0}, "invalid_duration"),
+    ({"seconds": 0.0}, "invalid_duration"), ({"seconds": 0.0004}, "invalid_duration"),    # 0.4 ms would truncate to a stored duration of 0 ({"seconds": -3.0}, "invalid_duration"), ({"seconds": 601.0}, "invalid_duration"),
     ({"test_bytes_received": 0}, "no_bytes"), ({"test_bytes_received": None}, "no_bytes"),
     ({"seconds": 3.0, "test_bytes_received": 10**12}, "bytes_exceed_profile"),
     ({"seconds": 8.0, "test_bytes_received": 10_500_001}, "bytes_exceed_profile"),    # just over the 5 % tolerance of a 10 MB profile

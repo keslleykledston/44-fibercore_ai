@@ -26,6 +26,7 @@ OPERATION_DIRECTION = {v: k for k, v in DIRECTIONS.items()}
 PROFILE_BYTES = {"10mb": 10_000_000, "50mb": 50_000_000, "200mb": 200_000_000}
 
 MIN_RELIABLE_S = 3.0          # a measurement shorter than this is `partial`: TCP has not left slow start
+MIN_DURATION_S = 0.001        # the smallest interval the run row can store (duration_ms > 0)
 MAX_DURATION_S = 600.0        # a test that "lasted" longer than the Edge's own ceiling is not a measurement
 MIN_BYTES_RATIO = 0.95        # a transfer that moved less than this share of the profile is `partial`
 MAX_BYTES_RATIO = 1.05        # a counter above the profile by more than this tolerance is not THIS test: inconclusive, never a credible-looking figure
@@ -97,7 +98,7 @@ def compute(direction: str, profile: str, c: dict) -> Computed:
     if bom is None or eom is None:
         return Computed("inconclusive", None, None, None, "no_timestamps", None)
     dt = (eom - bom).total_seconds()
-    if dt <= 0 or dt > MAX_DURATION_S:
+    if dt < MIN_DURATION_S or dt > MAX_DURATION_S:   # below a millisecond the stored duration would round to 0 (the table refuses it): not a measurement
         return Computed("inconclusive", None, None, None, "invalid_duration", None)
     if direction == "download":
         basis, n = "test_bytes_received", c.get("test_bytes_received")
@@ -109,6 +110,8 @@ def compute(direction: str, profile: str, c: dict) -> Computed:
     if n > MAX_BYTES_RATIO * PROFILE_BYTES[profile]:
         return Computed("inconclusive", None, None, int(dt * 1000), "bytes_exceed_profile", basis)
     mbps = round(8 * n / dt / 1e6, 2)
+    if mbps <= 0:   # so few bytes that the figure rounds to 0.00: that is "no throughput measured", never a stored 0
+        return Computed("inconclusive", None, None, int(dt * 1000), "negligible_rate", basis)
     short = dt < MIN_RELIABLE_S or n < MIN_BYTES_RATIO * PROFILE_BYTES[profile]
     return Computed("partial" if short else "completed", mbps, n, int(dt * 1000), ("too_short" if dt < MIN_RELIABLE_S else "short_transfer") if short else None, basis)
 
