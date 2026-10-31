@@ -22,7 +22,12 @@ var ReadOnlyOps = map[string]bool{"collect": true, "refresh": true}
 
 // BenchWriteOps (ADR-0030) is a SEPARATE compile-time set: the only writes this Edge can ever run, and only on the configured bench devices,
 // with a single-use prior authorization, a durable claim, a valid lease and the device confirmed against the ACS. ReadOnlyOps never grows.
-var BenchWriteOps = map[string]bool{"reboot_cpe": true, "set_wifi_ssid": true, "onu_reset": true, "onu_deactivate": true}
+var BenchWriteOps = map[string]bool{"reboot_cpe": true, "set_wifi_ssid": true, "onu_reset": true, "onu_deactivate": true,
+	"speed_test_download": true, "speed_test_upload": true}
+
+// SpeedOps (ADR-0038) are the bench operations that are a TR-143 throughput test. They need, besides everything a bench write needs, the local `speed`
+// section (SpeedEnabled + SpeedCheck): without it they are refused here, whatever the Cloud signs.
+var SpeedOps = map[string]bool{"speed_test_download": true, "speed_test_upload": true}
 
 // QueryOps (ADR-0029) is a THIRD compile-time set: read-only queries of the OLT's CLI. It runs only when the local switch is on and a checker for the
 // intent is wired in; whatever the Cloud signs, an unknown or unwired query operation is refused here. ReadOnlyOps and BenchWriteOps never grow.
@@ -115,6 +120,10 @@ type Verifier struct {
 	Allowed  map[string]bool // local allowlist (subset of ReadOnlyOps, plus BenchWriteOps when BenchEnabled)
 	// BenchEnabled is the local `bench_writes_enabled` switch (ADR-0030 item 3): without it a bench operation is refused here, whatever the Cloud signs.
 	BenchEnabled bool
+	// SpeedEnabled is the local `speed.enabled` switch and SpeedCheck validates the two signed parameters (logical endpoint id, profile) against the Edge's own
+	// validated catalog (ADR-0038). Without both, a speed test envelope is refused here.
+	SpeedEnabled bool
+	SpeedCheck   func(target, profile string) error
 	// QueryEnabled is the local `olt_query_enabled` switch (ADR-0029) and QueryCheck validates the closed intent against the Edge's own catalog and
 	// OLT identity. Without both, an olt_query envelope is refused here, whatever the Cloud signs.
 	QueryEnabled bool
@@ -159,7 +168,8 @@ func (v *Verifier) Verify(ctx context.Context, raw []byte) (*Envelope, error) {
 	}
 	bench := BenchWriteOps[env.Operation]
 	query := QueryOps[env.Operation]
-	if !(ReadOnlyOps[env.Operation] || (bench && v.BenchEnabled) || (query && v.QueryEnabled && v.QueryCheck != nil)) || !v.Allowed[env.Operation] {
+	speedOK := !SpeedOps[env.Operation] || (v.SpeedEnabled && v.SpeedCheck != nil)
+	if !(ReadOnlyOps[env.Operation] || (bench && v.BenchEnabled && speedOK) || (query && v.QueryEnabled && v.QueryCheck != nil)) || !v.Allowed[env.Operation] {
 		return nil, fmt.Errorf("%w: %s", ErrOperation, env.Operation)
 	}
 	if env.Operation == "refresh" && env.TargetRef != "" && !targetRefRe.MatchString(env.TargetRef) {
@@ -185,6 +195,15 @@ func (v *Verifier) Verify(ctx context.Context, raw []byte) (*Envelope, error) {
 	} else if bench {
 		if err := checkBench(&env, iss, exp, now); err != nil {
 			return nil, err
+		}
+		if SpeedOps[env.Operation] {
+			// the signed hash must be the hash of the parameters actually carried, and both must be names the Edge itself knows
+			if h, err := IntentHash(env.Operation, "cpe", env.TargetID, env.Params); err != nil || h != env.IntentSHA256 {
+				return nil, fmt.Errorf("%w: intent hash does not cover the parameters", ErrFormat)
+			}
+			if err := v.SpeedCheck(env.Params.String("target"), env.Params.String("profile")); err != nil {
+				return nil, fmt.Errorf("%w: %v", ErrFormat, err)
+			}
 		}
 	} else if env.AuthorizationID != "" || env.AuthorizationEndsAt != "" || env.OwnerEpoch != 0 || len(env.Params) != 0 {
 		return nil, fmt.Errorf("%w: authorization fields only exist on bench writes", ErrFormat)
@@ -219,6 +238,10 @@ func checkBench(env *Envelope, iss, exp, now time.Time) error {
 		return fmt.Errorf("%w: a bench envelope lives at most %s", ErrExpired, BenchEnvelopeTTL)
 	}
 	switch env.Operation {
+	case "speed_test_download", "speed_test_upload":
+		if len(env.Params) != 2 || env.Params.String("target") == "" || env.Params.String("profile") == "" {
+			return fmt.Errorf("%w: a speed test takes exactly a target and a profile", ErrFormat)
+		}
 	case "set_wifi_ssid":
 		if len(env.Params) != 1 || !BenchSSIDRe.MatchString(env.Params.String("ssid")) {
 			return fmt.Errorf("%w: set_wifi_ssid takes exactly one ssid parameter of the bench shape", ErrFormat)

@@ -536,3 +536,50 @@ func TestOLTCaptureConfig(t *testing.T) {
 		t.Errorf("captures dir: %s", got)
 	}
 }
+
+func speedCfg(speed, ops, allow, devExtra string) string {
+	return `,"nbi_url":"http://10.0.0.5:7557","jobs_enabled":true,"job_public_key":"AAAA","allowed_operations":[` + ops + `],"allowlist":["10.0.0.5:7557"` + allow + `],` +
+		`"bench":{"bench_writes_enabled":true,"devices":[{"oui":"00259E","product_class":"EG8145V5","serial":"48575443E2247AA5"` + devExtra + `}]}` + speed
+}
+
+const okSpeed = `,"speed":{"enabled":true,"core_cidrs":["10.20.0.0/16"],"endpoints":[{"id":"core-sp-1","kind":"CORE","host":"10.20.5.9","port":8080}]}`
+const okWAN = `,"speed_wan_interface":"Device.IP.Interface.1"`
+
+func TestSpeedSectionValidation(t *testing.T) {
+	ops := `"speed_test_download","speed_test_upload"`
+	allow := `,"10.20.5.9:8080"`
+	c, err := Load(write(t, 0o600, good(speedCfg(okSpeed, ops, allow, okWAN))), "v")
+	if err != nil {
+		t.Fatalf("a complete speed configuration must load: %v", err)
+	}
+	if got := c.Bench.SpeedWANInterfaces()["00259E-EG8145V5-48575443E2247AA5"]; got != "Device.IP.Interface.1" {
+		t.Fatalf("wan map %q", got)
+	}
+	for name, body := range map[string]string{
+		"endpoint not in allowlist":     speedCfg(okSpeed, ops, ``, okWAN),
+		"no wan interface":              speedCfg(okSpeed, ops, allow, ``),
+		"bad wan interface":             speedCfg(okSpeed, ops, allow, `,"speed_wan_interface":"Device.IP.Interface.1;x"`),
+		"management-looking path":       speedCfg(okSpeed, ops, allow, `,"speed_wan_interface":"Device.ManagementServer"`),
+		"speed op not allowed explicit": speedCfg(okSpeed, `"reboot_cpe"`, allow, okWAN),
+		"core endpoint outside cidrs":   speedCfg(`,"speed":{"enabled":true,"core_cidrs":["10.30.0.0/16"],"endpoints":[{"id":"core-sp-1","kind":"CORE","host":"10.20.5.9","port":8080}]}`, ops, allow, okWAN),
+		"loopback endpoint":             speedCfg(`,"speed":{"enabled":true,"core_cidrs":["10.20.0.0/16"],"endpoints":[{"id":"core-sp-1","kind":"INTERNET","host":"127.0.0.1","port":8080}]}`, ops, `,"127.0.0.1:8080"`, okWAN),
+		"hostname endpoint":             speedCfg(`,"speed":{"enabled":true,"core_cidrs":["10.20.0.0/16"],"endpoints":[{"id":"core-sp-1","kind":"INTERNET","host":"speedtest.example.com","port":8080}]}`, ops, `,"speedtest.example.com:8080"`, okWAN),
+		"no endpoints":                  speedCfg(`,"speed":{"enabled":true,"core_cidrs":["10.20.0.0/16"],"endpoints":[]}`, ops, allow, okWAN),
+	} {
+		if _, err := Load(write(t, 0o600, good(body)), "v"); err == nil {
+			t.Errorf("%s: must be rejected", name)
+		}
+	}
+	// the section needs the bench; the operations need the section
+	noBench := `,"nbi_url":"http://10.0.0.5:7557","jobs_enabled":true,"job_public_key":"AAAA","allowed_operations":[` + ops + `],"allowlist":["10.0.0.5:7557","10.20.5.9:8080"]` + okSpeed
+	if _, err := Load(write(t, 0o600, good(noBench)), "v"); err == nil {
+		t.Error("speed without the bench must be rejected")
+	}
+	off := speedCfg(`,"speed":{"enabled":false}`, ops, allow, okWAN)
+	if _, err := Load(write(t, 0o600, good(off)), "v"); err == nil {
+		t.Error("speed operations without an enabled speed section must be rejected")
+	}
+	if _, err := Load(write(t, 0o600, good(speedCfg(``, `"reboot_cpe"`, ``, ``))), "v"); err != nil {
+		t.Errorf("a bench-only configuration must still load: %v", err)
+	}
+}

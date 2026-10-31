@@ -61,6 +61,15 @@ func leaseHeader(priv ed25519.PrivateKey, ref string) string {
 type recACS struct {
 	mu      sync.Mutex
 	reboots []string
+	speeds  []nbi.SpeedRequest
+}
+
+func (r *recACS) RunBenchSpeed(_ context.Context, d nbi.BenchDevice, req nbi.SpeedRequest, _ time.Time, _, _ time.Duration, _ func() time.Time) (nbi.SpeedOutcome, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.speeds = append(r.speeds, req)
+	n := int64(10_000_000)
+	return nbi.SpeedOutcome{Attempted: true, Counters: &nbi.SpeedCounters{State: "Completed", BOM: "2026-10-30T12:00:01Z", EOM: "2026-10-30T12:00:09Z", TestBytesReceived: &n}}, nil
 }
 
 func (r *recACS) SetBenchSSID(context.Context, nbi.BenchDevice, string, func(string) bool, time.Time, string, func() time.Time) (nbi.SSIDOutcome, error) {

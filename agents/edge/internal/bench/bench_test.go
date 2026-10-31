@@ -31,6 +31,14 @@ type fakeACS struct {
 	ssidCalls        []string
 	ssidOut          nbi.SSIDOutcome
 	ssidErr          error
+	speedCalls       []nbi.SpeedRequest
+	speedOut         nbi.SpeedOutcome
+	speedErr         error
+}
+
+func (f *fakeACS) RunBenchSpeed(_ context.Context, d nbi.BenchDevice, req nbi.SpeedRequest, _ time.Time, _, _ time.Duration, _ func() time.Time) (nbi.SpeedOutcome, error) {
+	f.speedCalls = append(f.speedCalls, req)
+	return f.speedOut, f.speedErr
 }
 
 func (f *fakeACS) SetBenchSSID(_ context.Context, d nbi.BenchDevice, ssid string, _ func(string) bool, _ time.Time, _ string, _ func() time.Time) (nbi.SSIDOutcome, error) {

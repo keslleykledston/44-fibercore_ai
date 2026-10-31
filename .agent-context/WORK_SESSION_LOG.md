@@ -79,3 +79,8 @@ Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetido
 - Usuário de coleta da homologação: `captura-homologacao@k3gsolutions.com.br` (noc_n1, sem MFA); senha só em arquivo 0600 do scratchpad. Encerrar ao fim da homologação.
 - PR 107 lote 2a da OLT: slot.cpu e slot.mem validados (Validated, fora do ROLLOUT até haver seletor de slot). Brutos apagados no Edge (a pasta de capturas estava cheia e bloqueava slot.board/pon.ont.summary). Edge novo (versão `0.1.0-lab-75ed006`) implantado ANTES da nuvem (hash do catálogo 959fdad3…); depois `make up-prod`.
 - Pendências: lote 2b (slot.board ×3, pon.ont.summary da PON 0/14) assim que o Edge capturar; seletor de slot na tela para oferecer cpu/mem; NOC `EVAL_FRESH_FOR` (15 min) igual ao intervalo da OLT; FC24-04 só com autorização de laboratório; ZTE (reinício manual do responsável).
+
+## 2026-10-31 (cont.) — Speed Diagnostics PR 109 (nuvem) mergeado
+- PR 108 (docs) e PR 109 (nuvem: ADR-0038, migração 0034, `app/core/speed.py`, `app/api/speed.py`, catálogo de bancada, flag `speed_diagnostics` OFF, `bench.SPEED_EDGE_SUPPORT=False`; Codex 8 rodadas, approve; 727 testes PASS) em `main` (d3b3fd0). Nada executado em ONT/OLT/ACS.
+- Próximo: PR 2 (Edge Go `internal/speed`, NBI de escrita fechado, descoberta, testes com NBI falso; Edge implantado ANTES da nuvem), depois PR 3 (UX, ajuda, guia de homologação).
+- Só o responsável: autorizar homologação na ONT de bancada + aprovar emenda ao ADR-0030; nó de teste e ACL; WAN de serviço da bancada; janela de baixa carga.

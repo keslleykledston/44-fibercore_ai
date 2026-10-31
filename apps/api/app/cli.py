@@ -81,6 +81,7 @@ def main(argv: list[str] | None = None) -> None:
     se = sub.add_parser("speed-endpoint-set", help="ADR-0038: create/update a LOGICAL speed-test endpoint (id, label, CORE|INTERNET, region, enabled). No URL: the Edge holds the address (owner-only)")
     se.add_argument("tenant_id"); se.add_argument("endpoint_id"); se.add_argument("label")
     se.add_argument("kind", choices=["CORE", "INTERNET"]); se.add_argument("region"); se.add_argument("state", choices=["on", "off"])
+    se.add_argument("--edge", required=True, help="the Edge that owns this test node (only it can report its health, and only a bench CPE of that Edge can use it)")
     sp = sub.add_parser("set-password", help="set a user's password (owner-only); ends all their sessions")
     sp.add_argument("email"); sp.add_argument("--password-env")
     ul = sub.add_parser("unlock-login"); ul.add_argument("key", help="e-mail, or svc:<client_id>, or ip:<addr>")
@@ -246,10 +247,13 @@ def main(argv: list[str] | None = None) -> None:
             if not 1 <= len(a.label) <= 60 or "://" in a.label or "/" in a.label:
                 sys.exit("label: 1..60 characters, a name (no URL, no address)")
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
-            c.execute(text("INSERT INTO speed_endpoints (tenant_id, id, label, target_kind, region, enabled) VALUES (:t,:i,:l,:k,:r,:e) "
+            if c.execute(text("SELECT 1 FROM edges WHERE id = :e AND tenant_id = :t"), {"e": a.edge, "t": a.tenant_id}).first() is None:
+                sys.exit("unknown edge for this tenant")
+            c.execute(text("INSERT INTO speed_endpoints (tenant_id, id, label, target_kind, region, enabled, edge_id) VALUES (:t,:i,:l,:k,:r,:e,:g) "
                            "ON CONFLICT (tenant_id, id) DO UPDATE SET label = EXCLUDED.label, target_kind = EXCLUDED.target_kind, "
-                           "region = EXCLUDED.region, enabled = EXCLUDED.enabled"),
-                      {"t": a.tenant_id, "i": a.endpoint_id, "l": a.label, "k": a.kind, "r": a.region, "e": a.state == "on"})
+                           "region = EXCLUDED.region, enabled = EXCLUDED.enabled, edge_id = EXCLUDED.edge_id, "
+                           "health = CASE WHEN speed_endpoints.edge_id IS DISTINCT FROM EXCLUDED.edge_id THEN 'unknown' ELSE speed_endpoints.health END"),
+                      {"t": a.tenant_id, "i": a.endpoint_id, "l": a.label, "k": a.kind, "r": a.region, "e": a.state == "on", "g": a.edge})
             print(f"speed endpoint {a.endpoint_id}: {a.kind}, {'enabled' if a.state == 'on' else 'disabled'} (health is reported by the Edge)")
         elif a.cmd == "olt-transfer-start":
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
