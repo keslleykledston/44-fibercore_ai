@@ -42,8 +42,8 @@ CATALOG: tuple[Query, ...] = (
     Query("olt.temperature", "Temperatura", "global", True),
     Query("olt.sync", "Sincronismo de controladoras", "global", True),
     Query("slot.board", "Detalhe da placa", "slot", False),
-    Query("slot.cpu", "CPU da placa", "slot", False),
-    Query("slot.mem", "Memória da placa", "slot", False),
+    Query("slot.cpu", "CPU da placa", "slot", True),
+    Query("slot.mem", "Memória da placa", "slot", True),
     Query("pon.ont.summary", "Contagem de ONTs da PON", "pon", False),
     Query("pon.ont.info", "ONTs da PON", "pon", True),
     Query("pon.ont.optical", "Óptica das ONTs da PON", "pon", True),
@@ -153,6 +153,8 @@ def check_result(query_id: str, data) -> bool:
             return False
     if query_id == "olt.sync":
         return data == {"standby": "absent_or_fault"}
+    if query_id in ("slot.cpu", "slot.mem"):   # one integer percentage; the slot is the one asked (it is in the cache key), never in the result
+        return set(data) == {"percent"} and _is_int(data["percent"]) and 0 <= data["percent"] <= 100
     if query_id == "olt.temperature":
         rows = data.get("boards")
         if set(data) != {"boards"} or not isinstance(rows, list) or not 1 <= len(rows) <= LIMITS["slot"] + 1:

@@ -241,9 +241,9 @@ def test_the_vectors_the_edge_pins_are_the_ones_the_cloud_computes():
 
     from app.api.jobs import _intent_hash
     oid = UUID("8f14e45f-ceea-467a-9a36-4a1b5c3d2e10")
-    assert olt_query.catalog_version() == "7e386eb3208fc48e848edaaf106256602a361c528fc13f493120d1a342a68eef"
+    assert olt_query.catalog_version() == "959fdad3e4dc820399aec98bc2a232e35a714136043353424c12a5f67c36e62c"
     params = olt_query.build_intent(oid, {"query_id": "pon.ont.info", "slot": 1, "port": 0})
-    assert _intent_hash("olt_query", "olt", oid, params) == "07065fc989790b810a2de02a058c7f8722afcb501ffac927e406e2326f76ce3b"
+    assert _intent_hash("olt_query", "olt", oid, params) == "e3ccc5caef226c81094daf5c66f85399c06ea2f241ca35c39c044549dbde8fe0"
 
 
 def _report(client, inv, jid, **body):
@@ -459,3 +459,12 @@ def test_the_typed_shapes_of_lot_1_are_closed():
     for qid, data in bad:
         assert not olt_query.check_result(qid, data), (qid, data)
     assert {"olt.time", "olt.sync", "olt.temperature"} <= olt_query.ROLLOUT
+
+
+def test_slot_cpu_and_mem_results_are_one_integer_percentage():
+    for q in ("slot.cpu", "slot.mem"):
+        assert olt_query.BY_ID[q].validated
+        assert q not in olt_query.ROLLOUT     # validated on the real OLT, but not OFFERED until the screen has a slot picker (ADR-0029 item 7)
+        assert olt_query.check_result(q, {"percent": 0}) and olt_query.check_result(q, {"percent": 100})
+        for bad in ({}, {"percent": 101}, {"percent": -1}, {"percent": 5.5}, {"percent": True}, {"percent": "5"}, {"percent": 5, "slot": 1}, {"value": 5}):
+            assert not olt_query.check_result(q, bad), (q, bad)

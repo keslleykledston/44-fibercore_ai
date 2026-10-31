@@ -102,7 +102,7 @@ func TestOnlyValidatedQueriesAreAllowedUntilTheOperatorEnablesOne(t *testing.T) 
 	h := HuaweiR015{}
 	for cmd, want := range map[string]bool{
 		"display version": true, "display board 0": true, "display ont info 3 all": true, "display ont optical-info 3 all": true,
-		"display alarm active all": false, "display ont register-info 0 5": false, "display cpu 0/3": false,
+		"display alarm active all": false, "display ont register-info 0 5": false, "display board 0/3": false,
 		// never allowed whatever the policy
 		"display ont info 3 all; reload": false, "reboot": false, "undo ont add 0 5": false, "save": false, "display\nreload": false,
 		"display ont register-info 0 5 | include x": false, "display version 1": false,
@@ -124,7 +124,7 @@ func TestOnlyValidatedQueriesAreAllowedUntilTheOperatorEnablesOne(t *testing.T) 
 	for cmd, want := range map[string]bool{
 		"display ont register-info 0 5": true, "display ont register-info 15 127": true, "display ont register-info 16 5": false,
 		"display ont register-info 0 128": false, "display ont register-info 0 05": false, "display alarm active all": true,
-		"display cpu 0/3": false, "display alarm history all list": false, "display ont register-info 0 5; reload": false,
+		"display board 0/3": false, "display alarm history all list": false, "display ont register-info 0 5; reload": false,
 		"display ont register-info 0 5 6": false,
 	} {
 		if got := h2.Allowed(cmd); got != want {

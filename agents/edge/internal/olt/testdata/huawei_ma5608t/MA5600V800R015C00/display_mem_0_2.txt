@@ -1,0 +1,4 @@
+  Command:
+          display mem 0/2 
+  Memory occupancy: 30%
+

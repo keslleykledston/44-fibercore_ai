@@ -29,7 +29,7 @@ var (
 // HasParser says whether a query can return a typed result.
 func HasParser(queryID string) bool {
 	switch queryID {
-	case "olt.version", "olt.board", "olt.time", "olt.sync", "olt.temperature":
+	case "olt.version", "olt.board", "olt.time", "olt.sync", "olt.temperature", "slot.cpu", "slot.mem":
 		return true
 	}
 	return false
@@ -48,6 +48,10 @@ func ParseResult(queryID, out string) (json.RawMessage, error) {
 		return parseSync(out)
 	case "olt.temperature":
 		return parseTemperature(out)
+	case "slot.cpu":
+		return parseOccupancy(out, "CPU", true)
+	case "slot.mem":
+		return parseOccupancy(out, "Memory", false)
 	}
 	return nil, ErrNoParser
 }
@@ -218,4 +222,38 @@ func parseTemperature(out string) (json.RawMessage, error) {
 		return nil, ErrBadOutput
 	}
 	return json.Marshal(map[string]any{"boards": rows})
+}
+
+const cpuPreamble = "Send message for inquiring board cpu occupancy successfully, board executing..."
+
+var reOccupancy = regexp.MustCompile(`^(CPU|Memory) occupancy:\s*(\d{1,3})%$`)
+
+// parseOccupancy: a board's CPU or memory use, one integer percentage. A line-card answers with a fixed "Send message ... board executing..." line first (only for
+// the CPU query); the control board answers with the occupancy alone. The slot is NOT in the output: it is the one the query asked for (the cloud keys the cache by it).
+func parseOccupancy(out, label string, preamble bool) (json.RawMessage, error) {
+	pct, seen, pre := -1, 0, false
+	for _, line := range strings.Split(out, "\n") {
+		l := strings.TrimSpace(strings.TrimRight(line, "\r"))
+		if isEcho(l) {
+			continue
+		}
+		if preamble && l == cpuPreamble && !pre && seen == 0 {
+			pre = true
+			continue
+		}
+		m := reOccupancy.FindStringSubmatch(l)
+		if m == nil || m[1] != label {
+			return nil, ErrBadOutput
+		}
+		v, _ := strconv.Atoi(m[2])
+		if v > 100 {
+			return nil, ErrBadOutput
+		}
+		pct = v
+		seen++
+	}
+	if seen != 1 {
+		return nil, ErrBadOutput
+	}
+	return json.Marshal(map[string]int{"percent": pct})
 }

@@ -62,8 +62,8 @@ var queryCatalog = []Query{
 	{"olt.sync", "Sincronismo de controladoras", ScopeGlobal, "display data sync state", true, "3"},
 	// per slot
 	{"slot.board", "Detalhe da placa", ScopeSlot, "display board 0/%[1]d", false, "3"},
-	{"slot.cpu", "CPU da placa", ScopeSlot, "display cpu 0/%[1]d", false, "3"},
-	{"slot.mem", "Memória da placa", ScopeSlot, "display mem 0/%[1]d", false, "3"},
+	{"slot.cpu", "CPU da placa", ScopeSlot, "display cpu 0/%[1]d", true, "3"},
+	{"slot.mem", "Memória da placa", ScopeSlot, "display mem 0/%[1]d", true, "3"},
 	// per PON
 	{"pon.ont.summary", "Contagem de ONTs da PON", ScopePON, "display ont info summary %[2]d", false, "5"},
 	{"pon.ont.info", "ONTs da PON", ScopePON, "display ont info %[2]d all", true, "5"},

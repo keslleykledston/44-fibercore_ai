@@ -14,8 +14,8 @@ import (
 const (
 	qOLT = "8f14e45f-ceea-467a-9a36-4a1b5c3d2e10"
 	// computed by the Cloud (apps/api/app/api/jobs.py _intent_hash) for exactly the params below
-	qHash = "07065fc989790b810a2de02a058c7f8722afcb501ffac927e406e2326f76ce3b"
-	qCat  = "7e386eb3208fc48e848edaaf106256602a361c528fc13f493120d1a342a68eef"
+	qHash = "e3ccc5caef226c81094daf5c66f85399c06ea2f241ca35c39c044549dbde8fe0"
+	qCat  = "959fdad3e4dc820399aec98bc2a232e35a714136043353424c12a5f67c36e62c"
 )
 
 func queryBase() map[string]any {
