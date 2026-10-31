@@ -80,12 +80,12 @@ export function OntFormBody({ load, form, retry }: { load: Load; form: OntForm |
             </div>
           ) : (
             <>
-              <div role="tablist" aria-label="Seções" className="flex flex-wrap gap-1">
+              {tabs.length > 1 && <div role="tablist" aria-label="Seções" className="flex flex-wrap gap-1">
                 {tabs.map((t, i) => (
                   <button key={t} role="tab" type="button" id={`ont-tab-${t}`} aria-selected={active === t} aria-controls={`ont-panel-${t}`} tabIndex={active === t ? 0 : -1} onClick={() => setTab(t)} onKeyDown={(e) => rovingKeys(e, i, tabs.length, (n) => setTab(tabs[n]!))}
                     className={`min-h-touch rounded-btn px-3 text-sm ${active === t ? "bg-accent text-[color:var(--on-accent)]" : "border border-line hover:bg-bg"}`}>{TAB_LABEL[t]}</button>
                 ))}
-              </div>
+              </div>}
               <div role="tabpanel" id={`ont-panel-${active}`} aria-labelledby={`ont-tab-${active}`} className="grid gap-4">
                 {active === "resumo" && (
                   <>
