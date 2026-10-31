@@ -56,7 +56,23 @@ type BenchConfig struct {
 	Devices            []BenchDeviceConfig `json:"devices"`
 	// OLT is the bench ONU for the H4 maneuvers (onu_reset, onu_deactivate): the ONLY ONU they may touch. Port and ONT-ID live here, never in the Cloud.
 	OLT *BenchOLTConfig `json:"olt"`
+	// ReadOnlyONUs are ADDITIONAL bench ONUs (a second homologation device) that may only be READ by the supervised captures (ADR-0032): they never
+	// take part in a maneuver (onu_reset/onu_deactivate stay with `olt`, the one ONU of H4). Written by the owner; the Cloud never names one.
+	ReadOnlyONUs []BenchReadONUConfig `json:"read_only_onus"`
 }
+
+// BenchReadONUConfig names the position of one extra bench ONU for READ-ONLY captures. The GPON serial is declared by the owner (it need not equal an
+// ACS serial: proving that link is what the capture is for) and is never used to authorise a write.
+type BenchReadONUConfig struct {
+	Name       string `json:"name"` // one of `olts` (CLI transport)
+	Slot       int    `json:"slot"`
+	Port       int    `json:"port"`
+	OntID      int    `json:"ont_id"`
+	GPONSerial string `json:"gpon_serial"` // 16 upper-case hex
+}
+
+// BenchReadONUMax bounds the extra read-only bench ONUs.
+const BenchReadONUMax = 4
 
 // BenchOLTConfig names the OLT (one of `olts`, CLI transport) and the position of the bench ONU on it.
 type BenchOLTConfig struct {
@@ -272,6 +288,30 @@ func (c *Config) Validate() error {
 				errs = append(errs, errors.New("bench.olt.wait_seconds must be 0 (240) or between 30 and 600"))
 			}
 		}
+		if len(b.ReadOnlyONUs) > BenchReadONUMax {
+			errs = append(errs, fmt.Errorf("bench.read_only_onus: at most %d entries", BenchReadONUMax))
+		}
+		seenRO := map[string]bool{}
+		for i, r := range b.ReadOnlyONUs {
+			cli := false
+			for _, x := range c.OLTs {
+				cli = cli || (x.Name == r.Name && x.Transport != "snmp")
+			}
+			k := fmt.Sprintf("%s|%d|%d|%d", r.Name, r.Slot, r.Port, r.OntID)
+			switch {
+			case !cli:
+				errs = append(errs, fmt.Errorf("bench.read_only_onus[%d].name must be one of the configured olts with CLI transport", i))
+			case r.Slot < 0 || r.Slot > 21 || r.Port < 0 || r.Port > 15 || r.OntID < 0 || r.OntID > 127:
+				errs = append(errs, fmt.Errorf("bench.read_only_onus[%d] slot/port/ont_id out of range", i))
+			case !gponSerialRe.MatchString(r.GPONSerial):
+				errs = append(errs, fmt.Errorf("bench.read_only_onus[%d].gpon_serial must be 16 upper-case hex", i))
+			case seenRO[k]:
+				errs = append(errs, fmt.Errorf("bench.read_only_onus[%d] listed twice", i))
+			case b.OLT != nil && b.OLT.Name == r.Name && b.OLT.Slot == r.Slot && b.OLT.Port == r.Port && b.OLT.OntID == r.OntID:
+				errs = append(errs, fmt.Errorf("bench.read_only_onus[%d] repeats the H4 bench ONU (bench.olt)", i))
+			}
+			seenRO[k] = true
+		}
 		oltOps := false
 		for _, o := range c.AllowedOps {
 			oltOps = oltOps || o == "onu_reset" || o == "onu_deactivate"
@@ -340,10 +380,8 @@ func (c *Config) Validate() error {
 			}
 			seenCap[k] = true
 			// a PON or ONU scope is only ever the bench's: a subscriber's PON or ONU is never captured
-			if (q.Scope == olt.ScopePON || q.Scope == olt.ScopeONU) &&
-				!(c.Bench != nil && c.Bench.OLT != nil && c.Bench.OLT.Name == o.Name && c.Bench.OLT.Slot == cp.Slot && c.Bench.OLT.Port == cp.Port &&
-					(q.Scope == olt.ScopePON || c.Bench.OLT.OntID == cp.ONT)) {
-				errs = append(errs, fmt.Errorf("%s[%d]: a PON or ONU capture can only be the bench's (bench.olt)", p, j))
+			if (q.Scope == olt.ScopePON || q.Scope == olt.ScopeONU) && !c.benchOwnsCapture(o.Name, q.Scope == olt.ScopePON, cp) {
+				errs = append(errs, fmt.Errorf("%s[%d]: a PON or ONU capture can only be the bench's (bench.olt or bench.read_only_onus)", p, j))
 			}
 		}
 	}
@@ -661,4 +699,21 @@ func (b BenchConfig) SpeedWANInterfaces() map[string]string {
 		}
 	}
 	return out
+}
+
+// benchOwnsCapture reports whether a PON- or ONU-scope capture names the bench: the H4 ONU (bench.olt) or one of the read-only bench ONUs. A PON scope is
+// the PON of any of them; an ONU scope must also be that exact ONU.
+func (c *Config) benchOwnsCapture(oltName string, ponScope bool, cp CaptureConfig) bool {
+	if c.Bench == nil {
+		return false
+	}
+	if o := c.Bench.OLT; o != nil && o.Name == oltName && o.Slot == cp.Slot && o.Port == cp.Port && (ponScope || o.OntID == cp.ONT) {
+		return true
+	}
+	for _, r := range c.Bench.ReadOnlyONUs {
+		if r.Name == oltName && r.Slot == cp.Slot && r.Port == cp.Port && (ponScope || r.OntID == cp.ONT) {
+			return true
+		}
+	}
+	return false
 }

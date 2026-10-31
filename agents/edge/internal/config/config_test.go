@@ -537,6 +537,47 @@ func TestOLTCaptureConfig(t *testing.T) {
 	}
 }
 
+func TestReadOnlyBenchONUs(t *testing.T) {
+	cid := "8f14e45f-ceea-467a-9a36-4a1b5c3d2e10"
+	dev := `{"oui":"00259E","product_class":"EG8145V5","serial":"48575443E2247AA5"}`
+	mk := func(capture, readOnly string) string {
+		ro := ""
+		if readOnly != "" {
+			ro = `,"read_only_onus":[` + readOnly + `]`
+		}
+		return `,"nbi_url":"http://127.0.0.1:7557","jobs_enabled":true,"job_public_key":"k","allowlist":["10.0.0.1:22"],"allowed_operations":["collect","olt_query","onu_reset"],"olt_query_enabled":true` +
+			`,"olts":[{"name":"OLT-A","vendor":"huawei","address":"10.0.0.1:22","username":"u","secret_file":"/s","host_key_sha256":"SHA256:abc","pon_ports":["0/0/14"],"profile":"huawei_ma56_r015","cloud_id":"` + cid + `","capture":[` + capture + `]}]` +
+			`,"bench":{"bench_writes_enabled":true,"devices":[` + dev + `],"olt":{"name":"OLT-A","frame":0,"slot":0,"port":14,"ont_id":10,"gpon_serial":"48575443E2247AA5"}` + ro + `}`
+	}
+	zte := `{"name":"OLT-A","slot":0,"port":14,"ont_id":11,"gpon_serial":"5A544547D1EDA1A3"}`
+	ok := map[string]string{
+		"ONU capture of the read-only bench ONU": mk(`{"query_id":"onu.register","slot":0,"port":14,"ont":11}`, zte),
+		"PON capture with a read-only ONU":       mk(`{"query_id":"pon.ont.summary","slot":0,"port":14}`, zte),
+		"H4 ONU still captured":                  mk(`{"query_id":"onu.info","slot":0,"port":14,"ont":10}`, zte),
+	}
+	for name, c := range ok {
+		if _, err := Load(write(t, 0o600, good(c)), "v"); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	bad := map[string]string{
+		"ONU 11 without the read-only entry": mk(`{"query_id":"onu.register","slot":0,"port":14,"ont":11}`, ""),
+		"another ONU on the same PON":        mk(`{"query_id":"onu.register","slot":0,"port":14,"ont":12}`, zte),
+		"read-only ONU on another PON":       mk(`{"query_id":"onu.register","slot":0,"port":3,"ont":11}`, zte),
+		"unknown OLT name":                   mk(`{"query_id":"olt.time"}`, `{"name":"OLT-X","slot":0,"port":14,"ont_id":11,"gpon_serial":"5A544547D1EDA1A3"}`),
+		"lower-case serial":                  mk(`{"query_id":"olt.time"}`, `{"name":"OLT-A","slot":0,"port":14,"ont_id":11,"gpon_serial":"5a544547d1eda1a3"}`),
+		"ont_id out of range":                mk(`{"query_id":"olt.time"}`, `{"name":"OLT-A","slot":0,"port":14,"ont_id":128,"gpon_serial":"5A544547D1EDA1A3"}`),
+		"repeats the H4 ONU":                 mk(`{"query_id":"olt.time"}`, `{"name":"OLT-A","slot":0,"port":14,"ont_id":10,"gpon_serial":"48575443E2247AA5"}`),
+		"listed twice":                       mk(`{"query_id":"olt.time"}`, zte+","+zte),
+		"more than the maximum":              mk(`{"query_id":"olt.time"}`, strings.Repeat(zte+",", BenchReadONUMax)+zte),
+	}
+	for name, c := range bad {
+		if _, err := Load(write(t, 0o600, good(c)), "v"); err == nil {
+			t.Errorf("%s: must be refused", name)
+		}
+	}
+}
+
 func speedCfg(speed, ops, allow, devExtra string) string {
 	return `,"nbi_url":"http://10.0.0.5:7557","jobs_enabled":true,"job_public_key":"AAAA","allowed_operations":[` + ops + `],"allowlist":["10.0.0.5:7557"` + allow + `],` +
 		`"bench":{"bench_writes_enabled":true,"devices":[{"oui":"00259E","product_class":"EG8145V5","serial":"48575443E2247AA5"` + devExtra + `}]}` + speed
