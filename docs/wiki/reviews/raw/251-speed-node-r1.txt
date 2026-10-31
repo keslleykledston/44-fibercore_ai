@@ -1,0 +1,18 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1921d-5405-7ef2-9ff5-b4747f6acb06).
+[codex] Turn started (01a1921d-543c-7010-9752-3b14a1b60665).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e comparar os contratos de URL do nó com o Edge. Também vou...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- tools/speed-node && git sta...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- tools/speed-node && git sta... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,290p' agents/edge/internal/speed/speed.go; rg -n \"TR-143|10mb|50mb|...
+[codex] Command completed: /bin/bash -lc "sed -n '1,290p' agents/edge/internal/speed/speed.go; rg -n \"TR-143|10mb|50mb|... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"Não encontrei risco material que justifique bloquear o envio....
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+Não encontrei risco material que justifique bloquear o envio. Os caminhos do nó não emitem redirecionamentos, aplicam a allowlist ao endereço remoto, limitam downloads aos perfis fechados e uploads ao tamanho do perfil, e limitam transferências simultâneas. Os modelos de URL correspondem aos do Edge.
+
+No material findings.
