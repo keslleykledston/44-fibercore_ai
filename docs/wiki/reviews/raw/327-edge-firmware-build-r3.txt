@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1945a-880d-7e11-a42c-3455ddce2499).
+[codex] Turn started (01a1945a-8847-7323-a413-6c242d9564f2).
+[codex] Assistant message captured: Vou conferir o diff completo contra `main` e rastrear como a validação do firmware afeta o ca...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/nbi/nb...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/nbi/nb... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"Firmware\\(\\)|firmwareBuild|SoftwareVersion|firmware\" agents/edge"
+[codex] Command completed: /bin/bash -lc "rg -n \"Firmware\\(\\)|firmwareBuild|SoftwareVersion|firmware\" agents/edge" (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- docs/wiki/reviews/raw/325-e...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- docs/wiki/reviews/raw/325-e... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: o novo padrão ZTE é estrutural, mas a valid...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: o novo padrão ZTE é estrutural, mas a validação ainda aceita tokens amplos com aparência de credencial; os negativos não cobrem esse caminho.
+
+Findings:
+- [high] A alternativa de token ainda aceita valores com aparência de senha (agents/edge/internal/nbi/nbi.go:89-90)
+  `Firmware()` também aceita qualquer valor que corresponda a `firmwareToken` e contenha letras e dígitos. Assim, valores como `ADMIN1234` continuam sendo retornados e podem ser encaminhados pelo coletor, apesar de não corresponderem a uma versão ou build ZTE reconhecível. Os novos negativos cobrem apenas valores com prefixo e pontuação de versão; não exercitam essa alternativa. Isso mantém o risco de propagar conteúdo controlado pelo aparelho com aparência de credencial.
+  Recommendation: Se o requisito é impedir esse tipo de valor, remova a alternativa genérica de token ou restrinja-a a formatos comprovados; acrescente negativos como `ADMIN1234` e confirme que os tokens de firmware legítimos ainda são aceitos.
+
+Next steps:
+- Adicionar casos negativos para a alternativa `firmwareToken` e restringir esse caminho antes de enviar o campo `firmware`.

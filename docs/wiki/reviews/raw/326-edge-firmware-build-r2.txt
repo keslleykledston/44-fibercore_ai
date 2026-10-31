@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1945a-2ec1-73b3-8f68-3219d78d44ee).
+[codex] Turn started (01a1945a-2efa-7402-8ab6-693f300163e7).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e rastrear a validação de `firmwareBuild`, com foco nos val...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/nbi/nb...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/nbi/nb... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/nbi/nbi.go | sed -n '68,100p'; git diff --check ma...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/nbi/nbi.go | sed -n '68,100p'; git diff --check ma... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: o pacote não compila e a regex ampla ainda ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: o pacote não compila e a regex ampla ainda presente aceitaria os valores com aparência de senha se fosse usada.
+
+Findings:
+- [high] Declarações duplicadas impedem a compilação (agents/edge/internal/nbi/nbi.go:77-81)
+  O bloco declara `firmwareToken`, `firmwareVersion` e `firmwareBuild` duas vezes. Em Go, isso causa erro de compilação no pacote `nbi`, bloqueando qualquer build que o inclua.
+  Recommendation: Remova as declarações antigas duplicadas e mantenha apenas a regex ZTE estrutural.
+- [high] A regex ampla ainda aceita caudas com aparência de senha (agents/edge/internal/nbi/nbi.go:79-81)
+  A expressão na linha 81 aceita uma versão pontuada seguida de uma letra maiúscula e mais 2 a 15 letras maiúsculas ou dígitos. Portanto, `V1.2.3ABC123` e `V1.2.3ADMIN123` correspondem a ela. A duplicação impede confirmar o comportamento em runtime porque o pacote não compila; porém, se essa expressão for mantida como `firmwareBuild` ao corrigir a duplicação, os valores que esta rodada quer rejeitar continuarão passando.
+  Recommendation: Exclua a regex ampla e deixe apenas o padrão `V<n>(.<n>){1,3}P<n>N<n>[A-Z]?`; adicione os negativos solicitados para evitar regressão.
+
+Next steps:
+- Remover a declaração ampla duplicada e confirmar que os negativos `V1.2.3ABC123`, `V1.2.3ADMIN123`, `V1.2.3P1N2ABC` e `V1.2.3P1N2-B` são rejeitados, enquanto os dois builds ZTE válidos são aceitos.

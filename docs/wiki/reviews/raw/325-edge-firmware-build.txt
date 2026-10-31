@@ -1,0 +1,19 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19459-d180-7181-af81-3538e81d8fc1).
+[codex] Turn started (01a19459-d4b0-7260-9a16-dcedcad13805).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e rastrear como `SoftwareVersion` é validado e enviado, com...
+[codex] Running command: /bin/bash -lc "git diff --unified=80 main...HEAD -- agents/edge/internal/nbi/nbi.go agents/ed...
+[codex] Command completed: /bin/bash -lc "git diff --unified=80 main...HEAD -- agents/edge/internal/nbi/nbi.go agents/ed... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: o novo formato ainda aceita valores com apa...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: o novo formato ainda aceita valores com aparência plausível de senha e os testes não exercitam esse caso.
+
+Findings:
+- [high] O novo padrão aceita senhas com formato de build (agents/edge/internal/nbi/nbi.go:76-89)
+  `firmwareBuild` aceita qualquer sufixo de 3 a 16 caracteres em maiúsculas e dígitos após uma versão pontuada. Assim, valores como `V1.2.3ABC123` ou `V1.2.3ADMIN123` passam e são retornados por `Firmware()`, embora possam ser senhas. Como `SoftwareVersion` é escrito pelo aparelho e enviado à nuvem, esse filtro não garante que um segredo não seja propagado. Os negativos adicionados cobrem minúsculas, separadores, cauda curta e cauda longa, mas não uma cauda maiúscula com aparência de credencial. O filtro anterior também não garantia isso: seu padrão de token aceitava texto em maiúsculas com letras e dígitos; a mudança restringe parte do espaço, mas não elimina o risco.
+  Recommendation: Restrinja a aceitação a formatos de build ZTE comprovados, incluindo limites estruturais mais específicos ou valores conhecidos, e adicione testes negativos com sufixos maiúsculos plausíveis de senha, como `V1.2.3ABC123` e `V1.2.3ADMIN123`.
