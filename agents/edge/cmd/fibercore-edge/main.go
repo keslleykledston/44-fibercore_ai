@@ -153,7 +153,11 @@ func main() {
 				drv = olt.ZTE{}
 			}
 			if o.Profile == "huawei_ma56_r015" {
-				drv = olt.HuaweiR015{DownTimes: o.DownTimes != nil}
+				enabled := map[string]bool{} // supervised captures (ADR-0032): ONLY the listed IDs are enabled on this driver, so the session allowlist admits exactly them
+				for _, cp := range o.Capture {
+					enabled[cp.QueryID] = true
+				}
+				drv = olt.HuaweiR015{DownTimes: o.DownTimes != nil, Queries: olt.QueryPolicy{Enabled: enabled}}
 			}
 			src := collector.OLTSource{
 				Name: o.Name, Driver: drv, Ports: o.PonPorts, AllowUnverified: o.AllowUnverifiedFirmware, CloudID: o.CloudID,
@@ -250,6 +254,21 @@ func main() {
 			}
 			oltLease = &jobs.LeaseHolder{Schema: "olt-lease/1", MaxSkew: 45 * time.Second, Pub: pub, EdgeID: cfg.EdgeID, TenantID: cfg.TenantID}
 			oltCol.Queries = &collector.Queries{Store: qs, Run: olt.HuaweiR015{}.RunQueryInConfig, Lease: oltLease}
+			items, enabled := map[string][]collector.CaptureItem{}, map[string]bool{}
+			for _, o := range cfg.OLTs {
+				for _, cp := range o.Capture {
+					items[o.CloudID] = append(items[o.CloudID], collector.CaptureItem{QueryID: cp.QueryID, Params: olt.Params{Slot: cp.Slot, Port: cp.Port, ONT: cp.ONT}})
+					enabled[cp.QueryID] = true
+				}
+			}
+			if len(items) > 0 {
+				log.Warn("olt SUPERVISED CAPTURE enabled: the raw output of the listed queries is written to captures/ on this host only (deleted after 24 h)", "olts", len(items))
+				oltCol.Capture = &collector.Capture{Dir: config.CapturesDir(cfg.QueuePath), Items: items, Store: qs, Lease: oltLease,
+					Run: olt.HuaweiR015{Queries: olt.QueryPolicy{Enabled: enabled}}.RunQueryInConfig,
+					OnCapture: func(id string, n int, took time.Duration, outcome string) {
+						log.Info("olt capture", "query", id, "bytes", n, "took_ms", took.Milliseconds(), "outcome", outcome) // never the content
+					}}
+			}
 			verifier.QueryEnabled = true
 			verifier.QueryCheck = func(params map[string]any, targetID string) error {
 				in, err := olt.ParseIntent(params)

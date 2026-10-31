@@ -394,3 +394,8 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 
 ## Tela de consultas da OLT (PR 94)
 - `tsc` e `next build` OK; Playwright (projeto `consultas`) 4 passed em stack efêmera (axe sem violações sérias com a gaveta aberta; resultado com `<img onerror>` no lugar de um campo é descartado); a rota real BFF→API cria o job `olt_query` APPROVED com `{query_id, olt_ref, catalog_version}`; axe claro/escuro das rotas autenticadas (inclui `/rede`) passou. A LAB tem MFA no admin: a conferência visual lá é do responsável.
+
+## Edge: modo captura supervisionada (PR 95, ADR-0032 item 1)
+- `go vet ./...` limpo; `go test -count=1 ./...` verde em todos os pacotes do Edge.
+- Novos testes: `oltquery` (`TestCaptureBudgetIsItsOwnClassAndFitsTheAggregate`: 2/sessão, 4/h, por OLT, sobrevive a reinício, janela de 1 h rola, não consome a classe sob demanda, teto agregado 8), `collector` (`olt_capture_test.go`: arquivo 0600 em diretório 0700 com a saída crua intacta, nada na fila de relatórios, execução única mesmo após reinício, só consultas listadas chegam ao equipamento, orçamento de 2 por sessão com o resto na próxima, recusa do equipamento encerra o lote e não se repete, varredura de 24 h e `.tmp-`, diretório cheio não executa, sem lease ou fila ilegível não executa), `config` (`TestOLTCaptureConfig`: PON/ONU só da bancada, duplicata, consulta desconhecida, parâmetros fora do escopo, >10, sem `olt_query_enabled`).
+- Ainda NÃO executado no equipamento real: a captura do lote 1 acontece depois do merge e do reimplante do Edge, numa janela de coleta.

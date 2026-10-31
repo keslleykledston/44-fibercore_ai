@@ -18,8 +18,8 @@ import (
 // already holds (no login of its own), after the collection and the on-demand queries, and its RAW output is written to a file that never leaves this host.
 // Nothing here is sent to the Cloud. The file is for the person who writes the sanitised fixture and the parser; the Edge deletes it by itself after 24 h.
 type Capture struct {
-	Dir   string // captures/ next to the Edge queue: 0700, files 0600
-	Items []CaptureItem
+	Dir   string                   // captures/ next to the Edge queue: 0700, files 0600
+	Items map[string][]CaptureItem // by the OLT's cloud id
 	Store *oltquery.Store
 	// Run executes one catalog query on the open session, unparsed (olt.HuaweiR015.RunQueryInConfig on a driver that enables exactly the listed IDs).
 	Run   func(ctx context.Context, s olt.Session, queryID string, p olt.Params) (olt.QueryResult, error)
@@ -121,7 +121,7 @@ func categoryOf(err error) string {
 // Do runs the pending captures of this OLT. It returns how many reached the device. The first anomaly (device refusal, pagination, timeout, no lease, no
 // room) ends the batch: the rest waits for another window. A capture that was attempted is marked done BEFORE its output is written, so a crash never repeats it.
 func (c *Capture) Do(ctx context.Context, src OLTSource, raw olt.Session, cloudID, session string) (ran int) {
-	if c == nil || c.Store == nil || c.Run == nil || c.Lease == nil || cloudID == "" || len(c.Items) == 0 {
+	if c == nil || c.Store == nil || c.Run == nil || c.Lease == nil || cloudID == "" || len(c.Items[cloudID]) == 0 {
 		return 0
 	}
 	files, size, err := c.sweep()
@@ -130,7 +130,7 @@ func (c *Capture) Do(ctx context.Context, src OLTSource, raw olt.Session, cloudI
 	}
 	done := c.loadDone()
 	var pending []CaptureItem
-	for _, it := range c.Items {
+	for _, it := range c.Items[cloudID] {
 		if !done[it.key()] {
 			pending = append(pending, it)
 		}

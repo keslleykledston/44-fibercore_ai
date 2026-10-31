@@ -112,7 +112,7 @@ func (s *Store) now() time.Time {
 func (s *Store) load() (*file, error) {
 	b, err := os.ReadFile(s.Path)
 	if errors.Is(err, os.ErrNotExist) {
-		return &file{Entries: map[string]*Entry{}, Claims: map[string][]time.Time{}, Epochs: map[string]int{}}, nil
+		return &file{Entries: map[string]*Entry{}, Claims: map[string][]time.Time{}, Epochs: map[string]int{}, Captures: map[string][]time.Time{}, CaptureSess: map[string]capSess{}}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrCorrupt, err)

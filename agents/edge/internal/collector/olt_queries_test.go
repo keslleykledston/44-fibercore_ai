@@ -40,11 +40,15 @@ func (l fakeLease) Grant(ref string, epoch int) (time.Duration, error) {
 type qSession struct {
 	inner  r015Session
 	sent   []string
-	reject string // a command the device refuses
+	reject string            // a command the device refuses
+	extra  map[string]string // replies for commands the replayed captures do not cover
 }
 
 func (q *qSession) Run(ctx context.Context, cmd string) (string, error) {
 	q.sent = append(q.sent, cmd)
+	if out, ok := q.extra[cmd]; ok {
+		return out, nil
+	}
 	if cmd == q.reject {
 		return "  Failure: Unknown command\n", nil
 	}
