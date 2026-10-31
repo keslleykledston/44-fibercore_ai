@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LOAD_ERROR, STATE_TEXT, readForm, valueText, type OntField, type OntForm, type OntGroup } from "@/lib/ont-config";
 
-type Load = { kind: "idle" } | { kind: "loading" } | { kind: "ready"; form: OntForm } | { kind: "error"; error: string };
+type Load = { kind: "idle" } | { kind: "loading" } | { kind: "ready"; cpe: string; form: OntForm } | { kind: "error"; error: string };
 const TAB_LABEL: Record<string, string> = { resumo: "Resumo", wifi: "Wi-Fi", lan: "LAN", wan: "WAN" };
 const ago = (iso: string) => {
   const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
@@ -50,6 +50,8 @@ export function OntSidebar({ cpeId, identity }: { cpeId: string; identity: strin
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLElement>(null);
 
+  useEffect(() => { setLoad({ kind: "idle" }); setTab("resumo"); setSsid(""); }, [cpeId]);   // outro aparelho: nada do anterior sobra
+
   useEffect(() => {
     if (!open || attempt === 0) return;
     let live = true;
@@ -58,7 +60,7 @@ export function OntSidebar({ cpeId, identity }: { cpeId: string; identity: strin
       const j = (await r.json().catch(() => ({}))) as { form?: unknown; error?: string };
       if (!live) return;
       const form = r.ok ? readForm(j.form) : null;
-      if (form) { setLoad({ kind: "ready", form }); setSsid(form.instances.ssid[0]?.key ?? ""); }
+      if (form) { setLoad({ kind: "ready", cpe: cpeId, form }); setSsid(form.instances.ssid[0]?.key ?? ""); }
       else setLoad({ kind: "error", error: j.error && LOAD_ERROR[j.error] ? j.error : "failed" });
     }).catch(() => live && setLoad({ kind: "error", error: "failed" }));
     return () => { live = false; };
@@ -66,7 +68,7 @@ export function OntSidebar({ cpeId, identity }: { cpeId: string; identity: strin
 
   useEffect(() => { if (open) panel.current?.focus(); }, [open]);
   const close = () => { setOpen(false); trigger.current?.focus(); };
-  const form = load.kind === "ready" ? load.form : null;
+  const form = load.kind === "ready" && load.cpe === cpeId ? load.form : null;   // uma leitura só vale para o aparelho que a pediu
   const g = (id: string) => form?.groups.find((x) => x.id === id);
   const tabs = ["resumo", ...(g("wifi") ? ["wifi"] : []), ...(g("lan") ? ["lan"] : []), ...(g("wan") ? ["wan"] : [])];
   const active = tabs.includes(tab) ? tab : "resumo";
