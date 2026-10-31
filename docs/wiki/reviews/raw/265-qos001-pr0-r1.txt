@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192ef-cb00-7060-a15e-3fd498c99866).
+[codex] Turn started (01a192ef-cb3b-7243-87ff-5952fce27544).
+[codex] Assistant message captured: Vou conferir os três documentos contra o código e verificar se os contratos e o plano realmen...
+[codex] Running command: /bin/bash -lc "git diff --unified=60 main...HEAD -- docs/addenda/v2.2-qos/CURRENT_STATE.md do...
+[codex] Command completed: /bin/bash -lc "git diff --unified=60 main...HEAD -- docs/addenda/v2.2-qos/CURRENT_STATE.md do... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'DiagnosticsState|IPPing|NSLookup|TraceRoute|BENCH_OPS|HOMOLOGATED_WRITE...
+[codex] Command completed: /bin/bash -lc "rg -n 'DiagnosticsState|IPPing|NSLookup|TraceRoute|BENCH_OPS|HOMOLOGATED_WRITE... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/speed.py | sed -n '125,180p'; rg -n 'def busy_reason|...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/speed.py | sed -n '125,180p'; rg -n 'def busy_reason|... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o plano trata o limite de velocida...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o plano trata o limite de velocidade como trava compartilhada para novos diagnósticos, mas a implementação atual só conta runs de banda; também falta explicitar a emenda obrigatória ao ADR-0030 para incluir ping/DNS na lista fechada de escrita.
+
+Findings:
+- [high] Lock existente não serializa ping/DNS com testes de banda (docs/addenda/v2.2-qos/GAP_MAP.md:26-27)
+  O plano diz que `busy_reason()` e os limites do SD-001 passarão a valer para ping/DNS, mas a função consulta exclusivamente `speed_test_runs` e só conta runs associados a essa tabela. Assim, uma suite de ping/DNS pode não ocupar o slot nem impedir um teste de banda concorrente no mesmo CPE; ambos podem disputar `DiagnosticsState` no aparelho. A referência a um lock compartilhado cria falsa confiança contra essa concorrência.
+  Recommendation: Definir e implementar uma trava compartilhada por CPE para todas as operações que escrevem diagnósticos, incluindo reservas durante jobs pendentes; não classificar o lock atual de speed como reaproveitável até isso existir.
+- [medium] Adicionar operações à lista de escrita exige emenda explícita ao ADR-0030 (docs/addenda/v2.2-qos/IMPLEMENTATION_PLAN.md:15-16)
+  O plano propõe `ping_test` e `dns_test` em `BENCH_OPS`, mas o ADR-0030 estabelece que incluir qualquer operação nessa lista fechada exige emenda ao próprio ADR. Sem essa etapa, o Edge e o gate atual continuarão recusando essas operações; o plano menciona ADR-0039 para o adendo, mas não exige a alteração da política que governa o catálogo de escrita.
+  Recommendation: Tornar a emenda ao ADR-0030, com parâmetros, autorização e evidência de homologação definidos, um pré-requisito explícito do PR A antes de adicionar os novos itens ao catálogo.

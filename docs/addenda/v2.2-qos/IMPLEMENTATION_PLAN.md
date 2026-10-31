@@ -9,10 +9,11 @@
 3. **Banda no COMPLETO.** Depende de resolver o `redirect_unverified` do SD-001 (ACL de saída real ou emenda); o QoS não contorna isso.
 
 ## PR A — backend, capacidade e Edge (migração 0036 aditiva)
+**Pré-requisitos, nesta ordem, antes de qualquer código de escrita:** (1) emenda ao ADR-0030 incluindo `ping_test` e `dns_test` no catálogo fechado (parâmetros permitidos, autorização, evidência de homologação) e ADR-0039 do QoS; (2) aprovação do responsável para as duas.
 - `apps/api/app/core/quality.py` (puro, sem relógio/banco/rede): contrato de medição, TTLs por grupo, estados sem zero falso, hipóteses determinísticas.
 - Migração `quality_runs` (+ `speed_endpoints.target_kind` aceita `DNS`), RLS forçada, imutável, idempotência por `(tenant, usuário, Idempotency-Key)`.
 - `app/api/quality.py`: `POST/GET /v1/cpes/{id}/quality/runs`, leitura de telemetria já retida (A1, A4, A5, A7), vínculo com o grupo de speed existente; flags e permissões novas; auditoria.
-- Bancada: `ping_test`, `dns_test` em `BENCH_OPS`, com o mesmo lock/limites do SD-001 (`busy_reason`).
+- Bancada: `ping_test`, `dns_test` em `BENCH_OPS` (após a emenda do ADR-0030), com **reserva compartilhada por CPE** para banda, ping e DNS (generalização de `busy_reason`, que hoje só conhece `speed_test_runs`) e os limites de PON/provedor do SD-001.
 - Edge: `internal/nbi/diag.go` (um `setParameterValues` com `DiagnosticsState`, polling com prova de frescor, 202 ⇒ remove a própria tarefa), `speed.Catalog` ganha destinos DNS; `params.go` + `cpe_state.py` ganham `eth_link_status` e `eth_link_speed_mbps` (lista fechada espelhada, teste cruzado).
 - Testes: Q01–Q22 que forem simuláveis com fake NBI e relógio controlado; regressão completa da API e do Go; contrato do envelope; cada correção de segurança com teste que falha sem ela.
 - Codex até `approve`.
