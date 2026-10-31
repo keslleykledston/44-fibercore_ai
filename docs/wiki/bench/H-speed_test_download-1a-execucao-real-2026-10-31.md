@@ -20,3 +20,8 @@ O download TR-143 foi executado pela ONT de bancada contra o nó de teste e o Ed
 - A origem pública que chegou ao nó foi um único endereço, o mesmo da lista permitida (conferido por captura de SYNs no host do nó; endereço não registrado aqui).
 - O aceite do risco de 3xx continua vigente (até 2026-11-30); o nó nunca redireciona.
 - Não verificado: confiabilidade do número (precisa de 200 MB), upload, repetições (3) e comparação com medição cabeada.
+
+## Verificação do registro após a reversão (consulta ao banco do LAB, 2026-10-31 22:13 UTC)
+Saída do owner CLI: `capability speed_test_download/tr069 on Huawei Technologies Co., Ltd EG8145V5 V5R019C10S350: supported/identified`.
+Linha em `device_capabilities` (campos sanitizados): `speed_test_download | supported | identified | verificado em 2026-10-31 22:10:25+00`.
+A promoção a `observed` só será refeita depois do aceite escrito do responsável, com o mesmo comando e esta evidência.
