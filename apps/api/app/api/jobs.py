@@ -25,7 +25,7 @@ from sqlalchemy import Connection, text
 
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import audit
-from app.core import bench, features, jobsign, olt_ownership, olt_query
+from app.core import bench, features, jobsign, olt_cache, olt_ownership, olt_query
 from app.core.settings import Settings, get_settings
 from app.events import outbox
 
@@ -417,6 +417,18 @@ class ResultIn(BaseModel):
     data: dict | None = None  # olt_query only: the typed result (ADR-0029 item 4), checked against the query's closed shape
 
 
+def _cache_result(conn: Connection, p: Principal, row, data: dict) -> None:
+    """The typed result of a validated query also feeds the cache (ADR-0032), but only while the reporting Edge still OWNS the OLT: a result of a previous owner stays
+    on its job and does not become 'the last value'."""
+    prm = _row_params(row)
+    own = conn.execute(text("SELECT edge_id, owner_epoch FROM olts WHERE id = :i"), {"i": row.target_id}).first()
+    if own is None or own.edge_id != p.edge_id:
+        return
+    qid = str(prm.get("query_id", ""))
+    olt_cache.store_latest(conn, p.tenant_id, row.target_id, qid, olt_cache.params_key({k: prm[k] for k in ("slot", "port", "ont") if k in prm}), data, own.owner_epoch)
+    olt_cache.store_samples(conn, p.tenant_id, row.target_id, qid, data)
+
+
 @router.post("/v1/edge/jobs/{job_id}/result", status_code=204)
 def job_result(
     job_id: UUID, body: ResultIn, p: Principal = Depends(require("jobs:execute")), conn: Connection = TENANT_CONN
@@ -443,5 +455,7 @@ def job_result(
         raise HTTPException(409, f"illegal transition from {row.status} to {to}")
     if to in ("FAILED", "UNKNOWN") and row.operation in bench.BENCH_OPS and _blocked_reason(row.operation):
         bench.lock_target(conn, row.target_id, f"bench write ended {to}")  # no retry, no new write until `bench-unlock`
+    if row.operation == "olt_query" and to == "SUCCEEDED" and "data" in res:
+        _cache_result(conn, p, row, res["data"])
     outbox.enqueue(conn, tenant_id=p.tenant_id, aggregate_type="job", aggregate_id=job_id, event_type=f"job.{to.lower()}",
                    payload={"operation": row.operation})

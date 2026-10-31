@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { EntityDetailDrawer } from "@/components/EntityDetailDrawer";
-import { QUERY_ERROR, QUERY_FAILED, QUERY_UNAVAILABLE, oltClockText, readBoard, readSync, readTemperature, readTime, readVersion, uptimeText, type OltQueryItem } from "@/lib/olt-queries";
+import { ageText, QUERY_ERROR, QUERY_FAILED, QUERY_UNAVAILABLE, oltClockText, readBoard, readSync, readTemperature, readTime, readVersion, uptimeText, type OltQueryItem } from "@/lib/olt-queries";
 
-type Phase = { kind: "idle" } | { kind: "waiting"; jobId: string; since: number; queryId: string } | { kind: "done"; queryId: string; data: unknown } | { kind: "failed"; reason: string };
+type Phase = { kind: "idle" } | { kind: "waiting"; jobId: string; since: number; queryId: string } | { kind: "done"; queryId: string; data: unknown; age?: number } | { kind: "failed"; reason: string };
 const POLL_MS = 10_000;
 const GIVE_UP_MS = 25 * 60_000; // o pedido vive 22 min na nuvem; depois disso a tela para de perguntar
 
@@ -102,17 +102,20 @@ export function OltQueries({ oltId, oltName }: { oltId: string; oltName: string 
     return () => clearInterval(t);
   }, [phase, open]);
 
-  async function ask(e: React.FormEvent) {
-    e.preventDefault();
-    if (!chosen) return;
-    const queryId = chosen, idem = `${key.current}-${queryId}`;   // consulta e chave fixadas no envio: trocar a seleção depois não muda o que foi pedido
+  async function request(queryId: string, refresh: boolean) {
+    const idem = `${key.current}-${queryId}${refresh ? "-refresh" : ""}`;   // consulta e chave fixadas no envio: trocar a seleção depois não muda o que foi pedido
     setBusy(true); setError(null);
     try {
-      const res = await fetch(`/bff/olts/${oltId}/queries/${queryId}`, { method: "POST", headers: { "content-type": "application/json" }, cache: "no-store", body: JSON.stringify({ key: idem }) });
-      const j = (await res.json().catch(() => ({}))) as { error?: string; job_id?: string | null };
+      const res = await fetch(`/bff/olts/${oltId}/queries/${queryId}`, { method: "POST", headers: { "content-type": "application/json" }, cache: "no-store", body: JSON.stringify({ key: idem, refresh }) });
+      const j = (await res.json().catch(() => ({}))) as { error?: string; job_id?: string | null; outcome?: string; data?: unknown; age_seconds?: number };
+      if (res.ok && j.outcome === "cached" && typeof j.age_seconds === "number") { setPhase({ kind: "done", queryId, data: j.data ?? null, age: j.age_seconds }); return; }   // guardado e dentro do prazo: a OLT não foi consultada
       if (res.ok && j.job_id) { setPhase({ kind: "waiting", jobId: j.job_id, since: Date.now(), queryId }); return; }
       setError(QUERY_ERROR[j.error ?? "failed"] ?? QUERY_ERROR.failed);
     } catch { setError(QUERY_ERROR.failed); } finally { setBusy(false); }
+  }
+  function ask(e: React.FormEvent) {
+    e.preventDefault();
+    if (chosen) void request(chosen, false);
   }
 
   const close = () => { setOpen(false); setError(null); trigger.current?.focus(); };
@@ -160,8 +163,13 @@ export function OltQueries({ oltId, oltName }: { oltId: string; oltName: string 
           {phase.kind === "done" && (
             <div role="status" className="grid gap-3" data-testid="olt-queries-done">
               <p><strong>{title}</strong></p>
+              {phase.age !== undefined && <p className="text-muted" data-testid="olt-queries-age">Dado guardado, {ageText(phase.age)}. A OLT não foi consultada agora.</p>}
               <Result queryId={phase.queryId} data={phase.data} />
-              <button type="button" onClick={() => setPhase({ kind: "idle" })} className="min-h-touch rounded-btn border border-line px-3">Nova consulta</button>
+              {error && <p role="alert" data-testid="olt-queries-error" className="text-danger">{error}</p>}
+              <div className="flex flex-wrap gap-2">
+                {phase.age !== undefined && <button type="button" disabled={busy} onClick={() => void request(phase.queryId, true)} className="min-h-touch rounded-btn border border-line px-3 disabled:opacity-60">Atualizar agora</button>}
+                <button type="button" onClick={() => setPhase({ kind: "idle" })} className="min-h-touch rounded-btn border border-line px-3">Nova consulta</button>
+              </div>
             </div>
           )}
           {phase.kind === "failed" && (

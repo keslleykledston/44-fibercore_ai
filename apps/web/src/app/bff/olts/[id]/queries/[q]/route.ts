@@ -14,17 +14,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string; q:
   if (!UUID.test(id) || !QID.test(q)) return reply({ error: "bad_request" }, 400);
   const raw = await req.text();
   if (raw.length > 512) return reply({ error: "bad_request" }, 413);
-  let body: { key?: unknown };
+  let body: { key?: unknown; refresh?: unknown };
   try { body = JSON.parse(raw); } catch { return reply({ error: "bad_request" }, 400); }
   if (typeof body.key !== "string" || !KEY.test(body.key)) return reply({ error: "bad_request" }, 400);
-  const r = await apiPost(`/v1/olts/${id}/queries/${q}`, JSON.stringify({ params: {} }), { "content-type": "application/json", "Idempotency-Key": body.key });
+  const r = await apiPost(`/v1/olts/${id}/queries/${q}`, JSON.stringify({ params: {}, refresh: body.refresh === true }), { "content-type": "application/json", "Idempotency-Key": body.key });
   if (r.status === 200) {
-    const j = r.json as { outcome?: string; job?: { id?: string; status?: string } } | null;
+    const j = r.json as { outcome?: string; job?: { id?: string; status?: string }; cached?: { data?: unknown; observed_at?: string; age_seconds?: number } } | null;
+    if (j?.outcome === "cached" && j.cached && Number.isInteger(j.cached.age_seconds)) {
+      return reply({ ok: true, outcome: "cached", data: j.cached.data ?? null, observed_at: j.cached.observed_at ?? null, age_seconds: j.cached.age_seconds });
+    }
     return reply({ ok: true, outcome: j?.outcome === "existing" ? "existing" : "submitted", job_id: j?.job?.id ?? null });
   }
   const detail = String((r.json as { detail?: string } | null)?.detail ?? "");
   if (r.status === 409 && KNOWN.has(detail)) return reply({ error: detail }, 409);
-  if (r.status === 429) return reply({ error: "olt_query_quota" }, 429);
+  if (r.status === 429) return reply({ error: detail === "olt_query_refresh_quota" ? "olt_query_refresh_quota" : "olt_query_quota" }, 429);
   if (r.status === 404) return reply({ error: "not_found" }, 404);
   if (r.status === 401) return reply({ error: "session" }, 401);
   if (r.status === 403) return reply({ error: "forbidden" }, 403);

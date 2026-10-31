@@ -151,3 +151,28 @@ test("consultas da OLT: hora, sincronismo e temperatura mostram só o formato fe
   const a11y = await new AxeBuilder({ page: page as never }).include("dialog").analyze();
   expect(a11y.violations.filter((v) => ["serious", "critical"].includes(v.impact ?? ""))).toEqual([]);
 });
+
+
+test("consultas da OLT: dado guardado responde na hora, mostra a idade e 'Atualizar agora' pergunta de novo", async ({ page }) => {
+  const posted: { refresh: unknown }[] = [];
+  await page.route("**/bff/olts/*/queries", (r) => r.fulfill({ json: CATALOG_ON }));
+  await page.route("**/bff/olts/*/queries/olt.version", (r) => {
+    const b = JSON.parse(r.request().postData() ?? "{}") as { refresh: unknown };
+    posted.push({ refresh: b.refresh });
+    return r.fulfill({ json: b.refresh ? { ok: true, outcome: "submitted", job_id: JOB } : { ok: true, outcome: "cached", data: VERSION, observed_at: "2026-10-31T01:00:00Z", age_seconds: 600 } });
+  });
+  await page.route(`**/bff/jobs/${JOB}`, (r) => r.fulfill({ json: { status: "ACCEPTED", detail: null, data: null } }));
+  await page.clock.install();
+  await openDrawer(page);
+  await page.getByRole("radio", { name: /Software, patch e uptime/ }).check();
+  await page.getByRole("button", { name: "Pedir consulta" }).click();
+  await expect(page.getByTestId("olt-queries-age")).toContainText("há 10 min");
+  await expect(page.getByTestId("olt-queries-age")).toContainText("não foi consultada agora");
+  await expect(page.getByTestId("olt-query-result")).toContainText("MA5608T");
+  await expect(page.getByTestId("olt-queries-waiting")).toHaveCount(0);
+  await page.getByRole("button", { name: "Atualizar agora" }).click();
+  await expect(page.getByTestId("olt-queries-waiting")).toBeVisible();
+  expect(posted).toEqual([{ refresh: false }, { refresh: true }]);
+  const a11y = await new AxeBuilder({ page: page as never }).include("dialog").analyze();
+  expect(a11y.violations.filter((v) => ["serious", "critical"].includes(v.impact ?? ""))).toEqual([]);
+});
