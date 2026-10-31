@@ -59,6 +59,13 @@ def test_upload_uses_the_bytes_the_device_sent_when_it_reports_them_else_the_req
     assert (sent.mbps, sent.basis) == (19.8, "test_bytes_sent")
 
 
+def test_a_reported_zero_of_bytes_sent_is_not_a_missing_counter():
+    c = speed.compute("upload", PF, speed.check_counters("upload", EP, PF, counters("upload", seconds=4.0, test_bytes_sent=0)))
+    assert (c.outcome, c.mbps, c.reason, c.basis) == ("inconclusive", None, "no_bytes", "test_bytes_sent")
+    absent = speed.compute("upload", PF, speed.check_counters("upload", EP, PF, counters("upload", seconds=4.0, test_bytes_sent=None)))
+    assert (absent.outcome, absent.basis) == ("completed", "test_file_length")   # only a missing counter falls back to the requested length
+
+
 def test_an_upload_counter_above_the_profile_is_also_inconclusive():
     c = speed.compute("upload", PF, speed.check_counters("upload", EP, PF, counters("upload", seconds=4.0, test_bytes_sent=50_000_000)))
     assert (c.outcome, c.mbps, c.reason, c.basis) == ("inconclusive", None, "bytes_exceed_profile", "test_bytes_sent")

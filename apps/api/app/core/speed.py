@@ -102,7 +102,8 @@ def compute(direction: str, profile: str, c: dict) -> Computed:
     if direction == "download":
         basis, n = "test_bytes_received", c.get("test_bytes_received")
     else:
-        basis, n = ("test_bytes_sent", c.get("test_bytes_sent")) if c.get("test_bytes_sent") else ("test_file_length", c.get("test_file_length"))
+        # the device's own counter wins whenever it reports one, ZERO included (a reported 0 is "nothing was sent", not "not reported")
+        basis, n = ("test_bytes_sent", c["test_bytes_sent"]) if c.get("test_bytes_sent") is not None else ("test_file_length", c.get("test_file_length"))
     if not n or n <= 0:
         return Computed("inconclusive", None, None, int(dt * 1000), "no_bytes", basis)
     if n > MAX_BYTES_RATIO * PROFILE_BYTES[profile]:
