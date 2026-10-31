@@ -1,5 +1,7 @@
 # QoS-001 — GAP_MAP (só o que falta; o resto é reaproveitado)
 
+> **Governança:** as colunas "Classe" dizem o que **existe** (JÁ) e o que está **bloqueado/fora** — isso é fato do repositório. Tudo marcado **ESTENDER** é **proposta de desenho**, condicionada ao ADR-0039 e à aprovação do responsável (incluindo nomes de flag/permissão, regras de hipótese, tabela, endpoints e reaproveitamento de jobs/outbox); o ADR pode alterar ou rejeitar qualquer item antes do PR A.
+
 Classificação: **JÁ** = implementado, reutilizar sem mudança · **ESTENDER** = menor extensão de componente existente · **BLOQUEADO** = depende de decisão/evidência que não existe · **FORA** = fora do escopo do adendo ou deste lote.
 
 ## A. Leituras (RÁPIDO, passivas)

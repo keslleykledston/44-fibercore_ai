@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192f2-358e-7d71-8f19-c9ac6bc782d6).
+[codex] Turn started (01a192f2-35ca-76a1-855c-3c5a1feda8da).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e rastrear se GAP_MAP C3/C4 e o plano do PR A estão clarame...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=5 main...HEAD -- docs/addenda/v2.2-qos docs/w...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=5 main...HEAD -- docs/addenda/v2.2-qos docs/w... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n -i "proposta|condicionad|decid|decisão|obrigatóri|pré-requisito|entrega|...
+[codex] Command completed: /bin/bash -lc 'rg -n -i "proposta|condicionad|decid|decisão|obrigatóri|pré-requisito|entrega|... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/addenda/v2.2-qos/GAP_MAP.md | sed -n '32,48p'; nl -ba docs/addenda...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/addenda/v2.2-qos/GAP_MAP.md | sed -n '32,48p'; nl -ba docs/addenda... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/addenda/v2.2-qos/GAP_MAP.md | sed -n '46,54p';"
+[codex] Command completed: /bin/bash -lc "nl -ba docs/addenda/v2.2-qos/GAP_MAP.md | sed -n '46,54p';" (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"C3/C4 agora identificam claramente a proposta condici...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+C3/C4 agora identificam claramente a proposta condicionada ao ADR-0039. Ainda há decisões adjacentes descritas como estabelecidas no GAP_MAP, embora o plano marque todo o PR A como proposta sujeita a revisão.
+
+Findings:
+- [medium] O GAP_MAP ainda fixa decisões que o plano mantém condicionais (docs/addenda/v2.2-qos/GAP_MAP.md:37-50)
+  C3/C4 e a linha 15 do README agora dizem que tabela e API são propostas pendentes do ADR-0039. Porém, o GAP_MAP ainda classifica como já decidido o uso dos jobs/outbox atuais (C5) e propõe nomes e comportamento concretos para flags, permissões, auditoria e hipóteses (D1/E1/E2), sem marcar esses itens como condicionais. Como o ADR-0039 pode alterar ou rejeitar o desenho, leitores do GAP_MAP — que o README declara autoridade junto com o plano — podem implementar essas escolhas como requisitos aprovados antes da decisão. Essa ambiguidade de governança é explícita nos documentos; o impacto provável é retrabalho ou implementação incompatível com o ADR.
+  Recommendation: Identifique C5, D1, E1 e E2 como proposta condicionada ao ADR-0039, ou esclareça que o ADR-0039 só decide C3/C4 e que as demais escolhas já foram aprovadas por outra decisão, citando-a.
