@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a190ff-2fc0-7d93-b8c0-b2cf60e22ce5).
+[codex] Turn started (01a190ff-2ff9-7331-bbd6-934e5cd67235).
+[codex] Assistant message captured: I’ll inspect the full branch diff against `main`, then trace the report creation and job-resu...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff -- apps/api/app/core/speed.py apps/api...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff -- apps/api/app/core/speed.py apps/api... (exit 0)
+[codex] Running command: /bin/bash -lc 'git status --short; rg -n "job_result|speed_report|Speed" apps/api/app/api/job...
+[codex] Command completed: /bin/bash -lc 'git status --short; rg -n "job_result|speed_report|Speed" apps/api/app/api/job... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff main...HEAD -- apps/api/app/core/speed.py apps/api/app/api/speed.py a...
+[codex] Command completed: /bin/bash -lc 'git diff main...HEAD -- apps/api/app/core/speed.py apps/api/app/api/speed.py a... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff main...HEAD -- apps/api/app/api/bench_authorizations.py apps/api/app/...
+[codex] Command completed: /bin/bash -lc 'git diff main...HEAD -- apps/api/app/api/bench_authorizations.py apps/api/app/... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/speed.py; nl -ba apps/api/app/api/speed.py | sed -n '...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/speed.py; nl -ba apps/api/app/api/speed.py | sed -n '... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship: valid short-duration reports can overflo...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship: valid short-duration reports can overflow the run table’s `mbps` column, rolling back ingestion and leaving the Edge unable to get an acknowledgment.
+
+Findings:
+- [high] Computed Mbps can exceed the database column and make result ingestion fail (apps/api/app/core/speed.py:101-116)
+  `check_counters` accepts intervals as short as 1 ms and byte counts up to 105% of the selected profile. `compute` then calculates Mbps without bounding the result, but `speed_test_runs.mbps` is `numeric(10,2)`, whose maximum is 99,999,999.99. For example, a 10 MB profile’s permitted byte count over 1 ms produces roughly 84 billion Mbps. `job_result` first CASes the job, then calls `store_result`; the subsequent database update can fail on numeric overflow. Inference: because both writes use the request transaction, that failure rolls back the job transition too, so a durable Edge retry can repeatedly receive an error and the report never gets accepted. The 1 ms duration floor does not prevent this.
+  Recommendation: Before returning a measurement, ensure the computed rounded Mbps fits `numeric(10,2)`; classify out-of-range values as inconclusive (or widen the column with a deliberate bound). Add an ingestion case at the minimum accepted duration and largest allowed counter to verify the job and run outcome commit.
+done 0

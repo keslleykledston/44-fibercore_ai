@@ -1,0 +1,32 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a190f7-4d76-74d1-b4d5-5c2f59b03f04).
+[codex] Turn started (01a190f7-4db1-7801-af36-c2915f47ce1f).
+[codex] Assistant message captured: I’ll inspect the actual branch diff against `main`, then trace the focused paths through the ...
+[codex] Running command: /bin/bash -lc 'git status --short && git diff --stat main...HEAD && git diff --unified=60 mai...
+[codex] Command completed: /bin/bash -lc 'git status --short && git diff --stat main...HEAD && git diff --unified=60 mai... (exit 0)
+[codex] Running command: /bin/bash -lc 'nl -ba apps/api/app/api/speed.py && nl -ba apps/api/app/core/speed.py && rg -n...
+[codex] Command completed: /bin/bash -lc 'nl -ba apps/api/app/api/speed.py && nl -ba apps/api/app/core/speed.py && rg -n... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/bench.py | sed -n '35,185p'; nl -ba apps/api/app/api/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/bench.py | sed -n '35,185p'; nl -ba apps/api/app/api/... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '410,485p'; nl -ba apps/api/app/api/b...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '410,485p'; nl -ba apps/api/app/api/b... (exit 0)
+[codex] Assistant message captured: The primary bypass is in the shared jobs API: speed operations are registered as ordinary ben...
+[codex] Running command: /bin/bash -lc "rg -n \"speed_endpoints|speed_test_runs|SPEED_EDGE_SUPPORT|speed_diagnostics\"...
+[codex] Command completed: /bin/bash -lc "rg -n \"speed_endpoints|speed_test_runs|SPEED_EDGE_SUPPORT|speed_diagnostics\"... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: speed failures can persist and expos...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: speed failures can persist and expose unfiltered Edge detail, and the generic jobs API bypasses speed-specific controls once Edge support is enabled.
+
+Findings:
+- [high] Speed jobs can bypass the speed flag and run limits through the generic jobs API (apps/api/app/api/jobs.py:154-156)
+  The speed router enforces `speed_diagnostics`, endpoint readiness, PON/CPE slot limits, and run recording, but `/v1/jobs/preview` also accepts these operations through the shared `BENCH_OPS` path. That path does not apply those speed-specific checks, and submit relies only on the bench gate. With `SPEED_EDGE_SUPPORT` currently false this path is blocked at submit; if Edge support is enabled as planned, generic jobs can be submitted without the speed flag, slot limits, or a `speed_test_runs` row. This defeats the documented controls and leaves those tests out of run history.
+  Recommendation: Route speed operations through the speed-specific request checks, or enforce the feature flag, endpoint health, PON/CPE/tenant limits, and run creation in shared job submission so every entry point gets the same controls.
+- [medium] Unfiltered Edge failure detail can leak addresses into speed run history (apps/api/app/api/jobs.py:445)
+  The result handler stores `body.detail` in `jobs.result` without validating it for speed operations. The speed run view then returns that detail for failed or unknown jobs. An Edge error containing a test-node URL, IP address, or other internal target data would therefore be persisted and exposed through the speed history API, despite the stated no-address contract.
+  Recommendation: For speed results, accept only a closed set of short reason codes and discard or redact free-form Edge detail before storing or returning it.
+done 0

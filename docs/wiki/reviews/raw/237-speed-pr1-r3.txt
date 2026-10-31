@@ -1,0 +1,30 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a190fb-dc2f-7f60-9ac6-2b1d4cea6112).
+[codex] Turn started (01a190fb-dc68-7753-b5b1-ea7906a61de2).
+[codex] Assistant message captured: I’ll inspect the branch diff against `main`, then trace the speed job lifecycle and its autho...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/api/a...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/api/a... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --unified=25 main...HEAD -- apps/api/app/api/speed.py apps/api/app/ap...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=25 main...HEAD -- apps/api/app/api/speed.py apps/api/app/ap... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/speed.py && nl -ba apps/api/app/api/jobs.py | sed -n '...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/speed.py && nl -ba apps/api/app/api/jobs.py | sed -n '... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"create_preview\\(|speed_test|speed-endpoint-set|health_at|speed_endpoi...
+[codex] Command completed: /bin/bash -lc "rg -n \"create_preview\\(|speed_test|speed-endpoint-set|health_at|speed_endpoi... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '210,320p'; nl -ba apps/api/app/api/s...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '210,320p'; nl -ba apps/api/app/api/s... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/device_actions.py | sed -n '45,110p'; nl -ba apps/api/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/device_actions.py | sed -n '45,110p'; nl -ba apps/api/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship the speed result calculation yet: accepte...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship the speed result calculation yet: accepted counters can produce a completed measurement that exceeds the selected test profile by an arbitrary amount, making reported throughput unreliable.
+
+Findings:
+- [medium] Completed results do not cap counters at the requested profile size (apps/api/app/core/speed.py:102-112)
+  `compute()` marks a run completed whenever the byte count meets the profile’s minimum, but never rejects a count above the requested file size. For example, a 10 MB profile can be stored as a completed result using a much larger `test_bytes_received` or `test_bytes_sent` value, as long as the calculated rate stays below `MAX_PLAUSIBLE_MBPS`. A malformed device result can therefore become a credible-looking but inflated throughput figure. Reject counters inconsistent with the requested profile, allowing only a documented protocol tolerance.
+  Recommendation: Validate direction-specific byte counters against the selected profile’s expected transfer size before returning a completed measurement; classify out-of-range results as inconclusive.
+done 0

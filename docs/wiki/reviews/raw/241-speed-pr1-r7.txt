@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19100-7b2f-7683-ac3a-076d8aff1965).
+[codex] Turn started (01a19100-7b6c-76e0-8966-78d4ceb869e6).
+[codex] Assistant message captured: I’ll inspect the full diff against `main`, then trace the speed ingestion and job lifecycle p...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=70 main...HEA...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=70 main...HEA... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/speed.py && nl -ba apps/api/app/api/speed.py && rg -n...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/speed.py && nl -ba apps/api/app/api/speed.py && rg -n... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '420,510p'; nl -ba apps/api/app/core/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '420,510p'; nl -ba apps/api/app/core/... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"speed_endpoints|health_at|speed_test_runs|speed_diagnostics\" apps/api...
+[codex] Command completed: /bin/bash -lc "rg -n \"speed_endpoints|health_at|speed_test_runs|speed_diagnostics\" apps/api... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: concurrent retries can miss the idem...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: concurrent retries can miss the idempotency record, then be rejected as busy instead of receiving the run they already created.
+
+Findings:
+- [medium] Concurrent retries can lose the idempotent response (apps/api/app/api/speed.py:153-154)
+  The route checks for an existing idempotency key before acquiring the speed-slot lock (lines 153–157), but only reaches `create_preview`, which serializes that key, after checking whether a slot is busy (lines 178–181). If two identical requests arrive together, the second can observe no job, wait for the first request to commit, then see its live run as `cpe_busy` and return 409 instead of the existing run. This makes a legitimate retry or double submission depend on timing and violates the endpoint's stated idempotency behavior. Recheck the key under the same serialization boundary before returning a busy refusal, and verify its intent matches.
+  Recommendation: Serialize speed requests by idempotency key before slot evaluation, or recheck the key after acquiring the slot lock and return the existing run when the stored intent matches.
+done 0

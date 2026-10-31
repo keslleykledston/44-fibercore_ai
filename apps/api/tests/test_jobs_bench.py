@@ -288,7 +288,7 @@ def test_bench_evidence_file_check_and_the_catalog():
     assert "Aprovador" in bench.evidence_missing("\n".join(ok.splitlines()[:-4]))
     assert bench.evidence_missing(ok + "\n- **Nota:** 192.168.0.1")[-1].startswith("conteúdo sensível")
     assert bench.evidence_missing(ok + "\nsenha: x")[-1].startswith("conteúdo sensível")
-    assert set(bench.BENCH_OPS) == {"reboot_cpe", "set_wifi_ssid", "onu_reset", "onu_deactivate"} and bench.MIN_APPROVALS == 1
+    assert set(bench.BENCH_OPS) == {"reboot_cpe", "set_wifi_ssid", "onu_reset", "onu_deactivate", "speed_test_download", "speed_test_upload"} and bench.MIN_APPROVALS == 1
     assert all(jobs_mod.OPERATIONS[o].writes for o in bench.BENCH_OPS)  # the catalog is a subset of the engine's write operations
 
 
@@ -374,7 +374,8 @@ def test_the_shipped_default_has_the_edge_support_but_every_other_condition_stay
     import importlib
 
     assert importlib.reload(bench).EDGE_SUPPORT is True   # flipped by the PR that implements and tests the Edge side
-    assert bench.BENCH_OPS.keys() == {"reboot_cpe", "set_wifi_ssid", "onu_reset", "onu_deactivate"}   # H2, H3 and H4 (ADR-0030)
+    assert bench.BENCH_OPS.keys() == {"reboot_cpe", "set_wifi_ssid", "onu_reset", "onu_deactivate", "speed_test_download", "speed_test_upload"}   # H2, H3, H4 (ADR-0030) and the speed test (ADR-0038)
+    assert bench.SPEED_EDGE_SUPPORT is False   # the Edge half is a separate delivery: until it ships no speed test can be authorized or dispatched
     assert features_default("bench_writes") is False      # the tenant flag still defaults off
 
 

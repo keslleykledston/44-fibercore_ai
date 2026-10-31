@@ -65,6 +65,8 @@ def main(argv: list[str] | None = None) -> None:
     ba.add_argument("--to", dest="end", required=True, help="ISO-8601 end of the window (at most 4 h after the start)")
     ba.add_argument("--by", required=True, help="who authorizes (the responsible person)")
     ba.add_argument("--ssid", help="set_wifi_ssid only: the exact SSID this authorization covers (BANCADA-<A-Z0-9>)")
+    ba.add_argument("--speed-target", help="speed_test_* only: the logical endpoint id this authorization covers (no URL, no address)")
+    ba.add_argument("--speed-profile", help="speed_test_* only: the file-size profile this authorization covers (10mb, 50mb, 200mb)")
     ba.add_argument("--first-run", action="store_true", help="ADR-0030 amendment: stands in for the missing `observed` registry entry (single use)")
     bu = sub.add_parser("bench-unlock", help="ADR-0030: clear the write lock of a bench target after a documented reconciliation")
     bu.add_argument("tenant_id"); bu.add_argument("cpe_id"); bu.add_argument("--reason", required=True)
@@ -76,6 +78,9 @@ def main(argv: list[str] | None = None) -> None:
     fs.add_argument("tenant_id"); fs.add_argument("feature"); fs.add_argument("state", choices=["on", "off", "default"])
     oc = sub.add_parser("ont-config-mock", help="ADR-0034: write a SYNTHETIC configuration profile for a CPE (source 'mock', labelled synthetic; lab/demo only; owner-only)")
     oc.add_argument("tenant_id"); oc.add_argument("cpe_id"); oc.add_argument("profile", help="dualband | multi_ssid | no_wifi | inactive_5g | clear")
+    se = sub.add_parser("speed-endpoint-set", help="ADR-0038: create/update a LOGICAL speed-test endpoint (id, label, CORE|INTERNET, region, enabled). No URL: the Edge holds the address (owner-only)")
+    se.add_argument("tenant_id"); se.add_argument("endpoint_id"); se.add_argument("label")
+    se.add_argument("kind", choices=["CORE", "INTERNET"]); se.add_argument("region"); se.add_argument("state", choices=["on", "off"])
     sp = sub.add_parser("set-password", help="set a user's password (owner-only); ends all their sessions")
     sp.add_argument("email"); sp.add_argument("--password-env")
     ul = sub.add_parser("unlock-login"); ul.add_argument("key", help="e-mail, or svc:<client_id>, or ip:<addr>")
@@ -111,12 +116,15 @@ def main(argv: list[str] | None = None) -> None:
             if (a.certification != "identified" or a.status != "unknown") and not (a.evidence and a.verified_at):
                 sys.exit("any claim (supported/unsupported, or observed/certified) requires --evidence and --verified-at")
             from app.api.jobs import OPERATIONS  # the catalog is the job engine's operations: no invented names
-            if a.operation not in OPERATIONS:
+            from app.core import speed as _speed0
+            if a.operation not in OPERATIONS and a.operation not in {o for o, _ in _speed0.REGISTRY_ONLY}:
                 sys.exit(f"unknown operation {a.operation!r}; known: {', '.join(sorted(OPERATIONS))}")
             from app.core.capabilities import catalog_for
             valid = {(e.operation, e.protocol) for kind in ("cpe", "olt") for e in catalog_for(kind, OPERATIONS)}
             from app.core import bench as _bench
             valid |= {(n, sp.protocol) for n, sp in _bench.BENCH_OPS.items()}   # the bench catalog names its own (operation, protocol) pairs
+            from app.core import speed as _speed
+            valid |= set(_speed.REGISTRY_ONLY)   # registry rows that are an observation of the device, not an operation (e.g. what the CPE does with a 3xx)
             if (a.operation, a.protocol) not in valid:  # a row the API could never show would hide the recorded state
                 sys.exit(f"{a.operation!r} is not catalogued over {a.protocol!r}; valid pairs: {sorted(valid)}")
             from app.core import bench
@@ -188,8 +196,12 @@ def main(argv: list[str] | None = None) -> None:
             if not bench.EDGE_SUPPORT:
                 sys.exit("refused: no bench authorization can be recorded until the Edge-side bench gate exists and is tested (ADR-0030)")
             params = {"ssid": a.ssid} if a.ssid is not None else {}
+            if a.operation in bench.SPEED_OPS:
+                if not bench.SPEED_EDGE_SUPPORT:
+                    sys.exit("refused: the Edge half of the speed test is not delivered yet (ADR-0038)")
+                params = {"target": a.speed_target, "profile": a.speed_profile}
             if not bench.params_valid(a.operation, params):
-                sys.exit(f"parameters outside the bench catalog for {a.operation!r} (set_wifi_ssid needs --ssid BANCADA-...; others take none)")
+                sys.exit(f"parameters outside the bench catalog for {a.operation!r} (set_wifi_ssid needs --ssid BANCADA-...; speed_test_* needs --speed-target and --speed-profile; others take none)")
             start, end = datetime.fromisoformat(a.start), datetime.fromisoformat(a.end)
             if start.tzinfo is None or end.tzinfo is None:
                 sys.exit("--from/--to need a time zone (e.g. 2026-10-30T14:00:00+00:00)")
@@ -227,6 +239,18 @@ def main(argv: list[str] | None = None) -> None:
                            "VALUES (:t,'bench_target',:i,'bench.unlocked','1',CAST(:p AS jsonb))"),
                       {"t": a.tenant_id, "i": n.id, "p": json.dumps({"reason": a.reason[:300]})})
             print("write lock cleared")
+        elif a.cmd == "speed-endpoint-set":
+            from app.core import speed
+            if speed.ENDPOINT_ID_RE.fullmatch(a.endpoint_id) is None:
+                sys.exit("endpoint id: lowercase letters, digits and '-', 2..31 characters; it is a name, never an address or URL")
+            if not 1 <= len(a.label) <= 60 or "://" in a.label or "/" in a.label:
+                sys.exit("label: 1..60 characters, a name (no URL, no address)")
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            c.execute(text("INSERT INTO speed_endpoints (tenant_id, id, label, target_kind, region, enabled) VALUES (:t,:i,:l,:k,:r,:e) "
+                           "ON CONFLICT (tenant_id, id) DO UPDATE SET label = EXCLUDED.label, target_kind = EXCLUDED.target_kind, "
+                           "region = EXCLUDED.region, enabled = EXCLUDED.enabled"),
+                      {"t": a.tenant_id, "i": a.endpoint_id, "l": a.label, "k": a.kind, "r": a.region, "e": a.state == "on"})
+            print(f"speed endpoint {a.endpoint_id}: {a.kind}, {'enabled' if a.state == 'on' else 'disabled'} (health is reported by the Edge)")
         elif a.cmd == "olt-transfer-start":
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
             o = c.execute(text("SELECT edge_id, transfer_to FROM olts WHERE id = :o FOR UPDATE"), {"o": a.olt_id}).first()

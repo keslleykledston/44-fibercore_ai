@@ -44,6 +44,7 @@ CATALOG: dict[str, Permission] = dict([
     _p("erp:manage", "Cadastrar e desativar a conexão com o ERP do provedor (guarda só a referência do segredo, nunca o segredo)", "R3", mfa_recent=True),
     _p("erp:test", "Testar a conexão com o ERP (autentica e nada mais; somente leitura)", "R2"),
     _p("diagnostics:run", "Rodar diagnósticos (somente leitura)", "R0", scopable=True),
+    _p("diagnostics:speed_run", "Pedir um teste de banda (TR-143) da ONT (gera tráfego no aparelho; só bancada, com autorização prévia)", "R2", mfa_recent=True, scopable=True),
     _p("members:read", "Ver os membros do provedor e o estado do MFA de cada um", "R1"),
     _p("members:manage", "Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite)", "R3", mfa_recent=True),
     _p("platform:delegate", "Conceder e revogar o acesso temporário (até 8 h, com motivo) do suporte da plataforma a este provedor", "R3", mfa_recent=True),

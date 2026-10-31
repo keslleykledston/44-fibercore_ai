@@ -447,3 +447,9 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - `pon.ont.summary` na PON da bancada: a única tentativa terminou em `session_error` (33 s) e o marcador `done.json` impede nova tentativa automática; a PON da bancada tem outras ONTs além da de bancada, então a saída teria o mesmo risco. NÃO validada; fica para quando houver necessidade e autorização.
 - Modo de captura do Edge: desligado ao final (config sem `capture`); a pasta de capturas ficou só com `done.json`.
 
+
+## Speed Diagnostics TR-143 — nuvem (PR 1, ADR-0038)
+- `tests/test_speed.py`: 80 casos PASS (aritmética DL/UL e bases, parcial/inconclusivo/erro sem figura, formato fechado do relatório com 14 mutações recusadas, catálogo de parâmetros sem URL/IP, flag desligada = 403 e nenhum job/linha, permissão por papel, tela de capacidades, sem evidência de redirecionamento = `redirect_unverified` no pedido e no gate, recusas com 409+código+auditoria sem job vivo, idempotência, `SPEED_EDGE_SUPPORT` desligado = `operation_not_homologated`, caminho completo com Edge falso: envelope sem endereço, resultado calculado, reenvio sem efeito, erro do aparelho ≠ escrita falha, relatório inválido = falha + trava, incerto = `UNKNOWN` + trava, limites 1/ONT·1/PON·2/provedor, vínculo sugerido não conta, grupo download/upload, isolamento por tenant, papel da aplicação sem INSERT em destinos, CHECKs do esquema, CLI do dono).
+- Teste de esquema: nenhuma coluna das duas tabelas comporta URL, host, endereço, token, segredo ou payload.
+- Regressão: testes de RBAC/catálogo/bancada atualizados só nos conjuntos esperados (novas operações e permissão). Matriz RBAC regenerada.
+- NÃO verificado: nenhum teste real em ONT/OLT/ACS (nem previsto neste PR); Edge (PR 2) e UI (PR 3) ainda não existem; homologação real depende de autorização do responsável, nó de teste e janela.

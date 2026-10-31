@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a190fc-f146-72f3-b05d-30f59e86cb6b).
+[codex] Turn started (01a190fc-f43a-7d00-b941-dedec986373a).
+[codex] Assistant message captured: I’ll inspect the branch diff against `main`, then trace the new speed flow through its API, p...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=60 main...HEA...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=60 main...HEA... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --unified=35 main...HEAD -- apps/api/app/api/jobs.py apps/api/app/api...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=35 main...HEAD -- apps/api/app/api/jobs.py apps/api/app/api... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"speed|data is|_validate|ResultIn|store_result|result\\(\" apps/api/app...
+[codex] Command completed: /bin/bash -lc "rg -n \"speed|data is|_validate|ResultIn|store_result|result\\(\" apps/api/app... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '445,490p'; nl -ba apps/api/app/api/s...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '445,490p'; nl -ba apps/api/app/api/s... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "health_at|speed_endpoints|speed.*health" apps/api/app apps/api/alembic/...
+[codex] Command completed: /bin/bash -lc 'rg -n "health_at|speed_endpoints|speed.*health" apps/api/app apps/api/alembic/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship: upload results can report a credible Mbp...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship: upload results can report a credible Mbps figure when the CPE explicitly reports zero bytes sent.
+
+Findings:
+- [high] Zero upload counter falls back to file length (apps/api/app/core/speed.py:105)
+  `check_counters` accepts zero as a valid integer, but this truthiness check treats `test_bytes_sent: 0` as if the counter were absent and uses `test_file_length` instead. A completed upload with an explicit zero sent counter and a nonzero file length can therefore be stored as a completed measurement with a plausible Mbps value, misrepresenting throughput.
+  Recommendation: Fall back to `test_file_length` only when `test_bytes_sent` is missing or `None`; preserve zero so `compute()` returns `no_bytes`.
+done 0
