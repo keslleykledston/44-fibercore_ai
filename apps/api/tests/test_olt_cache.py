@@ -166,3 +166,14 @@ def test_a_late_result_of_an_older_question_does_not_replace_a_newer_value(clien
     assert _report(client, inv, j2, state="succeeded", postcheck_ok=True, data=newer).status_code == 204
     assert _report(client, inv, j1, state="succeeded", postcheck_ok=True, data=VERSION).status_code == 204      # the OLDER question answers last
     assert client.get(f"/v1/olts/{olt}/queries/olt.version/latest", headers=h).json()["data"] == newer
+
+
+def test_a_result_from_an_older_ownership_generation_is_never_cached_even_if_the_same_edge_came_back(client, seed, inv, olt, on, migrated):
+    h, jid = _dispatched(client, seed, inv, olt, "olt.version")
+    with migrated.begin() as c:    # the OLT left this Edge and came back: same Edge, a higher generation
+        c.execute(text("UPDATE olts SET owner_epoch = owner_epoch + 2 WHERE id = :o"), {"o": olt})
+    assert _report(client, inv, jid, state="succeeded", postcheck_ok=True, data=VERSION).status_code == 204
+    assert client.get(f"/v1/jobs/{jid}", headers=h).json()["status"] == "SUCCEEDED"
+    assert client.get(f"/v1/olts/{olt}/queries/olt.version/latest", headers=h).json()["detail"] == "no_cached_value"
+    with migrated.begin() as c:
+        c.execute(text("UPDATE olts SET owner_epoch = owner_epoch - 2 WHERE id = :o"), {"o": olt})

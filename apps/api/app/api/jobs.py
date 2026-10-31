@@ -402,7 +402,9 @@ def next_job(
             response.status_code = 204
             return None
     envelope["signature"] = jobsign.sign(jobsign.load_private(settings.job_signing_key), envelope)
-    if not cas(conn, row.id, "DISPATCHED"):  # the emission is the transition: no confirmed transition, no envelope leaves
+    # an olt_query remembers the ownership generation it was dispatched under: its result may feed the cache only while the OLT is still in THAT generation
+    stamp = {"extra": ", owner_epoch = :oe", "params": {"oe": own.owner_epoch}} if row.operation == "olt_query" else {}
+    if not cas(conn, row.id, "DISPATCHED", **stamp):  # the emission is the transition: no confirmed transition, no envelope leaves
         response.status_code = 204
         return None
     outbox.enqueue(conn, tenant_id=p.tenant_id, aggregate_type="job", aggregate_id=row.id, event_type="job.dispatched",
@@ -422,10 +424,10 @@ def _cache_result(conn: Connection, p: Principal, row, data: dict) -> None:
     on its job and does not become 'the last value'."""
     prm = _row_params(row)
     own = conn.execute(text("SELECT edge_id, owner_epoch FROM olts WHERE id = :i"), {"i": row.target_id}).first()
-    if own is None or own.edge_id != p.edge_id:
-        return
+    if own is None or own.edge_id != p.edge_id or row.owner_epoch is None or own.owner_epoch != row.owner_epoch:
+        return   # another owner now, or the OLT went away and came back (a higher generation): the result stays on its job, it is not 'the last value'
     qid = str(prm.get("query_id", ""))
-    olt_cache.store_latest(conn, p.tenant_id, row.target_id, qid, olt_cache.params_key({k: prm[k] for k in ("slot", "port", "ont") if k in prm}), data, own.owner_epoch, row.created_at)
+    olt_cache.store_latest(conn, p.tenant_id, row.target_id, qid, olt_cache.params_key({k: prm[k] for k in ("slot", "port", "ont") if k in prm}), data, row.owner_epoch, row.created_at)
     olt_cache.store_samples(conn, p.tenant_id, row.target_id, qid, data)
 
 
