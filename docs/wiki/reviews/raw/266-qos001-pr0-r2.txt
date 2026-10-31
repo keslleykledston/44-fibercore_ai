@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192f0-4bcd-78f0-afaa-ca70d26e192e).
+[codex] Turn started (01a192f0-4e2f-7110-a324-e4ddd66c20ff).
+[codex] Assistant message captured: Vou comparar a branch com `main`, depois cruzar os documentos novos com os contratos e a impl...
+[codex] Running command: /bin/bash -lc "git diff --find-renames --unified=40 main...HEAD -- docs/addenda/v2.2-qos docs...
+[codex] Command completed: /bin/bash -lc "git diff --find-renames --unified=40 main...HEAD -- docs/addenda/v2.2-qos docs... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --unified=8 3f7b998..HEAD -- docs/addenda/v2.2-qos docs/wiki/reviews/...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=8 3f7b998..HEAD -- docs/addenda/v2.2-qos docs/wiki/reviews/... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/addenda/v2.2-qos/GAP_MAP.md | sed -n '20,31p'; nl -ba docs/addenda...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/addenda/v2.2-qos/GAP_MAP.md | sed -n '20,31p'; nl -ba docs/addenda... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: B5 e a emenda ao ADR-0030 foram co...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: B5 e a emenda ao ADR-0030 foram corrigidos nos documentos principais, mas o pacote de referência ainda descreve o lock do SD-001 como diretamente reutilizável, sem registrar a reserva compartilhada exigida pelo PR A.
+
+Findings:
+- [medium] Documentos de referência ainda prometem reutilizar locks existentes (docs/addenda/v2.2-qos/reference/docs/07_SEGURANCA_OPERACAO.md:12)
+  O plano e o GAP_MAP agora reconhecem que `busy_reason()` consulta apenas `speed_test_runs` e exigem uma reserva compartilhada. Porém, a referência de segurança ainda diz que COMPLETO herdará todos os limites do SD-001 e que nunca haverá locks duplicados ou testes simultâneos; o prompt mestre também manda usar o mesmo lock de ONT/PON. Isso conflita com o código atual e pode levar quem implementar a seguir a referência a reaproveitar o lock sem fazer a generalização obrigatória, deixando ping/DNS concorrer com banda no mesmo `DiagnosticsState`. Atualize essas instruções para tornar explícita a reserva compartilhada e seus limites antes de distribuir o pacote.
+  Recommendation: Atualizar a referência de segurança e o prompt mestre para exigir a reserva compartilhada descrita no GAP_MAP B5/PR A, incluindo coordenação com o lock existente e cobertura dos limites por CPE, PON e tenant.
