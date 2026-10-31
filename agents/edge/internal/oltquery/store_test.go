@@ -465,3 +465,25 @@ func TestCaptureBudgetIsItsOwnClassAndFitsTheAggregate(t *testing.T) {
 		t.Fatalf("9 executions already counted in the session: a capture would pass the aggregate cap: %v", err)
 	}
 }
+
+func TestCapturesOfTheSessionCountTowardTheAggregateCapOfOnDemandClaims(t *testing.T) {
+	s, c := newStore(t)
+	for i := 0; i < CapturesPerSession; i++ {
+		if err := s.ReserveCapture(olt1, "S"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < MaxPerSession; i++ {
+		enq(t, s, c, fmt.Sprintf("j%d", i), olt1)
+	}
+	n := 0
+	for {
+		if _, err := s.Claim(olt1, "S"); err != nil {
+			break
+		}
+		n++
+	}
+	if n+CapturesPerSession > MaxPerSession {
+		t.Fatalf("%d on-demand + %d captures pass the aggregate cap %d", n, CapturesPerSession, MaxPerSession)
+	}
+}

@@ -302,7 +302,7 @@ func (s *Store) Claim(oltRef, sessionID string) (Entry, error) {
 				cand = append(cand, e)
 			}
 		}
-		if inSession >= PerSession || len(cand) == 0 {
+		if inSession >= PerSession || inSession+f.CaptureSess[sessionID].N >= MaxPerSession || len(cand) == 0 { // captures of the session count toward the aggregate cap too
 			return ErrNothingToDo
 		}
 		sort.Slice(cand, func(i, j int) bool {

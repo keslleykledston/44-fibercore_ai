@@ -214,3 +214,61 @@ func TestNoCaptureWithoutALeaseOrOnAnUnreadableQueue(t *testing.T) {
 		t.Fatalf("an unreadable budget file means the budget is spent: %v", sess.sent)
 	}
 }
+
+func TestADamagedDoneFileStopsTheBatchInsteadOfRepeatingCaptures(t *testing.T) {
+	sess := &qSession{inner: r015Session{}, extra: map[string]string{"display time": rawTime}}
+	o, cp, events := captureRig(t, sess, "olt.time")
+	if err := os.MkdirAll(cp.Dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cp.Dir, captureDoneFile), []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := o.Collect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(strings.Join(sess.sent, "|"), "display time") {
+		t.Fatalf("a damaged marker file means nothing runs: %v", sess.sent)
+	}
+	if len(*events) != 1 || (*events)[0].outcome != "done_unreadable" {
+		t.Fatalf("the stop must be visible: %v", *events)
+	}
+}
+
+func TestEarlyStopsAreReportedWithACategoryAndNeverContent(t *testing.T) {
+	sess := &qSession{inner: r015Session{}, extra: map[string]string{"display time": rawTime}}
+	o, cp, events := captureRig(t, sess, "olt.time")
+	cp.Lease = fakeLease{}
+	if _, err := o.Collect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(*events) != 1 || (*events)[0].outcome != "no_lease" || (*events)[0].bytes != 0 {
+		t.Fatalf("%v", *events)
+	}
+}
+
+func TestTwoOLTsAndTwoScopesNeverShareAFileOrAMarker(t *testing.T) {
+	a := CaptureItem{QueryID: "pon.ont.summary", Params: olt.Params{Slot: 0, Port: 14}}
+	b := CaptureItem{QueryID: "pon.ont.summary", Params: olt.Params{Slot: 0, Port: 15}}
+	at := time.Date(2026, 10, 30, 22, 0, 0, 0, time.UTC)
+	if a.fileBase("aaaaaaaa-1", at) == b.fileBase("aaaaaaaa-1", at) || a.fileBase("aaaaaaaa-1", at) == a.fileBase("bbbbbbbb-2", at) {
+		t.Fatal("file names must differ by scope and by OLT")
+	}
+	if a.key("x") == a.key("y") || a.key("x") == b.key("x") {
+		t.Fatal("markers must differ by scope and by OLT")
+	}
+	// the same capture finishing in the same second never overwrites the first file
+	cp := &Capture{Dir: filepath.Join(t.TempDir(), "captures"), Now: func() time.Time { return at }}
+	if err := os.MkdirAll(cp.Dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := cp.store(a, "aaaaaaaa-1", olt.QueryResult{Output: strings.Repeat("x", i+1)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	files, _ := filepath.Glob(filepath.Join(cp.Dir, "*.txt"))
+	if len(files) != 3 {
+		t.Fatalf("3 captures, %d files: %v", len(files), files)
+	}
+}
