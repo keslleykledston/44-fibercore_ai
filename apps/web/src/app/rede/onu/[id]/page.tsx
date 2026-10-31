@@ -5,6 +5,7 @@ import { Card, Row } from "@/components/Panel";
 import { SourceChip } from "@/components/SourceChip";
 import { DataFreshness, ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
+import { featuresOn } from "@/lib/features";
 import { CapabilityGate } from "@/components/CapabilityGate";
 import { FaceplateCard } from "@/components/Faceplate";
 import { OntSidebar } from "@/components/OntSidebar";
@@ -33,24 +34,25 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
   if (!o) return <AppShell active="/rede" user="1"><ErrorState title="Falha ao carregar a ONU" hint="Tente novamente em instantes." /></AppShell>;
   const caps = await apiSafe<Capability[]>(`/v1/olts/${o.olt.id}/capabilities`);  // perfil da OLT da ONU (registro de capacidades)
   const hist = await apiSafe<OnuHistory>(`/v1/onus/${id}/history?days=30&limit=12`);
+  const newUx = await featuresOn("onu_quick_inspector");   // trilha e painel frontal (ADR-0037) seguem a mesma flag da Rede: desligada, a tela é a anterior
   const ontCfg = o.cpe?.link === "confirmed" && o.cpe.device ? await apiSafe<{ enabled: boolean }>("/v1/ont-config/health") : null;   // o botão só existe com o recurso ligado
   return (
     <AppShell active="/rede" user="1">
       <PageHeader title={`ONU ${o.serial}`} subtitle="Visão completa de uma ONU, com a origem de cada dado" helpSlug="rede/onu-360">
         <Link href="/rede" className="inline-flex min-h-touch items-center rounded-btn px-3 text-sm text-accent hover:underline">← Voltar para Rede</Link>
       </PageHeader>
-      <nav aria-label="Trilha" className="mb-4 flex flex-wrap items-center gap-1 text-sm text-muted" data-testid="onu360-breadcrumb">
+      {newUx && <nav aria-label="Trilha" className="mb-4 flex flex-wrap items-center gap-1 text-sm text-muted" data-testid="onu360-breadcrumb">
         <Link href="/rede" className="hover:text-text">Rede</Link><span aria-hidden>›</span>
         <Link href={`/rede?olt=${encodeURIComponent(o.olt.id)}`} className="hover:text-text">{o.olt.name}</Link>
         {o.pon?.path && <><span aria-hidden>›</span><Link href={`/rede?olt=${encodeURIComponent(o.olt.id)}&pon=${encodeURIComponent(o.pon.path)}`} className="hover:text-text">PON {o.pon.path}</Link></>}
         <span aria-hidden>›</span><span className="text-text">ONU</span>
-      </nav>
+      </nav>}
       <div data-testid="onu360-ready" className="grid gap-4 md:grid-cols-2">
         {/* padrão Lovable (ADR-0037): painel frontal e números de óptica no alto, sem um clique até a aba; o estado dos LEDs é derivado do que a OLT reportou */}
-        <div className="md:col-span-2" data-testid="onu360-faceplate">
+        {newUx && <div className="md:col-span-2" data-testid="onu360-faceplate">
           <FaceplateCard model={o.cpe?.link === "confirmed" && o.cpe.device ? [o.cpe.device.vendor, o.cpe.device.model].filter(Boolean).join(" ") : null} reported={{ status: o.status, freshness: o.freshness }}
             serial={o.serial} optics={{ rx: o.rx_dbm, tx: null }} />
-        </div>
+        </div>}
         <Card title="Estado" testid="onu360-state">
           <dl>
             <Row k="Status"><StatusPill value={o.status} /></Row>
