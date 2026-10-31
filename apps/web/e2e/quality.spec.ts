@@ -131,3 +131,18 @@ test("qualidade (cenário): sem nenhuma leitura feita, a tela diz isso e não in
   await expect(page.getByTestId("quality-global")).toHaveCount(0);
   await expect(page.getByTestId("quality-run")).toBeEnabled();
 });
+
+test("qualidade (cenário): resposta fora do formato fechado (escopo/grupo/valor inventados) é recusada inteira, nada é renderizado", async ({ page, request }) => {
+  await confirmDemoA2(request);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  for (const bad of [M({ scope: "<img src=x>" }), M({ group: "DADOS" }), M({ value: "x".repeat(60) }), M({ instance: "a b<c>" }), M({ collected_at: "ontem" })]) {
+    await page.route("**/bff/cpes/*/quality", (r) => r.fulfill({ body: JSON.stringify({ caps: CAPS, runs: [RUN({ metrics: [bad] })] }).replace("null", "null"), contentType: "application/json" }));
+    await page.goto("/rede");
+    await row(page, "DEMOA0002").click();
+    await page.getByRole("tab", { name: "Qualidade" }).click();
+    await expect(page.getByTestId("quality-error")).toContainText("Não foi possível carregar");
+    await expect(page.getByTestId("quality-global")).toHaveCount(0);
+    await page.unroute("**/bff/cpes/*/quality");
+  }
+});

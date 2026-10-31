@@ -25,7 +25,7 @@ export function QualitySection({ cpeId }: { cpeId: string }) {
   const fetchAll = useCallback(async (signal?: AbortSignal) => {
     const mine = ++seq.current;
     const fail = (code: string) => {
-      if (code === "session" || code === "disabled" || code === "not_found") { setRefreshFailed(false); setLoad({ kind: "error", code }); }
+      if (code === "session" || code === "forbidden" || code === "not_found") { setRefreshFailed(false); setLoad({ kind: "error", code }); }
       else if (hasData.current) setRefreshFailed(true);
       else setLoad({ kind: "error", code });
     };

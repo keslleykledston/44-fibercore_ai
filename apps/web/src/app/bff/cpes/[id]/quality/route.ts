@@ -13,10 +13,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const caps = readCaps(c.data), runs = readRuns(r.data);
     return caps && runs ? reply({ caps, runs }) : reply({ error: "failed" }, 502);
   }
-  const st = c.status !== 200 ? c.status : r.status;
-  if (st === 403) return reply({ error: "disabled" }, 403);
-  if (st === 404) return reply({ error: "not_found" }, 404);
-  if (st === 401) return reply({ error: "session" }, 401);
+  // as duas leituras são julgadas juntas e a falha de autorização/ausência vence: sessão > inexistente > recusa (recurso desligado ou sem permissão) > falha
+  const sts = [c.status, r.status];
+  if (sts.includes(401)) return reply({ error: "session" }, 401);
+  if (sts.includes(404)) return reply({ error: "not_found" }, 404);
+  if (sts.includes(403)) return reply({ error: "forbidden" }, 403);
   return reply({ error: "failed" }, 502);
 }
 

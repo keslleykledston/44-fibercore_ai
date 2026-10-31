@@ -18,6 +18,11 @@ const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CODE = /^[a-z][a-z0-9_]{0,59}$/;
 const UP = /^[A-Z][A-Z0-9_]{0,59}$/;
 const MID = /^[a-z][a-z0-9_.]{0,59}$/;
+const GROUPS: readonly string[] = ["WAN", "OPTICAL", "ETHERNET", "WIFI", "CPE", "CORE", "INTERNET"];
+const SOURCES: readonly string[] = ["TR069_READ", "TR069_ACTIVE", "OLT_ADAPTER", "SD001", "ACS_CACHE"];
+const SCOPES: readonly string[] = ["SERVICE_WAN", "MGMT_WAN", "WAN_UNCLASSIFIED", "LAN", "PON", "WIFI", "CPE"];
+const CONF: readonly string[] = ["low", "medium", "high"];
+const INST = /^[A-Za-z0-9_.:-]{1,40}$/;
 const STATUSES: readonly string[] = ["valid", "stale", "not_supported", "not_available", "not_applicable", "failed", "inconclusive"];
 const STATES: readonly string[] = ["ok", "attention", "stale", "unknown"];
 const GLOBAL: readonly string[] = ["attention", "no_anomalies_observed", "insufficient_data"];
@@ -32,15 +37,18 @@ export function readCaps(d: unknown): QCaps | null {
 }
 
 function readMetric(m: QMetric): QMetric | null {
-  if (!m || !MID.test(m.id) || !STATUSES.includes(m.status) || typeof m.group !== "string") return null;
+  if (!m || !MID.test(m.id) || !STATUSES.includes(m.status) || !GROUPS.includes(m.group) || !SOURCES.includes(m.source) || !SCOPES.includes(m.scope)) return null;
+  if (m.instance !== null && m.instance !== undefined && (typeof m.instance !== "string" || !INST.test(m.instance))) return null;
+  if (m.collected_at !== null && m.collected_at !== undefined && (typeof m.collected_at !== "string" || Number.isNaN(Date.parse(m.collected_at)))) return null;
+  if (m.freshness_s !== null && m.freshness_s !== undefined && (typeof m.freshness_s !== "number" || !Number.isFinite(m.freshness_s))) return null;
+  if (m.unit !== null && m.unit !== undefined && (typeof m.unit !== "string" || !/^[A-Za-z%\/]{1,12}$/.test(m.unit))) return null;
   const keeps = m.status === "valid" || m.status === "stale";
   const v = m.value;
+  if (keeps && v !== null && v !== undefined && !(typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v)) || (typeof v === "string" && v.length <= 40 && /^[\w .:/-]*$/.test(v)))) return null;
   const judged = (m as unknown as { details?: { judged?: unknown } }).details?.judged;
-  const value = keeps && (typeof v === "string" || typeof v === "number" || typeof v === "boolean") ? (typeof v === "string" ? v.slice(0, 40) : v) : null;
   return {
-    id: m.id, group: str(m.group, 20), status: m.status, value, unit: typeof m.unit === "string" ? m.unit.slice(0, 12) : null, source: str(m.source, 20),
-    scope: str(m.scope, 20), instance: typeof m.instance === "string" ? m.instance.slice(0, 40) : null,
-    collected_at: typeof m.collected_at === "string" ? m.collected_at : null, freshness_s: typeof m.freshness_s === "number" && m.freshness_s >= 0 ? m.freshness_s : null,
+    id: m.id, group: m.group, status: m.status, value: keeps && v !== undefined ? v : null, unit: m.unit ?? null, source: m.source, scope: m.scope, instance: m.instance ?? null,
+    collected_at: m.collected_at ?? null, freshness_s: m.freshness_s !== null && m.freshness_s !== undefined && m.freshness_s >= 0 ? m.freshness_s : null,
     judged: typeof judged === "boolean" ? judged : null,
   };
 }
@@ -59,15 +67,15 @@ export function readRun(r: unknown): QRun | null {
   const metrics = o.metrics.map(readMetric);
   if (metrics.some((m) => m === null)) return null;
   return {
-    id: o.id, mode: o.mode, created_at: String(o.created_at),
+    id: o.id, mode: o.mode, created_at: Number.isNaN(Date.parse(String(o.created_at))) ? "" : String(o.created_at),
     metrics: metrics as QMetric[],
     hypotheses: o.hypotheses.filter((h) => h && UP.test(h.code)).map((h) => ({
-      code: h.code, label: str(h.label, 200), confidence: str(h.confidence, 10), recommended_check: str(h.recommended_check, 200),
+      code: h.code, label: str(h.label, 200), confidence: CONF.includes(h.confidence) ? h.confidence : "low", recommended_check: str(h.recommended_check, 200),
       caveats: Array.isArray(h.caveats) ? h.caveats.slice(0, 5).map((c) => str(c, 200)) : [],
     })),
     summary: {
       state: s.state, indicators: ind, note: typeof s.note === "string" ? s.note.slice(0, 200) : null,
-      observations: s.observations.filter((x) => x && UP.test(x.code)).slice(0, 12).map((x) => ({ code: x.code, scope: str(x.scope, 20) })),
+      observations: s.observations.filter((x) => x && UP.test(x.code)).slice(0, 12).map((x) => ({ code: x.code, scope: SCOPES.includes(x.scope) ? x.scope : "CPE" })),
     },
   };
 }
@@ -103,8 +111,9 @@ export const OBSERVATION_TEXT: Record<string, string> = {
 export const SCOPE_TEXT: Record<string, string> = { WAN_UNCLASSIFIED: "WAN não classificada (serviço ou gerência)", SERVICE_WAN: "WAN de serviço", MGMT_WAN: "WAN de gerência", PON: "PON", WIFI: "Wi‑Fi", CPE: "Aparelho", LAN: "LAN" };
 export const CONFIDENCE_TEXT: Record<string, string> = { low: "confiança baixa", medium: "confiança média", high: "confiança alta" };
 export const LOAD_ERROR: Record<string, string> = {
-  disabled: "O diagnóstico de qualidade está desligado para este provedor.", not_found: "Este aparelho não existe mais.",
+  not_found: "Este aparelho não existe mais.",
   session: "Sua sessão expirou. Recarregue a página e entre de novo.", failed: "Não foi possível carregar o diagnóstico de qualidade agora.",
+  forbidden: "O diagnóstico de qualidade não está disponível para você: o recurso está desligado para este provedor ou o seu papel não permite.",
 };
 export const REFUSAL_TEXT: Record<string, string> = {
   forbidden: "Seu papel não permite pedir a leitura de qualidade.", disabled: "O diagnóstico de qualidade está desligado para este provedor.",
