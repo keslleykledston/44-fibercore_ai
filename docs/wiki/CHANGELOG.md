@@ -288,3 +288,11 @@
 - Rede reconstruída no padrão do protótipo Lovable: matriz de PONs, árvore OLT/PON, lista com filtros e painel de detalhes ao lado (nunca sobreposto), abas Resumo/Aparelho/Histórico, painéis frontais conceituais; ONU 360° com trilha e painel frontal. BFF `GET /bff/onus/{id}/history`. Atrás da flag `onu_quick_inspector`.
 - Inventário: janela de dado recente da OLT de 15 para 35 min (2 coletas + folga; CPE/ACS seguem 15 min); coleta de 25 min atrás é recente, de 40 min é defasada.
 
+
+## Unreleased — Speed Diagnostics TR-143, metade da nuvem (PR 1, ADR-0038)
+- Migração aditiva 0034: `speed_endpoints` (destinos LÓGICOS, sem coluna de URL/endereço/credencial) e `speed_test_runs` (uma linha por direção, com o número calculado pela nuvem; CHECK impede figura sem medição e zero). RLS forçada; a aplicação só lê os destinos; o dono escreve por `speed-endpoint-set`.
+- Operações `speed_test_download`/`speed_test_upload` no motor de jobs e no **catálogo de bancada** (emenda ao ADR-0030): só o CPE de bancada, parâmetros `{target, profile}` fechados, autorização prévia de uso único; `HOMOLOGATED_WRITES` segue vazio. Condição extra do gate: `speed_test_redirect_probe` ou `speed_test_egress_acl` no registro, com evidência (`redirect_unverified`).
+- `app/core/speed.py`: `compute()` puro (DL/UL, parcial < 3 s ou < 95 % do perfil, inconclusivo, nunca zero), formato fechado do relatório do Edge, limites 1/ONT · 1/PON (vínculo ONU↔CPE confirmado) · 2/provedor sob trava transacional.
+- Rotas (todas 403 `feature_disabled` com a flag `speed_diagnostics` desligada, padrão): `GET /v1/cpes/{id}/speed/capabilities|runs|runs/{id}`, `POST /v1/cpes/{id}/speed/runs`, `GET /v1/speed/health`. Permissão `diagnostics:speed_run` (isp_admin, engineer, noc_n2); autorizar a manobra por API: engineer e isp_admin.
+- `bench.SPEED_EDGE_SUPPORT = False`: sem a metade do Edge (PR 2) nada é autorizado, aprovado nem despachado.
+- Nada foi executado em ONT, OLT ou ACS reais.

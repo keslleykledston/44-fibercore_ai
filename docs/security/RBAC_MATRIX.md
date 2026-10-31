@@ -27,6 +27,7 @@
 | `erp:manage` | R3 | sim | não | Cadastrar e desativar a conexão com o ERP do provedor (guarda só a referência do segredo, nunca o segredo) |
 | `erp:test` | R2 | não | não | Testar a conexão com o ERP (autentica e nada mais; somente leitura) |
 | `diagnostics:run` | R0 | não | sim | Rodar diagnósticos (somente leitura) |
+| `diagnostics:speed_run` | R2 | sim | sim | Pedir um teste de banda (TR-143) da ONT (gera tráfego no aparelho; só bancada, com autorização prévia) |
 | `members:read` | R1 | não | não | Ver os membros do provedor e o estado do MFA de cada um |
 | `members:manage` | R3 | sim | não | Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite) |
 | `platform:delegate` | R3 | sim | não | Conceder e revogar o acesso temporário (até 8 h, com motivo) do suporte da plataforma a este provedor |
@@ -61,6 +62,7 @@
 | `erp:manage` | ✔ |  |  |  |  |  |  |  |  |
 | `erp:test` | ✔ |  |  |  |  |  |  |  |  |
 | `diagnostics:run` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
+| `diagnostics:speed_run` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `members:read` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `members:manage` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `platform:delegate` | ✔ |  |  |  |  |  |  |  |  |
@@ -109,6 +111,10 @@
 | POST | `/v1/cpes/{cpe_id}/ont-config/changes/{change_id}/submit` | `ont_config:request` |
 | GET | `/v1/cpes/{cpe_id}/ont-config/configuration` | `inventory:read` |
 | GET | `/v1/cpes/{cpe_id}/ont-config/form-schema` | `inventory:read` |
+| GET | `/v1/cpes/{cpe_id}/speed/capabilities` | `inventory:read` |
+| GET | `/v1/cpes/{cpe_id}/speed/runs` | `inventory:read` |
+| POST | `/v1/cpes/{cpe_id}/speed/runs` | `diagnostics:speed_run` |
+| GET | `/v1/cpes/{cpe_id}/speed/runs/{run_id}` | `inventory:read` |
 | GET | `/v1/cpes/{cpe_id}/state` | `inventory:read` |
 | GET | `/v1/customers` | `customers:read` |
 | GET | `/v1/customers/{customer_id}/context` | `customers:read` |
@@ -168,6 +174,7 @@
 | GET | `/v1/platform/modules` | (sessão válida, sem permissão) |
 | GET | `/v1/platform/versions` | (sessão válida, sem permissão) |
 | GET | `/v1/roles` | `roles:read` |
+| GET | `/v1/speed/health` | `inventory:read` |
 | GET | `/v1/team` | `members:read` |
 | GET | `/v1/team/activity` | `audit:read` |
 | POST | `/v1/team/invites` | `members:manage` |

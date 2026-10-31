@@ -38,7 +38,17 @@ BENCH_OPS: dict[str, BenchOp] = {
     # H4: the bench ONU on the real OLT. No parameter at all: port and ONT-ID come from the Edge's LOCAL list, never from here.
     "onu_reset": BenchOp("olt", frozenset()),
     "onu_deactivate": BenchOp("olt", frozenset()),    # a cycle: deactivate, verify, REACTIVATE, verify
+    # ADR-0038 (amendment to this ADR): the TR-143 throughput test of the bench CPE. The parameters are two LOGICAL names: the endpoint id (cloud catalog,
+    # never a URL) and a file-size profile from a closed list; the Edge maps the id to its own local address.
+    "speed_test_download": BenchOp("tr069", frozenset({"target", "profile"})),
+    "speed_test_upload": BenchOp("tr069", frozenset({"target", "profile"})),
 }
+SPEED_OPS = frozenset({"speed_test_download", "speed_test_upload"})
+# The Edge half of the speed test (internal/speed) is a separate delivery (ADR-0038 PR 2). Until it ships, no speed test can be authorized, approved or
+# dispatched: an Edge that does not know the operation must never receive its envelope.
+SPEED_EDGE_SUPPORT = False
+SPEED_ENDPOINT_RE = re.compile(r"[a-z0-9][a-z0-9-]{1,30}")
+SPEED_PROFILES = ("10mb", "50mb", "200mb")
 # the ONLY values a parameter may take, per operation (ADR-0030 item 4); anything else is refused at preview, at the gate and again at the Edge
 SSID_RE = re.compile(r"BANCADA-[A-Z0-9]{1,16}")
 
@@ -50,6 +60,9 @@ def params_valid(operation: str, params) -> bool:
     if operation == "set_wifi_ssid":
         v = params["ssid"]
         return isinstance(v, str) and SSID_RE.fullmatch(v) is not None
+    if operation in SPEED_OPS:
+        t, f = params["target"], params["profile"]
+        return isinstance(t, str) and SPEED_ENDPOINT_RE.fullmatch(t) is not None and isinstance(f, str) and f in SPEED_PROFILES
     return True
 from datetime import timedelta  # noqa: E402
 
@@ -118,7 +131,7 @@ def gate(conn: Connection, tenant_id: UUID, job, *, mode: str, by: UUID | None =
     spec = BENCH_OPS.get(job.operation)
     if spec is None or job.target_type != "cpe":
         return "operation_not_homologated"
-    if not EDGE_SUPPORT:
+    if not EDGE_SUPPORT or (job.operation in SPEED_OPS and not SPEED_EDGE_SUPPORT):
         return "edge_support_missing"
     # promotion of the registry entry (owner CLI, exclusive) and this evaluation (shared) cannot interleave: a decision taken here sees either
     # the whole promotion or none of it, and the promotion waits for this transaction (which also emits the envelope) to finish
@@ -138,6 +151,10 @@ def gate(conn: Connection, tenant_id: UUID, job, *, mode: str, by: UUID | None =
     cpe = profile_for(conn, tenant_id, job.target_id, spec.protocol)
     if cpe is None or not (cpe.vendor and cpe.model and cpe.firmware):
         return "capability_not_observed"
+    if job.operation in SPEED_OPS:   # ADR-0038: the test node must not be able to steer the CPE elsewhere (3xx probe, or the confirmed egress ACL)
+        from app.core import speed  # local: speed.py is independent of this module's load order
+        if not speed.redirect_verified(conn, tenant_id, cpe.vendor, cpe.model, cpe.firmware):
+            return "redirect_unverified"
     certs = {r.certification: r for r in conn.execute(
         text("SELECT certification, evidence_ref, verified_at FROM device_capabilities WHERE tenant_id = :t AND lower(vendor) = lower(:v) AND lower(model) = lower(:m) "
              "AND firmware = :f AND protocol = :p AND operation = :o AND status = 'supported'"),

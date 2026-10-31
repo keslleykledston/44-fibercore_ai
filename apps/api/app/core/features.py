@@ -26,6 +26,7 @@ FEATURES: dict[str, bool] = {
     "onu_quick_inspector": False,             # UX 2.2 (handoff Quick Inspector): painel lateral de resumo da ONU na lista de Rede; desligada = a lista abre o resumo antigo
     "ont_config": False,                      # ADR-0034 (v2.4): configuração/capacidades/formulários da ONT, SOMENTE LEITURA nesta entrega; o dono liga por provedor
     "erp_hubsoft": False,                     # ADR-0033: conexão HubSoft (P0, somente leitura); só o dono liga, por provedor, depois de configurar o segredo no servidor
+    "speed_diagnostics": False,               # ADR-0038: teste de banda TR-143 da ONT (somente bancada nesta fase; o gate de escrita é o de bancada, a flag só mostra/esconde)
     "smart_diagnostics_copilot": False,       # bloqueada até ADR-0015 / ADR-SD-006
 }
 

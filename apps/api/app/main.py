@@ -24,6 +24,7 @@ from app.api.olt_queries import router as olt_queries_router
 from app.api.ont_config import router as ont_config_router
 from app.api.routes import router
 from app.api.session import router as session_router
+from app.api.speed import router as speed_router
 from app.api.team import router as team_router
 from app.core.settings import get_settings, required_mfa_roles
 
@@ -68,6 +69,7 @@ app.include_router(bench_auth_router)
 app.include_router(device_actions_router)
 app.include_router(olt_queries_router)
 app.include_router(ont_config_router)
+app.include_router(speed_router)
 app.include_router(context_router)
 app.include_router(diagnostics_router)
 app.include_router(diagnostic_jobs_router)

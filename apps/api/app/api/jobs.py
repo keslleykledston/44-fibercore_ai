@@ -25,7 +25,7 @@ from sqlalchemy import Connection, text
 
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import audit
-from app.core import bench, features, jobsign, olt_cache, olt_ownership, olt_query
+from app.core import bench, features, jobsign, olt_cache, olt_ownership, olt_query, speed
 from app.core.settings import Settings, get_settings
 from app.events import outbox
 
@@ -51,6 +51,9 @@ OPERATIONS: dict[str, Operation] = {
     # ADR-0030 H4 (bench only): the ONU of the bench CPE, on the OLT. The target is the bench CPE; the Edge resolves the ONU from its own local list.
     "onu_reset": Operation("R2", "cpe", True, 1),
     "onu_deactivate": Operation("R2", "cpe", True, 1),
+    # ADR-0038 (bench only): TR-143 throughput test of the bench CPE; the writes are the diagnostic's own parameters, the traffic goes to a logical endpoint
+    "speed_test_download": Operation("R2", "cpe", True, 1),
+    "speed_test_upload": Operation("R2", "cpe", True, 1),
     "provision_onu": Operation("R3", "olt", True, 2),
     # ADR-0029: a read-only query of the OLT's CLI; no approval, an exact closed intent, off by tenant flag and until the Edge channel exists
     "olt_query": Operation("R0", "olt", False, 0),
@@ -416,7 +419,7 @@ class ResultIn(BaseModel):
     state: Literal["accepted", "succeeded", "failed"]
     detail: str | None = Field(default=None, max_length=500)
     postcheck_ok: bool = False
-    data: dict | None = None  # olt_query only: the typed result (ADR-0029 item 4), checked against the query's closed shape
+    data: dict | None = None  # olt_query / speed_test_* only: the typed result (ADR-0029 item 4; ADR-0038), checked against the operation's closed shape
 
 
 def _cache_result(conn: Connection, p: Principal, row, data: dict) -> None:
@@ -440,8 +443,19 @@ def job_result(
         raise HTTPException(403, "job belongs to another edge")
     to = {"accepted": "ACCEPTED", "failed": "FAILED"}.get(body.state) or ("SUCCEEDED" if body.postcheck_ok else "UNKNOWN")
     detail, res = body.detail, {"detail": body.detail, "postcheck_ok": body.postcheck_ok}
-    if body.data is not None and row.operation != "olt_query":
-        raise HTTPException(422, "data only exists on olt_query results")
+    if body.data is not None and row.operation != "olt_query" and row.operation not in bench.SPEED_OPS:
+        raise HTTPException(422, "data only exists on olt_query and speed test results")
+    counters = None
+    if row.operation in bench.SPEED_OPS:
+        # a success needs the Edge's counters in the exact shape of THIS job (direction, endpoint, profile); otherwise it is a failure and nothing the Edge sent is stored
+        if to == "SUCCEEDED":
+            prm = _row_params(row)
+            counters = speed.check_counters(speed.OPERATION_DIRECTION[row.operation], prm.get("target", ""), prm.get("profile", ""), body.data)
+            if counters is None:
+                to, detail = "FAILED", "invalid_result"
+                res = {"detail": detail, "postcheck_ok": False}
+        elif body.data is not None:
+            raise HTTPException(422, "a typed result comes only with a success")
     if row.operation == "olt_query" and to == "SUCCEEDED":
         # a success needs the typed result, in the exact shape of THIS job's query; otherwise it is a failure, and nothing the Edge sent is stored as a result
         if body.data is None or not olt_query.check_result(_row_params(row).get("query_id", ""), body.data):
@@ -455,6 +469,8 @@ def job_result(
         return  # idempotent: the Edge re-sends a durable result until acknowledged; the same outcome is a no-op
     if not cas(conn, job_id, to, extra=", result = CAST(:res AS jsonb)", params={"res": json.dumps(res)}):
         raise HTTPException(409, f"illegal transition from {row.status} to {to}")
+    if counters is not None:
+        speed.store_result(conn, p.tenant_id, job_id, speed.OPERATION_DIRECTION[row.operation], _row_params(row)["profile"], counters)
     if to in ("FAILED", "UNKNOWN") and row.operation in bench.BENCH_OPS and _blocked_reason(row.operation):
         bench.lock_target(conn, row.target_id, f"bench write ended {to}")  # no retry, no new write until `bench-unlock`
     if row.operation == "olt_query" and to == "SUCCEEDED" and "data" in res:
