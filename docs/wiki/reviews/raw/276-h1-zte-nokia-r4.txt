@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192f5-1313-78a1-a943-8c503c0bc593).
+[codex] Turn started (01a192f5-134d-7a41-812f-1a154628b7fa).
+[codex] Assistant message captured: Vou conferir o diff contra `main`, com foco na consulta SQL, no filtro de frescor e na evidên...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/bench/H1-identifi...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/bench/H1-identifi... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/bench/H1-identificacao-zte-f670l-2026-10-31.md | sed -n '17,3...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/wiki/bench/H1-identificacao-zte-f670l-2026-10-31.md | sed -n '17,3... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não confirme ainda: o SQL aplica frescor contra o máx...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não confirme ainda: o SQL aplica frescor contra o máximo global de `onus`, não contra a PON nem o tenant consultado, então o resultado de 12 linhas e o horário único não são garantidos pelo método documentado.
+
+Findings:
+- [medium] O filtro de frescor usa uma referência global (docs/wiki/bench/H1-identificacao-zte-f670l-2026-10-31.md:26-28)
+  A subconsulta em `onus` calcula `max(observed_at)` sem restringir tenant ou PON. Se outro tenant ou outra coleta avançar esse máximo, as linhas da PON `0/0/14` podem ser excluídas ou selecionadas por uma janela que não representa a coleta dela; além disso, o SQL não associa as linhas à coleta de OLT das 16:59 UTC. Assim, o resultado informado (12 linhas, todas às 16:59:01 UTC) depende de uma execução específica e não é assegurado pela consulta reproduzível. Derive a referência da própria PON/tenant, preferencialmente selecionando explicitamente o timestamp/snapshot esperado, e registre ou preserve a saída agregada que comprova os valores.
+  Recommendation: Restringir a referência de frescor ao `pon_id` e `tenant_id` da PON consultada e comparar com o timestamp esperado da coleta; repetir a consulta validada nas duas páginas.

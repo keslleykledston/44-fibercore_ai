@@ -1,0 +1,16 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192f3-d890-74d1-baf1-2ac7a1912925).
+[codex] Turn started (01a192f3-d8cb-7cb1-b7ae-4899ff02d80b).
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não publicar ainda: a afirmação de ONUs de clientes n...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não publicar ainda: a afirmação de ONUs de clientes na mesma PON não tem evidência citada que permita verificá-la.
+
+Findings:
+- [medium] A presença de ONUs de clientes na PON não é verificável no registro (docs/wiki/bench/H1-identificacao-zte-f670l-2026-10-31.md:12)
+  As duas páginas afirmam que a PON contém ONUs de clientes e não é exclusiva da bancada, mas não apontam evidência para essa classificação. Os dados resumidos de contagem e família de fabricante não demonstram, por si só, quais ONUs pertencem a clientes. Isso pode registrar como fato uma classificação sem suporte e orientar decisões de bancada com base nela.
+  Recommendation: Anexe ou cite evidência autorizada que sustente a classificação; se ela não estiver disponível, descreva apenas a contagem observada e remova a afirmação sobre ONUs de clientes.

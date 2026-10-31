@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192f6-570c-7f83-a3f6-925fd7e4c725).
+[codex] Turn started (01a192f6-5746-7943-b450-980f5f3543dc).
+[codex] Assistant message captured: Vou conferir o diff inteiro contra `main`, com foco na consulta parametrizada e na evidência ...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=60 main...HEA...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=60 main...HEA... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --unified=20 main...HEAD -- docs/wiki/reviews/raw/273-h1-zte-nokia-r1...
+[codex] Command completed: /bin/bash -lc "git diff --unified=20 main...HEAD -- docs/wiki/reviews/raw/273-h1-zte-nokia-r1... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Ainda há um bloqueio material: o parâmetro `:tenant_i...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Ainda há um bloqueio material: o parâmetro `:tenant_id` não corresponde ao uso de `psql` documentado, então a consulta não é reproduzível como escrita. Os totais estão registrados, mas não podem ser confirmados executando esse SQL sem corrigir o parâmetro nas duas páginas.
+
+Findings:
+- [medium] A consulta usa o parâmetro de tenant com sintaxe incompatível com o exemplo de psql (docs/wiki/bench/H1-identificacao-zte-f670l-2026-10-31.md:28-31)
+  A consulta usa `o.tenant_id = :tenant_id`, mas a instrução de uso indica expansão como `:'tenant_id'`. Em `psql`, a forma sem aspas insere o valor bruto; com o UUID do tenant, isso não produz um literal UUID SQL válido. Assim, a consulta documentada falha antes de retornar os agregados e não permite reproduzir os valores registrados. A mesma discrepância aparece no H1 da Nokia.
+  Recommendation: Use `o.tenant_id = :'tenant_id'` no SQL e mantenha o exemplo de `\set` consistente; aplique a correção também ao H1 da Nokia e confirme novamente a saída agregada.

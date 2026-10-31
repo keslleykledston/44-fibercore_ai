@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192f5-834e-7940-adc1-1593e2a4824d).
+[codex] Turn started (01a192f5-838c-75f0-aaaa-ba9666688c95).
+[codex] Assistant message captured: Vou conferir o diff inteiro contra `main`, com foco em como os documentos fixam o horário da ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/bench/H1-identifi...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/bench/H1-identifi... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"CREATE TABLE.*onus|observed_at|pon_ports|serial.*String|serial =|seria...
+[codex] Command completed: /bin/bash -lc "rg -n \"CREATE TABLE.*onus|observed_at|pon_ports|serial.*String|serial =|seria... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '35,66p' apps/api/alembic/versions/0005_inventory.py; sed -n '155,212p'...
+[codex] Command completed: /bin/bash -lc "sed -n '35,66p' apps/api/alembic/versions/0005_inventory.py; sed -n '155,212p'... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não confirme ainda: o horário explícito filtra as lin...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não confirme ainda: o horário explícito filtra as linhas, mas a consulta não identifica uma PON única; pode somar PONs diferentes com o mesmo caminho e horário.
+
+Findings:
+- [medium] A consulta não restringe o resultado à PON consultada (docs/wiki/bench/H1-identificacao-zte-f670l-2026-10-31.md:27-29)
+  O filtro usa apenas `pon_path = '0/0/14'` e o instante; não restringe `tenant_id`, `olt_id` ou `pon_id`. No esquema, `pon_path` é único somente dentro de cada OLT e tenant. Se mais de uma PON compartilhar esse caminho e tiver observações naquele segundo, a consulta agregará suas ONUs; `count(DISTINCT observed_at) = 1` não detecta essa mistura. Isso pode tornar incorretos os totais 12/5/2 e a conclusão sobre a PON descrita. Inclua predicados para identificar a OLT e o tenant — ou o `pon_id` — e confirme novamente os agregados.
+  Recommendation: Restringir a consulta à OLT e ao tenant da coleta (ou ao `pon_id`) e atualizar a saída agregada nos dois H1 com o resultado dessa consulta.
