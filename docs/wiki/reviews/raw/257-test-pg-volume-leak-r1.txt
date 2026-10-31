@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192ba-8806-7dc0-bedf-b06600282266).
+[codex] Turn started (01a192ba-8add-7b40-8a29-cee17befe9ac).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir as rotas de criação e teardown para verificar c...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- Makefile scripts/test-env.s...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- Makefile scripts/test-env.s... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba Makefile | sed -n '34,54p'; nl -ba scripts/test-env.sh | sed -n '1,30p'...
+[codex] Command completed: /bin/bash -lc "nl -ba Makefile | sed -n '34,54p'; nl -ba scripts/test-env.sh | sed -n '1,30p'... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: o teardown global por nome pode rem...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: o teardown global por nome pode remover contêineres alheios e, com `-v`, apagar seus volumes anônimos.
+
+Findings:
+- [high] Teardown por nome pode apagar dados de outro uso (Makefile:36-37)
+  `test-api` remove `fc-test-pg` e `fc-test-nats` antes de iniciar e no trap; `test-env.sh start/stop` faz o mesmo. Se outro uso já tiver um contêiner com esses nomes, o novo `-v` apaga também seus volumes anônimos. O cleanup inicial em `test-api` já era destrutivo por nome, mas a mudança amplia o impacto para os dados desses volumes. Use nomes exclusivos por execução e remova apenas os IDs criados por ela, ou valide labels de propriedade antes de remover.
+  Recommendation: Substitua nomes globais por identificadores únicos e registre os IDs retornados pelo `docker run`; faça teardown somente desses IDs. Aplique a mesma regra em `scripts/test-env.sh`.
+
+Next steps:
+- Corrigir o escopo de propriedade dos contêineres antes de usar `docker rm -v` nos nomes compartilhados.

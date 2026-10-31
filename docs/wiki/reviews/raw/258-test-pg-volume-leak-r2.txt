@@ -1,0 +1,29 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192bd-98d0-7401-995d-b0120d0c2d53).
+[codex] Turn started (01a192bd-990f-7b03-978c-5ee5bb8f3aae).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os caminhos de falha no `trap` e na criação/remoçã...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- Makefile scripts/test-env.s...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- Makefile scripts/test-env.s... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"test-env\\.sh|TEST_PG_PORT|fc-test-pg|fc-test-nats|make test-api\" --g...
+[codex] Command completed: /bin/bash -lc "rg -n \"test-env\\.sh|TEST_PG_PORT|fc-test-pg|fc-test-nats|make test-api\" --g... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- Makefile scripts/test-env.s...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- Makefile scripts/test-env.s... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"A descoberta da r1 foi resolvida: `make test-api` rem...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+A descoberta da r1 foi resolvida: `make test-api` remove os IDs retornados por esta execução, e `test-env.sh` verifica o rótulo antes de remover contêineres com nomes conhecidos. Ainda há riscos materiais no trap e na inicialização parcial do `test-env.sh`.
+
+Findings:
+- [medium] Trap pode executar cleanup com IDs vazios ou remover contêineres de outra execução (Makefile:35-37)
+  O trap é instalado antes de qualquer `docker run` e `PG`/`NATS` começam vazios. Se o primeiro `docker run` falhar, o cleanup chama `docker rm -fv "" ""`; se apenas um run tiver sucesso, o outro argumento permanece vazio. Além do erro ser ocultado, uma versão futura do comando que aceite ou interprete valores vazios de forma diferente ampliaria o risco. Guarde IDs individualmente e só chame `docker rm` para IDs não vazios.
+  Recommendation: No cleanup, condicione cada remoção a `[[ -n $PG ]]` ou `[[ -n $NATS ]]`; preserve as aspas e trate cada ID separadamente.
+- [medium] Falha no segundo `docker run` deixa o Postgres iniciado por `test-env.sh` (scripts/test-env.sh:19-20)
+  `start` remove contêineres antigos próprios e depois inicia o Postgres antes do NATS, sem trap de rollback. Se o run do NATS falhar (por exemplo, porta 54222 ocupada), `set -e` encerra o script, mas deixa o Postgres com o rótulo de posse, rodando e ocupando a porta 55432. Isso transforma uma falha de inicialização em estado parcial persistente que exige um `stop` manual.
+  Recommendation: Arme um trap de falha durante `start` que remova apenas os IDs desta tentativa, e desarme-o depois que ambos os serviços estiverem prontos.
+- [low] `test-env.sh` ainda usa porta fixa para Postgres e NATS (scripts/test-env.sh:19-20)
+  `start` continua fixando 55432 e 54222, enquanto `test-api` também usa 54222 e, por padrão, 55432. Execuções concorrentes ou um serviço já ocupando uma dessas portas fazem `docker run` falhar; combinado à inicialização sem rollback, isso pode deixar um ambiente parcialmente criado. A porta do Postgres em `make test-api` é configurável, mas a de NATS e as duas portas do script não são.
+  Recommendation: Permita configurar as portas e trate colisões antes ou durante a inicialização; garanta rollback dos contêineres criados quando qualquer bind falhar.
