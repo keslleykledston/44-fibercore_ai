@@ -6,6 +6,7 @@ import { SourceChip } from "@/components/SourceChip";
 import { DataFreshness, ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
 import { CapabilityGate } from "@/components/CapabilityGate";
+import { FaceplateCard } from "@/components/Faceplate";
 import { OntSidebar } from "@/components/OntSidebar";
 import { humanHours } from "@/lib/offline";
 import type { Capability, Onu360, OnuCustomer, OnuHistory } from "@/lib/types";
@@ -38,7 +39,18 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
       <PageHeader title={`ONU ${o.serial}`} subtitle="Visão completa de uma ONU, com a origem de cada dado" helpSlug="rede/onu-360">
         <Link href="/rede" className="inline-flex min-h-touch items-center rounded-btn px-3 text-sm text-accent hover:underline">← Voltar para Rede</Link>
       </PageHeader>
+      <nav aria-label="Trilha" className="mb-4 flex flex-wrap items-center gap-1 text-sm text-muted" data-testid="onu360-breadcrumb">
+        <Link href="/rede" className="hover:text-text">Rede</Link><span aria-hidden>›</span>
+        <Link href={`/rede?olt=${encodeURIComponent(o.olt.id)}`} className="hover:text-text">{o.olt.name}</Link>
+        {o.pon?.path && <><span aria-hidden>›</span><Link href={`/rede?olt=${encodeURIComponent(o.olt.id)}&pon=${encodeURIComponent(o.pon.path)}`} className="hover:text-text">PON {o.pon.path}</Link></>}
+        <span aria-hidden>›</span><span className="text-text">ONU</span>
+      </nav>
       <div data-testid="onu360-ready" className="grid gap-4 md:grid-cols-2">
+        {/* padrão Lovable (ADR-0037): painel frontal e números de óptica no alto, sem um clique até a aba; o estado dos LEDs é derivado do que a OLT reportou */}
+        <div className="md:col-span-2" data-testid="onu360-faceplate">
+          <FaceplateCard model={o.cpe?.link === "confirmed" && o.cpe.device ? [o.cpe.device.vendor, o.cpe.device.model].filter(Boolean).join(" ") : null} reported={{ status: o.status, freshness: o.freshness }}
+            serial={o.serial} optics={{ rx: o.rx_dbm, tx: null }} />
+        </div>
         <Card title="Estado" testid="onu360-state">
           <dl>
             <Row k="Status"><StatusPill value={o.status} /></Row>

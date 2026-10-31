@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { DeviceThumbnail } from "@/components/DeviceThumbnail";
+import { FaceplateMini } from "@/components/Faceplate";
 import { EntityDetailDrawer } from "@/components/EntityDetailDrawer";
+import { OnuHistoryTab } from "@/components/OnuHistoryTab";
+import { OntFormBody, ago, useOntForm } from "@/components/OntConfigView";
+import { STATE_TEXT } from "@/lib/ont-config";
 import { readQuick, type QuickModel } from "@/lib/onu-quick";
 import type { Onu } from "@/lib/types";
 
@@ -34,8 +37,10 @@ function Body({ row, state, oltName, retry }: { row: Onu; state: State | null; o
   const m = state && state.id === row.id && state.kind === "ready" ? state.model : null;   // nunca mostra o resumo de OUTRA ONU como se fosse esta
   return (
     <div className="grid gap-4" data-testid="onu-quick-body">
-      <div className="flex justify-center"><DeviceThumbnail pon={m?.pon.tone ?? "neutral"} acs={m?.acs.tone ?? "neutral"} /></div>
-      <p className="-mt-2 text-center text-xs text-muted">Representação genérica do dispositivo. Os pontos de luz mostram a PON e o ACS, não os LEDs reais.</p>
+      <div className="flex items-center gap-3" data-testid="onu-quick-faceplate">
+        <FaceplateMini model={m?.acs.vendor_model ?? null} reported={{ status: row.status, freshness: row.freshness }} label={`Painel conceitual da ONU ${row.serial}`} />
+        <p className="text-xs text-muted">Painel conceitual: o estado dos LEDs é derivado do que a OLT reportou, não lido do equipamento.</p>
+      </div>
       {state?.id === row.id && state.kind === "error" && (
         <div role="alert" data-testid="onu-quick-error" className="grid gap-2 text-sm">
           <p className="text-danger">{ERR[state.code] ?? ERR.failed}</p>
@@ -67,8 +72,46 @@ function Body({ row, state, oltName, retry }: { row: Onu; state: State | null; o
   );
 }
 
-/** Resumo da ONU selecionada (UX 2.2). Largo (≥1024 px): painel direito NÃO modal, a lista continua navegável; estreito: gaveta modal. Trocar a ONU mantém o painel e nunca mostra o resumo da anterior. */
-export function OnuQuickInspector({ row, oltName, onClose }: { row: Onu | null; oltName: string; onClose: () => void }) {
+function DeviceTab({ cpeId }: { cpeId: string }) {
+  const { load, form, retry } = useOntForm(cpeId, true);
+  const newest = form?.groups.flatMap((x) => x.fields).map((f) => f.captured_at).sort().at(-1);
+  return (
+    <div className="grid gap-4" data-testid="onu-device-tab">
+      {form && <p className="text-xs text-muted" data-testid="ont-sidebar-state">{STATE_TEXT[form.state]}{newest ? ` Última leitura ${ago(newest)}.` : ""}</p>}
+      <OntFormBody load={load} form={form} retry={retry} />
+    </div>
+  );
+}
+
+const TABS: Record<string, string> = { resumo: "Resumo", aparelho: "Aparelho", historico: "Histórico" };
+
+/** Conteúdo do painel de gestão: abas Resumo (PON/ACS/RX/cliente), Aparelho (configuração somente leitura, só com roteador vinculado e o recurso ligado) e Histórico (30 dias). Uma aba por vez; trocar a ONU volta para Resumo. */
+function Pane({ row, state, oltName, retry, ontConfig }: { row: Onu; state: State | null; oltName: string; retry: () => void; ontConfig: boolean }) {
+  const [tab, setTab] = useState("resumo");
+  useEffect(() => { setTab("resumo"); }, [row.id]);
+  const m = state && state.id === row.id && state.kind === "ready" ? state.model : null;
+  const tabs = ["resumo", ...(ontConfig && m?.cpe ? ["aparelho"] : []), "historico"];
+  const active = tabs.includes(tab) ? tab : "resumo";
+  return (
+    <div className="grid gap-4">
+      <div role="tablist" aria-label="Seções da ONU" className="flex flex-wrap gap-1" data-testid="onu-pane-tabs">
+        {tabs.map((t) => (
+          <button key={t} role="tab" type="button" id={`onu-tab-${t}`} aria-selected={active === t} aria-controls="onu-pane-panel" onClick={() => setTab(t)}
+            className={`min-h-touch rounded-btn px-3 text-sm ${active === t ? "bg-accent text-[color:var(--on-accent)]" : "border border-line hover:bg-bg"}`}>{TABS[t]}</button>
+        ))}
+      </div>
+      <div role="tabpanel" id="onu-pane-panel" aria-labelledby={`onu-tab-${active}`}>
+        {active === "resumo" && <Body row={row} state={state} oltName={oltName} retry={retry} />}
+        {active === "aparelho" && m?.cpe && <DeviceTab key={m.cpe.id} cpeId={m.cpe.id} />}
+        {active === "historico" && <OnuHistoryTab key={row.id} onuId={row.id} />}
+      </div>
+    </div>
+  );
+}
+
+/** Painel de gestão da ONU selecionada (UX 2.2 / ADR-0037). Largo (≥1024 px): coluna ao lado da lista (a lista NUNCA fica escondida atrás dele) e segue a rolagem; estreito: gaveta modal.
+ *  Trocar a ONU mantém o painel e nunca mostra o conteúdo da anterior. */
+export function OnuQuickInspector({ row, oltName, onClose, ontConfig = false }: { row: Onu | null; oltName: string; onClose: () => void; ontConfig?: boolean }) {
   const wide = useWide();
   const [state, setState] = useState<State | null>(null);
   const [tries, setTries] = useState(0);
@@ -100,16 +143,22 @@ export function OnuQuickInspector({ row, oltName, onClose }: { row: Onu | null; 
     opened.current = row !== null;
   }, [row, wide]);
 
-  if (!row) return null;
-  const body = <Body row={row} state={state} oltName={oltName} retry={() => setTries((n) => n + 1)} />;
+  if (!row) {
+    return wide ? (
+      <aside aria-label="Detalhes da ONU" data-testid="onu-quick-empty" className="sticky top-4 hidden self-start rounded-card border border-line bg-surface p-5 shadow-card lg:block">
+        <p className="py-12 text-center text-sm text-muted">Selecione uma ONU para ver os detalhes.</p>
+      </aside>
+    ) : null;
+  }
+  const body = <Pane row={row} state={state} oltName={oltName} retry={() => setTries((n) => n + 1)} ontConfig={ontConfig} />;
   if (!wide) return <EntityDetailDrawer open onClose={onClose} title={`ONU ${row.serial}`}><div data-testid="onu-quick" data-mode="sheet">{body}</div></EntityDetailDrawer>;
   const m = state?.id === row.id && state.kind === "ready" ? state.model : null;
   return (
     <aside ref={panel} tabIndex={-1} role="complementary" aria-labelledby="onu-quick-title" data-testid="onu-quick" data-mode="panel" onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
-      className="fixed inset-y-0 right-0 z-30 flex w-[400px] max-w-full flex-col border-l border-line bg-surface text-text shadow-card">
-      <div className="sticky top-0 flex items-start justify-between gap-3 border-b border-line bg-surface p-4">
+      className="sticky top-4 flex max-h-[calc(100vh-2rem)] flex-col self-start overflow-hidden rounded-card border border-line bg-surface text-text shadow-card">
+      <div className="flex items-start justify-between gap-3 border-b border-line p-4">
         <div className="min-w-0">
-          <p className="text-xs text-muted">Resumo da ONU</p>
+          <p className="text-xs text-muted">Gestão da ONU</p>
           <h2 id="onu-quick-title" className="truncate font-mono text-lg font-semibold">{row.serial}</h2>
           {m && <p className={`text-sm font-medium ${TONE_CLASS[m.pon.tone]}`}>{m.pon.label}</p>}
         </div>

@@ -26,3 +26,10 @@ body { background: var(--bg); color: var(--text); }
 body { -webkit-font-smoothing: antialiased; }
 button, a { transition: background-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1), color 180ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-card); }
+/* painéis frontais (ADR-0037): LEDs piscam só sem preferência por menos movimento (a regra global acima já corta animações) */
+@keyframes fp-blink { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
+.fp-blink { animation: fp-blink 1.4s ease-in-out infinite; }
+.fp-blink-fast { animation: fp-blink .6s ease-in-out infinite; }
+.fp-label { font-size: 9px; font-family: inherit; }
+.fp-label-lg { font-size: 11px; font-family: inherit; }
+.fp-hatch { background-image: repeating-linear-gradient(45deg, transparent 0 5px, color-mix(in srgb, var(--border) 70%, transparent) 5px 6px); }
