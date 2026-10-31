@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1934d-6da7-79c0-928c-0a7c17bed300).
+[codex] Turn started (01a1934d-6ddf-78a0-aa82-5d2cd9138d71).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e conferir especialmente se o item 8 define uma condição...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/adr/ADR-0038-spee...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/adr/ADR-0038-spee... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md | sed -n '82,108p'; r...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md | sed -n '82,108p'; r... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o item 8 acrescenta uma condição d...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o item 8 acrescenta uma condição de desbloqueio, mas não comprova que a leitura terminal é nova e corresponde ao diagnóstico que ficou sem supervisão. Permanecem fatos operacionais explicitamente não verificados, incluindo o comportamento da ONT após perder o supervisor e os prazos do Edge e da nuvem.
+
+Findings:
+- [high] Estado terminal não identifica o diagnóstico reconciliado (docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md:92)
+  A condição permite desbloquear com `Completed` ou `Error_*` lido após o período de observação, mas não exige evidência de que essa leitura foi executada no ACS depois do diagnóstico desta execução — nem que o estado terminal corresponde a ele. Como o estado pode persistir no cache, uma leitura terminal anterior ou não correlacionada pode satisfazer a condição sem demonstrar que a operação deixada sem supervisão terminou. Isso pode liberar a bancada enquanto ainda há tráfego. Exigir leitura comprovadamente posterior à execução, correlacionada à operação por evidência de tempo/resultado, ou manter o bloqueio quando essa correlação não for possível.
+  Recommendation: Definir e exigir evidência de leitura fresca e correlacionada ao diagnóstico reconciliado antes de aceitar `bench-unlock`; cobrir o caso de estado terminal persistido de uma execução anterior.
+
+Next steps:
+- Antes de tratar o desbloqueio como condição segura, especificar como a leitura será comprovada como posterior e correlacionada à execução.
+- Manter como não verificados, conforme o próprio texto: duração dos perfis, Inform efetivo, execução das leituras enfileiradas, comportamento da ONT após perda do supervisor, expiração de tarefas no GenieACS e compatibilidade entre o orçamento do Edge e o prazo da nuvem.
