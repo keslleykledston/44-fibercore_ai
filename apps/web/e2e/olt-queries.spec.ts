@@ -138,7 +138,7 @@ test("consultas da OLT: hora, sincronismo e temperatura mostram só o formato fe
   data = { standby: "absent_or_fault" };
   await page.getByRole("button", { name: "Nova consulta" }).click();
   await ask(/Sincronismo de controladoras/);
-  await expect(page.getByTestId("olt-query-result")).toContainText("Sem placa de controle reserva");
+  await expect(page.getByTestId("olt-query-result")).toContainText("ausente ou com falha");
   data = { boards: [{ slot: 0, name: "H805GPFD", celsius: 45 }, { slot: 2, name: "H801MCUD1", celsius: 43 }] };
   await page.getByRole("button", { name: "Nova consulta" }).click();
   await ask(/Temperatura/);

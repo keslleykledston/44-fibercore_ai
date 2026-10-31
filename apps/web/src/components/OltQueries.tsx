@@ -46,7 +46,7 @@ function Result({ queryId, data }: { queryId: string; data: unknown }) {
   }
   if (queryId === "olt.sync") {
     if (!readSync(data)) return <p>O resultado não tinha o formato esperado e não foi mostrado.</p>;
-    return <p data-testid="olt-query-result">Sem placa de controle reserva (ausente ou com falha). A OLT roda só com a placa principal.</p>;
+    return <p data-testid="olt-query-result">A placa de controle reserva não está funcionando: ausente ou com falha. A resposta da OLT não diz qual das duas é; confira no equipamento se havia uma reserva instalada.</p>;
   }
   if (queryId === "olt.temperature") {
     const t = readTemperature(data);
