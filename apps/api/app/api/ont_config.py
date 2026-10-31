@@ -84,7 +84,10 @@ def ingest_cpe_config(body: ConfigSnapshot, p: Principal = Depends(require("inve
         cpes.add(hit[0])
         for f in c.fields:
             key = (hit[0], f.name, f.instance)
-            if key not in rows_by_key or f.captured_at > rows_by_key[key]["ca"]:
+            prev = rows_by_key.get(key)
+            if prev is not None and f.captured_at == prev["ca"] and json.dumps(f.value) != prev["v"]:
+                raise HTTPException(422, "conflicting_observations")   # same device time, different values: there is no honest winner, so the batch is refused
+            if prev is None or f.captured_at > prev["ca"]:
                 rows_by_key[key] = {"t": p.tenant_id, "c": hit[0], "n": f.name, "i": f.instance, "v": json.dumps(f.value), "ca": f.captured_at, "o": body.observed_at,
                                     "dm": c.data_model, "pr": c.binding.protocol}
     rows = list(rows_by_key.values())

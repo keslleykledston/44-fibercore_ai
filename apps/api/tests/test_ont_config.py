@@ -319,3 +319,13 @@ def test_a_repeated_field_in_one_batch_keeps_the_newest_and_does_not_break_the_r
     assert r.status_code == 202 and r.json()["fields"] == 2
     got = {f["name"]: f["value"] for f in client.get(f"/v1/cpes/{cpe}/ont-config/configuration", headers=h).json()["fields"]}
     assert got == {"wifi.ssid": "Novo", "wifi.channel": 11}
+
+
+def test_conflicting_observations_with_the_same_device_time_are_refused_in_any_order(client, seed, inv, on):
+    _cpe(client, inv, seed, "CFG-TIE-1", "ext-cfg-tie-1")
+    ag, at = agent(client, inv, "a1"), _now(-30)
+    for first, second in (("A", "B"), ("B", "A")):
+        r = client.post("/v1/edge/cpe-config", headers=ag, json=_report(inv, "ext-cfg-tie-1", [_f("wifi.ssid", "ssid/1", first, at), _f("wifi.ssid", "ssid/1", second, at)]))
+        assert r.status_code == 422 and r.json()["detail"] == "conflicting_observations"
+    same = client.post("/v1/edge/cpe-config", headers=ag, json=_report(inv, "ext-cfg-tie-1", [_f("wifi.ssid", "ssid/1", "A", at), _f("wifi.ssid", "ssid/1", "A", at)]))
+    assert same.status_code == 202 and same.json()["fields"] == 1      # the same value twice is just a repeat

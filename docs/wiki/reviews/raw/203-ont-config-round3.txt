@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18ffa-5928-7f52-bf67-830f6f421beb).
+[codex] Turn started (01a18ffa-5963-7550-9980-30ea587c4f96).
+[codex] Assistant message captured: Vou ler o diff contra `main` e rastrear especificamente como o lote é deduplicado, validado e...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/app/core/ont_confi...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/app/core/ont_confi... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/ont_config...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/ont_config... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'def _check_observed|def _bound_edge|class CpeBinding|observed_at' apps/...
+[codex] Command completed: /bin/bash -lc "rg -n 'def _check_observed|def _bound_edge|class CpeBinding|observed_at' apps/... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '25,45p;76,115p'; rg -n 'cpe_pro...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '25,45p;76,115p'; rg -n 'cpe_pro... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"No ship: within-batch deduplication can still choose ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+No ship: within-batch deduplication can still choose an older observation when device timestamps tie, contradicting the stated newest-wins rule and making the result depend on config order.
+
+Findings:
+- [medium] Equal timestamps make duplicate-field resolution order-dependent (apps/api/app/api/ont_config.py:144-147)
+  The batch map replaces an existing row only when `captured_at` is strictly greater. If the same CPE, field, and instance appears more than once with equal timestamps but different values, the first value wins; reversing the configs changes what gets stored. This can occur with repeated CPE entries in one snapshot and leaves the outcome dependent on input ordering. Define a deterministic tie policy (for example, reject conflicting ties or add a stable secondary ordering) and cover it with a test.
+  Recommendation: Handle equal `captured_at` values explicitly for duplicate keys, rejecting conflicting observations or applying a documented deterministic tie-breaker.
