@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1929a-a49e-75e3-9875-5e7dc8c83b25).
+[codex] Turn started (01a1929a-a6e5-7b42-bf36-39299d7b71f5).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e as linhas exatas dos três arquivos, com foco nos risco...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- infra/compose/speed-node.co...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- infra/compose/speed-node.co... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba infra/compose/speed-node.compose.yaml && nl -ba tools/speed-node/Docker...
+[codex] Command completed: /bin/bash -lc "nl -ba infra/compose/speed-node.compose.yaml && nl -ba tools/speed-node/Docker... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '70,135p' tools/speed-node/main.go && sed -n '200,255p' tools/speed-nod...
+[codex] Command completed: /bin/bash -lc "sed -n '70,135p' tools/speed-node/main.go && sed -n '200,255p' tools/speed-nod... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a sonda de saúde usa uma verificaç...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a sonda de saúde usa uma verificação que falha se o próprio IP do nó não estiver explicitamente permitido, e o README orienta a incluí-lo sem cobrir o comportamento de endereços de origem locais.
+
+Findings:
+- [medium] Healthcheck depende de autoacesso pela lista de origens (infra/compose/speed-node.compose.yaml:22-23)
+  Com `network_mode: host`, o `wget` acessa o endereço local configurado; o servidor ainda valida `RemoteAddr` contra `SPEED_NODE_ALLOW`. O README manda incluir o IP do nó, mas interfaces ou rotas locais podem fazer a sonda sair com outro endereço local, mantendo o servidor funcional para Edge/CPE enquanto o Compose marca o contêiner como unhealthy. Como o healthcheck é o sinal operacional declarado, isso pode ocultar falhas reais ou provocar alertas/reinícios externos; não há evidência no diff de que a origem da sonda será sempre esse IP.
+  Recommendation: Evite depender de autoacesso sujeito à allow-list: implemente uma sonda local dedicada que verifique o processo/porta sem ampliar os clientes permitidos, ou documente e valide a origem efetiva da sonda na configuração suportada.

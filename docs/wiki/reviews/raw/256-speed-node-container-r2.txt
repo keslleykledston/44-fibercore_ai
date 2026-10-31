@@ -1,0 +1,18 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1929b-2794-75f2-9100-5821866094c9).
+[codex] Turn started (01a1929b-27d0-7773-943a-c7840b2bef3a).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e rastrear a decisão de confiança de `/health` até a lóg...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- infra/compose/speed-node.co...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- infra/compose/speed-node.co... (exit 0)
+[codex] Running command: /bin/bash -lc 'cat docs/wiki/reviews/raw/255-speed-node-container-r1.txt && cat docs/wiki/rev...
+[codex] Command completed: /bin/bash -lc 'cat docs/wiki/reviews/raw/255-speed-node-container-r1.txt && cat docs/wiki/rev... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"A alteração da r1 foi resolvida: `/health` aceita a origem lo...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+A alteração da r1 foi resolvida: `/health` aceita a origem local sem entrada na allow-list. A exceção não alcança `/dl` nem `/ul`; endereços IPv4-mapped são normalizados antes da comparação. Não encontrei risco material de transferência ou exposição externa neste diff.
+
+No material findings.
