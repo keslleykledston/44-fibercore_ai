@@ -40,6 +40,7 @@ def main() -> None:
     cli("feature-set", tenant, "customer_context", "on")
     cli("feature-set", tenant, "subscriber_360", "on")  # FC22-005
     cli("feature-set", tenant, "diagnostic_engine", "on")  # FC22-006/007
+    cli("feature-set", tenant, "ont_config", "on")  # FC24-01/02 (ADR-0034): configuração do aparelho, somente leitura
     edge = cli("register-edge", tenant, "edge-demo", "--site", "POP Central (demo)")
     sa = subprocess.run([*COMPOSE, "run", "--rm", "-T", "--no-deps", "migrate", "python", "-m", "app.cli",
                          "create-service-account", tenant, "edge-demo-agent", "edge_agent", "--edge-id", edge],
@@ -77,6 +78,8 @@ def main() -> None:
     r = c.post("/v1/edge/cpe-snapshots", headers=h, json={"edge_id": edge, "observed_at": datetime.now(UTC).isoformat(), "cpes": [
         {"canonical_serial": f"DEMOCPE{i:03d}", "vendor": "Huawei", "model": "HG8245H",
          "binding": {"protocol": "tr069", "external_id": f"DEMO-OUI-HG8245H-DEMOCPE{i:03d}", "connector_id": "genieacs-demo"}} for i in range(5)]
+        + [{"canonical_serial": "DEMOA0002", "vendor": "Huawei", "model": "HG8245H", "firmware": "V3R017",  # alvo do e2e da configuração do aparelho (o vínculo é confirmado pelo teste)
+            "binding": {"protocol": "tr069", "external_id": "DEMO-OUI-HG8245H-DEMOA0002", "connector_id": "genieacs-demo"}}]
         + [{"canonical_serial": "DEMOA0001", "vendor": "Huawei", "model": "HG8245H",  # same serial as an ONU: the link is only SUGGESTED, a person confirms
             "binding": {"protocol": "tr069", "external_id": "DEMO-OUI-HG8245H-DEMOA0001", "connector_id": "genieacs-demo"}}]})
     assert r.status_code == 202, r.text
@@ -92,6 +95,8 @@ def main() -> None:
     assert r.status_code == 200, r.text
     olt_id = next(o["id"] for o in u.get("/v1/olts", headers=uh).json() if o["name"] == "OLT-DEMO-01")
     cpe_id = u.get("/v1/cpes", headers=uh).json()[0]["id"]
+    cfg_cpe = next(x["id"] for x in u.get("/v1/cpes", headers=uh).json() if x["canonical_serial"] == "DEMOA0002")
+    cli("ont-config-mock", tenant, cfg_cpe, "dualband")  # configuração SINTÉTICA (rotulada como tal) do aparelho DEMOA0002
     for i, (op, tgt) in enumerate([("collect", olt_id), ("reboot_cpe", cpe_id), ("set_wifi_ssid", cpe_id)]):
         j = u.post("/v1/jobs/preview", headers={**uh, "Idempotency-Key": f"demo-seed-job-{i:04d}"}, json={"operation": op, "target_id": tgt})
         assert j.status_code == 201, j.text

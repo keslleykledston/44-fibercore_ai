@@ -25,6 +25,9 @@ articles:
 - slug: rede/consultar-olt
   ui_route: /rede
   status: draft
+- slug: ont/consultar-configuracao
+  ui_route: /rede/onu/[id]
+  status: draft
 - slug: rede/dispositivos
   ui_route: /dispositivos
   status: draft
