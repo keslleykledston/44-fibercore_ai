@@ -6,6 +6,7 @@ import { FaceplateMini } from "@/components/Faceplate";
 import { EntityDetailDrawer } from "@/components/EntityDetailDrawer";
 import { OnuHistoryTab } from "@/components/OnuHistoryTab";
 import { OntFormBody, ago, useOntForm } from "@/components/OntConfigView";
+import { rovingKeys } from "@/lib/roving";
 import { STATE_TEXT } from "@/lib/ont-config";
 import { readQuick, type QuickModel } from "@/lib/onu-quick";
 import type { Onu } from "@/lib/types";
@@ -95,8 +96,8 @@ function Pane({ row, state, oltName, retry, ontConfig }: { row: Onu; state: Stat
   return (
     <div className="grid gap-4">
       <div role="tablist" aria-label="Seções da ONU" className="flex flex-wrap gap-1" data-testid="onu-pane-tabs">
-        {tabs.map((t) => (
-          <button key={t} role="tab" type="button" id={`onu-tab-${t}`} aria-selected={active === t} aria-controls="onu-pane-panel" onClick={() => setTab(t)}
+        {tabs.map((t, i) => (
+          <button key={t} role="tab" type="button" id={`onu-tab-${t}`} aria-selected={active === t} aria-controls="onu-pane-panel" tabIndex={active === t ? 0 : -1} onClick={() => setTab(t)} onKeyDown={(e) => rovingKeys(e, i, tabs.length, (n) => setTab(tabs[n]!))}
             className={`min-h-touch rounded-btn px-3 text-sm ${active === t ? "bg-accent text-[color:var(--on-accent)]" : "border border-line hover:bg-bg"}`}>{TABS[t]}</button>
         ))}
       </div>

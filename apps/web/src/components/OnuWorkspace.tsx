@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { OnuQuickInspector } from "@/components/OnuQuickInspector";
+import { rovingKeys } from "@/lib/roving";
 import { DataFreshness, StatusPill } from "@/components/ui";
 import type { Onu } from "@/lib/types";
 
@@ -35,8 +36,8 @@ export function OnuWorkspace({ onus, oltNames, tree, ontConfig = false }: { onus
           <input aria-label="Filtrar por serial" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrar por serial" maxLength={64}
             className="min-h-touch min-w-0 flex-1 rounded-btn border border-line bg-surface px-3 text-sm sm:max-w-xs" />
           <div role="radiogroup" aria-label="Filtro por estado" className="flex flex-wrap gap-1 rounded-btn bg-surface-2 p-1">
-            {(Object.keys(LABEL) as F[]).map((k) => (
-              <button key={k} type="button" role="radio" aria-checked={f === k} onClick={() => setF(k)}
+            {(Object.keys(LABEL) as F[]).map((k, i, all) => (
+              <button key={k} type="button" role="radio" aria-checked={f === k} tabIndex={f === k ? 0 : -1} onClick={() => setF(k)} onKeyDown={(e) => rovingKeys(e, i, all.length, (n) => setF(all[n]!))}
                 className={`min-h-9 rounded-[8px] px-3 text-sm ${f === k ? "bg-surface font-medium shadow-card" : "text-muted hover:text-text"}`}>
                 {LABEL[k]}<span className="tabular ml-1 text-xs text-muted">{count(k)}</span>
               </button>

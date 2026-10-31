@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { rovingKeys } from "@/lib/roving";
 import { LOAD_ERROR, readForm, valueText, type OntField, type OntForm, type OntGroup } from "@/lib/ont-config";
 
 export type Load = { kind: "idle" } | { kind: "loading" } | { kind: "ready"; cpe: string; form: OntForm } | { kind: "error"; error: string };
@@ -80,8 +81,8 @@ export function OntFormBody({ load, form, retry }: { load: Load; form: OntForm |
           ) : (
             <>
               <div role="tablist" aria-label="Seções" className="flex flex-wrap gap-1">
-                {tabs.map((t) => (
-                  <button key={t} role="tab" type="button" id={`ont-tab-${t}`} aria-selected={active === t} aria-controls={`ont-panel-${t}`} onClick={() => setTab(t)}
+                {tabs.map((t, i) => (
+                  <button key={t} role="tab" type="button" id={`ont-tab-${t}`} aria-selected={active === t} aria-controls={`ont-panel-${t}`} tabIndex={active === t ? 0 : -1} onClick={() => setTab(t)} onKeyDown={(e) => rovingKeys(e, i, tabs.length, (n) => setTab(tabs[n]!))}
                     className={`min-h-touch rounded-btn px-3 text-sm ${active === t ? "bg-accent text-[color:var(--on-accent)]" : "border border-line hover:bg-bg"}`}>{TAB_LABEL[t]}</button>
                 ))}
               </div>

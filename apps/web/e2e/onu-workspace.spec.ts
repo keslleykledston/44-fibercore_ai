@@ -207,3 +207,51 @@ test("gestão: recorte inválido na URL é dito (nunca cai em outra OLT em silê
   await expect(page.getByTestId("onu-quick")).toHaveCount(0);
   await expect(page.getByTestId("onu-quick-empty")).toBeVisible();
 });
+
+test("gestão: abas e filtros seguem o padrão de teclado (setas, Home/End, foco móvel)", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.goto("/rede");
+  // filtros (radiogroup): só o marcado entra na sequência de Tab; setas movem e marcam
+  const todas = page.getByRole("radio", { name: /Todas/ });
+  await expect(todas).toHaveAttribute("tabindex", "0");
+  await expect(page.getByRole("radio", { name: /Fora do ar/ })).toHaveAttribute("tabindex", "-1");
+  await todas.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("radio", { name: /Fora do ar/ })).toBeFocused();
+  await expect(page.getByRole("radio", { name: /Fora do ar/ })).toHaveAttribute("aria-checked", "true");
+  await page.keyboard.press("End");
+  await expect(page.getByRole("radio", { name: /Desconhecido/ })).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(todas).toBeFocused();
+  // abas do painel
+  await row(page, "DEMOA0001").click();
+  const panel = page.getByTestId("onu-quick");
+  const resumo = panel.getByRole("tab", { name: "Resumo" });
+  await expect(panel.getByRole("tab", { name: "Histórico" })).toHaveAttribute("tabindex", "-1");
+  await resumo.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(panel.getByRole("tab", { name: "Histórico" })).toBeFocused();
+  await expect(panel.getByRole("tab", { name: "Histórico" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("onu-history")).toBeVisible();
+  await page.keyboard.press("ArrowRight");                                   // dá a volta
+  await expect(resumo).toBeFocused();
+  await expect(resumo).toHaveAttribute("aria-selected", "true");
+});
+
+test("gestão: as abas internas da configuração do aparelho também respondem às setas", async ({ page, request }) => {
+  await confirmDemoA2(request);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.goto("/rede");
+  await row(page, "DEMOA0002").click();
+  await page.getByTestId("onu-quick").getByRole("tab", { name: "Aparelho" }).click();
+  const dev = page.getByTestId("onu-device-tab");
+  const r = dev.getByRole("tab", { name: "Resumo" });
+  await r.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(dev.getByRole("tab", { name: "Wi-Fi" })).toBeFocused();
+  await expect(dev.getByRole("tab", { name: "Wi-Fi" })).toHaveAttribute("aria-selected", "true");
+  await expect(dev.getByLabel("Nome da rede")).toBeVisible();
+  await expect(dev.getByRole("tab", { name: "LAN" })).toHaveAttribute("tabindex", "-1");
+});
