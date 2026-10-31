@@ -1,0 +1,17 @@
+{
+  "id": "spd_demo_001",
+  "deviceId": "ont_demo_router_1",
+  "target": "CORE",
+  "method": "TR143_HTTP",
+  "state": "completed",
+  "quality": "valid",
+  "currentDirection": null,
+  "downloadMbps": 482.4,
+  "uploadMbps": 245.8,
+  "wanInterface": "Device.IP.Interface.1",
+  "endpointName": "Test Node Core",
+  "requestedAt": "2026-10-31T12:00:00Z",
+  "startedAt": "2026-10-31T12:00:01Z",
+  "finishedAt": "2026-10-31T12:00:40Z",
+  "warnings": ["Medição originada na ONT; não mede Wi-Fi/LAN"]
+}

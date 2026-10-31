@@ -1,0 +1,17 @@
+{
+  "id": "spd_demo_002",
+  "deviceId": "ont_demo_router_1",
+  "target": "INTERNET",
+  "method": "TR143_HTTP",
+  "state": "partial",
+  "quality": "partial",
+  "currentDirection": null,
+  "downloadMbps": 312.9,
+  "uploadMbps": null,
+  "wanInterface": "Device.IP.Interface.1",
+  "endpointName": "Test Node Externo",
+  "requestedAt": "2026-10-31T13:00:00Z",
+  "startedAt": "2026-10-31T13:00:01Z",
+  "finishedAt": "2026-10-31T13:02:02Z",
+  "warnings": ["Upload não retornou resultado confirmado", "Medição originada na ONT; não mede Wi-Fi/LAN"]
+}

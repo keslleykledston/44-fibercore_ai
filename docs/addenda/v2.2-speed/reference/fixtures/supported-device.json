@@ -1,0 +1,17 @@
+{
+  "deviceId": "ont_demo_router_1",
+  "model": "ONT-SINTETICA-ROUTER",
+  "firmware": "FW-DEMO-1.0",
+  "mode": "ROUTER",
+  "capabilities": {
+    "status": "SUPPORTED",
+    "supportsDownload": true,
+    "supportsUpload": true,
+    "wanInterfaceVerified": true,
+    "method": "TR143_HTTP",
+    "wanInterface": "Device.IP.Interface.1",
+    "targets": ["CORE", "INTERNET"],
+    "blockers": [],
+    "lastCheckedAt": "2026-10-31T12:00:00Z"
+  }
+}

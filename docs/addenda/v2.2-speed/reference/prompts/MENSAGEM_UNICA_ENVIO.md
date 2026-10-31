@@ -1,0 +1,3 @@
+# Mensagem curta para enviar ao agente
+
+Implementar o pacote anexado **FiberCore 2.2 — SD-001 Speed Diagnostics TR-143**, seguindo `prompts/CLAUDE_CODE_EXECUTAR.md`. É um adendo incremental: mapear código real e GAP_MAP antes de editar; GenieACS já está instalado, acesso só pelo Edge outbound; nenhuma nova plataforma, nenhum NBI aberto na nuvem, nenhuma nova tela. Implementar teste da WAN de serviço da ONT para Core/Internet com HTTP GET/PUT TR-143, capacidades por modelo/firmware, limites por PON, estados confiáveis e UX no sidebar direito. Primeiro enviar descoberta/diff planejado; depois PRs pequenos, testes de mock e homologação real onde disponível, com Codex gate e how-to com capturas reais. Preservar todas as entregas 2.2 e manter feature flag OFF até aceite.
