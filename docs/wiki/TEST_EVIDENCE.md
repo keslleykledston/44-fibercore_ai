@@ -442,3 +442,8 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - Remoção dos brutos no Edge: os 10 arquivos de captura (lotes 1 e 2a) foram apagados por nome e a listagem seguinte mostrou só `done.json`; cópias locais também apagadas. Motivo adicional: a pasta de capturas estava cheia (`captures_dir_full` desde 01:17 local) e bloqueava `slot.board` e `pon.ont.summary`.
 - NÃO verificado: `slot.board` e `pon.ont.summary` (lote 2b: ainda sem captura); a oferta das consultas por slot na tela.
 
+## Consultas à OLT — fechamento do lote 2 (31/10/2026)
+- `slot.cpu` e `slot.mem`: validadas (PR 107). `slot.board`: NÃO validada. A saída de `display board 0/<slot>` de uma placa de linha lista todas as ONTs da placa com serial e descrição de cliente; os dois arquivos de linha foram apagados do Edge, o da placa de controle (47 linhas, sem serial nem ONT, conferido por contagem sem imprimir) também; nenhuma fixture foi criada. Parte da saída crua foi impressa na sessão por erro de procedimento: contenção e regras novas na emenda de 31/10/2026 do ADR-0032 (busca na memória do projeto por trechos dela: sem resultado).
+- `pon.ont.summary` na PON da bancada: a única tentativa terminou em `session_error` (33 s) e o marcador `done.json` impede nova tentativa automática; a PON da bancada tem outras ONTs além da de bancada, então a saída teria o mesmo risco. NÃO validada; fica para quando houver necessidade e autorização.
+- Modo de captura do Edge: desligado ao final (config sem `capture`); a pasta de capturas ficou só com `done.json`.
+
