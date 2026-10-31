@@ -12,3 +12,6 @@ Escopo: leitura. **Nenhuma manobra, nenhuma escrita, nenhum registro de alvo de 
 
 ## Pendente antes de qualquer alvo de bancada
 Aceite do responsável para esta identidade (serial terminado em `…C7DE`), emenda do ADR-0030 (lista fechada com mais de um modelo), `bench-target-add`, entrada na lista local do Edge e registro de capacidades por fabricante/modelo/firmware. Ajuste opcional do vinculador para decodificar o prefixo ASCII do GPON SN (com teste).
+
+## Fonte dos números da PON
+Consulta somente leitura ao banco da nuvem do LAB (tabelas `onus` e `pon_ports`, escopo do provedor da bancada), feita em 2026-10-31 sobre a coleta de OLT com `observed_at` 16:39 UTC: ONUs com `pon_path = '0/0/14'` (12) e família pelo prefixo do GPON SN (os 4 primeiros bytes em hex são o ID do fabricante em ASCII: `5A544547` = `ZTEG`, `414C434C` = `ALCL`). Não há exportação versionada (seriam seriais de ONUs); a consulta pode ser repetida no LAB por quem tem acesso ao banco.

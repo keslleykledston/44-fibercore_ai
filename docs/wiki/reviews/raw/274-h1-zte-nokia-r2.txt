@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192f4-3f38-7061-ae4d-f7d7a5da2efa).
+[codex] Turn started (01a192f4-42b8-75d3-bd67-c949c1f285fe).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e rastrear a evidência citada nos dois H1, com foco na cont...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/bench/H1-identifi...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/bench/H1-identifi... (exit 0)
+[codex] Running command: /bin/bash -lc 'cat docs/wiki/reviews/raw/274-h1-zte-nokia-r2.txt; rg -n "0/0/14|12 ONUs|ALCL|...
+[codex] Command completed: /bin/bash -lc 'cat docs/wiki/reviews/raw/274-h1-zte-nokia-r2.txt; rg -n "0/0/14|12 ONUs|ALCL|... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não publicar ainda: a nova ressalva corrige a classif...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não publicar ainda: a nova ressalva corrige a classificação de clientes, mas os números usados para descrever a PON continuam sem fonte verificável nos H1.
+
+Findings:
+- [medium] Contagem e composição da PON não têm evidência rastreável (docs/wiki/bench/H1-identificacao-zte-f670l-2026-10-31.md:11)
+  A revisão remove a afirmação de que as ONUs restantes são de clientes, mas ainda declara 12 ONUs na coleta de 2026-10-31 e subdivide a contagem por família (5 ZTE e 2 Nokia). Os H1 não citam nem anexam a coleta que sustentaria esses números; a busca no repositório também não encontrou essa evidência. Assim, a conclusão de que a PON não é exclusiva da bancada depende de contagens que o leitor não consegue conferir. Cite ou anexe a coleta autorizada e indique como a família foi determinada; se ela não estiver disponível, limite o registro às observações rastreáveis.
+  Recommendation: Adicionar referência verificável à coleta que sustenta as 12 ONUs e as contagens por família nos dois H1; sem ela, retirar os números não verificáveis.
