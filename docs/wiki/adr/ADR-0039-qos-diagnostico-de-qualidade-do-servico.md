@@ -34,3 +34,10 @@ iperf/TR-471, TR-369/USP, auto-remediação, edição de Wi-Fi, reboot, varredur
 
 ## Aprovação
 Aprovado por: o responsável do projeto, pelo chat da sessão, 2026-10-31 ("aprovado ADR-0039"); a emenda do ADR-0030 desta data foi aprovada junto.
+
+## Implementação (2026-10-31) — fatiada em três PRs, por causa do Connection Request
+O plano falava de 2 PRs de código; o primeiro teste real de banda mostrou que o ACS não completa o Connection Request da ONT de bancada (ver `docs/wiki/bench/H-speed_test_download-tentativa-1-2026-10-31.md`), o que bloqueia qualquer teste ativo. Para não misturar o que se prova com o que não se consegue provar, a entrega fica assim:
+1. **PR A (este): RÁPIDO passivo, suíte e API.** `app/core/quality.py` (puro), migração 0037 `quality_runs`, `app/api/quality.py` (`GET capabilities`, `POST/GET runs`), flags `quality_diagnostics|quality_full|quality_active_tests` (OFF), permissões `diagnostics:quality_read|quality_run|quality_run_full`. A leitura usa só `cpe_state` (cache do ACS) e a ONU ligada na OLT; o COMPLETO REFERENCIA um grupo do SD-001 que o chamador já tem (`speed_group_id`, recente, do mesmo CPE) e **não inicia teste nenhum**. Nenhum código toca o Edge, o ACS ou o aparelho (teste de varredura do fonte).
+2. **PR B: aba "Qualidade" no sidebar, ajuda com capturas reais, changelog.**
+3. **PR C (depende do Connection Request ou do modo fila): `ping_test`/`dns_test` na bancada, reserva compartilhada por CPE, métricas de Ethernet.** As regras de hipótese que usam esses dados já existem em `quality.py`, dormentes e testadas com entradas sintéticas.
+Decisões de implementação: TTL da óptica = 20 min (a OLT é coletada a cada 15 min e a rodada leva até ~3 min); a WAN do cache é sempre `WAN_UNCLASSIFIED` (o cache não diz se é a de serviço); ausência de Wi-Fi é `not_available`, nunca `not_applicable`; o limiar de "degradado" nas regras de caminho é 50 % da referência, declarado como constante.

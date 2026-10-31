@@ -52,6 +52,7 @@ CAPABILITIES: list[tuple[str, str, tuple[str, ...]]] = [
     ("incidents", "Acompanhar incidentes", ("incidents:read",)),
     ("ack", "Reconhecer incidentes", ("incidents:ack",)),
     ("diagnose", "Rodar diagnósticos", ("diagnostics:run",)),
+    ("quality", "Ver e pedir a leitura de qualidade do serviço da ONT (só dados já coletados)", ("diagnostics:quality_read", "diagnostics:quality_run", "diagnostics:quality_run_full")),
     ("speed", "Pedir teste de banda da ONT (hoje só o aparelho de bancada)", ("diagnostics:speed_run",)),
     ("olt_query", "Consultar a OLT (somente leitura)", ("olt_query:run",)),
     ("erp", "Conectar e testar o ERP do provedor (somente leitura)", ("erp:manage", "erp:test")),

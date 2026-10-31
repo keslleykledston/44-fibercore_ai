@@ -467,3 +467,7 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 ## Speed — aceite do risco de 3xx (opção C)
 - API: `pytest` 771 passed (18 novos em `test_speed_acceptance.py` e `test_speed_acceptance_docs.py`): destino/firmware/INTERNET/validade (0 e −1 dia), 90 e 91 dias no banco, papel da aplicação só lê, outro provedor não vê, revogação no pedido/aprovação/despacho, vida do envelope ≤ 9 min 15 s, exclusão mútua do bloqueio, CLI (sonda exigida, datas, documento incompleto, auditoria OK/MISMATCH/MISSING, revogação), hash do documento no repositório. `ruff` limpo.
 - NÃO verificado: aplicação da migração e do CLI no LAB (após o merge); nenhuma execução real de banda.
+
+## QoS-001 PR A
+- API: `pytest` 810 passed (39 novos: 20 puros em `test_quality.py` — Q03, Q04, Q05, Q11, Q12, Q16, Q17, regras de hipótese, contrato sem zero falso; 13 de API em `test_quality_api.py` — flag, RBAC, tenant, idempotência, referência ao SD-001 sem criar job, auditoria sem valores, imutabilidade, varredura do fonte; 4 expectativas de RBAC atualizadas). `ruff` limpo.
+- NÃO verificado: aplicação no LAB (após o merge); leitura contra dados reais; Q12 com perfil óptico homologado; Q13/Q14/Q20 (dependem de equipamento).
