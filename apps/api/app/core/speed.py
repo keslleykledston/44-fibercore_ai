@@ -28,7 +28,7 @@ PROFILE_BYTES = {"10mb": 10_000_000, "50mb": 50_000_000, "200mb": 200_000_000}
 MIN_RELIABLE_S = 3.0          # a measurement shorter than this is `partial`: TCP has not left slow start
 MAX_DURATION_S = 600.0        # a test that "lasted" longer than the Edge's own ceiling is not a measurement
 MIN_BYTES_RATIO = 0.95        # a transfer that moved less than this share of the profile is `partial`
-MAX_PLAUSIBLE_MBPS = 100_000  # above any PON: the counters are wrong, not the line fast
+MAX_BYTES_RATIO = 1.05        # a counter above the profile by more than this tolerance is not THIS test: inconclusive, never a credible-looking figure
 
 # one test per ONT, one per PON, two per provider (ADR-0038 item 8; the package's limits)
 LIMIT_PER_CPE, LIMIT_PER_PON, LIMIT_PER_TENANT = 1, 1, 2
@@ -105,9 +105,9 @@ def compute(direction: str, profile: str, c: dict) -> Computed:
         basis, n = ("test_bytes_sent", c.get("test_bytes_sent")) if c.get("test_bytes_sent") else ("test_file_length", c.get("test_file_length"))
     if not n or n <= 0:
         return Computed("inconclusive", None, None, int(dt * 1000), "no_bytes", basis)
+    if n > MAX_BYTES_RATIO * PROFILE_BYTES[profile]:
+        return Computed("inconclusive", None, None, int(dt * 1000), "bytes_exceed_profile", basis)
     mbps = round(8 * n / dt / 1e6, 2)
-    if mbps > MAX_PLAUSIBLE_MBPS:
-        return Computed("inconclusive", None, None, int(dt * 1000), "implausible", basis)
     short = dt < MIN_RELIABLE_S or n < MIN_BYTES_RATIO * PROFILE_BYTES[profile]
     return Computed("partial" if short else "completed", mbps, n, int(dt * 1000), ("too_short" if dt < MIN_RELIABLE_S else "short_transfer") if short else None, basis)
 

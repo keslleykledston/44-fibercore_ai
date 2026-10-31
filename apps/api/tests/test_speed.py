@@ -59,6 +59,11 @@ def test_upload_uses_the_bytes_the_device_sent_when_it_reports_them_else_the_req
     assert (sent.mbps, sent.basis) == (19.8, "test_bytes_sent")
 
 
+def test_an_upload_counter_above_the_profile_is_also_inconclusive():
+    c = speed.compute("upload", PF, speed.check_counters("upload", EP, PF, counters("upload", seconds=4.0, test_bytes_sent=50_000_000)))
+    assert (c.outcome, c.mbps, c.reason, c.basis) == ("inconclusive", None, "bytes_exceed_profile", "test_bytes_sent")
+
+
 def test_a_short_interval_or_a_short_transfer_is_partial_never_reliable():
     short_t = speed.compute("download", PF, speed.check_counters("download", EP, PF, counters(seconds=2.0)))
     assert (short_t.outcome, short_t.reason) == ("partial", "too_short") and short_t.mbps == 40.0
@@ -70,10 +75,15 @@ def test_a_short_interval_or_a_short_transfer_is_partial_never_reliable():
     ({"bom": None}, "no_timestamps"), ({"eom": None}, "no_timestamps"),
     ({"seconds": 0.0}, "invalid_duration"), ({"seconds": -3.0}, "invalid_duration"), ({"seconds": 601.0}, "invalid_duration"),
     ({"test_bytes_received": 0}, "no_bytes"), ({"test_bytes_received": None}, "no_bytes"),
-    ({"seconds": 3.0, "test_bytes_received": 10**12}, "implausible"),
+    ({"seconds": 3.0, "test_bytes_received": 10**12}, "bytes_exceed_profile"),
+    ({"seconds": 8.0, "test_bytes_received": 10_500_001}, "bytes_exceed_profile"),    # just over the 5 % tolerance of a 10 MB profile
+    ({"seconds": 8.0, "test_bytes_received": 10_500_000}, None),
 ])
 def test_counters_that_do_not_add_up_give_no_number_at_all(kw, reason):
     c = speed.compute("download", PF, speed.check_counters("download", EP, PF, counters(**kw)))
+    if reason is None:   # the edge of the tolerance is still a measurement
+        assert c.outcome == "completed" and c.mbps == 10.5
+        return
     assert c.outcome == "inconclusive" and c.mbps is None and c.reason == reason   # never 0, never a guess
 
 
