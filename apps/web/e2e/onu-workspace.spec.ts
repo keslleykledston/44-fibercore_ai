@@ -183,3 +183,27 @@ test("ONU 360°: trilha até a PON e painel frontal com óptica no alto; LOS apa
   await expect(page.getByTestId("onu360-faceplate").getByTestId("faceplate").first()).toHaveAttribute("data-last-known", "true");
   await expect(page.getByTestId("onu360-faceplate")).toContainText("Isso não significa que o equipamento esteja desligado");
 });
+
+test("gestão: recorte inválido na URL é dito (nunca cai em outra OLT em silêncio) e mudar o recorte limpa a seleção", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.goto("/rede?olt=00000000-0000-4000-8000-000000000000");
+  await expect(page.getByText("OLT não encontrada")).toBeVisible();
+  await expect(page.getByTestId("pon-matrix")).toHaveCount(0);
+  await page.goto("/rede?olt=nao-e-uuid");
+  await expect(page.getByText("OLT não encontrada")).toBeVisible();
+  await page.goto("/rede");
+  await row(page, "DEMOA0001").click();
+  await expect(page.getByTestId("onu-quick")).toBeVisible();
+  const href = await page.getByTestId("pon-tree").getByRole("link", { name: /PON 0\/1\/1/ }).getAttribute("href");
+  await page.goto(`${href!.split("&pon=")[0]}&pon=9%2F9%2F9`);              // PON que não existe nesta OLT
+  await expect(page.getByTestId("pon-missing")).toContainText("Mostrando a OLT inteira");
+  await expect(page.getByRole("heading", { name: "OLT-DEMO-01" })).toBeVisible();   // o título não afirma uma PON inexistente
+  await page.goto("/rede");
+  await row(page, "DEMOA0001").click();
+  await expect(page.getByTestId("onu-quick")).toBeVisible();
+  await page.getByTestId("pon-tree").getByRole("link", { name: /PON 0\/1\/1/ }).click();   // recorte novo: a ONU de antes não está mais na lista
+  await expect(row(page, "DEMOC0000")).toBeVisible();
+  await expect(page.getByTestId("onu-quick")).toHaveCount(0);
+  await expect(page.getByTestId("onu-quick-empty")).toBeVisible();
+});

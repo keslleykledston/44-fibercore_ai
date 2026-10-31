@@ -61,12 +61,26 @@ export default async function Rede({ searchParams }: { searchParams: Promise<{ s
   if (olts.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver o inventário." /></AppShell>;
   const list = olts.data ?? [];
   const bySerial = serialQ !== "";   // busca por serial atravessa as OLTs: sem matriz nem árvore, só o resultado
-  const olt = list.find((o) => o.id === oltParam && UUID.test(o.id)) ?? list[0] ?? null;
-  const pon = ponParam && PON_RE.test(ponParam) ? ponParam : undefined;
+  const oltAsked = !bySerial && oltParam !== undefined;   // um recorte pedido pela URL: se não existe, a tela diz (nunca cai em outra OLT em silêncio)
+  const olt = oltAsked ? list.find((o) => o.id === oltParam && UUID.test(oltParam)) ?? null : list[0] ?? null;
+  const ponAsked = !bySerial && ponParam !== undefined;
+  const ponValid = ponAsked && PON_RE.test(ponParam);
+  if (oltAsked && olt === null && olts.data !== null) {
+    return (
+      <AppShell active="/rede" user="1">
+        <PageHeader title="Rede" subtitle="OLTs, PONs e ONUs com frescor e fonte do dado" helpSlug="rede/consultar-onu" />
+        <DevicesTabs current="/rede" />
+        <div data-testid="onu-inventory-ready"><EmptyState title="OLT não encontrada" hint="O link aponta para uma OLT que não existe (ou não existe mais) neste provedor." /></div>
+        <p className="mt-4 text-sm"><Link href="/rede" className="text-accent underline underline-offset-2">Ver todas as OLTs</Link></p>
+      </AppShell>
+    );
+  }
   const onus = await apiSafe<Onu[]>(bySerial ? `/v1/onus?limit=${READ_LIMIT}${serialQ}` : olt ? `/v1/onus?limit=${READ_LIMIT}&olt_id=${olt.id}` : "/v1/onus?limit=1");
   if (onus.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver o inventário." /></AppShell>;
   const all = onus.data ?? [];
   const pons = bySerial ? [] : summarizePons(all);
+  const pon = ponValid && pons.some((p) => p.path === ponParam) ? ponParam : undefined;   // PON inexistente nesta OLT: mostra a OLT inteira e AVISA
+  const ponMissing = ponAsked && !pon && olts.data !== null && onus.data !== null;
   const rows = bySerial || !pon ? all : all.filter((o) => o.pon_path === pon);
   const names = Object.fromEntries(list.map((o) => [o.id, o.name]));
   const truncated = all.length >= READ_LIMIT;
@@ -89,6 +103,7 @@ export default async function Rede({ searchParams }: { searchParams: Promise<{ s
           {pon && <><span aria-hidden>›</span><span className="text-text">PON {pon}</span></>}
         </nav>
       )}
+      {ponMissing && <p role="status" className="mb-4 rounded-btn bg-warn-soft px-4 py-3 text-sm text-warn" data-testid="pon-missing">A PON pedida no link não tem ONUs nesta OLT (ou o link é inválido). Mostrando a OLT inteira.</p>}
       {bySerial && <p className="mb-4 text-sm"><Link href="/rede" className="text-accent underline underline-offset-2">Limpar a busca</Link></p>}
       <div data-testid="onu-inventory-ready">
         {olts.data === null ? <ErrorState title="Falha ao carregar OLTs" />
@@ -99,7 +114,7 @@ export default async function Rede({ searchParams }: { searchParams: Promise<{ s
               {olt && !bySerial && <PonMatrix oltId={olt.id} oltName={olt.name} model={olt.model} pons={pons} {...(pon ? { activePon: pon } : {})} truncated={truncated} />}
               {truncated && <p role="status" className="mb-3 rounded-btn bg-warn-soft px-4 py-3 text-sm text-warn" data-testid="onu-truncated">Mostrando as primeiras {READ_LIMIT} ONUs: há mais ONUs do que o limite de leitura. Use a busca por serial para as demais.</p>}
               {rows.length === 0 && bySerial ? <EmptyState title="Nenhuma ONU encontrada" hint="Confira o serial informado." /> : (
-                <OnuWorkspace ontConfig={ontConfig} onus={rows} oltNames={names}
+                <OnuWorkspace key={`${bySerial ? serialQ : ""}|${olt?.id ?? ""}|${pon ?? ""}`} ontConfig={ontConfig} onus={rows} oltNames={names}
                   tree={bySerial || !olt ? undefined : <PonTree olts={list} oltId={olt.id} pons={pons} {...(pon ? { ponId: pon } : {})} />} />
               )}
             </>

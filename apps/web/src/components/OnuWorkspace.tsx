@@ -18,11 +18,12 @@ const LABEL: Record<F, string> = { todas: "Todas", fora: "Fora do ar", defasado:
 /** Gestão de ONUs (ADR-0037, padrão Lovable): [árvore | lista com filtros | detalhes] lado a lado; a lista nunca fica atrás do painel. Largura < 1024: árvore em cima e detalhes em gaveta. */
 export function OnuWorkspace({ onus, oltNames, tree, ontConfig = false }: { onus: Onu[]; oltNames: Record<string, string>; tree?: ReactNode; ontConfig?: boolean }) {
   const showOlt = !tree;   // com a árvore, a OLT é o contexto da página: a coluna mostra só a PON; na busca por serial (várias OLTs) mostra OLT · PON
-  const [sel, setSel] = useState<Onu | null>(null);
+  const [selId, setSelId] = useState<string | null>(null);
+  const sel = useMemo(() => onus.find((o) => o.id === selId) ?? null, [onus, selId]);   // a seleção só vale enquanto a ONU ainda está no conjunto exibido
   const [f, setF] = useState<F>("todas");
   const [q, setQ] = useState("");
   const trigger = useRef<HTMLElement | null>(null);
-  const close = () => { setSel(null); trigger.current?.focus(); };
+  const close = () => { setSelId(null); trigger.current?.focus(); };
   const needle = q.trim().toLowerCase();
   const rows = useMemo(() => onus.filter((o) => MATCH[f](o) && (!needle || o.serial.toLowerCase().includes(needle))), [onus, f, needle]);
   const count = (k: F) => onus.filter(MATCH[k]).length;
@@ -51,7 +52,7 @@ export function OnuWorkspace({ onus, oltNames, tree, ontConfig = false }: { onus
                 <tr key={u.id} aria-selected={sel?.id === u.id} className={`h-12 ${sel?.id === u.id ? "bg-accent-soft" : "hover:bg-surface-2"}`}>
                   <td className="px-4 font-mono">
                     <button type="button" data-testid="onu-open" aria-haspopup="true" aria-current={sel?.id === u.id ? "true" : undefined}
-                      className="min-h-touch rounded-btn text-left font-mono text-accent underline-offset-4 hover:underline" onClick={(e) => { trigger.current = e.currentTarget; setSel(u); }}>{u.serial}</button>
+                      className="min-h-touch rounded-btn text-left font-mono text-accent underline-offset-4 hover:underline" onClick={(e) => { trigger.current = e.currentTarget; setSelId(u.id); }}>{u.serial}</button>
                   </td>
                   <td className="whitespace-nowrap px-4">{showOlt ? `${oltNames[u.olt_id] ?? "—"} · ` : ""}{u.pon_path ?? "—"}</td>
                   <td className="px-4"><StatusPill value={u.status} /></td>
