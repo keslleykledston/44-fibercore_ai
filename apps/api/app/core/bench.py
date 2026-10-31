@@ -44,9 +44,10 @@ BENCH_OPS: dict[str, BenchOp] = {
     "speed_test_upload": BenchOp("tr069", frozenset({"target", "profile"})),
 }
 SPEED_OPS = frozenset({"speed_test_download", "speed_test_upload"})
-# The Edge half of the speed test (internal/speed) is a separate delivery (ADR-0038 PR 2). Until it ships, no speed test can be authorized, approved or
-# dispatched: an Edge that does not know the operation must never receive its envelope.
-SPEED_EDGE_SUPPORT = False
+# The Edge half of the speed test (internal/speed, internal/nbi/speed.go) shipped with its tests (ADR-0038 PR 2). It is only a precondition, as EDGE_SUPPORT
+# is: the tenant flags, the bench target, the registry evidence, the redirect evidence and the owner's prior authorization all remain required, and an Edge
+# older than this build ignores speed envelopes. DEPLOY ORDER: the Edge first, then the Cloud.
+SPEED_EDGE_SUPPORT = True
 SPEED_ENDPOINT_RE = re.compile(r"[a-z0-9][a-z0-9-]{1,30}")
 SPEED_PROFILES = ("10mb", "50mb", "200mb")
 # the ONLY values a parameter may take, per operation (ADR-0030 item 4); anything else is refused at preview, at the gate and again at the Edge

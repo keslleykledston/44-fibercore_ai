@@ -130,6 +130,7 @@
 | GET | `/v1/edge/jobs/next` | `jobs:execute` |
 | POST | `/v1/edge/jobs/{job_id}/result` | `jobs:execute` |
 | POST | `/v1/edge/olt-snapshots` | `inventory:write` |
+| POST | `/v1/edge/speed-health` | `inventory:write` |
 | GET | `/v1/edges` | `edge:read` |
 | POST | `/v1/erp/import-csv` | `customers:import` |
 | GET | `/v1/incidents` | `incidents:read` |

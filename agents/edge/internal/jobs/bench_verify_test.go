@@ -77,9 +77,9 @@ func TestBenchSetIsDisjointFromReadOnly(t *testing.T) {
 			t.Fatalf("%s in both sets", op)
 		}
 	}
-	want := []string{"reboot_cpe", "set_wifi_ssid", "onu_reset", "onu_deactivate"}
+	want := []string{"reboot_cpe", "set_wifi_ssid", "onu_reset", "onu_deactivate", "speed_test_download", "speed_test_upload"}
 	if len(BenchWriteOps) != len(want) {
-		t.Fatalf("only the H2/H3/H4 operations are compiled in: %v", BenchWriteOps)
+		t.Fatalf("only the H2/H3/H4 operations and the speed tests (ADR-0038) are compiled in: %v", BenchWriteOps)
 	}
 	for _, op := range want {
 		if !BenchWriteOps[op] {

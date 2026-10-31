@@ -21,7 +21,7 @@ PARAMS = {"target": EP, "profile": PF}
 @pytest.fixture(autouse=True)
 def _speed_cleanup(migrated, monkeypatch):
     monkeypatch.setattr(bench, "EDGE_SUPPORT", True)
-    monkeypatch.setattr(bench, "SPEED_EDGE_SUPPORT", True)   # the Edge half is PR 2; these tests exercise the cloud with a fake Edge
+    monkeypatch.setattr(bench, "SPEED_EDGE_SUPPORT", True)   # shipped (PR 2); set explicitly so a test that turns it off cannot leak
     yield
     with migrated.begin() as c:
         c.execute(text("DELETE FROM speed_test_runs"))
@@ -380,7 +380,15 @@ def _dispatched(client, seed, inv, migrated, direction="download"):
 
 
 def test_the_envelope_carries_two_logical_names_and_no_address(client, seed, inv, migrated):
+    import json
+    from pathlib import Path
+
+    from jsonschema import Draft202012Validator
+    schema = json.loads((Path(__file__).resolve().parents[3] / "contracts" / "job-envelope.schema.json").read_text())
     _, _, run, env = _dispatched(client, seed, inv, migrated)
+    assert not list(Draft202012Validator(schema).iter_errors(env)), "the speed envelope must match contracts/job-envelope.schema.json"
+    bad = {**env, "params": {**env["params"], "target": "http://10.0.0.1/f"}}
+    assert list(Draft202012Validator(schema).iter_errors(bad)), "the contract must refuse a URL as the target"
     assert env["operation"] == "speed_test_download" and env["params"] == PARAMS and env["authorization_id"]
     blob = str(env).lower()
     assert "http" not in blob and "url" not in blob
@@ -625,3 +633,45 @@ def test_two_identical_requests_at_once_give_one_run_and_one_existing_never_a_bu
     [t.join() for t in ts]
     assert sorted(out) == [(200, "existing", None), (201, "submitted", None)], out
     assert len(_rows(migrated, "SELECT 1 FROM speed_test_runs")) == 1
+
+
+# ---- the Edge reports the health of its nodes ---------------------------------------------------------------------------------------------------
+def test_the_edge_reports_ok_or_down_per_logical_id_and_nothing_else(client, seed, inv, migrated):
+    _speed_flag(migrated, seed["A"])
+    _endpoint(migrated, seed, health="unknown")
+    a = agent(client, inv, "a1")
+    r = client.post("/v1/edge/speed-health", headers=a, json={"endpoints": [{"id": EP, "health": "ok"}, {"id": "not-mine", "health": "ok"}]})
+    assert r.status_code == 200 and r.json() == {"updated": 1, "unknown": 1}
+    assert _rows(migrated, "SELECT health FROM speed_endpoints WHERE id = :i", i=EP)[0].health == "ok"
+    h = hdr(client, "alice", seed, "A")
+    eps = client.get("/v1/speed/health", headers=h).json()["endpoints"]
+    assert eps[0]["ready"] is True and eps[0]["health"] == "ok"
+    assert client.post("/v1/edge/speed-health", headers=a, json={"endpoints": [{"id": EP, "health": "down"}]}).json()["updated"] == 1
+    assert client.get("/v1/speed/health", headers=h).json()["endpoints"][0]["ready"] is False
+    assert client.post("/v1/edge/speed-health", headers=a, json={"endpoints": [{"id": EP, "health": "degraded"}]}).status_code == 422
+    assert client.post("/v1/edge/speed-health", headers=a, json={"endpoints": [{"id": "http://10.0.0.1", "health": "ok"}]}).status_code == 422
+    assert client.post("/v1/edge/speed-health", headers=a, json={"endpoints": [{"id": f"n-{i}0", "health": "ok"} for i in range(9)]}).status_code == 422
+
+
+def test_only_an_edge_of_the_same_provider_can_report_and_a_person_cannot(client, seed, inv, migrated):
+    _speed_flag(migrated, seed["A"])
+    _endpoint(migrated, seed, health="down")
+    body = {"endpoints": [{"id": EP, "health": "ok"}]}
+    assert client.post("/v1/edge/speed-health", headers=hdr(client, "alice", seed, "A"), json=body).status_code == 403     # a person has no inventory:write
+    assert client.post("/v1/edge/speed-health", headers=agent(client, inv, "b1"), json=body).json() == {"updated": 0, "unknown": 1}   # another provider's Edge
+    assert client.post("/v1/edge/speed-health", json=body).status_code in (401, 403)
+    assert _rows(migrated, "SELECT health FROM speed_endpoints WHERE id = :i", i=EP)[0].health == "down"
+
+
+def test_an_edge_that_stopped_reporting_no_longer_vouches_for_its_nodes(client, seed, inv, migrated):
+    cpe = _ready(client, seed, inv, migrated)
+    _link(migrated, seed, inv, cpe)
+    h = hdr(client, "alice", seed, "A")
+    with migrated.begin() as c:
+        c.execute(text("UPDATE speed_endpoints SET health_at = now() - interval '2 hours'"))
+    j = client.get(f"/v1/cpes/{cpe}/speed/capabilities", headers=h).json()
+    assert j["endpoints"][0]["health"] == "unknown" and j["endpoints"][0]["ready"] is False and j["ready"] is False
+    r = _post(client, h, cpe)
+    assert r.status_code == 409 and r.json()["reason"] == "endpoint_unhealthy"
+    assert client.post("/v1/edge/speed-health", headers=agent(client, inv, "a1"), json={"endpoints": [{"id": EP, "health": "ok"}]}).status_code == 200
+    assert _post(client, h, cpe).status_code == 201

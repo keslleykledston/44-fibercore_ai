@@ -14,14 +14,17 @@
     "authorization_id": {"type": "string", "format": "uuid", "description": "bench writes only (ADR-0030): the single-use prior authorization consumed by this job; covered by the signature"},
     "authorization_ends_at": {"type": "string", "format": "date-time", "description": "bench writes only: end of the authorization window; expires_at is never later"},
     "owner_epoch": {"type": "integer", "minimum": 1, "description": "bench writes and olt_query: generation of the target's ownership; the Edge rejects a lower one (ADR-0029/0030)"},
-    "params": {"description": "bench writes (ADR-0030) or olt_query (ADR-0029) only: the catalog-validated parameters of the operation; covered by the signature",
+    "params": {"description": "bench writes (ADR-0030), speed tests (ADR-0038) or olt_query (ADR-0029) only: the catalog-validated parameters of the operation; covered by the signature",
       "oneOf": [
         {"type": "object", "additionalProperties": false, "properties": {"ssid": {"type": "string", "pattern": "^BANCADA-[A-Z0-9]{1,16}$"}}},
         {"type": "object", "additionalProperties": false, "required": ["query_id", "olt_ref", "catalog_version"], "properties": {
           "query_id": {"type": "string", "pattern": "^[a-z]+(\\.[a-z]+)+$"}, "olt_ref": {"type": "string", "format": "uuid"},
           "catalog_version": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-          "slot": {"type": "integer", "minimum": 0, "maximum": 17}, "port": {"type": "integer", "minimum": 0, "maximum": 15}, "ont": {"type": "integer", "minimum": 0, "maximum": 127}}}]},
-    "operation": {"type": "string", "enum": ["collect", "refresh", "reboot_cpe", "set_wifi_ssid", "onu_reset", "onu_deactivate", "provision_onu", "olt_query"]},
+          "slot": {"type": "integer", "minimum": 0, "maximum": 17}, "port": {"type": "integer", "minimum": 0, "maximum": 15}, "ont": {"type": "integer", "minimum": 0, "maximum": 127}}},
+        {"type": "object", "additionalProperties": false, "required": ["target", "profile"], "properties": {
+          "target": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,30}$", "description": "speed tests only (ADR-0038): a LOGICAL endpoint id, never a URL or address; the Edge maps it to its own validated local destination"},
+          "profile": {"type": "string", "enum": ["10mb", "50mb", "200mb"]}}}]},
+    "operation": {"type": "string", "enum": ["collect", "refresh", "reboot_cpe", "set_wifi_ssid", "onu_reset", "onu_deactivate", "speed_test_download", "speed_test_upload", "provision_onu", "olt_query"]},
     "parameters_ref": {"type": "string", "description": "Encrypted, scoped payload reference; no plaintext secret in envelope"},
     "idempotency_key": {"type": "string", "minLength": 8},
     "issued_at": {"type": "string", "format": "date-time"},

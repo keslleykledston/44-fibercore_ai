@@ -101,7 +101,7 @@ func TestEveryKindGoesToItsOwnEndpointAndUnknownKindsAreRejected(t *testing.T) {
 		w.WriteHeader(202)
 	})
 	c := New(srv.URL, "cid", "sec", srv.Client())
-	for kind, path := range map[string]string{"olt_snapshot": "/v1/edge/olt-snapshots", "cpe_snapshot": "/v1/edge/cpe-snapshots", "cpe_state": "/v1/edge/cpe-state"} {
+	for kind, path := range map[string]string{"olt_snapshot": "/v1/edge/olt-snapshots", "cpe_snapshot": "/v1/edge/cpe-snapshots", "cpe_state": "/v1/edge/cpe-state", "speed_health": "/v1/edge/speed-health"} {
 		got = nil
 		if o, err := c.Deliver(context.Background(), kind, []byte(`{}`)); o != Delivered || len(got) != 1 || got[0] != path {
 			t.Fatalf("%s: o=%v err=%v paths=%v", kind, o, err, got)

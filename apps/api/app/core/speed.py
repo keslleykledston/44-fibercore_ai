@@ -32,6 +32,8 @@ MIN_BYTES_RATIO = 0.95        # a transfer that moved less than this share of th
 MAX_PLAUSIBLE_MBPS = 10_000   # 10 Gbit/s: above the line rate of any ONT or XGS-PON (and far below the column range): the counters or the clock are wrong
 MAX_BYTES_RATIO = 1.05        # a counter above the profile by more than this tolerance is not THIS test: inconclusive, never a credible-looking figure
 
+HEALTH_FRESH_S = 1800         # the Edge reports at least every 15 minutes; a word older than this no longer counts
+
 # one test per ONT, one per PON, two per provider (ADR-0038 item 8; the package's limits)
 LIMIT_PER_CPE, LIMIT_PER_PON, LIMIT_PER_TENANT = 1, 1, 2
 ACTIVE_JOB_STATES = ("PENDING_APPROVAL", "APPROVED", "DISPATCHED", "ACCEPTED", "DEVICE_PENDING", "VERIFYING")

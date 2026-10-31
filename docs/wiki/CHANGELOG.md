@@ -296,3 +296,8 @@
 - Rotas (todas 403 `feature_disabled` com a flag `speed_diagnostics` desligada, padrão): `GET /v1/cpes/{id}/speed/capabilities|runs|runs/{id}`, `POST /v1/cpes/{id}/speed/runs`, `GET /v1/speed/health`. Permissão `diagnostics:speed_run` (isp_admin, engineer, noc_n2); autorizar a manobra por API: engineer e isp_admin.
 - `bench.SPEED_EDGE_SUPPORT = False`: sem a metade do Edge (PR 2) nada é autorizado, aprovado nem despachado.
 - Nada foi executado em ONT, OLT ou ACS reais.
+
+## Unreleased — Speed Diagnostics TR-143, metade do Edge (PR 2, ADR-0038)
+- Edge (Go): `internal/speed` (catálogo local de destinos com validação SSRF, perfis fechados, sonda de saúde, três URLs fixas), `internal/nbi/speed.go` (um único `setParameterValues`, leitura só do objeto TR-143, sem reenvio, resultado antigo ignorado), ramo de teste de banda no `bench.Runner` (lease, identidade no ACS, pacing em disco, claim durável), envelope `speed_test_*` verificado com nomes lógicos e hash de intenção, seção `speed` da configuração, relatório de saúde dos nós, `data` no resultado do job.
+- Nuvem: `bench.SPEED_EDGE_SUPPORT = True` (flag `speed_diagnostics` segue desligada); migração 0035 (o Edge atualiza só `health`/`health_at`); `POST /v1/edge/speed-health`; nó só "pronto" com palavra `ok` recente (30 min); contrato `job-envelope.schema.json` com as operações e o formato `{target, profile}`.
+- Docs: seção "Metade do Edge" no ADR-0038 e `docs/addenda/v2.2-speed/EDGE_CONFIG.md`. Nenhum Edge reimplantado; nada executado em ONT/ACS reais.

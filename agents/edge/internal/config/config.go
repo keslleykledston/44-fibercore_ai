@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/olt"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/speed"
 )
 
 type Config struct {
@@ -36,6 +37,9 @@ type Config struct {
 	JobPublicKey     string       `json:"job_public_key"`     // base64 Ed25519 public key of the Cloud, pinned locally
 	AllowedOps       []string     `json:"allowed_operations"` // narrows the compile-time read-only set (collect, refresh)
 	Bench            *BenchConfig `json:"bench"`              // ADR-0030: closed list of bench devices that may receive homologated writes (nil = none)
+	// Speed (ADR-0038): the TR-143 throughput test of the bench devices. Its endpoints are THIS host's own list of test nodes (validated here; the Cloud only
+	// names an id). Needs the bench section, the speed operations in allowed_operations and every node's host:port in `allowlist`. nil/disabled = no test runs.
+	Speed *speed.Config `json:"speed"`
 	// OLTQueryEnabled (ADR-0029): run the Cloud's approved read-only OLT queries, in the collection's own CLI session. Needs jobs_enabled, "olt_query" in
 	// allowed_operations (explicit) and at least one huawei_ma56_r015 OLT with cloud_id. Off by default.
 	OLTQueryEnabled bool   `json:"olt_query_enabled"`
@@ -72,6 +76,9 @@ type BenchDeviceConfig struct {
 	OUI          string `json:"oui"`
 	ProductClass string `json:"product_class"`
 	Serial       string `json:"serial"`
+	// SpeedWANInterface (ADR-0038): the SERVICE WAN interface the throughput test must use, as the data-model path (never the management WAN). Written by the
+	// owner at homologation; without it that device is refused for speed tests.
+	SpeedWANInterface string `json:"speed_wan_interface"`
 }
 
 // ID is the GenieACS _id form of the device.
@@ -282,12 +289,13 @@ func (c *Config) Validate() error {
 		}
 		ok := false
 		for _, o := range c.AllowedOps {
-			ok = ok || o == "reboot_cpe" || o == "set_wifi_ssid" || o == "onu_reset" || o == "onu_deactivate"
+			ok = ok || o == "reboot_cpe" || o == "set_wifi_ssid" || o == "onu_reset" || o == "onu_deactivate" || o == "speed_test_download" || o == "speed_test_upload"
 		}
 		if !ok {
-			errs = append(errs, errors.New("bench writes need \"reboot_cpe\" and/or \"set_wifi_ssid\" listed in allowed_operations (explicit)"))
+			errs = append(errs, errors.New("bench writes need \"reboot_cpe\", \"set_wifi_ssid\" and/or a speed test listed in allowed_operations (explicit)"))
 		}
 	}
+	errs = append(errs, c.validateSpeed()...)
 	if c.OLTQueryEnabled {
 		withOpt := false
 		for _, o := range c.AllowedOps {
@@ -592,4 +600,65 @@ func ReadSecret(path string) (string, error) {
 		return "", fmt.Errorf("%s is empty", path)
 	}
 	return s, nil
+}
+
+// validateSpeed checks the `speed` section against everything it depends on. A speed operation in allowed_operations without the section, or the
+// section without the bench, is an error: the module is either fully configured or not there.
+func (c *Config) validateSpeed() []error {
+	var errs []error
+	ops := false
+	for _, o := range c.AllowedOps {
+		ops = ops || o == "speed_test_download" || o == "speed_test_upload"
+	}
+	if c.Speed == nil || !c.Speed.Enabled {
+		if ops {
+			errs = append(errs, errors.New("speed_test_* in allowed_operations need an enabled speed section"))
+		}
+		return errs
+	}
+	if c.Bench == nil || !c.Bench.Enabled {
+		return append(errs, errors.New("speed.enabled requires the bench section enabled (the speed test is a bench write)"))
+	}
+	if !ops {
+		errs = append(errs, errors.New("speed.enabled needs speed_test_download and/or speed_test_upload listed in allowed_operations (explicit)"))
+	}
+	cat, err := speed.New(*c.Speed)
+	if err != nil {
+		return append(errs, err)
+	}
+	listed := map[string]bool{}
+	for _, a := range c.Allowlist {
+		listed[strings.ToLower(strings.TrimSpace(a))] = true
+	}
+	for _, hp := range cat.HostPorts() {
+		if !listed[strings.ToLower(hp)] {
+			errs = append(errs, fmt.Errorf("speed endpoint %s must also be listed in allowlist (the health probe is an outbound connection)", hp))
+		}
+	}
+	withWAN := 0
+	for _, d := range c.Bench.Devices {
+		if d.SpeedWANInterface == "" {
+			continue
+		}
+		if _, err := speed.InterfaceRoot(d.SpeedWANInterface); err != nil {
+			errs = append(errs, fmt.Errorf("bench.devices[%s].speed_wan_interface: %v", d.ID(), err))
+			continue
+		}
+		withWAN++
+	}
+	if withWAN == 0 {
+		errs = append(errs, errors.New("speed.enabled needs at least one bench device with a valid speed_wan_interface (the service WAN, written by the owner)"))
+	}
+	return errs
+}
+
+// SpeedWANInterfaces maps each bench device id to its configured service WAN interface (empty entries left out).
+func (b BenchConfig) SpeedWANInterfaces() map[string]string {
+	out := map[string]string{}
+	for _, d := range b.Devices {
+		if d.SpeedWANInterface != "" {
+			out[d.ID()] = d.SpeedWANInterface
+		}
+	}
+	return out
 }

@@ -206,13 +206,22 @@ func (a *Agent) runBench(ctx context.Context, env *jobs.Envelope) {
 	go func() {
 		res := a.Bench.Run(ctx, env)
 		a.Log.Info("bench job finished", "job_id", env.JobID, "state", res.State, "detail", res.Detail)
-		a.reportJob(ctx, env.JobID, res.State, res.Detail, res.Postcheck)
+		a.reportJobData(ctx, env.JobID, res.State, res.Detail, res.Postcheck, res.Data)
 		a.Flush(ctx)
 	}()
 }
 
 func (a *Agent) reportJob(ctx context.Context, jobID, state, detail string, postcheck bool) {
-	b, _ := json.Marshal(map[string]any{"job_id": jobID, "state": state, "detail": detail, "postcheck_ok": postcheck})
+	a.reportJobData(ctx, jobID, state, detail, postcheck, nil)
+}
+
+// reportJobData is reportJob plus the typed result of a speed test (closed shape, validated again by the Cloud).
+func (a *Agent) reportJobData(ctx context.Context, jobID, state, detail string, postcheck bool, data map[string]any) {
+	m := map[string]any{"job_id": jobID, "state": state, "detail": detail, "postcheck_ok": postcheck}
+	if data != nil {
+		m["data"] = data
+	}
+	b, _ := json.Marshal(m)
 	if err := a.Q.Enqueue(ctx, "job_result", "", 0, b); err != nil {
 		a.Log.Error("could not persist job result", "job_id", jobID, "err", err)
 	}

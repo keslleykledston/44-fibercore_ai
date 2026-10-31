@@ -375,7 +375,7 @@ def test_the_shipped_default_has_the_edge_support_but_every_other_condition_stay
 
     assert importlib.reload(bench).EDGE_SUPPORT is True   # flipped by the PR that implements and tests the Edge side
     assert bench.BENCH_OPS.keys() == {"reboot_cpe", "set_wifi_ssid", "onu_reset", "onu_deactivate", "speed_test_download", "speed_test_upload"}   # H2, H3, H4 (ADR-0030) and the speed test (ADR-0038)
-    assert bench.SPEED_EDGE_SUPPORT is False   # the Edge half is a separate delivery: until it ships no speed test can be authorized or dispatched
+    assert bench.SPEED_EDGE_SUPPORT is True   # the Edge half of the speed test shipped (ADR-0038); every other condition (flags, bench target, evidence, authorization) stays closed
     assert features_default("bench_writes") is False      # the tenant flag still defaults off
 
 

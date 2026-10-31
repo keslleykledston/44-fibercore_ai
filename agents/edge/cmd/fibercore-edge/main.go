@@ -26,6 +26,7 @@ import (
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/oltquery"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/queue"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/singleton"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/speed"
 )
 
 var version = "0.1.0-dev"
@@ -206,6 +207,13 @@ func main() {
 	var queryStore *oltquery.Store
 	var oltLease *jobs.LeaseHolder
 	var benchRunner *bench.Runner
+	var speedCat *speed.Catalog
+	if cfg.Speed != nil && cfg.Speed.Enabled { // validated by config.Validate: a section that does not pass never gets here
+		if speedCat, err = speed.New(*cfg.Speed); err != nil {
+			log.Error("speed section", "err", err)
+			os.Exit(2)
+		}
+	}
 	if cfg.JobsEnabled {
 		pub, err := jobs.ParsePublicKey(cfg.JobPublicKey)
 		if err != nil {
@@ -234,6 +242,9 @@ func main() {
 			allowed[o] = true
 		}
 		verifier = &jobs.Verifier{Pub: pub, EdgeID: cfg.EdgeID, TenantID: cfg.TenantID, Allowed: allowed, BenchEnabled: benchOn, Nonces: q, Now: time.Now}
+		if speedCat != nil {
+			verifier.SpeedEnabled, verifier.SpeedCheck = true, speedCat.Check
+		}
 		if cfg.OLTQueryEnabled {
 			if oltCol == nil {
 				log.Error("olt_query_enabled needs the olts collector")
@@ -299,6 +310,7 @@ func main() {
 				// per-device pacing (default 30 min, 2 per hour; the configuration may lower it down to the floor); reservation persisted before sending
 				Guard: &nbi.RefreshGuard{Path: config.BenchGuardFile(cfg.QueuePath), MinPerDevice: minGap, MaxPerHour: perHour},
 			}
+			benchRunner.Speed, benchRunner.WANInterface = speedCat, cfg.Bench.SpeedWANInterfaces()
 			if bo := cfg.Bench.OLT; bo != nil {
 				if oltCol == nil {
 					log.Error("bench.olt needs the olts collector")
@@ -353,7 +365,38 @@ func main() {
 		EdgeID: cfg.EdgeID, TenantID: cfg.TenantID, Version: cfg.Version, GW: gw, Q: q, Collectors: collectors,
 		Jobs: verifier, Queries: queryStore, OLTLease: oltLease, Refresher: refresher, Bench: benchRunner, JobPollEvery: 15 * time.Second, HeartbeatEvery: cfg.HeartbeatEvery(), CollectEvery: cfg.CollectEvery(), Log: log,
 	}
+	if speedCat != nil {
+		go reportSpeedHealth(ctx, speedCat, al.DialContext, ag, log)
+		log.Warn("speed tests ENABLED for the bench devices", "endpoints", len(speedCat.All()))
+	}
 	log.Info("fibercore-edge starting", "version", cfg.Version, "edge_id", cfg.EdgeID, "collectors", len(collectors))
 	ag.Run(ctx)
 	log.Info("fibercore-edge stopped")
+}
+
+// reportSpeedHealth probes the test nodes and tells the Cloud only `ok`/`down` per logical id, when it changes and at least every 15 minutes. The probe is
+// one small GET per node (see speed.Probe); it never starts a test.
+func reportSpeedHealth(ctx context.Context, cat *speed.Catalog, dial func(context.Context, string, string) (net.Conn, error), ag *agent.Agent, log *slog.Logger) {
+	var last []byte
+	var sentAt time.Time
+	tick := time.NewTicker(5 * time.Minute)
+	defer tick.Stop()
+	for {
+		pctx, cancel := context.WithTimeout(ctx, time.Minute)
+		b := cat.HealthPayload(pctx, dial)
+		cancel()
+		if string(b) != string(last) || time.Since(sentAt) >= 15*time.Minute {
+			if err := ag.Q.Enqueue(ctx, "speed_health", "speed_health", 0, b); err != nil {
+				log.Warn("could not queue the speed endpoint health", "err", err)
+			} else {
+				last, sentAt = b, time.Now()
+				ag.Flush(ctx)
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+	}
 }
