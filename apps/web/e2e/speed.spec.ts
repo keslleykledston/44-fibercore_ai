@@ -237,3 +237,34 @@ test("teste de banda (cenário): sessão expirada durante o acompanhamento para 
   await page.waitForTimeout(5000);                                                                                       // mais de um ciclo de acompanhamento
   expect(reads).toBe(seen);                                                                                              // parou de consultar
 });
+
+test("teste de banda (cenário): resposta 502 ao pedido é ambígua, trava os botões e só destrava por uma leitura feita depois do prazo sem execução nova", async ({ page, request }) => {
+  await confirmDemoA2(request);
+  let posts = 0;
+  await page.route("**/bff/cpes/*/speed", (r) => r.fulfill({ json: { caps: CAPS(), runs: [] } }));
+  await page.route("**/bff/cpes/*/speed/runs", (r) => { posts += 1; return r.fulfill({ status: 502, json: { error: "failed" } }); });
+  await openTab(page);
+  await page.clock.install();
+  await page.getByTestId("speed-start-download").click();
+  await expect(page.getByTestId("speed-refusal")).toContainText("Não foi possível confirmar o pedido");
+  await expect(page.getByTestId("speed-pending")).toBeVisible();
+  await expect(page.getByTestId("speed-start-download")).toBeDisabled();
+  await expect(page.getByTestId("speed-start-upload")).toBeDisabled();
+  await page.getByTestId("speed-pending-refresh").click();                                                              // uma leitura ANTES do prazo não basta
+  await expect(page.getByTestId("speed-start-download")).toBeDisabled();
+  await page.clock.fastForward("01:05");                                                                                // passa o prazo; a leitura periódica seguinte começa DEPOIS dele, sem execução nova: destrava sozinha
+  await expect(page.getByTestId("speed-start-download")).toBeEnabled();
+  await expect(page.getByTestId("speed-pending")).toHaveCount(0);
+  expect(posts).toBe(1);
+});
+
+test("teste de banda (cenário): recusa definitiva (409) não trava e a próxima tentativa é possível", async ({ page, request }) => {
+  await confirmDemoA2(request);
+  await page.route("**/bff/cpes/*/speed", (r) => r.fulfill({ json: { caps: CAPS(), runs: [] } }));
+  await page.route("**/bff/cpes/*/speed/runs", (r) => r.fulfill({ status: 409, json: { error: "blocked", reason: "tenant_busy" } }));
+  await openTab(page);
+  await page.getByTestId("speed-start-download").click();
+  await expect(page.getByTestId("speed-refusal")).toContainText("limite de testes simultâneos");
+  await expect(page.getByTestId("speed-pending")).toHaveCount(0);
+  await expect(page.getByTestId("speed-start-download")).toBeEnabled();
+});

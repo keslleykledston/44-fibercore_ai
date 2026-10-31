@@ -107,7 +107,10 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
         body: JSON.stringify({ key: crypto.randomUUID(), direction, endpoint_id: endpoint.id, profile, ...(group ? { group_id: group } : {}) }),
       });
       const j = (await r.json().catch(() => ({}))) as { error?: string; reason?: string };
+      // Só estes códigos garantem, pelo contrato do BFF/API, que NADA foi criado (recusa definitiva). Qualquer outra falha (5xx, 502, resposta ilegível) é AMBÍGUA: o pedido pode ter sido gravado.
+      const definitive = [400, 401, 403, 404, 409, 413].includes(r.status);
       if (r.ok) setPending({ known: runs.map((x) => x.id), until: Date.now() + PENDING_MS, certain: true });   // aceito: lembrado até uma leitura mostrar a execução
+      else if (!definitive) { setPending({ known: runs.map((x) => x.id), until: Date.now() + UNCERTAIN_MS, certain: false }); setRefusal("Não foi possível confirmar o pedido. Aguarde a atualização antes de pedir de novo."); }
       else setRefusal(j.error === "blocked" && j.reason ? BLOCKED_TEXT[j.reason] ?? "O pedido foi recusado." : j.error === "forbidden" ? BLOCKED_TEXT.not_permitted! : "Não foi possível pedir o teste agora.");
       await fetchAll();
     } catch {   // o pedido pode ter chegado: não se sabe. Trava por pouco tempo e deixa a leitura dizer
