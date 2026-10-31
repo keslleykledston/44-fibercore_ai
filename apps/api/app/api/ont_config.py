@@ -6,7 +6,7 @@ flag `ont_config` is off every call is refused with `feature_disabled`. A synthe
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -53,6 +53,14 @@ class ConfigSnapshot(BaseModel):
 
     _obs = field_validator("observed_at")(_check_observed)
 
+    @model_validator(mode="after")
+    def _fields_not_after_the_snapshot(self) -> ConfigSnapshot:
+        # a field cannot be newer than the snapshot that carries it (beyond a small tolerance): an Edge with a fast clock must not push a "future" watermark
+        limit = self.observed_at + timedelta(seconds=60)
+        if any(f.captured_at > limit for c in self.configs for f in c.fields):
+            raise ValueError("captured_at is after the snapshot")
+        return self
+
 
 @router.post("/v1/edge/cpe-config", status_code=202)
 def ingest_cpe_config(body: ConfigSnapshot, p: Principal = Depends(require("inventory:write")), conn: Connection = TENANT_CONN) -> dict:
@@ -79,7 +87,7 @@ def ingest_cpe_config(body: ConfigSnapshot, p: Principal = Depends(require("inve
     if rows:
         conn.execute(   # STRICTLY newer device time wins: a replay or an older read never overwrites a newer observation
             text("INSERT INTO cpe_config_fields (tenant_id, cpe_id, name, instance_key, value, captured_at, observed_at, data_model, protocol, source) "
-                 "VALUES (:t,:c,:n,:i,CAST(:v AS jsonb),:ca,:o,:dm,:pr,'edge') ON CONFLICT (tenant_id, cpe_id, name, instance_key) DO UPDATE SET "
+                 "VALUES (:t,:c,:n,:i,CAST(:v AS jsonb),LEAST(:ca, now()),:o,:dm,:pr,'edge') ON CONFLICT (tenant_id, cpe_id, name, instance_key) DO UPDATE SET "
                  "value = EXCLUDED.value, captured_at = EXCLUDED.captured_at, observed_at = EXCLUDED.observed_at, received_at = now(), "
                  "data_model = EXCLUDED.data_model, protocol = EXCLUDED.protocol, source = 'edge' WHERE cpe_config_fields.captured_at < EXCLUDED.captured_at"),
             rows)

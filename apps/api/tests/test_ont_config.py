@@ -295,3 +295,16 @@ def test_the_revision_changes_only_when_the_configuration_changes():
     rows = [{"name": "wifi.ssid", "instance_key": "ssid/1", "value": "A"}, {"name": "wifi.channel", "instance_key": "radio/1", "value": 6}]
     r1 = ont_config.revision(rows)
     assert r1 == ont_config.revision(list(reversed(rows))) and r1 != ont_config.revision([{**rows[0], "value": "B"}, rows[1]])
+
+
+def test_a_field_cannot_be_newer_than_its_snapshot_nor_than_the_cloud_clock(client, seed, inv, on):
+    cpe = _cpe(client, inv, seed, "CFG-CLK-1", "ext-cfg-clk-1")
+    h, ag = hdr(client, "alice", seed, "A"), agent(client, inv, "a1")
+    ahead = _report(inv, "ext-cfg-clk-1", [_f("wifi.ssid", "ssid/1", "Adiantado", _now(240))], observed=_now(-10))      # 4 min ahead of a snapshot taken 10 s ago
+    assert client.post("/v1/edge/cpe-config", headers=ag, json=ahead).status_code == 422
+    skewed = _report(inv, "ext-cfg-clk-1", [_f("wifi.ssid", "ssid/1", "Relogio_rapido", _now(200))], observed=_now(200))      # an Edge whose whole clock runs 200 s fast
+    assert client.post("/v1/edge/cpe-config", headers=ag, json=skewed).status_code == 202
+    right = _report(inv, "ext-cfg-clk-1", [_f("wifi.ssid", "ssid/1", "Correto", _now(-5))])
+    assert client.post("/v1/edge/cpe-config", headers=ag, json=right).status_code == 202
+    ssid = next(f for f in client.get(f"/v1/cpes/{cpe}/ont-config/configuration", headers=h).json()["fields"] if f["name"] == "wifi.ssid")
+    assert ssid["captured_at"] <= _now() and ssid["value"] in ("Relogio_rapido", "Correto")      # stored time never runs ahead of the cloud clock
