@@ -118,3 +118,16 @@ Fonte: `docs/addenda/v2.2/` (pacote intacto). Análise: `docs/addenda/v2.2/GAP_A
 - Gate B0 entregue: `docs/feature-packs/SD-001/BASELINE_COMPATIBILITY_REPORT.md` + ADR-0025 (Accepted em 2026-10-29). P0/P1/P2 e FC22-001…009 permanecem como estão.
 - Ordem proposta: SD-PR-01 contratos+mocks+flags off → SD-PR-02 `device_capabilities` (parameter_paths/TTL) → SD-PR-03 `diagnostic_jobs` read-only → (após ADRs) coleta WAN/Wi-Fi, testes ativos, propostas/aprovação (sobre o gate de jobs), homologação em laboratório.
 - Bloqueios: ADR-SD-002 (árvore de parâmetros + NBI fechado), ADR-0015/ADR-SD-006 (copiloto), ADR-SD-003 (testes ativos), ADR-SD-005 (USP). Escrita real: homologação + autorização operacional separada.
+
+## v2.4 — ONT Configuration Manager (FC24-*), incorporado SEM reiniciar a sprint (ADR-0034, `docs/addenda/v2.4/`)
+| ID | Prio | Estado | Dependência |
+|---|---|---|---|
+| FC24-00 | P0 | [x] GAP (`docs/addenda/v2.4/GAP_ANALYSIS.md`) + ADR-0034 + backlog | — |
+| FC24-01 | P0 | [x] leitura: catálogo fechado, ingestão `cpe-config`, `configuration` / `capabilities` / `form-schema`, perfis sintéticos; **só mocks, nada lido de ONT real** | FC22-002 |
+| FC24-02 | P0 | [ ] sidebar direito recolhível (miniatura, abas, formulários só leitura) + ajuda `/ajuda/ont/*` com capturas reais | 01 |
+| FC24-03 | P0 | [ ] preview/policy/jobs por capacidade (`If-Match`, diff redigido, risco, aprovação) com mocks | 01, jobs |
+| FC24-04 | P0 | [ ] adaptador GenieACS seguro no Edge (leitura ampla; escrita só em laboratório autorizado; SSID/enable primeiro numa combinação) | 03 |
+| FC24-05 | P1 | [ ] Wi-Fi abrangente (senha write-only por `secret_ref`, canal, largura, potência certificada) | 04 |
+| FC24-06 | P1 | [ ] LAN e WAN (R3: OOB, janela, dupla aprovação) | 04 |
+| FC24-07 | P2 | [ ] adaptador USP (Controller real homologado; lock comum) | 04 |
+| FC24-08 | P1 | [ ] métricas, rollback/reconciliação, gate humano | 05 |
