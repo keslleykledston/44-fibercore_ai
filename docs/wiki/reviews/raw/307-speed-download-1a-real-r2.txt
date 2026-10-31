@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19405-ee0f-7a60-b8c0-3a4863ffe846).
+[codex] Turn started (01a19405-ee4a-7a61-891a-e283e1804c2a).
+[codex] Assistant message captured: Vou comparar o diff com `main` e conferir as afirmações de status contra a evidência bruta, c...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/operations/SPEED_HOMOL...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/operations/SPEED_HOMOL... (exit 0)
+[codex] Running command: /bin/bash -lc "git status --short && git diff --check main...HEAD && rg -n \"speed_test_downl...
+[codex] Command completed: /bin/bash -lc "git status --short && git diff --check main...HEAD && rg -n \"speed_test_downl... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "ADR-0030|evidência completa|aceite.*observed|responsável.*observed|capa...
+[codex] Command failed: /bin/bash -lc 'rg -n "ADR-0030|evidência completa|aceite.*observed|responsável.*observed|capa... (exit 128)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: o status pendente está coerente, mas ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: o status pendente está coerente, mas a reversão do registro é afirmada sem evidência independente no diff.
+
+Findings:
+- [medium] A reversão para `identified` não tem comprovação rastreável (docs/wiki/bench/H-speed_test_download-1a-execucao-real-2026-10-31.md:17)
+  A linha afirma que a promoção foi revertida e que o registro continua `supported`/`identified`, mas cita o próprio arquivo como evidência; o arquivo registra essa conclusão sem mostrar uma saída do registro ou outro artefato que confirme o estado atual. Assim, não é possível distinguir uma reversão efetiva de uma afirmação documental incorreta, e leitores podem confiar num gate que ainda esteja em `observed`.
+  Recommendation: Anexar uma evidência verificável e sanitizada do estado atual do registro após a reversão, ou limitar a frase ao que está comprovado no documento e retirar a afirmação de estado atual.
