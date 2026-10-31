@@ -398,3 +398,123 @@ func TestAnEnvelopeOfAnOlderOwnerGenerationIsRefusedAndTheGenerationOnlyGoesUp(t
 		t.Fatalf("a malformed epoch table is corruption: %v", err)
 	}
 }
+
+func TestCaptureBudgetIsItsOwnClassAndFitsTheAggregate(t *testing.T) {
+	s, c := newStore(t)
+	for i := 0; i < CapturesPerSession; i++ {
+		if err := s.ReserveCapture(olt1, "sess-A"); err != nil {
+			t.Fatalf("capture %d: %v", i, err)
+		}
+	}
+	if err := s.ReserveCapture(olt1, "sess-A"); !errors.Is(err, ErrBudget) {
+		t.Fatalf("a session holds %d captures: %v", CapturesPerSession, err)
+	}
+	if err := s.ReserveCapture(olt1, "sess-B"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ReserveCapture(olt1, "sess-B"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ReserveCapture(olt1, "sess-C"); !errors.Is(err, ErrBudget) {
+		t.Fatalf("the hour holds %d captures: %v", CapturesPerHour, err)
+	}
+	if err := s.ReserveCapture(olt2, "sess-C"); err != nil {
+		t.Fatalf("another OLT has its own budget: %v", err)
+	}
+	restarted := &Store{Path: s.Path, Now: c.now}
+	if err := restarted.ReserveCapture(olt1, "sess-D"); !errors.Is(err, ErrBudget) {
+		t.Fatalf("the spent budget survives a restart: %v", err)
+	}
+	c.t = c.t.Add(61 * time.Minute)
+	if err := restarted.ReserveCapture(olt1, "sess-E"); err != nil {
+		t.Fatalf("the hour rolled: %v", err)
+	}
+	// captures never take the on-demand class: the on-demand budget of a session is untouched by them
+	s2, c2 := newStore(t)
+	_ = s2.ReserveCapture(olt1, "S")
+	_ = s2.ReserveCapture(olt1, "S")
+	for i := 0; i < PerSession; i++ {
+		enq(t, s2, c2, fmt.Sprintf("j%d", i), olt1)
+	}
+	n := 0
+	for {
+		if _, err := s2.Claim(olt1, "S"); err != nil {
+			break
+		}
+		n++
+	}
+	if n != PerSession || n+CapturesPerSession > MaxPerSession {
+		t.Fatalf("on-demand ran %d with 2 captures in the same session (aggregate cap %d)", n, MaxPerSession)
+	}
+	// the aggregate: with on-demand queries already filling the session, a capture is refused when the sum would pass the cap
+	s3, c3 := newStore(t)
+	for i := 0; i < MaxPerSession; i++ {
+		enq(t, s3, c3, fmt.Sprintf("a%d", i), olt1)
+	}
+	for i := 0; i < PerSession; i++ {
+		_, _ = s3.Claim(olt1, "T")
+	}
+	f, _ := s3.load()
+	for i := 0; i < 4; i++ { // pretend three more executions were counted in the session (routines of the future)
+		f.Entries[fmt.Sprintf("x%d", i)] = &Entry{JobID: fmt.Sprintf("x%d", i), Intent: Intent{OLTRef: olt1}, State: Failed, SessionID: "T"}
+	}
+	if err := s3.save(f); err != nil {
+		t.Fatal(err)
+	}
+	if err := s3.ReserveCapture(olt1, "T"); !errors.Is(err, ErrBudget) {
+		t.Fatalf("9 executions already counted in the session: a capture would pass the aggregate cap: %v", err)
+	}
+}
+
+func TestCapturesOfTheSessionCountTowardTheAggregateCapOfOnDemandClaims(t *testing.T) {
+	s, c := newStore(t)
+	for i := 0; i < CapturesPerSession; i++ {
+		if err := s.ReserveCapture(olt1, "S"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < MaxPerSession; i++ {
+		enq(t, s, c, fmt.Sprintf("j%d", i), olt1)
+	}
+	n := 0
+	for {
+		if _, err := s.Claim(olt1, "S"); err != nil {
+			break
+		}
+		n++
+	}
+	if n+CapturesPerSession > MaxPerSession {
+		t.Fatalf("%d on-demand + %d captures pass the aggregate cap %d", n, CapturesPerSession, MaxPerSession)
+	}
+}
+
+func TestTheAggregateCapIsPerSessionAcrossOLTs(t *testing.T) {
+	s, c := newStore(t)
+	for i := 0; i < PerSession; i++ {
+		enq(t, s, c, fmt.Sprintf("a%d", i), olt1)
+	}
+	for i := 0; i < PerSession; i++ {
+		if _, err := s.Claim(olt1, "S"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// the same session id used for another OLT (an alias or a shared id): 5 already ran, 2 captures fit (7), a 3rd execution of any kind does not pass 8
+	for i := 0; i < CapturesPerSession; i++ {
+		if err := s.ReserveCapture(olt2, "S"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 4; i++ {
+		enq(t, s, c, fmt.Sprintf("b%d", i), olt2)
+	}
+	n := 0
+	for {
+		if _, err := s.Claim(olt2, "S"); err != nil {
+			break
+		}
+		n++
+	}
+	if PerSession+CapturesPerSession+n > MaxPerSession {
+		t.Fatalf("session total %d passes the cap %d", PerSession+CapturesPerSession+n, MaxPerSession)
+	}
+}

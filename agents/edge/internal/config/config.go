@@ -106,6 +106,17 @@ type OLTConfig struct {
 	DownTimes *DownTimesConfig `json:"down_times"`
 	// CloudID is the id of this OLT in the Cloud (lower-case UUID): what an olt_query job names. Only OLTs that have it take queries.
 	CloudID string `json:"cloud_id"`
+	// Capture (ADR-0032): supervised, ONE-TIME captures of queries that are not validated yet; the raw output stays on this host (captures/, 0700/0600, deleted after 24 h).
+	// Needs olt_query_enabled and cloud_id. A PON or ONU scope can only be the bench's (bench.olt); global and slot scopes carry no subscriber ONU.
+	Capture []CaptureConfig `json:"capture"`
+}
+
+// CaptureConfig names one query to capture once, with the integers of its scope.
+type CaptureConfig struct {
+	QueryID string `json:"query_id"`
+	Slot    int    `json:"slot"`
+	Port    int    `json:"port"`
+	ONT     int    `json:"ont"`
 }
 
 // DownTimesConfig is the CLI read of the OLT's last down times (see OLTConfig.DownTimes).
@@ -292,6 +303,42 @@ func (c *Config) Validate() error {
 			errs = append(errs, errors.New("olt_query_enabled needs jobs_enabled, \"olt_query\" in allowed_operations and at least one huawei_ma56_r015 CLI olt with cloud_id"))
 		}
 	}
+	for i, o := range c.OLTs {
+		if len(o.Capture) == 0 {
+			continue
+		}
+		p := fmt.Sprintf("olts[%d].capture", i)
+		if !c.OLTQueryEnabled || o.CloudID == "" || o.Profile != "huawei_ma56_r015" || o.Transport == "snmp" {
+			errs = append(errs, fmt.Errorf("%s needs olt_query_enabled and a huawei_ma56_r015 CLI olt with cloud_id", p))
+			continue
+		}
+		if len(o.Capture) > 10 {
+			errs = append(errs, fmt.Errorf("%s: at most 10 captures", p))
+		}
+		seenCap := map[string]bool{}
+		for j, cp := range o.Capture {
+			q, ok := olt.QueryByID(cp.QueryID)
+			if !ok {
+				errs = append(errs, fmt.Errorf("%s[%d]: unknown query", p, j))
+				continue
+			}
+			if _, err := q.Render(olt.Params{Slot: cp.Slot, Port: cp.Port, ONT: cp.ONT}); err != nil {
+				errs = append(errs, fmt.Errorf("%s[%d]: parameters do not match the scope of %s", p, j, cp.QueryID))
+				continue
+			}
+			k := fmt.Sprintf("%s|%d|%d|%d", cp.QueryID, cp.Slot, cp.Port, cp.ONT)
+			if seenCap[k] {
+				errs = append(errs, fmt.Errorf("%s[%d]: listed twice", p, j))
+			}
+			seenCap[k] = true
+			// a PON or ONU scope is only ever the bench's: a subscriber's PON or ONU is never captured
+			if (q.Scope == olt.ScopePON || q.Scope == olt.ScopeONU) &&
+				!(c.Bench != nil && c.Bench.OLT != nil && c.Bench.OLT.Name == o.Name && c.Bench.OLT.Slot == cp.Slot && c.Bench.OLT.Port == cp.Port &&
+					(q.Scope == olt.ScopePON || c.Bench.OLT.OntID == cp.ONT)) {
+				errs = append(errs, fmt.Errorf("%s[%d]: a PON or ONU capture can only be the bench's (bench.olt)", p, j))
+			}
+		}
+	}
 	cloudIDs := map[string]bool{}
 	for i, o := range c.OLTs {
 		if o.CloudID == "" {
@@ -470,6 +517,9 @@ func (b BenchConfig) BenchPacing() (time.Duration, int) {
 var gponSerialRe = regexp.MustCompile(`^[0-9A-F]{16}$`)
 
 var cloudIDRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// CapturesDir is where the raw output of the supervised captures is written (ADR-0032): next to the Edge queue, 0700, never sent anywhere.
+func CapturesDir(queuePath string) string { return filepath.Join(filepath.Dir(queuePath), "captures") }
 
 // OLTQueriesFile is the durable queue of the read-only OLT queries (ADR-0029); it lives next to the Edge queue.
 func OLTQueriesFile(queuePath string) string {

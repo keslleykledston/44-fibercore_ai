@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -481,5 +482,57 @@ func TestOLTQueryConfig(t *testing.T) {
 	}
 	if _, err := Load(write(t, 0o600, good(`,"jobs_enabled":false,"olt_query_enabled":true,"allowed_operations":["olt_query"],"olts":[`+olt(`,"cloud_id":"`+cid+`"`)+`],"allowlist":["10.0.0.1:22"]`)), "v"); err == nil {
 		t.Error("olt_query_enabled without jobs_enabled must be refused")
+	}
+}
+
+func TestOLTCaptureConfig(t *testing.T) {
+	cid := "8f14e45f-ceea-467a-9a36-4a1b5c3d2e10"
+	dev := `{"oui":"00259E","product_class":"EG8145V5","serial":"48575443E2247AA5"}`
+	benchOLT := `"olt":{"name":"OLT-A","frame":0,"slot":0,"port":14,"ont_id":10,"gpon_serial":"48575443E2247AA5"}`
+	mk := func(enabled bool, capture string) string {
+		e := ""
+		if enabled {
+			e = `,"olt_query_enabled":true`
+		}
+		return `,"nbi_url":"http://127.0.0.1:7557","jobs_enabled":true,"job_public_key":"k","allowlist":["10.0.0.1:22"],"allowed_operations":["collect","olt_query","onu_reset"]` + e +
+			`,"olts":[{"name":"OLT-A","vendor":"huawei","address":"10.0.0.1:22","username":"u","secret_file":"/s","host_key_sha256":"SHA256:abc","pon_ports":["0/0/14"],"profile":"huawei_ma56_r015","cloud_id":"` + cid + `","capture":[` + capture + `]}]` +
+			`,"bench":{"bench_writes_enabled":true,"devices":[` + dev + `],` + benchOLT + `}`
+	}
+	ok := []string{
+		`{"query_id":"olt.time"},{"query_id":"olt.alarm.active"}`,
+		`{"query_id":"slot.cpu","slot":0}`,
+		`{"query_id":"pon.ont.summary","slot":0,"port":14}`,
+		`{"query_id":"onu.info","slot":0,"port":14,"ont":10}`,
+	}
+	for _, c := range ok {
+		if _, err := Load(write(t, 0o600, good(mk(true, c))), "v"); err != nil {
+			t.Errorf("%s: %v", c, err)
+		}
+	}
+	bad := map[string]string{
+		"unknown query":               `{"query_id":"olt.nope"}`,
+		"listed twice":                `{"query_id":"olt.time"},{"query_id":"olt.time"}`,
+		"PON that is not the bench's": `{"query_id":"pon.ont.summary","slot":0,"port":3}`,
+		"ONU that is not the bench's": `{"query_id":"onu.info","slot":0,"port":14,"ont":11}`,
+		"ONU on another PON":          `{"query_id":"onu.info","slot":0,"port":3,"ont":10}`,
+		"scope params missing":        `{"query_id":"onu.info"}`,
+	}
+	for name, c := range bad {
+		if _, err := Load(write(t, 0o600, good(mk(true, c))), "v"); err == nil {
+			t.Errorf("%s: must be refused", name)
+		}
+	}
+	if _, err := Load(write(t, 0o600, good(mk(false, `{"query_id":"olt.time"}`))), "v"); err == nil {
+		t.Error("capture without olt_query_enabled must be refused")
+	}
+	var many []string
+	for i := 0; i < 11; i++ {
+		many = append(many, fmt.Sprintf(`{"query_id":"slot.cpu","slot":%d}`, i))
+	}
+	if _, err := Load(write(t, 0o600, good(mk(true, strings.Join(many, ",")))), "v"); err == nil {
+		t.Error("more than 10 captures must be refused")
+	}
+	if got := CapturesDir("/var/lib/edge/queue.json"); got != "/var/lib/edge/captures" {
+		t.Errorf("captures dir: %s", got)
 	}
 }

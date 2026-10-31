@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18f4c-349c-72c2-9d32-7fbf9ba5395d).
+[codex] Turn started (01a18f4c-34d9-7050-a9fe-ce45d44aef04).
+[codex] Assistant message captured: Vou conferir o diff real contra `main` e seguir os caminhos de concorrência, retomada e grava...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt_capture.go | sed -n '1,330p'; git di...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt_capture.go | sed -n '1,330p'; git di... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"Capture.Do|sessionID|SessionID|ReserveCapture|queryCommandsEach|queryM...
+[codex] Command completed: /bin/bash -lc "rg -n \"Capture.Do|sessionID|SessionID|ReserveCapture|queryCommandsEach|queryM... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '245,300p'; nl -ba agent...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '245,300p'; nl -ba agent... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: os limites de comandos e bytes são...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: os limites de comandos e bytes são reiniciados entre consultas sob demanda e capturas na mesma sessão CLI, permitindo exceder o orçamento total da sessão.
+
+Findings:
+- [medium] Orçamento de comandos e bytes não é agregado entre consultas e capturas (agents/edge/internal/collector/olt_capture.go:201)
+  `Queries.Drain` envolve a sessão bruta em um `Budget` próprio; depois, `Capture.Do` envolve a mesma sessão em outro `Budget` independente. Assim, os limites de comandos e bytes são reiniciados ao começar as capturas, embora ambas as etapas ocorram na mesma sessão CLI. Uma rodada com consultas sob demanda seguida de capturas pode consumir até o limite de cada wrapper, excedendo o orçamento agregado esperado e prolongando ou sobrecarregando a sessão no OLT. Compartilhe um único contador de orçamento entre as duas etapas, ou reserve explicitamente o saldo consumido pela primeira antes de iniciar a segunda.
+  Recommendation: Passe o mesmo wrapper/estado de orçamento de sessão para `Drain` e `Capture.Do`, com comandos e bytes contabilizados cumulativamente.
+
+Next steps:
+- Unificar o orçamento da sessão entre consultas sob demanda e capturas antes de liberar a mudança.

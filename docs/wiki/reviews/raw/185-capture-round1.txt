@@ -1,0 +1,42 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18f49-904c-7f33-ab83-033e7c4377a4).
+[codex] Turn started (01a18f49-9085-7b23-af4c-110db25d856b).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os fluxos de orçamento, persistência, execução,...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=25 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=25 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"Capture|capture|ReserveCapture|func \\(.*Queries|Do\\(\" agents/edge/i...
+[codex] Command completed: /bin/bash -lc "rg -n \"Capture|capture|ReserveCapture|func \\(.*Queries|Do\\(\" agents/edge/i... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '225,290p'; nl -ba agent...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '225,290p'; nl -ba agent... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt_queries.go | sed -n '95,175p'; nl -b...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt_queries.go | sed -n '95,175p'; nl -b... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: há riscos concretos de perda de cap...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: há riscos concretos de perda de capturas e estouro dos limites agregados, além de controles de sessão vulneráveis a reinício e concorrência.
+
+Findings:
+- [high] A limpeza após 24 h não alcança `done.json`, então capturas expiradas nunca voltam a ser executadas (agents/edge/internal/collector/olt_capture.go:69-70)
+  O marcador `done.json` é explicitamente excluído da varredura e guarda apenas chaves, sem timestamps. Após a primeira execução de cada item, `loadDone` continua a filtrá-lo mesmo depois de os arquivos de saída terem sido removidos. Assim, reiniciar o Edge ou esperar a retenção não permite nova captura da configuração; o comportamento contradiz a janela de retenção e exige intervenção manual para rearmar a sessão.
+  Recommendation: Persistir horário/estado por captura e expirar os marcadores junto com os arquivos após 24 h, ou definir uma política explícita de rearmamento com marcador versionado.
+- [high] O teto agregado de 8 é contado por OLT, não pela sessão CLI (agents/edge/internal/oltquery/store.go:232-240)
+  `ReserveCapture` soma as consultas sob demanda apenas para entradas cujo `Intent.OLTRef` é igual ao OLT da captura, embora o identificador `session` seja compartilhado entre os OLTs. Consultas feitas em outro OLT da mesma sessão não entram em `onDemand`, então capturas em outro OLT podem ultrapassar o limite agregado declarado. O caminho `Claim` também limita apenas a classe sob demanda a 5 e não aplica `MaxPerSession` ao total.
+  Recommendation: Contar todas as claims atribuídas àquele session ID independentemente de OLT e aplicar o mesmo limite agregado ao `Claim` e ao `ReserveCapture` dentro da atualização bloqueada.
+- [high] O limite de 2 capturas por sessão é reiniciado a cada processo (agents/edge/internal/collector/olt.go:277-279)
+  O ID de sessão é gerado com `UnixNano()` para cada coleta. `CaptureSess` persiste contagens apenas por esse ID e não as associa a uma janela identificável após reinício; cada nova sessão começa com `N=0`. Como a cota por hora é quatro, reinícios repetidos permitem executar mais de duas capturas por hora, apesar do limite por sessão e da exigência de orçamento persistido.
+  Recommendation: Definir e persistir uma identidade/delimitação de sessão que sobreviva a reinícios para a cota pretendida, ou controlar uma cota persistida por OLT e janela que imponha o limite operacional independentemente do ciclo de processo.
+- [medium] Falha ao gravar `done.json` pode deixar a saída sem persistência com a captura já consumida (agents/edge/internal/collector/olt_capture.go:158-163)
+  O orçamento é reservado antes de atualizar `done.json`. Se a gravação do marcador falha, `Do` retorna antes de executar, mas a reserva já foi persistida. Se `done.json` estiver ausente ou inválido, `loadDone` trata todos os itens como pendentes; na próxima sessão a captura pode ser tentada novamente apesar de já ter consumido orçamento, e falhas repetidas podem bloquear o lote sem uma saída capturada. A ordem também não garante durabilidade do marcador antes do comando: `saveDone` renomeia sem `fsync` do arquivo ou diretório.
+  Recommendation: Persistir atomicamente orçamento e estado de tentativa em um único store durável antes do comando; sincronizar arquivo e diretório e tratar marcador corrompido como fail-closed.
+- [medium] Capturas distintas podem sobrescrever arquivos e o limite de armazenamento é contornado (agents/edge/internal/collector/olt_capture.go:177-190)
+  O nome de saída usa apenas segundo UTC e QueryID, sem incluir parâmetros ou ID OLT. Duas configurações/OLTs com a mesma query no mesmo segundo geram o mesmo caminho e a segunda `Rename` pode substituir silenciosamente a primeira. A varredura conta arquivos existentes, mas o limite é verificado antes da gravação e não considera esse overwrite; gravação concorrente pode ainda exceder 10 arquivos ou 20 MiB.
+  Recommendation: Usar nomes únicos contendo OLT, escopo e identificador de tentativa, criar arquivos sem sobrescrita e serializar a reserva de capacidade juntamente com a gravação.
+- [medium] Falhas do armazenamento de captura são ocultadas e a coleta segue como se nada tivesse ocorrido (agents/edge/internal/collector/olt_capture.go:127-129)
+  `Do` ignora erros de sweep e retorna silenciosamente; erros de orçamento, lease e gravação de `done.json` também terminam sem `OnCapture` nem diagnóstico. Isso preserva a coleta principal, mas torna impossível distinguir captura não executada por falta de janela de falha de permissões/disco. Operadores podem acreditar que os dados foram coletados e não têm indicação para corrigir o bloqueio.
+  Recommendation: Emitir um resultado categorizado sem conteúdo bruto para cada saída antecipada relevante, preservando a regra de que falha de captura não quebra a coleta.

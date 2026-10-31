@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18f4b-1f9b-7353-a854-f642dec7ed39).
+[codex] Turn started (01a18f4b-2222-7f73-8e4c-a7383f1dda1d).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os fluxos de orçamento, escrita dos marcadores ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-e... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"Capture.Do|sessionID|ReserveCapture|queryCommandsEach|func \\(.*collec...
+[codex] Command completed: /bin/bash -lc "rg -n \"Capture.Do|sessionID|ReserveCapture|queryCommandsEach|func \\(.*collec... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '250,285p'; nl -ba agent...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '250,285p'; nl -ba agent... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviaria ainda: a reserva de orçamento usa o ID d...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviaria ainda: a reserva de orçamento usa o ID de sessão globalmente, mas o teto agregado de `Claim` só conta consultas sob o OLT atual. Uma sessão pode ultrapassar o teto ao consultar múltiplos OLTs.
+
+Findings:
+- [high] O teto agregado não conta consultas de outros OLTs na mesma sessão (agents/edge/internal/oltquery/store.go:292-305)
+  `ReserveCapture` conta consultas não enfileiradas por `SessionID` sem filtrar OLT, mas `Claim` incrementa `inSession` apenas para entradas cujo `OLTRef` corresponde ao OLT atual. Como o ID de sessão é `nome-da-OLT@timestamp`, em configurações com nomes repetidos entre execuções/aliases ou em chamadas concorrentes que compartilhem esse ID, capturas e consultas sob um OLT podem deixar o `Claim` de outro OLT abaixo do limite. Isso permite exceder o teto agregado de 8 operações da sessão. Conte as claims por `SessionID` globalmente ao aplicar o teto agregado, mantendo o limite de classe por OLT separado.
+  Recommendation: Calcule o uso agregado da sessão sobre todas as entradas com esse `SessionID` e some as capturas; aplique `PerSession` separadamente ao OLT atual. Adicione cobertura com claims em dois OLTs usando o mesmo ID de sessão.
+
+Next steps:
+- Corrigir a contagem global do teto agregado e validar o limite com sessões que abrangem mais de um OLT.
