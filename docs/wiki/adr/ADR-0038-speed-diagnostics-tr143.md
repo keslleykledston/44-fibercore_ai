@@ -69,3 +69,36 @@ Terceiro caminho de escrita paralelo ao de bancada (duplicaria gate, auditoria e
 - Migração 0036 `speed_risk_acceptances` (RLS forçada; a aplicação só lê; só o owner CLI escreve); `speed.redirect_basis()` decide `probe | acl | acceptance | None` por destino; `bench.gate` passa o destino e reavalia no pedido, na aprovação e no despacho sob o bloqueio compartilhado do registro (a revogação e o aceite tomam o mesmo bloqueio exclusivo). Owner CLI: `speed-acceptance-set | -revoke | -audit`.
 - O envelope de bancada já vive no máximo `bench.ENVELOPE_TTL` = **2 min** (menor que os 9 min 15 s do texto); o pior caso depois de uma revogação é portanto ≤ 2 min + 45 s de desvio de relógio. O Edge já recusa envelope vencido antes de qualquer escrita (`internal/bench`, teste "envelope expired"). Teste novo: a vida do envelope sob aceitação nunca passa de 9 min 15 s.
 - Documento do primeiro aceite: `docs/wiki/bench/ACEITE-risco-3xx-eg8145v5-2026-10-31.md` (hash em `ACEITES.sha256`, conferido por teste de CI).
+
+## Emenda PROPOSTA (2026-10-31): "modo fila" do Edge para a bancada, sem Connection Request — AGUARDA APROVAÇÃO
+
+**Estado: proposta. Nada disto está implementado nem autorizado.** Só o responsável aprova (ver a caixa no fim).
+
+### Problema
+Na 1ª tentativa real (`docs/wiki/bench/H-speed_test_download-tentativa-1-2026-10-31.md`), o ACS respondeu HTTP 202 em 0,04 s a toda tarefa com Connection Request para a ONT de bancada; o Edge trata 202 como "dispositivo inalcançável", remove a própria tarefa e termina em `speed_not_started`. A causa do Connection Request não está confirmada (hipótese: divergência de credencial ou URL entre o ACS e a ONT) e a correção pode exigir acesso de administrador ao ACS. A sonda de 3xx mostrou que uma tarefa enfileirada **sem** Connection Request é executada pela ONT no Inform seguinte (cerca de 60 s naquela amostra; o intervalo periódico é de 300 s).
+
+### Opções
+- **A (preferível a longo prazo):** corrigir o Connection Request (credenciais/URL no ACS e na ONT). Não depende deste ADR, mas depende de quem tem acesso de administrador. Se for feita, o modo fila nunca é usado.
+- **B (esta emenda):** modo fila, só para a bancada, desligado por padrão.
+
+### Desenho proposto do modo fila
+1. **Chave local do Edge** `speed_queue_mode` (booleana, desligada por padrão, vale por dispositivo de bancada, lida só do arquivo de configuração do Edge). A nuvem não a liga nem a vê como capacidade: o contrato do envelope não muda.
+2. **Pré-leitura sem tarefa:** a leitura do estado do diagnóstico passa a vir do **cache do ACS** (sem `getParameterValues`), exigindo Inform recente (a regra `informFresh` atual) e `DiagnosticsState` diferente de `Requested`. Cache velho ou ocupado recusa antes de escrever (`speed_not_started`, com o motivo no log local).
+3. **Envio único sem Connection Request:** `setParameterValues` enviado **sem** `connection_request`. Aqui o 202 é o resultado esperado ("enfileirada"), não uma falha. O Edge guarda o identificador da própria tarefa e **não reenvia**.
+4. **Espera em duas etapas, só com tarefas enfileiradas:** (i) espera a tarefa de escrita sumir da fila (executada no Inform seguinte); (ii) depois enfileira UMA leitura dos resultados (`getParameterValues` sem Connection Request), executada na sessão aberta pelo evento de diagnóstico concluído (ou no Inform periódico). Orçamento total do Edge: `intervalo de Inform × 2 + duração máxima do perfil + margem` (hoje, 300 s × 2 + 60 s + 60 s = 12 min), registrado no código como constante e testado.
+5. **Limpeza:** em qualquer saída (sucesso, tempo esgotado, interrupção, parada do Edge), o Edge remove as próprias tarefas ainda não executadas (a regra `removeOwnTask` atual). Se a limpeza falhar, o resultado é `ErrBenchUncleaned` e a bancada fica travada, como hoje.
+6. **Resultado incerto continua incerto:** tarefa de escrita executada mas sem resultado no prazo = `outcome_unknown`/`timeout`; o alvo da bancada fica travado e nada é repetido. A confiabilidade do número continua vindo só dos contadores do aparelho (`BOM`/`EOM`/bytes), então o atraso entre o pedido e a execução não distorce a medição.
+7. **Prazos na nuvem:** o pedido de banda hoje expira em cerca de 15 min sem executar. A implementação deve conferir que o prazo de reporte do job de bancada comporta os 12 min do item 4 sem marcar o job como expirado antes do resultado; se não comportar, ajustar só para operações de bancada com teste.
+8. **Reinício do Edge durante a espera:** ao subir, o Edge reconcilia pela fila persistente da bancada: tarefa própria ainda pendente no ACS é removida e o job termina como `outcome_unknown` (alvo travado). Nunca retoma um envio.
+9. **Limites que não mudam:** bancada apenas (a ONT de bancada identificada), 1 teste por ONT, 1 por PON, 2 por provedor, autorização de uso único, aprovação por outra pessoa, envelope de 2 min até o envio, flag `speed_diagnostics` só dentro da janela autorizada, aceite do risco de 3xx.
+
+### Riscos e o que NÃO resolve
+- **Tarefa que sobrevive ao Edge.** Se o Edge morrer entre o envio e a limpeza, a tarefa pode ser executada depois, sem ninguém acompanhando. Impacto limitado: um único download de até 200 MB contra o nó do provedor (lista de origens), mas é tráfego não acompanhado. Mitigação: o item 8, e verificar na versão do GenieACS do LAB (somente leitura) se a tarefa aceita prazo de expiração; se aceitar, o Edge o define com o orçamento do item 4.
+- A latência do teste passa de segundos para minutos; a tela já acompanha estados de longa duração.
+- Não vale para produção: ali a correção é o Connection Request (opção A) ou a ACL real. Ampliar exige ADR novo.
+- Não muda o QoS-001 PR C (ping/DNS) automaticamente: ele reaproveitaria este modo só se esta emenda for aprovada, com a sua própria emenda do ADR-0030.
+
+### Testes exigidos antes de implementar (com Codex)
+Simulador de ACS com: 202 imediato e execução no Inform; execução que nunca chega (tempo esgotado + limpeza); limpeza que falha (bancada travada); Edge reiniciado no meio da espera; cache velho (recusa sem escrever); `Requested` no cache (recusa); chave local desligada (comportamento atual idêntico, 202 continua sendo `speed_not_started`); duas ONTs ou dois pedidos (limites); prazo de 12 min sem expirar o job na nuvem.
+
+**Decisão do responsável:** ☐ aprovar o modo fila (opção B) ☐ aguardar a correção do Connection Request (opção A) ☐ rejeitar
