@@ -329,4 +329,4 @@
 
 ## Edge — `bench.read_only_onus` e H1 de vínculo da ZTE (2026-10-31)
 - Edge: nova lista `bench.read_only_onus` (até 4 ONUs de bancada adicionais, só para capturas de LEITURA, escopo de ONU com posição exata, nunca PON, sem manobra). Implantado no LAB (`0.1.0-lab-9ec5221`).
-- Captura supervisionada de 2 consultas da ONT 11 da PON 0/0/14 e `docs/wiki/bench/H1-vinculo-zte-f670l-2026-10-31.md`: a OLT registra tipo `F670LV9.0` e serial GPON compatíveis com a ZTE do ACS. Vínculo bem sustentado, ainda sem aceite do responsável; nenhuma ZTE cadastrada como alvo de bancada.
+- Captura supervisionada de 2 consultas da ONT 11 da PON 0/0/14 e `docs/wiki/bench/H1-vinculo-zte-f670l-2026-10-31.md`: a OLT registra tipo `F670LV9.0` e serial GPON compatíveis com a ZTE do ACS. Vínculo apenas sugerido (não confirmado); nenhuma ZTE cadastrada como alvo de bancada.
