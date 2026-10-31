@@ -17,7 +17,7 @@ const MATCH: Record<F, (o: Onu) => boolean> = {
 const LABEL: Record<F, string> = { todas: "Todas", fora: "Fora do ar", defasado: "Defasadas", desconhecido: "Desconhecido" };
 
 /** Gestão de ONUs (ADR-0037, padrão Lovable): [árvore | lista com filtros | detalhes] lado a lado; a lista nunca fica atrás do painel. Largura < 1024: árvore em cima e detalhes em gaveta. */
-export function OnuWorkspace({ onus, oltNames, tree, ontConfig = false }: { onus: Onu[]; oltNames: Record<string, string>; tree?: ReactNode; ontConfig?: boolean }) {
+export function OnuWorkspace({ onus, oltNames, tree, ontConfig = false, speed = false }: { onus: Onu[]; oltNames: Record<string, string>; tree?: ReactNode; ontConfig?: boolean; speed?: boolean }) {
   const showOlt = !tree;   // com a árvore, a OLT é o contexto da página: a coluna mostra só a PON; na busca por serial (várias OLTs) mostra OLT · PON
   const [selId, setSelId] = useState<string | null>(null);
   const sel = useMemo(() => onus.find((o) => o.id === selId) ?? null, [onus, selId]);   // a seleção só vale enquanto a ONU ainda está no conjunto exibido
@@ -66,7 +66,7 @@ export function OnuWorkspace({ onus, oltNames, tree, ontConfig = false }: { onus
           </table>
         </div>
       </div>
-      <OnuQuickInspector ontConfig={ontConfig} row={sel} oltName={sel ? oltNames[sel.olt_id] ?? "—" : "—"} onClose={close} />
+      <OnuQuickInspector ontConfig={ontConfig} speed={speed} row={sel} oltName={sel ? oltNames[sel.olt_id] ?? "—" : "—"} onClose={close} />
     </div>
   );
 }

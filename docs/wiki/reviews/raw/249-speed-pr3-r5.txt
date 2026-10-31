@@ -1,0 +1,22 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19132-b108-7370-a6bc-71a751f53db1).
+[codex] Turn started (01a19132-b3fd-7250-9631-cdfcaf968fee).
+[codex] Assistant message captured: I’ll inspect the complete diff against `main`, then trace the ambiguous POST and read orderin...
+[codex] Running command: /bin/bash -lc "git diff --stat main...HEAD && git diff --find-renames --unified=80 main...HEA...
+[codex] Command completed: /bin/bash -lc "git diff --stat main...HEAD && git diff --find-renames --unified=80 main...HEA... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --unified=8 main...HEAD -- apps/web/src/components/SpeedTestSection.t...
+[codex] Command completed: /bin/bash -lc "git diff --unified=8 main...HEAD -- apps/web/src/components/SpeedTestSection.t... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship: the ambiguous-request lock exists only i...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship: the ambiguous-request lock exists only in component state, so leaving and reopening the panel can erase it and permit a duplicate run.
+
+Findings:
+- [high] Ambiguous POST lock is lost when the speed section unmounts (apps/web/src/components/SpeedTestSection.tsx:42)
+  `pending` is held only in React component state. The speed section unmounts when the user switches tabs, closes the drawer, or navigates away; remounting starts with `pending === null` and fetches the current run list. If an ambiguous POST was accepted but its run is not yet visible, the buttons become usable again and another request can generate duplicate traffic. Keep the unresolved request state across section unmounts (at least per CPE for the session), or require a server read that establishes the prior request’s outcome before enabling another POST.
+  Recommendation: Persist the pending request marker above this component or in session storage keyed by CPE, retaining its known run IDs and deadline across remounts; clear it only under the stated post-deadline read condition or when a new run appears.
+done 0

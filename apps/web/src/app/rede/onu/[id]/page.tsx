@@ -9,6 +9,7 @@ import { featuresOn } from "@/lib/features";
 import { CapabilityGate } from "@/components/CapabilityGate";
 import { FaceplateCard } from "@/components/Faceplate";
 import { OntSidebar } from "@/components/OntSidebar";
+import { SpeedTestSection } from "@/components/SpeedTestSection";
 import { humanHours } from "@/lib/offline";
 import type { Capability, Onu360, OnuCustomer, OnuHistory } from "@/lib/types";
 
@@ -35,6 +36,7 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
   const caps = await apiSafe<Capability[]>(`/v1/olts/${o.olt.id}/capabilities`);  // perfil da OLT da ONU (registro de capacidades)
   const hist = await apiSafe<OnuHistory>(`/v1/onus/${id}/history?days=30&limit=12`);
   const newUx = await featuresOn("onu_quick_inspector");   // trilha e painel frontal (ADR-0037) seguem a mesma flag da Rede: desligada, a tela é a anterior
+  const speedOn = newUx && o.cpe?.link === "confirmed" && !!o.cpe.device ? await featuresOn("speed_diagnostics") : false;   // ADR-0038: o bloco só existe com o recurso ligado e roteador vinculado
   const ontCfg = o.cpe?.link === "confirmed" && o.cpe.device ? await apiSafe<{ enabled: boolean }>("/v1/ont-config/health") : null;   // o botão só existe com o recurso ligado
   return (
     <AppShell active="/rede" user="1">
@@ -158,6 +160,11 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
               </ul>
             ) : <p className="text-sm text-muted">Nenhum roteador vinculado a esta ONU.</p>}
             <p className="mt-3 text-xs text-muted">O vínculo ONU↔CPE só vale depois de confirmado por uma pessoa. Nada aqui altera a rede.</p>
+          </Card>
+        )}
+        {speedOn && o.cpe?.device && (
+          <Card title="Teste de banda" testid="onu360-speed">
+            <SpeedTestSection key={o.cpe.device.id} cpeId={o.cpe.device.id} />
           </Card>
         )}
         <Card title="Ações" testid="onu360-actions">
