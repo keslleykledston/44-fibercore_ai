@@ -55,14 +55,18 @@ def _cpe_or_404(conn: Connection, cpe_id: UUID):
     return c
 
 
-def _endpoints(conn: Connection) -> list[dict]:
-    """Catalog + the Edge's last health word. `ready` needs the word to be recent too: an Edge that stopped reporting no longer vouches for its nodes."""
+def _endpoints(conn: Connection, edge_id=None) -> list[dict]:
+    """Catalog + the owning Edge's last health word. `ready` needs the word to be recent (an Edge that stopped reporting no longer vouches for its nodes), an
+    owning Edge, and, when `edge_id` is given (the Edge that would run the test), that it is THAT Edge."""
     rows = conn.execute(
-        text("SELECT id, label, target_kind, region, enabled, health, health_at, "
+        text("SELECT id, label, target_kind, region, enabled, health, health_at, edge_id, "
              "(health_at IS NOT NULL AND health_at > now() - make_interval(secs => :s)) AS fresh FROM speed_endpoints ORDER BY target_kind, id"),
         {"s": speed.HEALTH_FRESH_S}).all()
+    def ready(r) -> bool:
+        return bool(r.enabled and r.health == "ok" and r.fresh and r.edge_id is not None and (edge_id is None or r.edge_id == edge_id))
+
     return [{"id": r.id, "label": r.label, "target_kind": r.target_kind, "region": r.region, "enabled": r.enabled, "health": r.health if r.fresh else "unknown",
-             "health_at": r.health_at.isoformat() if r.health_at else None, "ready": r.enabled and r.health == "ok" and r.fresh} for r in rows]
+             "health_at": r.health_at.isoformat() if r.health_at else None, "ready": ready(r)} for r in rows]
 
 
 def _direction_state(p: Principal, caps: list[dict], operation: str, is_bench: bool, redirect_ok: bool) -> dict:
@@ -81,6 +85,11 @@ def _direction_state(p: Principal, caps: list[dict], operation: str, is_bench: b
             "certification": entry["certification"] if entry else "identified", "status": entry["status"] if entry else "unknown"}
 
 
+def _bench_edge(conn: Connection, cpe_id: UUID):
+    """The Edge that would run a test on this CPE: the one its bench target is registered to (None for a CPE that is not a bench target)."""
+    return conn.execute(text("SELECT edge_id FROM bench_targets WHERE cpe_id = :c"), {"c": cpe_id}).scalar()
+
+
 @router.get("/v1/cpes/{cpe_id}/speed/capabilities")
 def capabilities(cpe_id: UUID, p: Principal = Depends(require("inventory:read")), conn: Connection = TENANT_CONN) -> dict:
     _flag(conn, p)
@@ -88,7 +97,7 @@ def capabilities(cpe_id: UUID, p: Principal = Depends(require("inventory:read"))
     caps = _capabilities(conn, p.tenant_id, "cpe", c.vendor, c.model, c.firmware)
     is_bench = bool(conn.execute(text("SELECT 1 FROM bench_targets WHERE cpe_id = :c"), {"c": cpe_id}).first())
     redirect_ok = bool(c.vendor and c.model and c.firmware and speed.redirect_verified(conn, p.tenant_id, c.vendor, c.model, c.firmware))
-    eps = _endpoints(conn)
+    eps = _endpoints(conn, _bench_edge(conn, cpe_id))
     directions = {d: _direction_state(p, caps, op, is_bench, redirect_ok) for d, op in speed.DIRECTIONS.items()}
     return {
         "cpe_id": str(cpe_id), "bench_target": is_bench, "redirect_verified": redirect_ok, "edge_support": bench.SPEED_EDGE_SUPPORT,
@@ -174,7 +183,7 @@ def request_run(
     st = _direction_state(p, caps, operation, is_bench, redirect_ok)
     if not st["offered"]:
         return _blocked(conn, p, response, cpe_id, st["reason"], body)
-    ep = next((e for e in _endpoints(conn) if e["id"] == body.endpoint_id), None)
+    ep = next((e for e in _endpoints(conn, _bench_edge(conn, cpe_id)) if e["id"] == body.endpoint_id), None)
     if ep is None or not ep["enabled"]:
         return _blocked(conn, p, response, cpe_id, "endpoint_unavailable", body)
     if not ep["ready"]:
@@ -218,12 +227,13 @@ class HealthIn(BaseModel):
 
 @router.post("/v1/edge/speed-health")
 def edge_speed_health(body: HealthIn, p: Principal = Depends(require("inventory:write")), conn: Connection = TENANT_CONN) -> dict:
-    """The Edge tells which of its test nodes answered its probe. It can only update endpoints the owner created for this provider; an unknown id is counted
-    and ignored. It says `ok` or `down`, nothing else, and no address."""
+    """The Edge tells which of its test nodes answered its probe. It can only update endpoints the owner bound to THIS Edge; an id that is unknown or belongs
+    to another Edge is counted and ignored. It says `ok` or `down`, nothing else, and no address."""
     if p.edge_id is None:
         raise HTTPException(403, "only an Edge reports the health of its nodes")
     updated = 0
     for it in body.endpoints:
         updated += conn.execute(
-            text("UPDATE speed_endpoints SET health = :h, health_at = now() WHERE id = :i RETURNING 1"), {"h": it.health, "i": it.id}).rowcount
+            text("UPDATE speed_endpoints SET health = :h, health_at = now() WHERE id = :i AND edge_id = :e RETURNING 1"),
+            {"h": it.health, "i": it.id, "e": p.edge_id}).rowcount
     return {"updated": updated, "unknown": len(body.endpoints) - updated}

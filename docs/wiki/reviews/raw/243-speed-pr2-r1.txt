@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19112-9110-71d0-8085-0fc1f358adc0).
+[codex] Turn started (01a19112-9424-7843-a39e-e92ce64acb68).
+[codex] Assistant message captured: I’ll inspect the branch diff against `main` and trace the speed job from cloud envelope throu...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/speed/...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/speed/... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/speed/speed.go; nl -ba agents/edge/internal/nbi/sp...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/speed/speed.go; nl -ba agents/edge/internal/nbi/sp... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/bench/bench.go | sed -n '100,330p'; nl -ba agents/...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/bench/bench.go | sed -n '100,330p'; nl -ba agents/... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'redirect_verified|EGRESS_ACL|speed_test_egress_acl|SPEED_EDGE_SUPPORT|s...
+[codex] Command completed: /bin/bash -lc "rg -n 'redirect_verified|EGRESS_ACL|speed_test_egress_acl|SPEED_EDGE_SUPPORT|s... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/speed.py | sed -n '140,205p'; nl -ba apps/api/app/cor...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/speed.py | sed -n '140,205p'; nl -ba apps/api/app/cor... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: any Edge with tenant-level inventory...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: any Edge with tenant-level inventory write access can forge health for every speed endpoint in that tenant, making unhealthy destinations appear ready.
+
+Findings:
+- [high] Health reports are not bound to the reporting Edge's endpoints (apps/api/app/api/speed.py:219-228)
+  The handler checks only that the principal has `edge_id`, then updates `speed_endpoints` by ID without checking that the endpoint belongs to that Edge. Since endpoint rows are tenant-scoped, an Edge can report `ok` for another Edge's endpoint—or any endpoint in the tenant—and refresh its health timestamp. The run-request path treats fresh `ok` as sufficient readiness, so forged health can enable tests against a node the reporting Edge never probed. Bind endpoints to their reporting Edge and constrain the update by both tenant and Edge ownership; reject or ignore IDs outside that set.
+  Recommendation: Add explicit endpoint-to-Edge ownership and update only rows owned by `p.edge_id`, within the tenant; test that one Edge cannot refresh another Edge's endpoint health.
+done 0
