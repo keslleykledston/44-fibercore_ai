@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19424-a5ee-7130-9088-633c570c7d0a).
+[codex] Turn started (01a19424-a629-7762-b3a1-9b07e3826372).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir cada uso de `bench.read_only_onus` até as verifica...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/config...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/config... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '270,395p' agents/edge/internal/config/config.go; sed -n '640,735p' age...
+[codex] Command completed: /bin/bash -lc "sed -n '270,395p' agents/edge/internal/config/config.go; sed -n '640,735p' age... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/config/config.go | sed -n '282,320p;370,390p;700,7...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/config/config.go | sed -n '282,320p;370,390p;700,7... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"A checagem atual nega PON autorizada apenas por ONU r...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+A checagem atual nega PON autorizada apenas por ONU read-only, mas o teste não demonstra isso: a PON testada também pertence à ONU H4. Falta a regressão solicitada antes de confiar na correção.
+
+Findings:
+- [medium] Teste de PON não isola a autorização read-only (agents/edge/internal/config/config_test.go:555)
+  O caso chamado “PON capture with a read-only ONU” usa slot 0/porta 14, a mesma PON da ONU H4 em `bench.olt`. A captura passa pela autorização explícita de H4, então o teste continuaria verde mesmo se uma ONU read-only indevidamente autorizasse PON. Sem um caso em que a entrada read-only esteja em outra PON e a captura PON correspondente seja recusada, a regressão central desta rodada não fica protegida.
+  Recommendation: Adicione um caso negativo com `bench.read_only_onus` numa PON diferente da ONU H4 e captura `pon.*` nessa PON; confirme que `Load` recusa a configuração. Mantenha um caso positivo separado para a PON de H4.
+
+Next steps:
+- Adicionar e executar o teste negativo de PON autorizada somente por ONU read-only.

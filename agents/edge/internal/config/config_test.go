@@ -552,7 +552,7 @@ func TestReadOnlyBenchONUs(t *testing.T) {
 	zte := `{"name":"OLT-A","slot":0,"port":14,"ont_id":11,"gpon_serial":"5A544547D1EDA1A3"}`
 	ok := map[string]string{
 		"ONU capture of the read-only bench ONU": mk(`{"query_id":"onu.register","slot":0,"port":14,"ont":11}`, zte),
-		"PON capture with a read-only ONU":       mk(`{"query_id":"pon.ont.summary","slot":0,"port":14}`, zte),
+		"PON capture of the H4 bench PON":        mk(`{"query_id":"pon.ont.summary","slot":0,"port":14}`, zte),
 		"H4 ONU still captured":                  mk(`{"query_id":"onu.info","slot":0,"port":14,"ont":10}`, zte),
 	}
 	for name, c := range ok {
@@ -561,15 +561,17 @@ func TestReadOnlyBenchONUs(t *testing.T) {
 		}
 	}
 	bad := map[string]string{
-		"ONU 11 without the read-only entry": mk(`{"query_id":"onu.register","slot":0,"port":14,"ont":11}`, ""),
-		"another ONU on the same PON":        mk(`{"query_id":"onu.register","slot":0,"port":14,"ont":12}`, zte),
-		"read-only ONU on another PON":       mk(`{"query_id":"onu.register","slot":0,"port":3,"ont":11}`, zte),
-		"unknown OLT name":                   mk(`{"query_id":"olt.time"}`, `{"name":"OLT-X","slot":0,"port":14,"ont_id":11,"gpon_serial":"5A544547D1EDA1A3"}`),
-		"lower-case serial":                  mk(`{"query_id":"olt.time"}`, `{"name":"OLT-A","slot":0,"port":14,"ont_id":11,"gpon_serial":"5a544547d1eda1a3"}`),
-		"ont_id out of range":                mk(`{"query_id":"olt.time"}`, `{"name":"OLT-A","slot":0,"port":14,"ont_id":128,"gpon_serial":"5A544547D1EDA1A3"}`),
-		"repeats the H4 ONU":                 mk(`{"query_id":"olt.time"}`, `{"name":"OLT-A","slot":0,"port":14,"ont_id":10,"gpon_serial":"48575443E2247AA5"}`),
-		"listed twice":                       mk(`{"query_id":"olt.time"}`, zte+","+zte),
-		"more than the maximum":              mk(`{"query_id":"olt.time"}`, strings.Repeat(zte+",", BenchReadONUMax)+zte),
+		"ONU 11 without the read-only entry":                                                    mk(`{"query_id":"onu.register","slot":0,"port":14,"ont":11}`, ""),
+		"another ONU on the same PON":                                                           mk(`{"query_id":"onu.register","slot":0,"port":14,"ont":12}`, zte),
+		"PON scope on a PON owned only by a read-only ONU":                                      mk(`{"query_id":"pon.ont.info","slot":0,"port":5}`, `{"name":"OLT-A","slot":0,"port":5,"ont_id":3,"gpon_serial":"5A544547D1EDA1A3"}`),
+		"PON scope of the read-only ONU's PON (ONU 11 on PON 14 is not enough for another ONU)": mk(`{"query_id":"pon.ont.optical","slot":0,"port":3}`, zte),
+		"read-only ONU on another PON":                                                          mk(`{"query_id":"onu.register","slot":0,"port":3,"ont":11}`, zte),
+		"unknown OLT name":                                                                      mk(`{"query_id":"olt.time"}`, `{"name":"OLT-X","slot":0,"port":14,"ont_id":11,"gpon_serial":"5A544547D1EDA1A3"}`),
+		"lower-case serial":                                                                     mk(`{"query_id":"olt.time"}`, `{"name":"OLT-A","slot":0,"port":14,"ont_id":11,"gpon_serial":"5a544547d1eda1a3"}`),
+		"ont_id out of range":                                                                   mk(`{"query_id":"olt.time"}`, `{"name":"OLT-A","slot":0,"port":14,"ont_id":128,"gpon_serial":"5A544547D1EDA1A3"}`),
+		"repeats the H4 ONU":                                                                    mk(`{"query_id":"olt.time"}`, `{"name":"OLT-A","slot":0,"port":14,"ont_id":10,"gpon_serial":"48575443E2247AA5"}`),
+		"listed twice":                                                                          mk(`{"query_id":"olt.time"}`, zte+","+zte),
+		"more than the maximum":                                                                 mk(`{"query_id":"olt.time"}`, strings.Repeat(zte+",", BenchReadONUMax)+zte),
 	}
 	for name, c := range bad {
 		if _, err := Load(write(t, 0o600, good(c)), "v"); err == nil {
