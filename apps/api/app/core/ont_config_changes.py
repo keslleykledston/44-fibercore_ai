@@ -44,13 +44,25 @@ def high_risk(capability: str) -> bool:
     return CAPS[capability].risk == "R3"
 
 
-def _lan_error(params: dict) -> str | None:
-    """LAN: máscara contígua, endereço de host (nem rede nem broadcast); faixa DHCP ordenada. Só coerência numérica: topologia real é da homologação."""
+def _net(addr, mask):
+    try:
+        return ipaddress.ip_network(f"{addr}/{mask}", strict=False)
+    except ValueError:
+        return None
+
+
+def _effective(rows: list[dict], instance: str, params: dict, name: str):
+    """What the device would have after the change: the request wins, else what was observed on this LAN instance."""
+    return params[name] if name in params else current_value(rows, name, instance)[0]
+
+
+def _lan_error(rows: list[dict], instance: str, params: dict) -> str | None:
+    """LAN: contiguous mask, a host address (neither network nor broadcast); DHCP range ordered, inside the subnet and clear of network, broadcast and the gateway itself.
+    Pure numeric coherence: the real topology is the homologation's business."""
     a, m = params.get("lan.ipv4_address"), params.get("lan.netmask")
     if a is not None and m is not None:
-        try:
-            net = ipaddress.ip_network(f"{a}/{m}", strict=False)
-        except ValueError:
+        net = _net(a, m)
+        if net is None:
             return "netmask_not_contiguous"
         ip = ipaddress.ip_address(a)
         if net.prefixlen > 30 or ip in (net.network_address, net.broadcast_address):
@@ -58,10 +70,34 @@ def _lan_error(params: dict) -> str | None:
     lo, hi = params.get("lan.dhcp_min"), params.get("lan.dhcp_max")
     if lo is not None and hi is not None and ipaddress.ip_address(lo) > ipaddress.ip_address(hi):
         return "dhcp_range_inverted"
+    if "lan.dhcp_min" in params or "lan.dhcp_max" in params:
+        lo, hi = _effective(rows, instance, params, "lan.dhcp_min"), _effective(rows, instance, params, "lan.dhcp_max")
+        gw, mask = _effective(rows, instance, params, "lan.ipv4_address"), _effective(rows, instance, params, "lan.netmask")
+        net = _net(gw, mask) if gw and mask else None
+        if lo and hi and ipaddress.ip_address(lo) > ipaddress.ip_address(hi):
+            return "dhcp_range_inverted"
+        if net is None:
+            return "lan_address_not_observed"   # cannot prove the range fits a subnet nobody reported
+        if any(ipaddress.ip_address(x) not in net or ipaddress.ip_address(x) in (net.network_address, net.broadcast_address, ipaddress.ip_address(gw))
+               for x in (lo, hi) if x):
+            return "dhcp_range_outside_subnet"
+        if lo and hi and int(ipaddress.ip_address(lo)) <= int(ipaddress.ip_address(gw)) <= int(ipaddress.ip_address(hi)):
+            return "dhcp_range_contains_gateway"
     return None
 
 
-def validate(capability: str, instance: str, params: dict) -> str | None:
+def warnings_for(rows: list[dict], capability: str, instance: str, params: dict) -> list[str]:
+    """Not refusals: facts the operator must see. A new LAN subnet that leaves the CURRENT DHCP range outside it would strand the clients."""
+    if capability != "lan.ipv4.write":
+        return []
+    net = _net(params["lan.ipv4_address"], params["lan.netmask"])
+    lo, hi = current_value(rows, "lan.dhcp_min", instance)[0], current_value(rows, "lan.dhcp_max", instance)[0]
+    if net is not None and lo and hi and any(ipaddress.ip_address(x) not in net for x in (lo, hi)):
+        return ["dhcp_range_outside_new_subnet"]
+    return []
+
+
+def validate(capability: str, instance: str, params: dict, rows: list[dict]) -> str | None:
     """None when the request is well formed, else a stable code."""
     if capability not in WRITE_FIELDS:
         return "unknown_capability"
@@ -78,7 +114,7 @@ def validate(capability: str, instance: str, params: dict) -> str | None:
             return "password_value_not_accepted"
     if capability == "wifi.enabled.write" and len(params) != 1:
         return "one_field_per_request"
-    return _lan_error(params) if capability.startswith("lan.") else None
+    return _lan_error(rows, instance, params) if capability.startswith("lan.") else None
 
 
 def current_value(rows: list[dict], name: str, instance: str):
@@ -142,4 +178,4 @@ def expiry(now: datetime) -> datetime:
     return now + PREVIEW_TTL
 
 
-__all__ = ["APPROVALS", "PREVIEW_TTL", "WRITE_FIELDS", "blockers", "build_diff", "expiry", "high_risk", "intent_hash", "observed", "validate"]
+__all__ = ["APPROVALS", "PREVIEW_TTL", "WRITE_FIELDS", "blockers", "build_diff", "expiry", "high_risk", "intent_hash", "observed", "validate", "warnings_for"]

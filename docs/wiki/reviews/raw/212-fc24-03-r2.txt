@@ -1,0 +1,31 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19040-1715-7d62-9734-3f0f428bf829).
+[codex] Turn started (01a19040-174f-7c41-ad40-34ee931a2465).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir especialmente os caminhos de persistência, auto...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/ont_config...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/ont_config... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/ont_config.py | sed -n '190,310p'; nl -ba apps/api/app...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/ont_config.py | sed -n '190,310p'; nl -ba apps/api/app... (exit 0)
+[codex] Assistant message captured: Há um risco forte no caminho de submissão: ele recalcula os bloqueios, mas não verifica se o ...
+[codex] Running command: /bin/bash -lc 'rg -n "CREATE TABLE cpe_config_fields|CREATE POLICY tenant_isolation|GRANT UPD...
+[codex] Command completed: /bin/bash -lc 'rg -n "CREATE TABLE cpe_config_fields|CREATE POLICY tenant_isolation|GRANT UPD... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/alembic/versions/0033_cpe_config_changes.py | sed -n '33,53p';...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/alembic/versions/0033_cpe_config_changes.py | sed -n '33,53p';... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: submissões repetidas convertem o e...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: submissões repetidas convertem o estado `blocked` em um novo evento auditado sem transição válida, e parâmetros validados não garantem coerência da configuração de LAN/DHCP.
+
+Findings:
+- [medium] Submissão aceita repetidamente uma mudança já bloqueada (apps/api/app/api/ont_config.py:284-297)
+  Após a primeira submissão, a linha passa a `blocked`, mas a rota não exige que o status seja `previewed` e atualiza novamente `submitted_at` e `blockers` em cada chamada. Uma repetição ou chamadas concorrentes podem gerar múltiplos eventos `change_blocked` para o mesmo pedido e substituir a evidência temporal, tornando a trilha de auditoria enganosa. Faça a transição condicional `WHERE status = 'previewed'` e trate zero linhas atualizadas como conflito idempotente, preservando a primeira submissão.
+  Recommendation: Bloqueie a transição para pedidos que não estejam `previewed`; atualize e audite apenas quando a transição condicional afetar uma linha.
+- [medium] Validação LAN aceita faixas DHCP fora da sub-rede e que incluem endereços reservados (apps/api/app/core/ont_config_changes.py:47-60)
+  A validação ordena apenas `dhcp_min` e `dhcp_max` numericamente. Não verifica que ambos pertencem à sub-rede configurada, nem que excluem o endereço de rede, broadcast ou o próprio gateway. Assim, uma prévia pode apresentar como coerente uma intenção que deixa clientes sem configuração ou inclui endereços reservados; a checagem atual de host para `lan.ipv4_address` não cobre essa relação. Como o fluxo registra uma mudança LAN R3 para submissão futura, preserve a segurança da intenção validando a faixa DHCP contra IP e máscara, ou marque explicitamente essa coerência como bloqueio obrigatório.
+  Recommendation: Validar faixa e gateway conjuntamente, exigindo que início/fim estejam na sub-rede e excluam rede, broadcast e gateway antes de aceitar a prévia.

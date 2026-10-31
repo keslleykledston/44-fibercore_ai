@@ -217,7 +217,7 @@ def _need_high(p: Principal, settings: Settings, capability: str) -> None:
 def _change_out(r, cpe_id: UUID, now: datetime) -> dict:
     expired = r["expires_at"] <= now
     return {"id": str(r["id"]), "cpe_id": str(cpe_id), "capability": r["capability"], "instance_key": r["instance_key"], "diff": r["diff"], "risk": r["risk"],
-            "approvals": r["approvals"], "status": "expired" if expired and r["status"] == "previewed" else r["status"], "blockers": r["blockers"],
+            "approvals": r["approvals"], "warnings": r["warnings"], "status": "expired" if expired and r["status"] == "previewed" else r["status"], "blockers": r["blockers"],
             "submittable": False, "base_revision": r["base_revision"], "intent_hash": r["intent_hash"], "created_at": r["created_at"].isoformat(),
             "expires_at": r["expires_at"].isoformat(), "policy_version": chg.POLICY_VERSION, "executes": False}
 
@@ -231,10 +231,10 @@ def preview_change(cpe_id: UUID, body: PreviewIn, p: Principal = Depends(require
         raise HTTPException(422, "unknown_capability")
     _need_high(p, settings, body.capability)
     c = _cpe_or_404(conn, cpe_id)
-    code = chg.validate(body.capability, body.instance_key, body.params)
+    rows = _rows(conn, cpe_id)
+    code = chg.validate(body.capability, body.instance_key, body.params, rows)
     if code:
         raise HTTPException(422, code)
-    rows = _rows(conn, cpe_id)
     if not chg.observed(rows, body.capability, body.instance_key):
         raise HTTPException(422, "instance_not_observed")
     rev = ont_config.revision(rows)
@@ -249,12 +249,12 @@ def preview_change(cpe_id: UUID, body: PreviewIn, p: Principal = Depends(require
     bl = chg.blockers(body.capability, body.instance_key, rows, caps, rev, now)
     risk = chg.CAPS[body.capability].risk
     row = conn.execute(
-        text("INSERT INTO cpe_config_changes (tenant_id, cpe_id, capability, instance_key, params, diff, base_revision, intent_hash, risk, approvals, blockers, requested_by, expires_at) "
-             "VALUES (:t,:c,:cap,:i,CAST(:p AS jsonb),CAST(:d AS jsonb),:r,:h,:k,CAST(:a AS jsonb),CAST(:b AS jsonb),:u,:e) "
-             "RETURNING id, capability, instance_key, diff, risk, approvals, status, blockers, base_revision, intent_hash, created_at, expires_at"),
+        text("INSERT INTO cpe_config_changes (tenant_id, cpe_id, capability, instance_key, params, diff, base_revision, intent_hash, risk, approvals, blockers, warnings, requested_by, expires_at) "
+             "VALUES (:t,:c,:cap,:i,CAST(:p AS jsonb),CAST(:d AS jsonb),:r,:h,:k,CAST(:a AS jsonb),CAST(:b AS jsonb),CAST(:w AS jsonb),:u,:e) "
+             "RETURNING id, capability, instance_key, diff, risk, approvals, status, blockers, warnings, base_revision, intent_hash, created_at, expires_at"),
         {"t": p.tenant_id, "c": cpe_id, "cap": body.capability, "i": body.instance_key, "p": json.dumps(body.params, sort_keys=True), "d": json.dumps(diff), "r": rev,
          "h": chg.intent_hash(p.tenant_id, cpe_id, body.capability, body.instance_key, body.params, rev), "k": risk, "a": json.dumps(chg.APPROVALS[risk]),
-         "b": json.dumps(bl), "u": p.id, "e": chg.expiry(now)}).mappings().one()
+         "b": json.dumps(bl), "w": json.dumps(chg.warnings_for(rows, body.capability, body.instance_key, body.params)), "u": p.id, "e": chg.expiry(now)}).mappings().one()
     audit(conn, p, "ont_config.change_previewed", "cpe", str(cpe_id), {"change_id": str(row["id"]), "capability": body.capability, "instance": body.instance_key,
                                                                        "fields": sorted(body.params), "risk": risk, "blockers": bl})
     return _change_out(row, cpe_id, now) | {"submittable": not bl}
@@ -262,7 +262,7 @@ def preview_change(cpe_id: UUID, body: PreviewIn, p: Principal = Depends(require
 
 def _own_change(conn: Connection, p: Principal, cpe_id: UUID, change_id: UUID):
     r = conn.execute(
-        text("SELECT id, capability, instance_key, diff, risk, approvals, status, blockers, base_revision, intent_hash, created_at, expires_at, requested_by FROM cpe_config_changes "
+        text("SELECT id, capability, instance_key, diff, risk, approvals, status, blockers, warnings, base_revision, intent_hash, created_at, expires_at, requested_by FROM cpe_config_changes "
              "WHERE id = :i AND cpe_id = :c"), {"i": change_id, "c": cpe_id}).mappings().first()
     if r is None:
         raise HTTPException(404, "change not found")
@@ -286,6 +286,8 @@ def submit_change(cpe_id: UUID, change_id: UUID, p: Principal = Depends(require(
         raise HTTPException(403, "forbidden")
     _need_high(p, settings, r["capability"])
     now = datetime.now(UTC)
+    if r["status"] == "blocked":   # already recorded: the first submission stays the evidence; a repeat is answered, not re-audited
+        return _blocked(list(r["blockers"]))
     if r["expires_at"] <= now:
         raise HTTPException(410, "preview_expired")
     c = _cpe_or_404(conn, cpe_id)
@@ -293,7 +295,10 @@ def submit_change(cpe_id: UUID, change_id: UUID, p: Principal = Depends(require(
     fp = {"vendor": c.vendor, "model": c.model, "firmware": c.firmware}
     caps = ont_config.build_capabilities(rows, fp, _protocol(rows), _capabilities(conn, p.tenant_id, "cpe", c.vendor, c.model, c.firmware))
     bl = chg.blockers(r["capability"], r["instance_key"], rows, caps, r["base_revision"], now)
-    conn.execute(text("UPDATE cpe_config_changes SET status = 'blocked', blockers = CAST(:b AS jsonb), submitted_at = now() WHERE id = :i"), {"b": json.dumps(bl), "i": change_id})
+    moved = conn.execute(text("UPDATE cpe_config_changes SET status = 'blocked', blockers = CAST(:b AS jsonb), submitted_at = now() WHERE id = :i AND status = 'previewed' RETURNING id"),
+                         {"b": json.dumps(bl), "i": change_id}).first()
+    if moved is None:   # a concurrent submission won: same answer, no second audit row
+        return _blocked(list(_own_change(conn, p, cpe_id, change_id)["blockers"]))
     audit(conn, p, "ont_config.change_blocked", "cpe", str(cpe_id), {"change_id": str(change_id), "capability": r["capability"], "blockers": bl})
     # the 409 must carry the reason, but the audit row and the status above have to COMMIT first: raising here would roll them back
     return _blocked(bl)

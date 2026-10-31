@@ -33,6 +33,7 @@ def upgrade() -> None:
           approvals jsonb NOT NULL,
           status text NOT NULL DEFAULT 'previewed' CHECK (status IN ('previewed', 'blocked')),
           blockers jsonb NOT NULL DEFAULT '[]'::jsonb,
+          warnings jsonb NOT NULL DEFAULT '[]'::jsonb,
           requested_by uuid NOT NULL,
           created_at timestamptz NOT NULL DEFAULT now(),
           expires_at timestamptz NOT NULL,

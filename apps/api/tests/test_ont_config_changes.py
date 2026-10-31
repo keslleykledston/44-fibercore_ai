@@ -104,6 +104,9 @@ def test_even_with_everything_else_ready_the_missing_executor_still_blocks(clien
     ("lan.ipv4.write", "lan/1", {"lan.ipv4_address": "10.0.0.255", "lan.netmask": "255.255.255.0"}, "address_not_a_host"),
     ("lan.ipv4.write", "lan/1", {"lan.ipv4_address": "10.0.0.1", "lan.netmask": "255.0.255.0"}, "netmask_not_contiguous"),
     ("lan.dhcp.write", "lan/1", {"lan.dhcp_min": "10.0.0.50", "lan.dhcp_max": "10.0.0.10"}, "dhcp_range_inverted"),
+    ("lan.dhcp.write", "lan/1", {"lan.dhcp_min": "192.168.2.10", "lan.dhcp_max": "192.168.2.50"}, "dhcp_range_outside_subnet"),
+    ("lan.dhcp.write", "lan/1", {"lan.dhcp_min": "192.168.1.1", "lan.dhcp_max": "192.168.1.50"}, "dhcp_range_outside_subnet"),
+    ("lan.dhcp.write", "lan/1", {"lan.dhcp_min": "192.168.1.10", "lan.dhcp_max": "192.168.1.255"}, "dhcp_range_outside_subnet"),
     ("wifi.password.write", "ssid/1", {"wifi.password.set": "hunter2hunter2"}, "value_not_valid_for_field"),
     ("optical.rx_dbm.write", "optical/1", {"optical.rx_dbm": -10.0}, "unknown_capability"),
     ("wifi.ssid.write", "ssid/1", {"wifi.ssid": "Rede_Demo_2G"}, "no_change"),
@@ -201,3 +204,29 @@ def test_r3_asks_for_a_recent_second_factor_when_the_platform_enforces_it(client
     finally:
         monkeypatch.setenv("MFA_RECENT_ENFORCE", "false")
         settings.get_settings.cache_clear()
+
+
+def test_dhcp_range_is_judged_against_the_gateway_and_a_new_subnet_only_warns(client, seed, cpe, migrated):
+    ok = _preview(client, seed, cpe, "lan.dhcp.write", "lan/1", {"lan.dhcp_min": "192.168.1.20", "lan.dhcp_max": "192.168.1.90"})
+    assert ok.status_code == 201 and ok.json()["warnings"] == []
+    # a new subnet that strands the CURRENT range is allowed to be previewed (otherwise the subnet could never change) but is flagged
+    w = _preview(client, seed, cpe, "lan.ipv4.write", "lan/1", {"lan.ipv4_address": "10.10.0.1", "lan.netmask": "255.255.255.0"})
+    assert w.status_code == 201 and w.json()["warnings"] == ["dhcp_range_outside_new_subnet"]
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE cpe_config_fields SET value = '\"192.168.1.100\"'::jsonb WHERE cpe_id = :c AND name = 'lan.ipv4_address'"), {"c": cpe})
+    r = _preview(client, seed, cpe, "lan.dhcp.write", "lan/1", {"lan.dhcp_min": "192.168.1.20", "lan.dhcp_max": "192.168.1.90"})
+    assert r.status_code == 201   # range below the gateway: fine
+    r = _preview(client, seed, cpe, "lan.dhcp.write", "lan/1", {"lan.dhcp_min": "192.168.1.20", "lan.dhcp_max": "192.168.1.200"})
+    assert r.status_code == 422 and r.json()["detail"] == "dhcp_range_contains_gateway"
+
+
+def test_a_repeated_submission_is_answered_but_audited_once(client, seed, cpe, migrated):
+    b = _preview(client, seed, cpe, "wifi.ssid.write", "ssid/1", {"wifi.ssid": "Nova_Rede"}).json()
+    h = hdr(client, "alice", seed, "A")
+    first = client.post(f"/v1/cpes/{cpe}/ont-config/changes/{b['id']}/submit", headers=h)
+    again = client.post(f"/v1/cpes/{cpe}/ont-config/changes/{b['id']}/submit", headers=h)
+    assert first.status_code == again.status_code == 409 and first.json() == again.json()
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        assert c.execute(text("SELECT count(*) FROM audit_log WHERE action = 'ont_config.change_blocked' AND evidence_redacted->>'change_id' = :i"), {"i": b["id"]}).scalar() == 1
