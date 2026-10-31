@@ -10,7 +10,7 @@ Escopo: SOMENTE a ONT de bancada (Huawei EG8145V5 `V5R019C10S350`, serial de ban
 - Origem que chegou ao nó (captura de SYNs): um único endereço, o da lista permitida; endereço não registrado aqui.
 
 ## Leitura do resultado
-- A execução de 10 MB (parcial, 233 Mbps em 352 ms) subestimou a taxa: com arquivo curto a fase de partida da conexão domina. O valor de 200 MB (331 Mbps) é o que vale como medição.
+- Observado por perfil, uma execução de cada: 10 MB → 233,43 Mbps em 352 ms (PARCIAL, abaixo de 3 s); 200 MB → 331,15 Mbps em 4.961 ms (`completed`). A diferença entre os dois números NÃO foi explicada: uma hipótese é o efeito de arquivo curto (partida da conexão), mas não há repetições nem referência cabeada para sustentá-la. **331,15 Mbps é uma medição válida desta execução, pelo critério de duração (≥ 3 s)**; não é estimativa representativa até haver repetições e comparação cabeada.
 - Este valor é o **caminho ONT → nó de teste do LAB** (um único sentido e uma repetição). Não é a velocidade contratada do cliente nem a capacidade da PON.
 
 ## O que ainda falta (homologação do download)

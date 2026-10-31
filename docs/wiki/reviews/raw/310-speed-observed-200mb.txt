@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1940d-3f48-7dc1-b726-1ecf1638026d).
+[codex] Turn started (01a1940d-419b-72b1-9cd5-f7abeb11003f).
+[codex] Assistant message captured: Vou ler o diff contra `main` e os documentos de evidência/ADR referenciados para verificar se...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/operations/SPEED_HOMOL...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/operations/SPEED_HOMOL... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=5 main...HEAD -- docs/wiki/bench/H-speed_test...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=5 main...HEAD -- docs/wiki/bench/H-speed_test... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "3 s|3 segundos|too_short|confiável|minimum|200mb|TestBytesReceived" doc...
+[codex] Command completed: /bin/bash -lc 'rg -n "3 s|3 segundos|too_short|confiável|minimum|200mb|TestBytesReceived" doc... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a evidência limita corretamente o ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a evidência limita corretamente o resultado a uma execução no caminho ONT–nó, mas atribui a diferença entre perfis à partida da conexão sem demonstrar essa causa.
+
+Findings:
+- [medium] A explicação da diferença entre medições extrapola os dados (docs/wiki/bench/H-speed_test_download-200mb-confiavel-2026-10-31.md:13-14)
+  A linha afirma que a execução de 10 MB subestimou a taxa porque a partida da conexão domina, e que 331 Mbps é o valor que vale. Há apenas uma execução por perfil, sem referência cabeada ou repetições; isso não isola a causa da diferença nem sustenta essa comparação como conclusão. O documento limita o resultado ao caminho ONT–nó e a uma repetição, mas a explicação causal ainda pode levar leitores a tratar 331 Mbps como estimativa representativa além daquela execução.
+  Recommendation: Descrever apenas os resultados observados por perfil e rotular 331,15 Mbps como uma medição válida desta execução, conforme o critério de duração; remova a explicação sobre a partida dominar ou identifique-a como hipótese até haver repetições e comparação cabeada.
+
+Next steps:
+- Manter explícito que faltam duas repetições, referência cabeada e homologação de upload; o diff já registra essas lacunas.
