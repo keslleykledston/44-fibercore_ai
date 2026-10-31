@@ -50,3 +50,7 @@ Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetido
 - PR 57 (Edge: claim durável, lease assinada, identidade relida do ACS, única tarefa `reboot`, prazo `notAfter`), PR 58 (primeira execução, migração 0022, advisory lock), PR 59 (firmware). Codex: 2, 5 e 5 rodadas, approve. `make test-api` 373 passed; `go test -race ./...` PASS.
 - Deploy LAB: backup `fibercore-20261030T030646Z.dump`; Alembic 0022; Edge novo; bancada ligada (alvo, registro identified, flag, seção bench no Edge). Nada enviado a equipamento.
 
+
+## 2026-10-30/31 — captura supervisionada (ADR-0032 item 1, PR 95)
+- Edge: modo captura (`olts[].capture`): saída crua só em `captures/` (0700/0600, 24 h, 10 arquivos), orçamento persistido (2/sessão, 4/h, agregado 8), execução única (`done.json`; reexecutar = apagar o marcador), lote inteiro sob um mutex. Codex 5 rodadas → approve. `go vet` + `go test ./...` PASS; teste de concorrência com `-race`. Merge `76a52c0`, push feito.
+- Próximo: reimplantar o Edge (binário `0.1.0-lab-76a52c0`) com o lote 1 numa janela de coleta; recolher os arquivos crus por SFTP, sanitizar, escrever parsers, `Validated`, apagar os crus e registrar a remoção verificada.
