@@ -1,0 +1,65 @@
+{
+  "id": "qos_lab_complete",
+  "deviceId": "ont_lab_001",
+  "mode": "COMPLETE",
+  "state": "completed",
+  "requestedAt": "2026-10-31T15:34:30Z",
+  "completedAt": "2026-10-31T15:35:00Z",
+  "metrics": [
+    {
+      "id": "ip.rtt_avg_ms",
+      "group": "CORE",
+      "status": "valid",
+      "value": 4.1,
+      "source": "TR069_ACTIVE",
+      "scope": "SERVICE_WAN",
+      "unit": "ms",
+      "collectedAt": "2026-10-31T15:35:00Z",
+      "evidenceRef": "ping_lab_2",
+      "note": null
+    },
+    {
+      "id": "speed.core.down_mbps",
+      "group": "CORE",
+      "status": "valid",
+      "value": 480.2,
+      "source": "SD001",
+      "scope": "SERVICE_WAN",
+      "unit": "Mbps",
+      "collectedAt": "2026-10-31T15:35:00Z",
+      "evidenceRef": "spd_lab_core_001",
+      "note": null
+    },
+    {
+      "id": "speed.core.up_mbps",
+      "group": "CORE",
+      "status": "valid",
+      "value": 232.1,
+      "source": "SD001",
+      "scope": "SERVICE_WAN",
+      "unit": "Mbps",
+      "collectedAt": "2026-10-31T15:35:00Z",
+      "evidenceRef": "spd_lab_core_001",
+      "note": null
+    },
+    {
+      "id": "speed.internet.down_mbps",
+      "group": "INTERNET",
+      "status": "not_supported",
+      "value": null,
+      "source": "SD001",
+      "scope": "SERVICE_WAN",
+      "unit": null,
+      "collectedAt": null,
+      "evidenceRef": null,
+      "note": "Perfil não homologado para destino externo"
+    }
+  ],
+  "hypotheses": [],
+  "speedRunIds": [
+    "spd_lab_core_001"
+  ],
+  "warnings": [
+    "O diagnóstico completo apenas referencia SD-001; não reexecutou TR-143 para gerar estes valores."
+  ]
+}

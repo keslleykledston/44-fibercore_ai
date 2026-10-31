@@ -1,0 +1,38 @@
+{
+  "notice": "EXEMPLOS SINTÉTICOS. Host 192.0.2.10 e diagnostic.example.net não são destinos operacionais. NÃO EXECUTAR sem homologação e autorização. O Edge existente deve montar as tarefas após validar WAN/allowlist.",
+  "tr181_ping": {
+    "name": "setParameterValues",
+    "parameterValues": [
+      ["Device.IP.Diagnostics.IPPing.Interface", "Device.IP.Interface.1", "xsd:string"],
+      ["Device.IP.Diagnostics.IPPing.Host", "192.0.2.10", "xsd:string"],
+      ["Device.IP.Diagnostics.IPPing.NumberOfRepetitions", 5, "xsd:unsignedInt"],
+      ["Device.IP.Diagnostics.IPPing.Timeout", 1000, "xsd:unsignedInt"],
+      ["Device.IP.Diagnostics.IPPing.DiagnosticsState", "Requested", "xsd:string"]
+    ]
+  },
+  "tr181_dns": {
+    "name": "setParameterValues",
+    "parameterValues": [
+      ["Device.DNS.Diagnostics.NSLookupDiagnostics.HostName", "diagnostic.example.net", "xsd:string"],
+      ["Device.DNS.Diagnostics.NSLookupDiagnostics.NumberOfRepetitions", 2, "xsd:unsignedInt"],
+      ["Device.DNS.Diagnostics.NSLookupDiagnostics.DiagnosticsState", "Requested", "xsd:string"]
+    ]
+  },
+  "tr098_ping": {
+    "name": "setParameterValues",
+    "parameterValues": [
+      ["InternetGatewayDevice.IPPingDiagnostics.Interface", "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1", "xsd:string"],
+      ["InternetGatewayDevice.IPPingDiagnostics.Host", "192.0.2.10", "xsd:string"],
+      ["InternetGatewayDevice.IPPingDiagnostics.NumberOfRepetitions", 5, "xsd:unsignedInt"],
+      ["InternetGatewayDevice.IPPingDiagnostics.DiagnosticsState", "Requested", "xsd:string"]
+    ]
+  },
+  "read_example": {
+    "name": "getParameterValues",
+    "parameterNames": [
+      "Device.DeviceInfo.UpTime",
+      "Device.DeviceInfo.ProcessStatus.CPUUsage",
+      "Device.Ethernet.Interface.1.Status"
+    ]
+  }
+}

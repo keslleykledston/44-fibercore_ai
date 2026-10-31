@@ -1,0 +1,39 @@
+{
+  "id": "qos_lab_stale",
+  "deviceId": "ont_lab_001",
+  "mode": "QUICK",
+  "state": "partial",
+  "requestedAt": "2026-10-31T15:34:30Z",
+  "completedAt": "2026-10-31T15:35:00Z",
+  "metrics": [
+    {
+      "id": "ip.rtt_avg_ms",
+      "group": "CORE",
+      "status": "stale",
+      "value": 7.2,
+      "source": "ACS_CACHE",
+      "scope": "SERVICE_WAN",
+      "unit": "ms",
+      "collectedAt": "2026-10-30T12:10:00Z",
+      "evidenceRef": null,
+      "note": "Resultado antigo: nenhum Inform comprovou o ping solicitado agora"
+    },
+    {
+      "id": "dns.avg_ms",
+      "group": "CORE",
+      "status": "inconclusive",
+      "value": null,
+      "source": "TR069_ACTIVE",
+      "scope": "SERVICE_WAN",
+      "unit": "ms",
+      "collectedAt": null,
+      "evidenceRef": null,
+      "note": "GenieACS HTTP 202 significou task enfileirada, não teste completo"
+    }
+  ],
+  "hypotheses": [],
+  "speedRunIds": [],
+  "warnings": [
+    "Não usar Complete antigo nem HTTP 202 do NBI como evidência de teste concluído."
+  ]
+}

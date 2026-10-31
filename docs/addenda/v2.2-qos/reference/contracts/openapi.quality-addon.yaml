@@ -1,0 +1,155 @@
+openapi: 3.0.3
+info:
+  title: FiberCore QoS-001 Addendum — contract reference only
+  version: 1.1.0
+  description: >-
+    EXEMPLO para adaptar/mesclar à API atual /api/v1 e aos DTOs do SD-001.
+    Nenhuma rota nova se o Diagnostic Engine já oferece API compatível.
+servers:
+  - url: /api/v1
+paths:
+  /devices/{deviceId}/diagnostics/quality/capabilities:
+    get:
+      operationId: listQualityCapabilities
+      summary: Descobrir dados/testes de QoS homologados, inclusive bloqueios
+      parameters:
+        - $ref: '#/components/parameters/deviceId'
+      responses:
+        '200':
+          description: Capabilities
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [model, firmware, wanServiceVerified, capabilities]
+                properties:
+                  model: {type: string}
+                  firmware: {type: string}
+                  wanServiceVerified: {type: boolean}
+                  blockers: {type: array, items: {type: string}}
+                  capabilities:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, status]
+                      properties:
+                        id: {type: string}
+                        status: {type: string, enum: [homologated, partial, present_unverified, unsupported, unknown, not_applicable]}
+                        source: {type: string}
+                        reason: {type: string}
+        '403': {description: Permissão negada}
+        '404': {description: Dispositivo ausente no tenant}
+  /devices/{deviceId}/diagnostics/quality/runs:
+    post:
+      operationId: createQualityRun
+      summary: Inicia suite de diagnóstico manual
+      parameters:
+        - $ref: '#/components/parameters/deviceId'
+        - in: header
+          name: Idempotency-Key
+          schema: {type: string, maxLength: 120}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [mode]
+              properties:
+                mode: {type: string, enum: [QUICK, COMPLETE]}
+                targets:
+                  type: array
+                  uniqueItems: true
+                  maxItems: 2
+                  items: {type: string, enum: [CORE, INTERNET]}
+                trace: {type: boolean, default: false}
+                confirmImpact: {type: boolean, default: false}
+              description: >-
+                Para COMPLETE com banda: 1-2 targets e confirmImpact=true;
+                QUICK não usa targets nem teste de banda. Destinos de allowlist no servidor.
+      responses:
+        '202':
+          description: Suite aceita; execução de dispositivo NÃO necessariamente concluída
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QualityRun'}
+        '403': {description: Acesso negado}
+        '409': {description: Limite de concorrência/idempotência}
+        '422': {description: Interface/firmware/destino não homologado ou ação inconsistente}
+    get:
+      operationId: listQualityRuns
+      parameters:
+        - $ref: '#/components/parameters/deviceId'
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 20, default: 5}
+      responses:
+        '200':
+          description: Histórico do tenant
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/QualityRun'}
+  /devices/{deviceId}/diagnostics/quality/runs/{runId}:
+    get:
+      operationId: getQualityRun
+      parameters:
+        - $ref: '#/components/parameters/deviceId'
+        - in: path
+          name: runId
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Run agregado + métricas com origem e status
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QualityRun'}
+        '404': {description: Run não encontrado neste tenant}
+components:
+  parameters:
+    deviceId:
+      in: path
+      name: deviceId
+      required: true
+      schema: {type: string}
+  schemas:
+    QualityMetric:
+      type: object
+      required: [id, group, status, source, scope, value, collectedAt]
+      properties:
+        id: {type: string}
+        group: {type: string, enum: [WAN, CORE, INTERNET, OPTICAL, ETHERNET, WIFI, CPE]}
+        status: {type: string, enum: [valid, stale, not_supported, not_available, not_applicable, failed, inconclusive]}
+        value: {nullable: true, oneOf: [{type: number}, {type: string}, {type: boolean}]}
+        unit: {type: string, nullable: true}
+        source: {type: string, enum: [TR069_READ, TR069_ACTIVE, ACS_CACHE, OLT_ADAPTER, SD001]}
+        scope: {type: string, enum: [SERVICE_WAN, MGMT_WAN, PON, LAN, WIFI]}
+        collectedAt: {type: string, format: date-time, nullable: true}
+        evidenceRef: {type: string, nullable: true}
+        note: {type: string, nullable: true}
+    QualityHypothesis:
+      type: object
+      required: [code, label, confidence, evidenceMetricIds]
+      properties:
+        code: {type: string}
+        label: {type: string}
+        confidence: {type: string, enum: [low, medium]}
+        evidenceMetricIds: {type: array, items: {type: string}}
+        recommendedCheck: {type: string}
+    QualityRun:
+      type: object
+      required: [id, deviceId, mode, state, requestedAt, metrics, warnings, speedRunIds]
+      properties:
+        id: {type: string}
+        deviceId: {type: string}
+        mode: {type: string, enum: [QUICK, COMPLETE]}
+        state: {type: string, enum: [queued, dispatched, running, collecting, completed, partial, failed, timeout]}
+        requestedAt: {type: string, format: date-time}
+        completedAt: {type: string, format: date-time, nullable: true}
+        metrics: {type: array, items: {$ref: '#/components/schemas/QualityMetric'}}
+        hypotheses: {type: array, items: {$ref: '#/components/schemas/QualityHypothesis'}}
+        speedRunIds: {type: array, items: {type: string}}
+        warnings: {type: array, items: {type: string}}
