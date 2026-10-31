@@ -1,6 +1,6 @@
 # ADR-0039: QoS-001 — diagnóstico de qualidade do serviço (adendo ao SD-001)
 
-Status: **PROPOSTA — aguarda aprovação do responsável** (nada de código antes disso) | Data: 2026-10-31 | Owner: equipe | Origem: `docs/addenda/v2.2-qos/` (PR0: CURRENT_STATE, GAP_MAP, plano). Relaciona-se a ADR-0028 (diagnostic jobs passivos), ADR-SD-002 (leitura de parâmetros do CPE), ADR-0030 (bancada), ADR-0038 (Speed Diagnostics) e à emenda proposta do ADR-0030 desta data.
+Status: **Accepted (2026-10-31)** — aprovado pelo responsável; o PR A e o PR B seguem com Codex e flags OFF | Data: 2026-10-31 | Owner: equipe | Origem: `docs/addenda/v2.2-qos/` (PR0: CURRENT_STATE, GAP_MAP, plano). Relaciona-se a ADR-0028 (diagnostic jobs passivos), ADR-SD-002 (leitura de parâmetros do CPE), ADR-0030 (bancada), ADR-0038 (Speed Diagnostics) e à emenda proposta do ADR-0030 desta data.
 
 ## Contexto
 O adendo pede "Diagnóstico de Qualidade do Serviço" sobre o SD-001: leituras (WAN/PPPoE, Ethernet, óptica, Wi-Fi, CPU), testes leves de ping e DNS, traceroute opcional, e o COMPLETO reusando o teste de banda. O repositório já tem a leitura passiva (`cpe_state`), a óptica da OLT, as regras R-D001/R-D002, o motor TR-143 único e a aba "Teste de banda" no sidebar. Faltam ping/DNS/traceroute, Ethernet/CPU, a entidade de suite, as hipóteses e o cartão de UI (ver GAP_MAP). Três fatos do código limitam o desenho:
@@ -33,4 +33,4 @@ iperf/TR-471, TR-369/USP, auto-remediação, edição de Wi-Fi, reboot, varredur
 - **Ping/DNS no gate global**: `HOMOLOGATED_WRITES` vazio de propósito.
 
 ## Aprovação
-Aprovado por: ______________________  Data: ____/____/______   (a emenda do ADR-0030 desta data é aprovada junto)
+Aprovado por: o responsável do projeto, pelo chat da sessão, 2026-10-31 ("aprovado ADR-0039"); a emenda do ADR-0030 desta data foi aprovada junto.
