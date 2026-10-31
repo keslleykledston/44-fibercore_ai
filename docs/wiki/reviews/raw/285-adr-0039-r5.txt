@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19301-349f-7013-8a9e-6dec0178d83f).
+[codex] Turn started (01a19301-34d8-7fe3-9084-44de1ce6753d).
+[codex] Assistant message captured: Vou inspecionar o diff completo contra `main` e seguir as garantias de revogação, expiração e...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- docs/wiki/adr/ADR-0030-homo...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- docs/wiki/adr/ADR-0030-homo... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md | sed -n '38,95p'; nl...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md | sed -n '38,95p'; nl... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: a janela residual pode exceder os 10 ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: a janela residual pode exceder os 10 minutos declarados. A serialização despacho–revogação está especificada, mas o limite do envelope não compensa a tolerância de relógio já permitida.
+
+Findings:
+- [medium] A tolerância de relógio permite execução após os 10 minutos declarados (docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md:58)
+  O Edge recusa pelo próprio relógio local, enquanto os relógios Edge e nuvem podem diferir por até 45 segundos. Se o relógio do Edge estiver atrasado, um envelope com `exp` dez minutos após o despacho ainda pode ser aceito por até cerca de 45 segundos após esse prazo. Portanto, o residual real pode chegar a aproximadamente 10 minutos e 45 segundos após a revogação, contrariando o limite de 10 minutos declarado. Isso amplia a janela em que um teste de banda já despachado pode escrever no CPE após o aceite ser revogado.
+  Recommendation: Compense a tolerância ao calcular `exp` (por exemplo, limite a validade a 9 min e 15 s quando a divergência máxima for 45 s), ou declare e aprove explicitamente o limite residual considerando o pior desvio de relógio; teste o caso de Edge atrasado.
+
+Next steps:
+- Ajustar o limite de `exp` para garantir o prazo real após revogação, ou revisar formalmente o residual declarado antes de implementar.
