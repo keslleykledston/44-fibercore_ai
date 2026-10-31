@@ -34,15 +34,17 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const alive = useRef(true);
+  const seq = useRef(0);   // cada leitura leva um número: só a MAIS RECENTE pode atualizar a tela (uma resposta lenta e antiga nunca esconde um teste ativo nem reabilita os botões)
 
   const fetchAll = useCallback(async (signal?: AbortSignal) => {
+    const mine = ++seq.current;
     try {
       const r = await fetch(`/bff/cpes/${cpeId}/speed`, { cache: "no-store", signal });
       const j = (await r.json().catch(() => ({}))) as { caps?: unknown; runs?: unknown; error?: string };
       const caps = r.ok ? readCaps(j.caps) : null, runs = r.ok ? readRuns({ items: j.runs }) : null;
-      if (!alive.current) return;
+      if (!alive.current || mine !== seq.current) return;
       setLoad(caps && runs ? { kind: "ready", caps, runs } : { kind: "error", code: j.error && LOAD_ERROR[j.error] ? j.error : "failed" });
-    } catch (e) { if ((e as Error).name !== "AbortError" && alive.current) setLoad({ kind: "error", code: "failed" }); }
+    } catch (e) { if ((e as Error).name !== "AbortError" && alive.current && mine === seq.current) setLoad({ kind: "error", code: "failed" }); }
   }, [cpeId]);
 
   useEffect(() => { alive.current = true; const c = new AbortController(); void fetchAll(c.signal); return () => { alive.current = false; c.abort(); }; }, [fetchAll]);

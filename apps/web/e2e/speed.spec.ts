@@ -130,6 +130,29 @@ test("ONU 360°: o cartão Teste de banda existe com roteador vinculado e a flag
   await expect(card.getByTestId("speed-start-download")).toHaveCount(0);
 });
 
+test("teste de banda (cenário): uma leitura lenta e antiga nunca sobrescreve o estado mais recente", async ({ page, request }) => {
+  test.setTimeout(90_000);
+  await confirmDemoA2(request);
+  let n = 0;
+  const done = RUN({ status: "completed", mbps: 93.7, reliable: true, bytes: 10_000_000, duration_ms: 8000 });
+  await page.route("**/bff/cpes/*/speed", async (r) => {
+    n += 1;
+    const mine = n;
+    if (mine === 1) return r.fulfill({ json: { caps: CAPS(), runs: [] } });                                         // abrir a aba
+    if (mine === 2) return r.fulfill({ json: { caps: CAPS(), runs: [RUN({ status: "awaiting_approval" })] } });      // logo depois do pedido
+    if (mine === 3) { await new Promise((res) => setTimeout(res, 6500)); return r.fulfill({ json: { caps: CAPS(), runs: [] } }); }   // leitura LENTA e antiga: "sem teste ativo"
+    return r.fulfill({ json: { caps: CAPS(), runs: [done] } });                                                      // a seguinte, mais nova, já com o resultado
+  });
+  await page.route("**/bff/cpes/*/speed/runs", (r) => r.fulfill({ status: 201, json: { ok: true, outcome: "submitted" } }));
+  await openTab(page);
+  await page.getByTestId("speed-start-download").click();
+  await expect(page.getByTestId("speed-active")).toBeVisible();
+  await expect(page.getByTestId("speed-kpi-download")).toContainText("93,7 Mbps", { timeout: 15_000 });
+  await page.waitForTimeout(4000);                                                                                   // a resposta antiga chega agora
+  await expect(page.getByTestId("speed-kpi-download")).toContainText("93,7 Mbps");
+  await expect(page.getByTestId("speed-active")).toHaveCount(0);
+});
+
 // Prova do recuo (só roda com a flag desligada no provedor: SPEED_FLAG_OFF=1): a aba, o cartão e a rota do BFF não existem para a tela; o resto do painel segue igual.
 test("flag speed_diagnostics desligada: sem aba, sem cartão na ONU 360° e o BFF responde que está desligado", async ({ page, request }) => {
   test.skip(!process.env.SPEED_FLAG_OFF, "rodar com SPEED_FLAG_OFF=1 e a flag desligada no provedor");
