@@ -29,7 +29,7 @@ Distância, estado de gerenciamento e demais campos extraídos foram omitidos de
 
 ## Leitura da evidência (SUGESTIVA, não conclusiva)
 - **Compatível, mas não independente nem exclusiva:** a OLT registra, em 0/0/14 ID 11, uma ONT de tipo `F670LV9.0` com serial GPON terminado em `…D1EDA1A3`; o ACS tem um dispositivo ZTE F670L e o seu SSID contém esse trecho. Limites: (a) o **modelo não distingue** esta ONT de outras F670L; (b) o **SSID de fábrica é derivado do próprio serial**, então não é uma segunda fonte independente do mesmo fato; (c) o ACS não expõe o GPON SN completo, logo **não há igualdade completa de serial** entre OLT e CPE.
-- **Linha do tempo: dois relatos separados, sem correlação.** Não há desvio conhecido entre o relógio da OLT e o do ACS, então **não afirmo ordem, proximidade nem compatibilidade temporal entre os dois**. (1) *Na OLT:* uma queda da ONT 11 às 20:04:40 UTC e a volta às 20:05:47 UTC, causa LOSi/LOBi (horário da OLT convertido de −04:00). (2) *No ACS (UTC, horário de recebimento):* último Inform da ZTE às 20:08:31 e o seguinte às 22:22, que traz um `1 BOOT`. Não usei o uptime lido (8.542 s às 22:33 UTC) para inferir boot. O reinício das 22:22 UTC **não aparece como queda na OLT** e não deve ser tomado como o reboot observado.
+- **Linha do tempo: dois relatos separados, sem correlação.** Não há desvio conhecido entre o relógio da OLT e o do ACS, então **não afirmo ordem, proximidade nem compatibilidade temporal entre os dois**. (1) *Na OLT:* uma queda da ONT 11 às 20:04:40 UTC e a volta às 20:05:47 UTC, causa LOSi/LOBi (horário da OLT convertido de −04:00). (2) *No ACS (UTC, horário de recebimento):* último Inform da ZTE às 20:08:31 e o seguinte às 22:22, que traz um `1 BOOT`. Não usei o uptime lido (8.542 s às 22:33 UTC) para inferir boot. Os dois relatos **não permitem nenhuma comparação entre os sistemas**; em particular, o `1 BOOT` do ACS **não deve ser tomado como o reboot observado na OLT**.
 - **Causa da queda de 20:04 UTC: não verificada** (LOSi/LOBi é perda de sinal óptico; pode ser fibra, conector ou o equipamento).
 
 ## Conclusão
@@ -41,5 +41,5 @@ O vínculo é **inferido** e permanece **não confirmado e não registrado**: h�
 3. Registro de capacidades por fabricante, modelo e firmware (o firmware da ZTE ainda não foi lido para a nuvem), com a evidência de cada operação.
 4. Para o teste de banda: rota da WAN de serviço, origem no nó de teste, sonda de 3xx e aceite do risco, como na Huawei.
 
-## Estado do Connection Request da ZTE (para o dossiê)
-Funciona pelo ACS desde o retorno de 2026-10-31 22:22 UTC (HTTP 200 em 0,55 s); credencial por dispositivo gerada pelo ACS; antes, o Connection Request ficava sem resposta (timeout) enquanto a ZTE estava fora.
+## Estado do Connection Request da ZTE (para o dossiê, independente da evidência de vínculo)
+Em verificação feita em 2026-10-31 por volta de 22:34 UTC (horário do ACS), uma tarefa de leitura inofensiva (`UpTime`) com Connection Request foi executada pelo ACS (HTTP 200 em 0,55 s) com a credencial por dispositivo que o próprio ACS gera. Verificação anterior (por volta de 21:40 UTC), com a ZTE sem informar, tinha dado 202 (sem entrega). Esta observação não é usada no argumento do vínculo.
