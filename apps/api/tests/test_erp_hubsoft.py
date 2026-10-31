@@ -572,3 +572,29 @@ def test_every_authentication_send_counts_including_retries():
                             auth_gate=lambda: (_ for _ in ()).throw(HubSoftError("RATE_LIMITED", retry_after=30.0)))
     with pytest.raises(HubSoftError, match="RATE_LIMITED"):
         blocked.token()
+
+
+def test_the_kill_switch_is_not_queued_behind_a_slow_test_and_the_test_cannot_undo_it(client, seed, env, monkeypatch):
+    h = hdr(client, "alice", seed, "A")
+    made = create(client, h)
+    _put_secret(env, seed["A"])
+    inside, release = threading.Event(), threading.Event()
+
+    def slow(method, path, headers, body, params):
+        inside.set()
+        release.wait(10)
+        return tok()
+    monkeypatch.setattr(erp_connections, "_send_for", lambda host, addrs: slow)
+    out = {}
+    t = threading.Thread(target=lambda: out.update(r=client.post(f"/v1/integrations/erp/{made['id']}/test", headers=h)))
+    t.start()
+    assert inside.wait(10)                     # the test is now "talking to the ERP"
+    done = {}
+    d = threading.Thread(target=lambda: done.update(r=client.post(f"/v1/integrations/erp/{made['id']}/disable", headers=h)))
+    d.start()
+    d.join(5)
+    assert not d.is_alive() and done["r"].status_code == 200 and done["r"].json()["status"] == "disabled"     # not blocked by the test's transaction
+    release.set()
+    t.join(10)
+    assert out["r"].status_code == 200 and out["r"].json()["status"] == "disabled"      # the late result did not bring it back
+    assert client.post(f"/v1/integrations/erp/{made['id']}/test", headers=h).json()["detail"] == "connection_disabled"

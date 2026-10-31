@@ -14,7 +14,7 @@ from sqlalchemy import Connection, text
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import audit
 from app.core import erp_hub, features
-from app.core.db import get_engine
+from app.core.db import get_engine, scoped_connection
 from app.core.settings import Settings, get_settings
 from app.integrations import hubsoft
 
@@ -123,9 +123,15 @@ def test_connection(connection_id: UUID, p: Principal = Depends(require("erp:tes
     prov = erp_hub.PROVIDERS[c.provider]
     if not prov.real_connector:
         raise HTTPException(403, "provider_not_available")
-    claimed = conn.execute(
-        text("UPDATE erp_connections SET last_tested_at = now() WHERE id = :i AND (last_tested_at IS NULL OR last_tested_at < now() - make_interval(secs => :s)) RETURNING id"),
-        {"i": connection_id, "s": TEST_MIN_INTERVAL_S}).first()
+    if c.status == "disabled":
+        raise HTTPException(409, "connection_disabled")   # a disabled connection is final: the kill switch is not undone by a test
+    # The row is claimed in a SHORT transaction of its own and committed BEFORE any network I/O, and the outcome is written in another one: no row lock is held while
+    # the ERP is slow, so `disable` (the kill switch) is never queued behind a test.
+    with scoped_connection(get_engine(), user_id=p.id, tenant_id=p.tenant_id) as short:
+        claimed = short.execute(
+            text("UPDATE erp_connections SET last_tested_at = now() WHERE id = :i AND status <> 'disabled' "
+                 "AND (last_tested_at IS NULL OR last_tested_at < now() - make_interval(secs => :s)) RETURNING id"),
+            {"i": connection_id, "s": TEST_MIN_INTERVAL_S}).first()
     if claimed is None:
         raise HTTPException(429, "test_too_soon")
     error: str | None = None
@@ -147,11 +153,12 @@ def test_connection(connection_id: UUID, p: Principal = Depends(require("erp:tes
     except hubsoft.HubSoftError as e:
         error, state = e.code, e.state
     log.info("erp test connection=%s provider=%s result=%s", connection_id, c.provider, error or "ok")   # class only: no host, no body, no secret
-    conn.execute(
-        text("UPDATE erp_connections SET status = :s, last_error_class = CAST(:e AS text), updated_at = now(), "
-             "last_success_at = CASE WHEN CAST(:e AS text) IS NULL THEN now() ELSE last_success_at END WHERE id = :i"),
-        {"s": state, "e": error, "i": connection_id})
-    audit(conn, p, "erp.connection.tested", "erp_connection", str(connection_id), {"ok": error is None, "error_class": error})
+    with scoped_connection(get_engine(), user_id=p.id, tenant_id=p.tenant_id) as short:
+        short.execute(
+            text("UPDATE erp_connections SET status = :s, last_error_class = CAST(:e AS text), updated_at = now(), "
+                 "last_success_at = CASE WHEN CAST(:e AS text) IS NULL THEN now() ELSE last_success_at END WHERE id = :i AND status <> 'disabled'"),   # never undo a disable that came meanwhile
+            {"s": state, "e": error, "i": connection_id})
+        audit(short, p, "erp.connection.tested", "erp_connection", str(connection_id), {"ok": error is None, "error_class": error})
     return _view(_get(conn, connection_id))
 
 
