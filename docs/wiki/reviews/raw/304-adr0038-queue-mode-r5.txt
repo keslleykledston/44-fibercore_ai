@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1934d-ca0d-7ea0-8218-ca29a7121edb).
+[codex] Turn started (01a1934d-ca46-78c0-87bb-cba445c9d7d5).
+[codex] Assistant message captured: Vou conferir o diff completo contra `main` e o texto ao redor da regra de destravamento para ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- docs/wiki/adr/ADR-0038-spee...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- docs/wiki/adr/ADR-0038-spee... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=15 main...HEAD -- docs/wiki/adr/ADR-0038-spee...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=15 main...HEAD -- docs/wiki/adr/ADR-0038-spee... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a nova regra reduz o risco de acei...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a nova regra reduz o risco de aceitar dados antigos em `Completed`, mas não correlaciona `Error_*` a esta execução; uma leitura posterior pode refletir um erro anterior e destravar a bancada enquanto o diagnóstico enviado ainda está ativo.
+
+Findings:
+- [high] `Error_*` posterior não comprova término desta execução (docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md:92)
+  A condição aceita `Error_*` com base em leitura terminal posterior e horário de captura posterior ao envio, mas a exigência de `BOMTime`/`EOMTime` entre envio e leitura só se aplica a `Completed`. O horário de captura demonstra quando o ACS observou o valor, não quando o erro ocorreu nem a qual diagnóstico ele pertence. Assim, um `Error_*` antigo ainda presente no CPE pode ser observado por uma leitura nova e satisfazer a regra sem provar que o diagnóstico desta execução terminou; o alvo poderia ser liberado enquanto a ONT ainda gera tráfego. Inferência baseada na ausência de identificador ou timestamp de transição para erros no texto. Exigir uma evidência de correlação específica para `Error_*` — ou manter o bloqueio quando ela não existir.
+  Recommendation: Definir como distinguir um `Error_*` gerado por esta execução de um erro terminal persistido antes do envio. Se o ACS/CPE não fornecer essa evidência, não aceitar `Error_*` como condição de destravamento automático.
+
+Next steps:
+- Especificar e testar a correlação de `Error_*` com o diagnóstico enviado, incluindo erro terminal antigo persistido antes do envio.

@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1934c-7daf-7282-9997-f6914e21701f).
+[codex] Turn started (01a1934c-7de9-7211-af50-ab7c877eb611).
+[codex] Assistant message captured: Vou conferir o diff e as referências locais relevantes para validar as afirmações do novo tex...
+[codex] Running command: /bin/bash -lc 'git diff --unified=30 main...HEAD -- docs/wiki/adr/ADR-0038-speed-diagnostics-...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=30 main...HEAD -- docs/wiki/adr/ADR-0038-speed-diagnostics-... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md | sed -n '80,112p'; n...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md | sed -n '80,112p'; n... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: item 8 melhora a reconciliação, ma...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: item 8 melhora a reconciliação, mas o limite de tráfego de 10 MB não é garantido pelo perfil solicitado. O texto também mantém prazos de nuvem e comportamento do ACS como pontos a verificar, sem evidência suficiente para dimensionar a operação.
+
+Findings:
+- [high] 10 MB limita o pedido, não necessariamente o tráfego após reinício (docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md:92-96)
+  O item 8 trata como limite de risco o perfil de 10 MB enquanto não houver medição; porém, a proposta não demonstra que o tamanho do perfil limite o tráfego total quando a ONT continua um diagnóstico sem supervisão. O registro de sonda mostra `TestBytesReceived` maior que o corpo de 1.000 B (`1282` B), então há ao menos tráfego adicional de protocolo. Mais importante, a reconciliação só observa `DiagnosticsState` até o orçamento expirar e declara desconhecido que exista cancelamento suportado: se a ONT continuar ativa ou não informar estado terminal, a liberação da reconciliação ao fim do orçamento não interrompe o download. Isso torna a afirmação de risco limitado a 10 MB não verificada. Definir um limite de tráfego total sustentado por comportamento observado ou manter o alvo travado e explicitar que o tráfego pode continuar até a ONT encerrar por conta própria.
+  Recommendation: Não apresentar 10 MB como limite comprovado de impacto. Medir e documentar bytes máximos e comportamento após perda do Edge; até haver mecanismo comprovado de cancelamento ou limite, declarar que a duração/tráfego podem exceder o orçamento de observação.
+- [medium] Orçamento e prazo do job permanecem sem validação operacional (docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md:88-91)
+  O item 4 corretamente marca como hipóteses a duração do perfil, o Inform efetivo e quando a leitura enfileirada é executada. Ainda assim, ele já descreve uma fórmula de orçamento e o item 7 menciona expiração atual de cerca de 15 minutos, deixando a compatibilidade para conferência futura. Não há evidência no diff de que o prazo de reporte do job possa acomodar esse orçamento, que pode incluir dois intervalos de Inform mais a duração e margem; falhar nessa compatibilidade pode expirar o job antes de chegar um resultado e deixar o Edge e a nuvem divergirem sobre o estado. A amostra de 60 s numa única execução também não verifica a hipótese para outros momentos de fila ou Inform atrasado.
+  Recommendation: Antes de aprovar prazos, registrar medições por perfil e atrasos de Inform na ONT/versão do ACS alvo, e demonstrar com teste integrado que o orçamento calculado cabe no prazo de expiração e reporte do job.
+
+Next steps:
+- Validar com evidência o limite real de tráfego após perda do Edge e a duração máxima do diagnóstico de 10 MB.
+- Confirmar por teste integrado o orçamento do Edge e o prazo de expiração/reporte do job na nuvem antes da aprovação.
