@@ -1,2 +1,7 @@
 # Fixed test passwords of a throwaway local container (never reachable, removed after each run) that scripts/perf-onu-events.sh carried for a few minutes in c0002b3; the script now generates them per run.
 c0002b3ddc5be6bb1ab6ca58d46d069381b3cb26:scripts/perf-onu-events.sh:generic-api-key:13
+# tokens e segredos FALSOS dos testes do ERP Hub (apps/api/tests/test_erp_hubsoft.py): valores fixos inventados, sem relação com qualquer credencial
+71410434f5f061c3f3e04c9f7a00931fcaaaddbe:apps/api/tests/test_erp_hubsoft.py:generic-api-key:150
+71410434f5f061c3f3e04c9f7a00931fcaaaddbe:apps/api/tests/test_erp_hubsoft.py:generic-api-key:263
+71410434f5f061c3f3e04c9f7a00931fcaaaddbe:apps/api/tests/test_erp_hubsoft.py:generic-api-key:264
+71410434f5f061c3f3e04c9f7a00931fcaaaddbe:apps/api/tests/test_erp_hubsoft.py:generic-api-key:424
