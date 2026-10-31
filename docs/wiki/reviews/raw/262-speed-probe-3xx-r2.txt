@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192ed-499d-7f31-83a7-da4c7cb59404).
+[codex] Turn started (01a192ed-49d9-7192-9e48-620eaa83ee53).
+[codex] Assistant message captured: Vou comparar a branch com `main` e conferir as três páginas alteradas, procurando vazamentos ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/operations/SPEED_HOMOL...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/operations/SPEED_HOMOL... (exit 0)
+[codex] Running command: /bin/bash -lc "git status --short && rg -n --hidden --glob '"'!**/.git/**'"' '7AA5|00259E|EG8...
+[codex] Command completed: /bin/bash -lc "git status --short && rg -n --hidden --glob '"'!**/.git/**'"' '7AA5|00259E|EG8... (exit 0)
+[codex] Running command: /bin/bash -lc 'cat docs/wiki/reviews/raw/262-speed-probe-3xx-r2.txt'
+[codex] Command completed: /bin/bash -lc 'cat docs/wiki/reviews/raw/262-speed-probe-3xx-r2.txt' (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: os identificadores completos parecem removi...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: os identificadores completos parecem removidos, mas `ROMTime` continua sem valor observável na evidência, apesar de ser declarado presente na planilha.
+
+Findings:
+- [medium] ROMTime não tem valor registrado (docs/wiki/bench/H-speed-sonda-3xx-eg8145v5-2026-10-31.md:25)
+  A tabela rotula a linha como `ROMTime` = `BOMTime` → `EOMTime`, mas informa somente “14 ms entre BOM e EOM”; não registra o valor de `ROMTime` nem deixa claro que os 14 ms são seu valor. A planilha então declara `ROMTime` presente sem mostrar a leitura que sustenta essa afirmação, justamente o ponto levantado na rodada anterior. Isso deixa a evidência incompleta e impede conferir o resultado documentado.
+  Recommendation: Registre explicitamente o valor lido de `ROMTime` e sua unidade; se a leitura não estiver disponível, retire `ROMTime` da lista de folhas confirmadas na evidência e na planilha.
+
+Next steps:
+- Conferir se `ROMTime` foi lido na resposta do ACS e atualizar a linha 25 e a planilha com esse valor.
