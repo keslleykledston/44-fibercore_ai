@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19416-2846-7362-bf41-7615a5d7241c).
+[codex] Turn started (01a19416-2b93-7dd3-a1f4-3c327ab6c378).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e ler os ADRs citados junto dos registros para verificar se...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- docs/operations/SPEED_HOMOL...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- docs/operations/SPEED_HOMOL... (exit 0)
+[codex] Running command: /bin/bash -lc "cat docs/wiki/adr/ADR-0030-homologacao-em-bancada-escopo-e-gates.md && cat doc...
+[codex] Command completed: /bin/bash -lc "cat docs/wiki/adr/ADR-0030-homologacao-em-bancada-escopo-e-gates.md && cat doc... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: a descrição das três amostras é ca...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: a descrição das três amostras é cautelosa, mas o registro do upload e a planilha afirmam folhas graváveis sem evidência explícita de que a gravação foi testada; isso pode promover capacidade além do que a leitura identificou.
+
+Findings:
+- [medium] Leitura de folhas é apresentada como prova de gravabilidade (docs/wiki/bench/H1-speed-upload-eg8145v5-2026-10-31.md:7-10)
+  O H1 diz que a tarefa foi somente de leitura, mas afirma que `DiagnosticsState` e as folhas de entrada são graváveis; a planilha repete a afirmação e usa o H1 como evidência. Presença no cache ou na lista de folhas não demonstra que uma gravação foi aceita. Isso importa porque ADR-0038 usa `supported`/`identified` como condição para a primeira execução. A redação das amostras de download, em contraste, limita a conclusão às três execuções e explicita que não prova desempenho típico.
+  Recommendation: Esclarecer como a gravabilidade foi verificada sem escrita ou reformular como folhas presentes/listadas e marcar gravabilidade como não verificada. Ajustar também a planilha para não tratar o H1 de leitura como evidência de escrita aceita.
