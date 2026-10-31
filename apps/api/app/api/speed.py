@@ -69,7 +69,19 @@ def _endpoints(conn: Connection, edge_id=None) -> list[dict]:
              "health_at": r.health_at.isoformat() if r.health_at else None, "ready": ready(r)} for r in rows]
 
 
-def _direction_state(p: Principal, caps: list[dict], operation: str, is_bench: bool, redirect_ok: bool) -> dict:
+def _first_run_open(conn: Connection, tenant_id: UUID, cpe_id: UUID, operation: str, combos: list[tuple[str, str]]) -> bool:
+    """An owner's `first_run` authorization (ADR-0030 amendment) is open and inside its window for this CPE and operation. Only it lets an `identified` registry
+    entry with complete evidence stand in for the missing `observed` one, exactly as `bench.gate` applies it; the gate re-decides at submit, approve and dispatch.
+    The authorization is bound to the EXACT parameters (`params_hash` of {target, profile}), so it counts only for one of the `combos` being asked about: the
+    request names one destination and profile; the listing offers every (destination, profile) combination it could show."""
+    hashes = sorted({bench.params_hash({"target": t, "profile": f}) for t, f in combos})
+    return bool(hashes) and conn.execute(
+        text("SELECT 1 FROM bench_authorizations WHERE tenant_id = :t AND cpe_id = :c AND operation = :o AND state = 'open' AND first_run "
+             "AND now() >= window_start AND now() < window_end AND params_hash = ANY(:h) LIMIT 1"),
+        {"t": tenant_id, "c": cpe_id, "o": operation, "h": hashes}).first() is not None
+
+
+def _direction_state(p: Principal, caps: list[dict], operation: str, is_bench: bool, redirect_ok: bool, first_run_open: bool = False) -> dict:
     """Why this direction can or cannot be requested right now, in the ORDER a person can act on it. Same decision the request applies (it re-checks)."""
     entry = next((c for c in caps if c["name"] == operation and c["protocol"] == "tr069"), None)
     reason = None
@@ -77,7 +89,10 @@ def _direction_state(p: Principal, caps: list[dict], operation: str, is_bench: b
         reason = "not_permitted"
     elif not is_bench:
         reason = "operation_not_homologated"   # every CPE outside the bench list: the global gate (HOMOLOGATED_WRITES) stays empty
-    elif entry is None or entry["status"] != "supported" or entry["certification"] not in ("observed", "certified"):
+    elif entry is None or entry["status"] != "supported" or not (
+        entry["certification"] in ("observed", "certified")
+        or (first_run_open and entry["certification"] == "identified" and entry["evidence_ref"] and entry["verified_at"])
+    ):
         reason = "capability_not_observed"
     elif not redirect_ok:
         reason = "redirect_unverified"
@@ -98,7 +113,8 @@ def capabilities(cpe_id: UUID, p: Principal = Depends(require("inventory:read"))
     is_bench = bool(conn.execute(text("SELECT 1 FROM bench_targets WHERE cpe_id = :c"), {"c": cpe_id}).first())
     redirect_ok = bool(c.vendor and c.model and c.firmware and speed.redirect_verified(conn, p.tenant_id, c.vendor, c.model, c.firmware))
     eps = _endpoints(conn, _bench_edge(conn, cpe_id))
-    directions = {d: _direction_state(p, caps, op, is_bench, redirect_ok) for d, op in speed.DIRECTIONS.items()}
+    combos = [(e["id"], f) for e in eps for f in bench.SPEED_PROFILES]
+    directions = {d: _direction_state(p, caps, op, is_bench, redirect_ok, _first_run_open(conn, p.tenant_id, cpe_id, op, combos)) for d, op in speed.DIRECTIONS.items()}
     return {
         "cpe_id": str(cpe_id), "bench_target": is_bench, "redirect_verified": redirect_ok, "edge_support": bench.SPEED_EDGE_SUPPORT,
         "directions": directions, "endpoints": eps, "profiles": list(bench.SPEED_PROFILES),
@@ -180,7 +196,7 @@ def request_run(
     caps = _capabilities(conn, p.tenant_id, "cpe", c.vendor, c.model, c.firmware)
     is_bench = bool(conn.execute(text("SELECT 1 FROM bench_targets WHERE cpe_id = :c"), {"c": cpe_id}).first())
     redirect_ok = bool(c.vendor and c.model and c.firmware and speed.redirect_verified(conn, p.tenant_id, c.vendor, c.model, c.firmware, body.endpoint_id))
-    st = _direction_state(p, caps, operation, is_bench, redirect_ok)
+    st = _direction_state(p, caps, operation, is_bench, redirect_ok, _first_run_open(conn, p.tenant_id, cpe_id, operation, [(body.endpoint_id, body.profile)]))
     if not st["offered"]:
         return _blocked(conn, p, response, cpe_id, st["reason"], body)
     ep = next((e for e in _endpoints(conn, _bench_edge(conn, cpe_id)) if e["id"] == body.endpoint_id), None)

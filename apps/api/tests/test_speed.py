@@ -708,3 +708,47 @@ def test_a_node_of_another_edge_is_not_offered_for_this_cpe_and_an_unowned_node_
         c.execute(text("UPDATE speed_endpoints SET edge_id = NULL"))
     assert client.get("/v1/speed/health", headers=h).json()["endpoints"][0]["ready"] is False
     assert _post(client, h, cpe).json()["reason"] == "endpoint_unhealthy"
+
+
+# ---- the first real run (ADR-0030 amendment): an `identified` entry plus the owner's open `first_run` authorization ------------------------------------
+def _first_run_setup(client, seed, inv, migrated, first_run=True, **bench_kw):
+    _flag(migrated, seed["A"]); _speed_flag(migrated, seed["A"]); _endpoint(migrated, seed, inv)
+    cpe = _cpe(client, inv, seed)
+    _bench(migrated, seed, inv, cpe, op="speed_test_download", params=PARAMS, cert="identified", first_run=first_run, **bench_kw)
+    _link(migrated, seed, inv, cpe)
+    _redirect_row(migrated, seed)
+    return cpe, hdr(client, "alice", seed, "A")
+
+
+def test_an_identified_entry_with_evidence_and_an_open_first_run_authorization_can_be_requested(client, seed, inv, migrated):
+    cpe, h = _first_run_setup(client, seed, inv, migrated)
+    d = client.get(f"/v1/cpes/{cpe}/speed/capabilities", headers=h).json()["directions"]["download"]
+    assert d["offered"] is True and d["certification"] == "identified"
+    r = _post(client, h, cpe)
+    assert r.status_code == 201, r.text
+    # the same gate then decides at approval and dispatch; the first-run authorization serves ONLY the no-`observed` state
+    assert client.post(f"/v1/jobs/{r.json()['run']['job_id']}/approve", headers=_approver(client, seed, migrated)).json()["status"] == "APPROVED"
+
+
+@pytest.mark.parametrize("kw,why", [
+    ({"authorization": False}, "no authorization at all"),
+    ({"first_run": False}, "a normal authorization never stands in for `observed`"),
+    ({"start": 3600, "end": 7200}, "the window has not started"),
+])
+def test_without_every_first_run_condition_the_request_is_refused_with_the_registry_reason(client, seed, inv, migrated, kw, why):
+    # (an `identified`+`supported` entry cannot exist without evidence: the registry's own CHECK forbids it)
+    cpe, h = _first_run_setup(client, seed, inv, migrated, **kw)
+    assert client.get(f"/v1/cpes/{cpe}/speed/capabilities", headers=h).json()["directions"]["download"]["offered"] is False, why
+    r = _post(client, h, cpe)
+    assert r.status_code == 409 and r.json()["reason"] == "capability_not_observed", why
+
+
+def test_a_first_run_authorization_for_another_destination_or_profile_is_not_offered_nor_usable(client, seed, inv, migrated):
+    cpe, h = _first_run_setup(client, seed, inv, migrated)    # authorization is for {core-sp-1, 10mb}
+    assert client.get(f"/v1/cpes/{cpe}/speed/capabilities", headers=h).json()["directions"]["download"]["offered"] is True
+    r = _post(client, h, cpe, profile="50mb")                  # same destination, another profile: the authorization does not cover it
+    assert r.status_code == 409 and r.json()["reason"] == "capability_not_observed"
+    _endpoint(migrated, seed, inv, eid="core-sp-2")
+    r = _post(client, h, cpe, endpoint_id="core-sp-2")         # another destination
+    assert r.status_code == 409 and r.json()["reason"] == "capability_not_observed"
+    assert _post(client, h, cpe).status_code == 201            # the exact one still works
