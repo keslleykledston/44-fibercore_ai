@@ -107,10 +107,10 @@ test("ONU 360: painel lateral abre pelo serial, foco volta ao fechar e a página
   await page.goto("/rede?serial=DEMOA0001");
   const opener = page.getByTestId("onu-open");
   await opener.click();
-  await expect(page.getByTestId("entity-drawer")).toBeVisible();
-  await expect(page.getByTestId("onu-summary")).toContainText("OLT-DEMO-01");
+  await expect(page.getByTestId("onu-quick")).toBeVisible();   // flag onu_quick_inspector ligada no demo (UX 2.2): painel direito de resumo
+  await expect(page.getByTestId("onu-quick")).toContainText("OLT-DEMO-01");
   await page.keyboard.press("Escape");
-  await expect(page.getByTestId("entity-drawer")).toBeHidden();
+  await expect(page.getByTestId("onu-quick")).toBeHidden();
   await expect(opener).toBeFocused();
   await opener.click();
   await page.getByTestId("onu-360-link").click();

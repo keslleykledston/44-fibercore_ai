@@ -1,0 +1,55 @@
+{
+  "onu": {
+    "id": "demo-onu-006",
+    "display_name": "ONU DEMO-006",
+    "serial_masked": null,
+    "manufacturer": "Fabricante demonstrativo",
+    "model": "ONT Genérica A",
+    "olt_name": "OLT POP Centro",
+    "pon_ref": "0/1/1",
+    "onu_id": "14"
+  },
+  "pon": {
+    "state": "online",
+    "source": "olt",
+    "observed_at": "2026-10-30T22:59:00-04:00",
+    "collected_at": "2026-10-30T22:59:08-04:00",
+    "freshness": "fresh"
+  },
+  "acs": {
+    "state": "connected",
+    "source": "acs",
+    "observed_at": "2026-10-30T22:58:00-04:00",
+    "collected_at": "2026-10-30T22:58:15-04:00",
+    "freshness": "fresh"
+  },
+  "optical": {
+    "rx_dbm": -21.4,
+    "severity": "normal",
+    "source": "olt",
+    "observed_at": "2026-10-30T22:59:00-04:00",
+    "collected_at": "2026-10-30T22:59:08-04:00",
+    "freshness": "fresh"
+  },
+  "association": {
+    "confidence": "confirmed",
+    "customer_display_name": null,
+    "contract_label": null,
+    "source": "base de associação (demo)"
+  },
+  "visual": {
+    "type": "generic",
+    "template_id": null,
+    "leds_homologated": false
+  },
+  "authorization": {
+    "can_view_customer": false,
+    "can_open_360": false,
+    "can_investigate": false
+  },
+  "capabilities": {
+    "has_optical_rx": true,
+    "has_acs": true,
+    "has_investigation_flow": false
+  }
+}

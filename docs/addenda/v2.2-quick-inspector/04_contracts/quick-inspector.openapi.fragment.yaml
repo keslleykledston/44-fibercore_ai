@@ -1,0 +1,32 @@
+# FRAGMENTO PROPOSTO — nao aplicar como endpoint sem decisao de arquitetura.
+# Primeiro compor pelos serviços e contratos existentes.
+paths:
+  /api/v1/onus/{onu_id}/quick-summary:
+    get:
+      summary: ONU quick inspector (read-only, condicional)
+      description: >-
+        Opcional SOMENTE quando consultas existentes nao puderem compor o resumo com
+        segurança e eficiência. Tenant e RBAC obtidos da sessão no servidor,
+        nao de query string. Nao revela entidades de outro tenant.
+      operationId: getOnuQuickSummary
+      tags: [ONUs]
+      security:
+        - sessionAuth: []
+      parameters:
+        - in: path
+          name: onu_id
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: View model com fontes e freshness independentes
+          content:
+            application/json:
+              schema:
+                # converter para componente local ao integrar OpenAPI real
+                $ref: './quick-inspector.schema.json'
+        '401': {description: Nao autenticado}
+        '403': {description: Nao autorizado, se politica permitir distinguir}
+        '404': {description: Nao encontrado ou inacessivel no tenant}
+        '503': {description: Servico nao disponivel — incluir partial quando possivel}
+# Remover securitySchema fragmentado: seguir o schema real do contrato FiberCore API v2.

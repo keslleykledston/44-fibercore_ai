@@ -4,12 +4,13 @@ import { DevicesTabs } from "@/components/DevicesTabs";
 import { OltQueries } from "@/components/OltQueries";
 import { OnuTable } from "@/components/OnuTable";
 import { apiSafe } from "@/lib/api";
+import { featuresOn } from "@/lib/features";
 import type { Olt, Onu } from "@/lib/types";
 
 export default async function Rede({ searchParams }: { searchParams: Promise<{ serial?: string }> }) {
   const { serial } = await searchParams;
   const q = serial && /^[A-Za-z0-9._-]{1,64}$/.test(serial) ? `&serial=${encodeURIComponent(serial.toUpperCase())}` : "";
-  const [olts, onus] = await Promise.all([apiSafe<Olt[]>("/v1/olts?limit=200"), apiSafe<Onu[]>(`/v1/onus?limit=200${q}`)]);
+  const [olts, onus, quick] = await Promise.all([apiSafe<Olt[]>("/v1/olts?limit=200"), apiSafe<Onu[]>(`/v1/onus?limit=200${q}`), featuresOn("onu_quick_inspector")]);
   if (olts.status === 403 || onus.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver o inventário." /></AppShell>;
   return (
     <AppShell active="/rede" user="1">
@@ -34,7 +35,7 @@ export default async function Rede({ searchParams }: { searchParams: Promise<{ s
         <section aria-label="ONUs" className="min-w-0">
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">ONUs{serial ? ` · busca “${serial}”` : ""}</h2>
           {onus.data === null ? <ErrorState title="Falha ao carregar ONUs" /> : onus.data.length === 0 ? <EmptyState title="Nenhuma ONU encontrada" hint={serial ? "Confira o serial informado." : undefined} /> : (
-            <OnuTable onus={onus.data} oltNames={Object.fromEntries((olts.data ?? []).map((o) => [o.id, o.name]))} />
+            <OnuTable quick={quick} onus={onus.data} oltNames={Object.fromEntries((olts.data ?? []).map((o) => [o.id, o.name]))} />
           )}
         </section>
       </div>

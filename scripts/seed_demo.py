@@ -75,6 +75,14 @@ def main() -> None:
                 "firmware": fw, "driver_level": "identified", "pons": [{"pon_path": p, "status": "up", "complete": True} for p in pons],
                 "onus": payload})
             assert r.status_code == 202, r.text
+    # ONUs do e2e do resumo rápido (UX 2.2): uma com coleta recente e outra com coleta de 3 h atrás (dado defasado). Online nas duas: não entram nas contagens de queda.
+    for name, serial, ago in (("OLT-QUICK-01", "DEMOQ0001", timedelta(minutes=1)), ("OLT-QUICK-02", "DEMOQ0002", timedelta(hours=3))):
+        r = c.post("/v1/edge/olt-snapshots", headers=h, json={
+            "edge_id": edge, "observed_at": (datetime.now(UTC) - ago).isoformat(), "name": name, "vendor": "huawei", "model": "MA5608T", "firmware": "R015",
+            "driver_level": "identified", "pons": [{"pon_path": "0/2/0", "status": "up", "complete": True}],
+            "onus": [{"serial": serial, "pon_path": "0/2/0", "status": "online", "rx_dbm": -18.75}]})
+        assert r.status_code == 202, r.text
+    cli("feature-set", tenant, "onu_quick_inspector", "on")
     r = c.post("/v1/edge/cpe-snapshots", headers=h, json={"edge_id": edge, "observed_at": datetime.now(UTC).isoformat(), "cpes": [
         {"canonical_serial": f"DEMOCPE{i:03d}", "vendor": "Huawei", "model": "HG8245H",
          "binding": {"protocol": "tr069", "external_id": f"DEMO-OUI-HG8245H-DEMOCPE{i:03d}", "connector_id": "genieacs-demo"}} for i in range(5)]
