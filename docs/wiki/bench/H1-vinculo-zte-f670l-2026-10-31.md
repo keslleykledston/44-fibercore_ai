@@ -41,5 +41,5 @@ O vínculo é **inferido** e permanece **não confirmado e não registrado**: h�
 3. Registro de capacidades por fabricante, modelo e firmware (o firmware da ZTE ainda não foi lido para a nuvem), com a evidência de cada operação.
 4. Para o teste de banda: rota da WAN de serviço, origem no nó de teste, sonda de 3xx e aceite do risco, como na Huawei.
 
-## Estado do Connection Request da ZTE (para o dossiê, independente da evidência de vínculo)
-Em verificação feita em 2026-10-31 por volta de 22:34 UTC (horário do ACS), uma tarefa de leitura inofensiva (`UpTime`) com Connection Request foi executada pelo ACS (HTTP 200 em 0,55 s) com a credencial por dispositivo que o próprio ACS gera. Verificação anterior (por volta de 21:40 UTC), com a ZTE sem informar, tinha dado 202 (sem entrega). Esta observação não é usada no argumento do vínculo.
+## Fora do escopo deste H1
+O estado do Connection Request da ZTE e do restante do ACS é tratado em `H-connection-request-diagnostico-eg8145v5-2026-10-31.md` e nas notas de estado; não faz parte da evidência de vínculo.
