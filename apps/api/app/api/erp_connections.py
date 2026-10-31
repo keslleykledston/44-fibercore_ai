@@ -155,7 +155,7 @@ def test_connection(connection_id: UUID, p: Principal = Depends(require("erp:tes
     log.info("erp test connection=%s provider=%s result=%s", connection_id, c.provider, error or "ok")   # class only: no host, no body, no secret
     with scoped_connection(get_engine(), user_id=p.id, tenant_id=p.tenant_id) as short:
         short.execute(
-            text("UPDATE erp_connections SET status = :s, last_error_class = CAST(:e AS text), updated_at = now(), "
+            text("UPDATE erp_connections SET status = :s, last_error_class = CAST(:e AS text), updated_at = now(), enabled = (enabled AND :s = 'healthy'), "
                  "last_success_at = CASE WHEN CAST(:e AS text) IS NULL THEN now() ELSE last_success_at END WHERE id = :i AND status <> 'disabled'"),   # never undo a disable that came meanwhile
             {"s": state, "e": error, "i": connection_id})
         audit(short, p, "erp.connection.tested", "erp_connection", str(connection_id), {"ok": error is None, "error_class": error})
@@ -166,10 +166,10 @@ def test_connection(connection_id: UUID, p: Principal = Depends(require("erp:tes
 def enable_connection(connection_id: UUID, p: Principal = Depends(require("erp:manage")), conn: Connection = TENANT_CONN) -> dict:
     """Only a connection whose last test succeeded may be enabled."""
     _feature(conn, p)
-    c = _get(conn, connection_id)
-    if c.status != "healthy":
+    _get(conn, connection_id)   # 404 for an unknown or foreign connection
+    done = conn.execute(text("UPDATE erp_connections SET enabled = true, updated_at = now() WHERE id = :i AND status = 'healthy' RETURNING id"), {"i": connection_id}).first()
+    if done is None:   # one atomic statement: a disable or a failed test that lands first leaves nothing to enable
         raise HTTPException(409, "test_first")
-    conn.execute(text("UPDATE erp_connections SET enabled = true, updated_at = now() WHERE id = :i"), {"i": connection_id})
     audit(conn, p, "erp.connection.enabled", "erp_connection", str(connection_id), {})
     return _view(_get(conn, connection_id))
 

@@ -598,3 +598,37 @@ def test_the_kill_switch_is_not_queued_behind_a_slow_test_and_the_test_cannot_un
     t.join(10)
     assert out["r"].status_code == 200 and out["r"].json()["status"] == "disabled"      # the late result did not bring it back
     assert client.post(f"/v1/integrations/erp/{made['id']}/test", headers=h).json()["detail"] == "connection_disabled"
+
+
+def test_enabled_always_means_healthy_even_under_concurrent_enable_disable_and_failed_tests(client, seed, env, monkeypatch, migrated):
+    h = hdr(client, "alice", seed, "A")
+    made = create(client, h)
+    _put_secret(env, seed["A"])
+    net_for(monkeypatch, Net(tok(), tok(), status(401), status(401), status(401)))
+    assert client.post(f"/v1/integrations/erp/{made['id']}/test", headers=h).json()["status"] == "healthy"
+    assert client.post(f"/v1/integrations/erp/{made['id']}/enable", headers=h).json()["enabled"] is True
+    again = client.post(f"/v1/integrations/erp/{made['id']}/test", headers=h).json()          # a healthy re-test keeps it on
+    assert (again["status"], again["enabled"]) == ("healthy", True)
+    erp_connections._LIMITERS.clear()
+    bad = client.post(f"/v1/integrations/erp/{made['id']}/test", headers=h).json()           # a failed test turns it off: nothing unhealthy stays enabled
+    assert (bad["status"], bad["enabled"]) == ("unauthorized", False)
+    assert client.post(f"/v1/integrations/erp/{made['id']}/enable", headers=h).json()["detail"] == "test_first"
+    # enable and disable racing: whatever the order, the end state is never 'disabled' AND enabled
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE erp_connections SET status = 'healthy' WHERE id = :i"), {"i": made["id"]})
+    for _ in range(8):
+        with migrated.begin() as c:
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+            c.execute(text("UPDATE erp_connections SET status = 'healthy', enabled = false WHERE id = :i"), {"i": made["id"]})
+        ts = [threading.Thread(target=lambda op=op: client.post(f"/v1/integrations/erp/{made['id']}/{op}", headers=h)) for op in ("enable", "disable", "enable", "disable")]
+        [t.start() for t in ts]
+        [t.join() for t in ts]
+        with migrated.begin() as c:
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+            row = c.execute(text("SELECT status, enabled FROM erp_connections WHERE id = :i"), {"i": made["id"]}).first()
+        assert not (row.enabled and row.status != "healthy"), row
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        with pytest.raises(Exception, match="enabled_means_healthy"):
+            c.execute(text("UPDATE erp_connections SET status = 'disabled', enabled = true WHERE id = :i"), {"i": made["id"]})

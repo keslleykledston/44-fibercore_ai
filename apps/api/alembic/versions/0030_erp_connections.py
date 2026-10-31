@@ -38,7 +38,8 @@ def upgrade() -> None:
           created_at timestamptz NOT NULL DEFAULT now(),
           updated_at timestamptz NOT NULL DEFAULT now(),
           PRIMARY KEY (tenant_id, id),
-          UNIQUE (tenant_id, display_name)
+          UNIQUE (tenant_id, display_name),
+          CONSTRAINT erp_connections_enabled_means_healthy CHECK (NOT enabled OR status = 'healthy')   -- uma conexão ligada está saudável; desativada/falha nunca fica ligada
         );
         ALTER TABLE erp_connections ENABLE ROW LEVEL SECURITY;
         ALTER TABLE erp_connections FORCE ROW LEVEL SECURITY;
