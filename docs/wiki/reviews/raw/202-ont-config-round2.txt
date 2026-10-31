@@ -1,0 +1,29 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18ff9-c120-7112-9e26-3fa455fb1415).
+[codex] Turn started (01a18ff9-c15a-74a2-9a66-dc8ccfafee0b).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os caminhos de leitura, validação temporal, persis...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/ont_config...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/ont_config... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- apps/api/app/core/ont_confi...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- apps/api/app/core/ont_confi... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"def _check_observed|def _bound_edge|CREATE TABLE cpe_protocol_bindings...
+[codex] Command completed: /bin/bash -lc "rg -n \"def _check_observed|def _bound_edge|CREATE TABLE cpe_protocol_bindings... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '1,38p'; rg -n \"uq_cpe_protocol...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '1,38p'; rg -n \"uq_cpe_protocol... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"def _capabilities\" apps/api/app/api/inventory.py; nl -ba apps/api/app...
+[codex] Command completed: /bin/bash -lc "rg -n \"def _capabilities\" apps/api/app/api/inventory.py; nl -ba apps/api/app... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '635,665p';"
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '635,665p';" (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: um lote com campos repetidos pode ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: um lote com campos repetidos pode transformar uma ingestão válida em erro 500 e perder o lote inteiro.
+
+Findings:
+- [medium] Campos duplicados no lote causam falha de ingestão (apps/api/app/api/ont_config.py:77-93)
+  O modelo valida cada campo isoladamente, mas não rejeita duas entradas com a mesma chave `(CPE, name, instance)` em um snapshot. Ambas viram linhas do mesmo `INSERT ... ON CONFLICT`; no PostgreSQL, um comando não pode atualizar a mesma linha mais de uma vez, então a requisição falha em vez de aceitar ou ignorar o replay. Um Edge que repita um campo pode provocar erro 500 e rollback de todos os campos do lote, ocultando a falha até a próxima tentativa.
+  Recommendation: Rejeite chaves repetidas no payload com 422 antes da escrita, ou normalize o lote para uma única observação por chave com uma regra explícita de desempate; cubra também campos repetidos entre configurações do mesmo snapshot.

@@ -74,7 +74,8 @@ def ingest_cpe_config(body: ConfigSnapshot, p: Principal = Depends(require("inve
                  "ON c.tenant_id = b.tenant_id AND c.id = b.cpe_id WHERE b.tenant_id = :t AND b.external_id = ANY(:x)"),
             {"t": p.tenant_id, "x": [c.binding.external_id for c in body.configs]})
     }
-    rows, unknown, cpes = [], 0, set()
+    rows_by_key: dict[tuple, dict] = {}   # one observation per (CPE, field, instance) in a batch: the newest device time wins (a repeated field must not break the whole INSERT)
+    unknown, cpes = 0, set()
     for c in body.configs:
         hit = bound.get((c.binding.connector_id, c.binding.protocol, c.binding.external_id))
         if hit is None or hit[1] != body.edge_id:   # unknown or another Edge's CPE: indistinguishable on purpose
@@ -82,8 +83,11 @@ def ingest_cpe_config(body: ConfigSnapshot, p: Principal = Depends(require("inve
             continue
         cpes.add(hit[0])
         for f in c.fields:
-            rows.append({"t": p.tenant_id, "c": hit[0], "n": f.name, "i": f.instance, "v": json.dumps(f.value), "ca": f.captured_at, "o": body.observed_at,
-                         "dm": c.data_model, "pr": c.binding.protocol})
+            key = (hit[0], f.name, f.instance)
+            if key not in rows_by_key or f.captured_at > rows_by_key[key]["ca"]:
+                rows_by_key[key] = {"t": p.tenant_id, "c": hit[0], "n": f.name, "i": f.instance, "v": json.dumps(f.value), "ca": f.captured_at, "o": body.observed_at,
+                                    "dm": c.data_model, "pr": c.binding.protocol}
+    rows = list(rows_by_key.values())
     if rows:
         conn.execute(   # STRICTLY newer device time wins: a replay or an older read never overwrites a newer observation
             text("INSERT INTO cpe_config_fields (tenant_id, cpe_id, name, instance_key, value, captured_at, observed_at, data_model, protocol, source) "

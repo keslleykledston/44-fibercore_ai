@@ -308,3 +308,14 @@ def test_a_field_cannot_be_newer_than_its_snapshot_nor_than_the_cloud_clock(clie
     assert client.post("/v1/edge/cpe-config", headers=ag, json=right).status_code == 202
     ssid = next(f for f in client.get(f"/v1/cpes/{cpe}/ont-config/configuration", headers=h).json()["fields"] if f["name"] == "wifi.ssid")
     assert ssid["captured_at"] <= _now() and ssid["value"] in ("Relogio_rapido", "Correto")      # stored time never runs ahead of the cloud clock
+
+
+def test_a_repeated_field_in_one_batch_keeps_the_newest_and_does_not_break_the_rest(client, seed, inv, on):
+    cpe = _cpe(client, inv, seed, "CFG-DUP-1", "ext-cfg-dup-1")
+    h, ag = hdr(client, "alice", seed, "A"), agent(client, inv, "a1")
+    twice = _report(inv, "ext-cfg-dup-1", [_f("wifi.ssid", "ssid/1", "Velho", _now(-100)), _f("wifi.ssid", "ssid/1", "Novo", _now(-20)), _f("wifi.channel", "radio/1", 11, _now(-20))])
+    twice["configs"].append(_report(inv, "ext-cfg-dup-1", [_f("wifi.ssid", "ssid/1", "Mais_velho", _now(-300))])["configs"][0])      # the same CPE listed twice in the snapshot
+    r = client.post("/v1/edge/cpe-config", headers=ag, json=twice)
+    assert r.status_code == 202 and r.json()["fields"] == 2
+    got = {f["name"]: f["value"] for f in client.get(f"/v1/cpes/{cpe}/ont-config/configuration", headers=h).json()["fields"]}
+    assert got == {"wifi.ssid": "Novo", "wifi.channel": 11}
