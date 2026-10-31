@@ -95,6 +95,7 @@ services:
     environment:
       WORKER_DATABASE_URL: postgresql://fibercore_worker:${FIBERCORE_WORKER_DB_PASSWORD}@postgres:5432/fibercore
       NATS_URL: nats://nats:4222
+      HEARTBEAT_FILE: /tmp/hb
     depends_on:
       migrate: {condition: service_completed_successfully}
       nats: {condition: service_healthy}
@@ -102,6 +103,13 @@ services:
     restart: unless-stopped
     security_opt: [no-new-privileges:true]
     read_only: true
+    tmpfs: [/tmp]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.core.heartbeat", "/tmp/hb", "60"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
   event-consumer:
     build:
       context: ../..
@@ -110,6 +118,7 @@ services:
     environment:
       DATABASE_URL: postgresql://fibercore_app:${FIBERCORE_APP_DB_PASSWORD}@postgres:5432/fibercore
       NATS_URL: nats://nats:4222
+      HEARTBEAT_FILE: /tmp/hb
     depends_on:
       migrate: {condition: service_completed_successfully}
       nats: {condition: service_healthy}
@@ -117,6 +126,13 @@ services:
     restart: unless-stopped
     security_opt: [no-new-privileges:true]
     read_only: true
+    tmpfs: [/tmp]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.core.heartbeat", "/tmp/hb", "60"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
   web:
     # Frontend Next.js (profile "public"). Fala com a API pela rede interna; o token fica em cookie HttpOnly (ADR-0014).
     profiles: [public]
