@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192ff-40ab-7923-aef1-f0ed7ac56866).
+[codex] Turn started (01a192ff-40e6-7410-83fe-b7a3d6cac7bb).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e conferir as afirmações citadas diretamente no código e...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/adr/ADR-0030-homo...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/adr/ADR-0030-homo... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=10 main...HEAD -- docs/wiki/adr/ADR-0038-spee...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=10 main...HEAD -- docs/wiki/adr/ADR-0038-spee... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: a emenda proposta ao ADR-0038 não ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: a emenda proposta ao ADR-0038 não mantém o gate restrito ao aceite formal e permite que uma linha de registro incompleta habilite banda; a proposta do ADR-0030 também inclui uma identidade candidata sem vínculo confirmado.
+
+Findings:
+- [high] Aceite formal não é condição executável da opção C (docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md:46-53)
+  A opção C exige documento de aceite assinado, mas a regra proposta para `redirect_verified()` enumera apenas as condições 1–4; a condição 5 (documento de aceite) não aparece. No código atual, a função já considera suficiente qualquer registro `supported`/`observed` com `evidence_ref` e `verified_at`. Assim, implementar literalmente as condições 1–4 pode permitir testes de banda sem o aceite formal do responsável. O código também não valida prazo de validade nem tipo CORE: a função atual aceita apenas `redirect_probe` ou `egress_acl` e não implementa a nova linha, portanto isso é risco da implementação proposta, não comportamento atual.
+  Recommendation: Torne o documento de aceite uma condição explícita e verificável do gate, com registro associado ao documento e escopo. Especifique e teste validade de 90 dias, firmware exato, destino CORE dentro de `core_cidrs` e rejeição de INTERNET antes de habilitar a nova evidência.
+- [medium] Candidata ZTE aparece na emenda apesar de vínculo não confirmado (docs/wiki/adr/ADR-0030-homologacao-em-bancada-escopo-e-gates.md:91)
+  A seção de identidades candidatas descreve a ZTE como tendo vínculo ONT↔CPE não confirmado e oferece uma caixa de aprovação por identidade. Embora o item 2 exija vínculo confirmado antes de admitir identidades adicionais, essa apresentação permite que a aprovação da ZTE seja lida como autorização suficiente e contradiz o próprio pré-requisito. O risco é cadastrar a identidade em `bench_targets` ou no Edge antes de comprovar a relação física, tornando a bancada um alvo incorreto.
+  Recommendation: Não oferecer aprovação da ZTE enquanto o vínculo estiver pendente; condicione explicitamente qualquer aprovação ao registro de H1 que confirme o vínculo e esclareça que a caixa não dispensa esse gate.
+
+Next steps:
+- Revisar a condição da opção C para exigir aceite formal verificável e delimitar validade, firmware e destinos CORE; depois conferir a implementação contra o texto aprovado.
+- Remover ou condicionar a aprovação da candidata ZTE até confirmação do vínculo físico.

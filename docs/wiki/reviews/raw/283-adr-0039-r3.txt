@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19300-35ad-7b52-b31c-d9ac1066469c).
+[codex] Turn started (01a19300-35e5-78a1-87b7-31dd3698d70d).
+[codex] Assistant message captured: Vou comparar o diff com `main` e rastrear as regras de `evidence_ref`, aceite e revogação nos...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- docs/wiki/adr/ADR-0030-homo...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- docs/wiki/adr/ADR-0030-homo... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- docs/wiki/adr/ADR-0038-spee...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- docs/wiki/adr/ADR-0038-spee... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: o hash identifica o aceite, mas audit...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: o hash identifica o aceite, mas auditoria posterior e revogação manual não garantem que um aceite alterado ou removido feche o gate imediatamente.
+
+Findings:
+- [high] Integridade depende de auditoria e revogação fora do gate (docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md:55)
+  A proposta deixa explícito que o gate não relê o arquivo: ele só valida o formato de `evidence_ref`. Se o documento for alterado ou removido após o registro, a linha `supported/observed` continua apta a autorizar banda até que `capability-audit` detecte a divergência e alguém revogue a linha. O teste de CI verifica o repositório versionado, mas não cobre a janela entre alteração e execução nem garante que CI ou auditoria rodem antes do próximo job. Como a consequência aceita é a ONT seguir um redirecionamento, a revogação não é imediata no caminho de decisão; é uma dependência operacional que pode falhar silenciosamente.
+  Recommendation: Defina um controle que feche a opção C antes de qualquer execução quando a integridade não estiver comprovada — por exemplo, sincronizar um estado de auditoria íntegro/atual ao gate e falhar fechado quando estiver ausente ou vencido, ou publicar/revogar a capability atomicamente com a atualização do aceite. Especifique também quem executa a auditoria, com que frequência e como a revogação bloqueia jobs já aprovados ou pendentes.
+
+Next steps:
+- Especificar a barreira fail-closed que liga o resultado da auditoria à elegibilidade do gate e o tratamento de jobs em voo; então revisar essa garantia antes de implementar a opção C.
