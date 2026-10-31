@@ -267,7 +267,7 @@ def main(argv: list[str] | None = None) -> None:
             print(f"speed endpoint {a.endpoint_id}: {a.kind}, {'enabled' if a.state == 'on' else 'disabled'} (health is reported by the Edge)")
         elif a.cmd == "speed-acceptance-set":
             import hashlib
-            from datetime import date, timedelta
+            from datetime import UTC, date, datetime, timedelta
 
             from app.core import bench, speed
             eps = [x for x in (e.strip() for e in a.endpoints.split(",")) if x]
@@ -279,6 +279,8 @@ def main(argv: list[str] | None = None) -> None:
                 sys.exit("dates must be YYYY-MM-DD")
             if not acc_on < exp_on <= acc_on + timedelta(days=speed.ACCEPTANCE_MAX_DAYS):
                 sys.exit(f"the acceptance lasts at most {speed.ACCEPTANCE_MAX_DAYS} days")
+            if acc_on > datetime.now(UTC).date():
+                sys.exit("the acceptance date cannot be in the future: record it on the day it is given")
             try:
                 raw = open(a.doc, "rb").read()
             except OSError as exc:

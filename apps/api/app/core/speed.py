@@ -188,7 +188,7 @@ def redirect_basis(conn: Connection, tenant_id: UUID, vendor: str, model: str, f
         return None
     acc = conn.execute(
         text("SELECT endpoint_ids FROM speed_risk_acceptances WHERE tenant_id = :t AND lower(vendor) = lower(:v) AND lower(model) = lower(:m) AND firmware = :f "
-             "AND revoked_at IS NULL AND expires_on >= (now() AT TIME ZONE 'UTC')::date"),
+             "AND revoked_at IS NULL AND accepted_on <= (now() AT TIME ZONE 'UTC')::date AND expires_on >= (now() AT TIME ZONE 'UTC')::date"),
         {"t": tenant_id, "v": vendor.strip(), "m": model.strip(), "f": firmware.strip()}).all()
     accepted = {e for r in acc for e in r.endpoint_ids}
     if not accepted:

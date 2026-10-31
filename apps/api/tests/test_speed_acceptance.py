@@ -286,9 +286,13 @@ def test_the_owner_cli_records_audits_and_revokes_an_acceptance(client, seed, in
         with pytest.raises(SystemExit, match=msg):
             cli.main(a)
     a = list(args)
-    a[a.index("--accepted-on") + 1] = (today + timedelta(days=1)).isoformat()
+    a[a.index("--accepted-on") + 1] = (today - timedelta(days=1)).isoformat()
     a[a.index("--expires-on") + 1] = (today + timedelta(days=30)).isoformat()
     with pytest.raises(SystemExit, match="incomplete"):   # the document states another date than the one given
+        cli.main(a)
+    a[a.index("--accepted-on") + 1] = (today + timedelta(days=1)).isoformat()
+    a[a.index("--expires-on") + 1] = (today + timedelta(days=31)).isoformat()
+    with pytest.raises(SystemExit, match="cannot be in the future"):   # a future date would only have its first day ignored by the gate; refuse it outright
         cli.main(a)
     cli.main(args)
     out = capsys.readouterr().out
@@ -312,3 +316,11 @@ def test_the_owner_cli_records_audits_and_revokes_an_acceptance(client, seed, in
     assert _basis(migrated, seed) is None
     with pytest.raises(SystemExit, match="no active acceptance"):
         cli.main(["speed-acceptance-revoke", t, str(aid.id)])
+
+
+def test_an_acceptance_dated_in_the_future_is_not_in_force_yet(client, seed, inv, migrated):
+    _ready(client, seed, inv, migrated)
+    _probe_follows(migrated, seed)
+    today = datetime.now(UTC).date()
+    _accept(migrated, seed, accepted=today + timedelta(days=1), expires=today + timedelta(days=30))
+    assert _basis(migrated, seed) is None
