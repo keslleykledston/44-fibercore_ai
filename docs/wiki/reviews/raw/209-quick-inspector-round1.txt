@@ -1,0 +1,31 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1900e-c90a-78b2-bf9c-b07408587e0e).
+[codex] Turn started (01a1900e-cc09-7c31-8f01-4089645f4d6b).
+[codex] Assistant message captured: Vou comparar o branch com `main` e seguir os caminhos da flag, autorização, montagem dos dado...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=60 main...HEAD -- apps/web/src/components/Onu...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=60 main...HEAD -- apps/web/src/components/Onu... (exit 0)
+[codex] Assistant message captured: Vou aplicar o fluxo de revisão do skill `code-review` do projeto e conferir os contratos/rota...
+[codex] Running command: /bin/bash -lc 'cat /home/suporte/.codex/skills/code-review/SKILL.md && rg -n "Onu360|OnuCusto...
+[codex] Command completed: /bin/bash -lc 'cat /home/suporte/.codex/skills/code-review/SKILL.md && rg -n "Onu360|OnuCusto... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,90p' apps/web/src/lib/api.ts; sed -n '1,70p' apps/web/src/lib/featur...
+[codex] Command completed: /bin/bash -lc "sed -n '1,90p' apps/web/src/lib/api.ts; sed -n '1,70p' apps/web/src/lib/featur... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,45p' apps/web/src/lib/types.ts; sed -n '535,610p' apps/api/app/api/i...
+[codex] Command completed: /bin/bash -lc "sed -n '1,45p' apps/web/src/lib/types.ts; sed -n '535,610p' apps/api/app/api/i... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"def cpe_block|link.*unavailable|onu_cpe_links\" apps/api/app/api/conte...
+[codex] Command completed: /bin/bash -lc "rg -n \"def cpe_block|link.*unavailable|onu_cpe_links\" apps/api/app/api/conte... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: a resposta distingue estados obser...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: a resposta distingue estados observados, mas o BFF não aplica a flag de rollout e aceita dados de resposta sem validar que pertencem à ONU solicitada.
+
+Findings:
+- [medium] A rota Quick continua acessível com a flag desligada (apps/web/src/app/bff/onus/[id]/quick/route.ts:9-13)
+  A flag só condiciona a renderização em `rede/page.tsx`; esta rota não a consulta. Um usuário autenticado pode chamar `/bff/onus/{id}/quick` diretamente mesmo quando `onu_quick_inspector` está desligada, obtendo resumo e, se autorizado por `customers:read`, nome do cliente. Isso contorna a desativação por tenant e o rollout pretendido. Verifique a flag no BFF antes de compor ou devolver o resumo e responda de forma consistente com as demais rotas desativadas.
+  Recommendation: Consultar `onu_quick_inspector` no servidor e negar a rota quando desativada; incluir cobertura para chamada direta com a flag OFF.
+- [medium] O parser não confirma que o resumo retornado corresponde à ONU pedida (apps/web/src/lib/onu-quick.ts:55-65)
+  `readQuick` verifica alguns campos, mas não valida o formato de `onu.id` nem sua correspondência com `row.id`; o cliente então associa o modelo à ONU selecionada usando apenas o ID local do estado. Se o BFF/proxy ou uma resposta malformada devolver um modelo de outra ONU, nome de cliente e demais dados podem aparecer no painel da selecionada. A proteção contra respostas atrasadas não cobre esse caso porque o request atual pode responder com payload de identidade divergente.
+  Recommendation: Validar UUID e identidade do modelo contra o ID solicitado no BFF ou no consumidor antes de marcar o estado como `ready`; rejeitar payloads divergentes.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { DeviceThumbnail, type Tone } from "@/components/DeviceThumbnail";
 import { LOAD_ERROR, STATE_TEXT, readForm, valueText, type OntField, type OntForm, type OntGroup } from "@/lib/ont-config";
 
 type Load = { kind: "idle" } | { kind: "loading" } | { kind: "ready"; cpe: string; form: OntForm } | { kind: "error"; error: string };
@@ -9,19 +10,6 @@ const ago = (iso: string) => {
   const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
   return s < 90 ? "agora há pouco" : s < 5400 ? `há ${Math.round(s / 60)} min` : s < 172800 ? `há ${Math.round(s / 3600)} h` : `há ${Math.round(s / 86400)} d`;
 };
-
-/** Miniatura vetorial do aparelho: um roteador estilizado; o anel é só reforço visual do estado (o texto sempre diz o estado). */
-function DeviceThumbnail({ state }: { state: OntForm["state"] | "loading" }) {
-  const ring = state === "fresh" ? "var(--ok, #2e7d32)" : state === "stale" || state === "partial_stale" ? "var(--warn, #b26a00)" : "var(--muted, #888)";
-  return (
-    <svg role="img" aria-label="Miniatura do aparelho" viewBox="0 0 64 48" width="64" height="48" data-testid="ont-thumbnail">
-      <rect x="6" y="22" width="52" height="18" rx="6" fill="none" stroke="currentColor" strokeWidth="2" />
-      <circle cx="16" cy="31" r="2.4" fill={ring} />
-      <circle cx="24" cy="31" r="2.4" fill="currentColor" opacity=".35" />
-      <path d="M20 22 14 8M44 22l6-14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 function FieldRow({ f }: { f: OntField }) {
   const id = `f-${f.name}-${f.instance_key}`.replace(/[^a-z0-9-]/gi, "-");
@@ -82,7 +70,7 @@ export function OntSidebar({ cpeId, identity }: { cpeId: string; identity: strin
         <aside id="ont-sidebar" ref={panel} tabIndex={-1} role="complementary" aria-labelledby="ont-sidebar-title" data-testid="ont-sidebar" onKeyDown={(e) => { if (e.key === "Escape") close(); }}
           className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-line bg-surface text-text shadow-card md:w-[420px]">
           <div className="flex items-start gap-3 border-b border-line p-4">
-            <div className="shrink-0 text-muted"><DeviceThumbnail state={form ? form.state : "loading"} /></div>
+            <div className="shrink-0 text-muted"><DeviceThumbnail height={56} acs={form ? ((form.state === "fresh" ? "ok" : form.state === "no_data" ? "neutral" : "warn") as Tone) : "neutral"} /></div>
             <div className="min-w-0 flex-1">
               <h2 id="ont-sidebar-title" className="text-lg font-semibold">Configuração do aparelho</h2>
               <p className="truncate text-sm text-muted">{identity}</p>

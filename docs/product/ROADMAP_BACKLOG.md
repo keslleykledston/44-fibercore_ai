@@ -131,3 +131,10 @@ Fonte: `docs/addenda/v2.2/` (pacote intacto). Análise: `docs/addenda/v2.2/GAP_A
 | FC24-06 | P1 | [ ] LAN e WAN (R3: OOB, janela, dupla aprovação) | 04 |
 | FC24-07 | P2 | [ ] adaptador USP (Controller real homologado; lock comum) | 04 |
 | FC24-08 | P1 | [ ] métricas, rollback/reconciliação, gate humano | 05 |
+
+## UX 2.2 — ONU Quick Inspector (handoff 2026-10-30; ADR-0035)
+| ID | Estado |
+|---|---|
+| QI-01 UI + dados read-only + miniatura + navegação (PR 101) | [x] flag `onu_quick_inspector` desligada por padrão; sem endpoint novo |
+| QI-02 captura real da ajuda `rede/resumo-da-onu`, ligar a flag por tenant após QA | [ ] |
+| QI-03 árvore PON/NOC como pontos de entrada; associações `medium/conflict` e estados ACS indisponível/unsupported quando houver dado | [ ] |
