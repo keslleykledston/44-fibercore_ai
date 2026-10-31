@@ -145,6 +145,7 @@ class HubSoftClient:
     rng: Callable[[], float] = random.random
     limiter: RateLimiter | None = None
     auth_limiter: RateLimiter | None = None
+    auth_gate: Callable[[], None] | None = None   # the deployment-wide budget (shared by every connection and worker); raises HubSoftError(RATE_LIMITED) when spent
     auth_calls: int = 0
 
     def __post_init__(self) -> None:
@@ -207,7 +208,11 @@ class HubSoftClient:
         self.auth_calls += 1
         body = {"client_id": self.creds.client_id, "client_secret": self.creds.client_secret, "username": self.creds.username,
                 "password": self.creds.password, "grant_type": "password"}
-        raw = self._call(self.auth_limiter, lambda: self.send("POST", TOKEN_PATH, {"Accept": "application/json"}, body, None), started)
+        def attempt() -> Raw:
+            if self.auth_gate is not None:
+                self.auth_gate()   # every send counts, retries included
+            return self.send("POST", TOKEN_PATH, {"Accept": "application/json"}, body, None)
+        raw = self._call(self.auth_limiter, attempt, started)
         if raw.status in (301, 302, 303, 307, 308):
             raise HubSoftError(BAD_RESPONSE, status=raw.status)   # a redirect would carry the credentials somewhere we did not vet
         if raw.status == 401:

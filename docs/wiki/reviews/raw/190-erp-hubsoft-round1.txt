@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a18f7a-a6b4-71e0-a3c5-2c932ffea8d9).
+[codex] Turn started (01a18f7a-a6ed-7aa0-82cc-3ca3ba7b2fef).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de segurança solicitados até config...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/erp_hub.p...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/erp_hub.p... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=8 main...HEAD -- apps/api/app/core/erp_hub.py...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=8 main...HEAD -- apps/api/app/core/erp_hub.py... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: os limitadores de autenticação são ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: os limitadores de autenticação são isolados por conexão e processo, então não protegem o limite do fornecedor compartilhado por IP.
+
+Findings:
+- [high] Limite de autenticação pode ser excedido entre conexões e workers (apps/api/app/api/erp_connections.py:25)
+  `_LIMITERS` cria um `auth_limiter` por `connection_id` e o mantém apenas na memória deste processo. Assim, várias conexões do mesmo tenant ou conexões distribuídas entre workers/processos têm orçamentos independentes, embora o limite mencionado no código seja compartilhado por IP. Chamadas concorrentes de teste podem ultrapassar o limite do fornecedor e provocar 429 em outras conexões ou bloqueio temporário de autenticação.
+  Recommendation: Aplicar um limitador compartilhado por IP de saída, com estado distribuído entre workers, ou impor um teto global equivalente antes de iniciar qualquer autenticação; inclua testes concorrentes com várias conexões.
+
+Next steps:
+- Compartilhar o orçamento de autenticação entre todas as conexões e workers que usam o mesmo IP de saída.

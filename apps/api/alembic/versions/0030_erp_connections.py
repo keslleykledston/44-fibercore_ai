@@ -45,9 +45,19 @@ def upgrade() -> None:
         CREATE POLICY tenant_isolation ON erp_connections USING (tenant_id = {cur_t}) WITH CHECK (tenant_id = {cur_t});
         GRANT SELECT, INSERT ON erp_connections TO fibercore_app;
         GRANT UPDATE (enabled, status, last_tested_at, last_success_at, last_error_class, updated_at) ON erp_connections TO fibercore_app;
+
+        -- Orçamento de saída COMPARTILHADO: o limite do fornecedor é por IP de saída, não por conexão nem por processo. Sem dado de tenant (por isso sem RLS):
+        -- só um contador por (escopo, janela). O incremento é atômico e recusa quando a janela já está cheia.
+        CREATE TABLE erp_egress_budget (
+          scope text NOT NULL CHECK (scope ~ '^[a-z][a-z0-9_.]{{1,40}}$'),
+          bucket timestamptz NOT NULL,
+          n integer NOT NULL CHECK (n >= 0),
+          PRIMARY KEY (scope, bucket)
+        );
+        GRANT SELECT, INSERT, UPDATE, DELETE ON erp_egress_budget TO fibercore_app;
         """
     )
 
 
 def downgrade() -> None:
-    op.execute("DROP TABLE IF EXISTS erp_connections;")
+    op.execute("DROP TABLE IF EXISTS erp_egress_budget; DROP TABLE IF EXISTS erp_connections;")

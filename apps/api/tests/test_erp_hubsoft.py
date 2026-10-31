@@ -370,13 +370,14 @@ def test_the_sender_tries_the_next_address_then_reports_unavailable_and_caps_the
 def env(migrated, seed, tmp_path, monkeypatch):
     from app.main import app
     base = get_settings()
-    app.dependency_overrides[get_settings] = lambda: base.model_copy(update={"erp_secrets_dir": str(tmp_path), "erp_allowed_hosts": "erp.example.com,*.hubsoft.test"})
+    app.dependency_overrides[get_settings] = lambda: base.model_copy(update={"erp_secrets_dir": str(tmp_path), "erp_allowed_hosts": "erp.example.com,*.hubsoft.test", "erp_auth_per_minute": 25})
     monkeypatch.setattr(erp_connections, "TEST_MIN_INTERVAL_S", 0)
     monkeypatch.setattr(erp_connections, "_resolve", lambda host: ["93.184.216.34"])
     monkeypatch.setattr(erp_connections, "_client_options", lambda: {"sleep": lambda s: None})
     erp_connections._LIMITERS.clear()
     hubsoft.CACHE.clear()
     with migrated.begin() as c:
+        c.execute(text("DELETE FROM erp_egress_budget"))
         c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
         c.execute(text("INSERT INTO tenant_features (tenant_id, feature, enabled) VALUES (:t,'erp_hubsoft',true) ON CONFLICT (tenant_id, feature) DO UPDATE SET enabled = true"), {"t": seed["A"]})
     yield tmp_path
@@ -526,3 +527,48 @@ def test_the_application_role_cannot_change_what_identifies_a_connection(client,
         with pytest.raises(Exception, match="permission denied"):
             with c.begin_nested():
                 c.execute(text("DELETE FROM erp_connections WHERE id = :i"), {"i": made["id"]})
+
+
+def test_the_authentication_budget_is_shared_by_every_connection_and_worker(client, seed, env, monkeypatch, migrated):
+    """The vendor's limit is per egress IP: two connections (and, by the same table, two processes) draw from ONE minute budget."""
+    from app.main import app
+    app.dependency_overrides[get_settings] = lambda: get_settings().model_copy(update={"erp_secrets_dir": str(env), "erp_allowed_hosts": "erp.example.com", "erp_auth_per_minute": 2})
+    h = hdr(client, "alice", seed, "A")
+    one, two = create(client, h), create(client, h)
+    _put_secret(env, seed["A"])
+    net = net_for(monkeypatch, Net(tok(), tok(), tok()))
+    first = client.post(f"/v1/integrations/erp/{one['id']}/test", headers=h).json()
+    second = client.post(f"/v1/integrations/erp/{two['id']}/test", headers=h).json()
+    third = client.post(f"/v1/integrations/erp/{one['id']}/test", headers=h).json()
+    assert [first["status"], second["status"], third["status"]] == ["healthy", "healthy", "rate_limited"]
+    assert third["last_error_class"] == "RATE_LIMITED" and len(net.calls) == 2      # the third was refused before anything was sent
+    with migrated.begin() as c:
+        assert c.execute(text("SELECT sum(n) FROM erp_egress_budget WHERE scope = 'hubsoft.auth'")).scalar() == 2
+
+
+def test_concurrent_sends_never_pass_the_shared_budget(env, migrated):
+    cap, passed, refused = 3, [], []
+
+    def one():
+        try:
+            erp_connections._auth_gate(cap)()
+            passed.append(1)
+        except HubSoftError as e:
+            assert e.code == "RATE_LIMITED" and 0 < e.retry_after <= 60
+            refused.append(1)
+    ts = [threading.Thread(target=one) for _ in range(12)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert len(passed) + len(refused) == 12 and len(passed) <= cap and len(passed) >= 1     # (a minute boundary during the run may open a second window: never more than one per window)
+
+
+def test_every_authentication_send_counts_including_retries():
+    spent = []
+    net = Net(status(503), status(503), tok())
+    c, _ = client(net, auth_gate=lambda: spent.append(1))
+    c.token()
+    assert len(spent) == 3 == len(net.calls)
+    blocked = HubSoftClient(creds=Credentials("c", "s", "u", "p", "v"), key=("t", "c", "h", "v"), send=Net(tok()), cache=TokenCache(),
+                            auth_gate=lambda: (_ for _ in ()).throw(HubSoftError("RATE_LIMITED", retry_after=30.0)))
+    with pytest.raises(HubSoftError, match="RATE_LIMITED"):
+        blocked.token()

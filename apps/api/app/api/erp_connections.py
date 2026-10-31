@@ -14,6 +14,7 @@ from sqlalchemy import Connection, text
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import audit
 from app.core import erp_hub, features
+from app.core.db import get_engine
 from app.core.settings import Settings, get_settings
 from app.integrations import hubsoft
 
@@ -30,6 +31,23 @@ def _resolve(host: str) -> list[str]:   # replaced by the tests
 
 def _send_for(host: str, addresses: list[str]) -> hubsoft.Send:   # replaced by the tests
     return hubsoft.make_send(host, addresses)
+
+
+def _auth_gate(cap: int):
+    """The deployment-wide authentication budget: the vendor's limit is per egress IP, so it cannot live in one process or one connection. One atomic increment per
+    send in a short transaction of its own (no row lock is held while the request runs); a full minute refuses."""
+    def gate() -> None:
+        with get_engine().begin() as c:
+            row = c.execute(
+                text("INSERT INTO erp_egress_budget (scope, bucket, n) VALUES ('hubsoft.auth', date_trunc('minute', now()), 1) "
+                     "ON CONFLICT (scope, bucket) DO UPDATE SET n = erp_egress_budget.n + 1 WHERE erp_egress_budget.n < :cap RETURNING n"), {"cap": cap}).first()
+            if row is None:
+                wait = c.execute(text("SELECT EXTRACT(EPOCH FROM (date_trunc('minute', now()) + interval '1 minute' - now()))")).scalar()
+            else:
+                c.execute(text("DELETE FROM erp_egress_budget WHERE bucket < now() - interval '1 hour'"))
+        if row is None:
+            raise hubsoft.HubSoftError(hubsoft.RATE_LIMITED, retry_after=float(wait or 60))
+    return gate
 
 
 def _client_options() -> dict:   # replaced by the tests (a fake sleep: the retry waits are real time otherwise)
@@ -120,7 +138,7 @@ def test_connection(connection_id: UUID, p: Principal = Depends(require("erp:tes
         lim = _LIMITERS.setdefault(connection_id, (hubsoft.RateLimiter(hubsoft.Policy().request_per_second, hubsoft.Policy().request_burst),
                                                   hubsoft.RateLimiter(hubsoft.Policy().auth_per_minute / 60.0, hubsoft.Policy().auth_burst)))
         key = (str(p.tenant_id), str(connection_id), host, creds.version)   # tokens are never shared between tenants, connections, hosts or credential versions
-        client = hubsoft.HubSoftClient(creds=creds, key=key, send=_send_for(host, addrs), limiter=lim[0], auth_limiter=lim[1], **_client_options())
+        client = hubsoft.HubSoftClient(creds=creds, key=key, send=_send_for(host, addrs), limiter=lim[0], auth_limiter=lim[1], auth_gate=_auth_gate(settings.erp_auth_per_minute), **_client_options())
         hubsoft.test_connection(client)
     except erp_hub.SecretError as e:
         error, state = e.code.upper(), "unconfigured"

@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     # reached. Both empty = no ERP connection can be created or tested (fail closed).
     erp_secrets_dir: str = ""
     erp_allowed_hosts: str = ""   # comma-separated: exact hosts or *.suffix
+    erp_auth_per_minute: int = Field(default=10, ge=1, le=25)   # HubSoft authentications per minute for the WHOLE deployment (the vendor's limit, 30/min, is per egress IP)
     pii_hmac_key: str = Field(default="", repr=False)  # HMAC key for customer documents; import fails closed without it
 
     @field_validator("jwt_secret", "jwt_secret_previous", "pii_hmac_key")
