@@ -329,3 +329,22 @@ def test_conflicting_observations_with_the_same_device_time_are_refused_in_any_o
         assert r.status_code == 422 and r.json()["detail"] == "conflicting_observations"
     same = client.post("/v1/edge/cpe-config", headers=ag, json=_report(inv, "ext-cfg-tie-1", [_f("wifi.ssid", "ssid/1", "A", at), _f("wifi.ssid", "ssid/1", "A", at)]))
     assert same.status_code == 202 and same.json()["fields"] == 1      # the same value twice is just a repeat
+
+
+def test_a_tie_with_the_stored_observation_is_refused_too_and_nothing_of_the_batch_is_kept(client, seed, inv, on):
+    cpe = _cpe(client, inv, seed, "CFG-TIE-2", "ext-cfg-tie-2")
+    h, ag, at = hdr(client, "alice", seed, "A"), agent(client, inv, "a1"), _now(-30)
+    assert client.post("/v1/edge/cpe-config", headers=ag, json=_report(inv, "ext-cfg-tie-2", [_f("wifi.ssid", "ssid/1", "A", at)])).status_code == 202
+    r = client.post("/v1/edge/cpe-config", headers=ag, json=_report(inv, "ext-cfg-tie-2", [_f("wifi.channel", "radio/1", 6, at), _f("wifi.ssid", "ssid/1", "B", at)]))
+    assert r.status_code == 422 and r.json()["detail"] == "conflicting_observations"
+    got = {f["name"]: f["value"] for f in client.get(f"/v1/cpes/{cpe}/ont-config/configuration", headers=h).json()["fields"]}
+    assert got == {"wifi.ssid": "A"}      # the channel of the refused batch was rolled back with it
+    assert client.post("/v1/edge/cpe-config", headers=ag, json=_report(inv, "ext-cfg-tie-2", [_f("wifi.ssid", "ssid/1", "A", at)])).status_code == 202      # the same value again is a repeat
+    import threading
+    codes = []
+    def go(v):
+        codes.append(client.post("/v1/edge/cpe-config", headers=ag, json=_report(inv, "ext-cfg-tie-2", [_f("wifi.channel", "radio/1", v, _now(-10))])).status_code)
+    ts = [threading.Thread(target=go, args=(6 + (i % 2) * 5,)) for i in range(2)]      # two requests with the SAME device time: 6 and 11
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert sorted(codes) in ([202, 202], [202, 422]), codes

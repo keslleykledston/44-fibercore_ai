@@ -98,6 +98,15 @@ def ingest_cpe_config(body: ConfigSnapshot, p: Principal = Depends(require("inve
                  "value = EXCLUDED.value, captured_at = EXCLUDED.captured_at, observed_at = EXCLUDED.observed_at, received_at = now(), "
                  "data_model = EXCLUDED.data_model, protocol = EXCLUDED.protocol, source = 'edge' WHERE cpe_config_fields.captured_at < EXCLUDED.captured_at"),
             rows)
+        # a tie with what is ALREADY stored (same key, same device time, another value) has no honest winner either: refuse, and the whole batch rolls back. Checked after the write,
+        # inside the transaction, so a concurrent request that committed first is seen whatever the order.
+        clash = conn.execute(
+            text("SELECT 1 FROM unnest(CAST(:c AS uuid[]), CAST(:n AS text[]), CAST(:i AS text[]), CAST(:ca AS timestamptz[]), CAST(:v AS text[])) AS x(c, n, i, ca, v) "
+                 "JOIN cpe_config_fields f ON f.cpe_id = x.c AND f.name = x.n AND f.instance_key = x.i "
+                 "WHERE f.captured_at = LEAST(x.ca, now()) AND f.value <> CAST(x.v AS jsonb) LIMIT 1"),
+            {"c": [r["c"] for r in rows], "n": [r["n"] for r in rows], "i": [r["i"] for r in rows], "ca": [r["ca"] for r in rows], "v": [r["v"] for r in rows]}).first()
+        if clash is not None:
+            raise HTTPException(422, "conflicting_observations")
     return {"status": "accepted", "cpes": len(cpes), "fields": len(rows), "unknown": unknown}
 
 
