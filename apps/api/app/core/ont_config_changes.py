@@ -74,14 +74,16 @@ def _lan_error(rows: list[dict], instance: str, params: dict) -> str | None:
         lo, hi = _effective(rows, instance, params, "lan.dhcp_min"), _effective(rows, instance, params, "lan.dhcp_max")
         gw, mask = _effective(rows, instance, params, "lan.ipv4_address"), _effective(rows, instance, params, "lan.netmask")
         net = _net(gw, mask) if gw and mask else None
-        if lo and hi and ipaddress.ip_address(lo) > ipaddress.ip_address(hi):
+        if not (lo and hi):
+            return "dhcp_range_incomplete"   # changing one end needs the other end known (observed or in the request)
+        if ipaddress.ip_address(lo) > ipaddress.ip_address(hi):
             return "dhcp_range_inverted"
         if net is None:
             return "lan_address_not_observed"   # cannot prove the range fits a subnet nobody reported
         if any(ipaddress.ip_address(x) not in net or ipaddress.ip_address(x) in (net.network_address, net.broadcast_address, ipaddress.ip_address(gw))
-               for x in (lo, hi) if x):
+               for x in (lo, hi)):
             return "dhcp_range_outside_subnet"
-        if lo and hi and int(ipaddress.ip_address(lo)) <= int(ipaddress.ip_address(gw)) <= int(ipaddress.ip_address(hi)):
+        if int(ipaddress.ip_address(lo)) <= int(ipaddress.ip_address(gw)) <= int(ipaddress.ip_address(hi)):
             return "dhcp_range_contains_gateway"
     return None
 

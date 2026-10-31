@@ -230,3 +230,13 @@ def test_a_repeated_submission_is_answered_but_audited_once(client, seed, cpe, m
     with migrated.begin() as c:
         c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
         assert c.execute(text("SELECT count(*) FROM audit_log WHERE action = 'ont_config.change_blocked' AND evidence_redacted->>'change_id' = :i"), {"i": b["id"]}).scalar() == 1
+
+
+def test_changing_one_dhcp_end_needs_the_other_end_known(client, seed, cpe, migrated):
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("DELETE FROM cpe_config_fields WHERE cpe_id = :c AND name = 'lan.dhcp_max'"), {"c": cpe})
+    r = _preview(client, seed, cpe, "lan.dhcp.write", "lan/1", {"lan.dhcp_min": "192.168.1.20"})
+    assert r.status_code == 422 and r.json()["detail"] == "dhcp_range_incomplete"
+    ok = _preview(client, seed, cpe, "lan.dhcp.write", "lan/1", {"lan.dhcp_min": "192.168.1.20", "lan.dhcp_max": "192.168.1.90"})
+    assert ok.status_code == 201
