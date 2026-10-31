@@ -139,6 +139,7 @@
 | GET | `/v1/olts/{olt_id}/capabilities` | `inventory:read` |
 | GET | `/v1/olts/{olt_id}/queries` | `inventory:read` |
 | POST | `/v1/olts/{olt_id}/queries/{query_id}` | `olt_query:run` |
+| GET | `/v1/olts/{olt_id}/queries/{query_id}/latest` | `olt_query:run` |
 | GET | `/v1/onu-cpe-links` | `inventory:read` |
 | POST | `/v1/onu-cpe-links/suggest` | `associations:review` |
 | POST | `/v1/onu-cpe-links/{link_id}/confirm` | `associations:review` |
