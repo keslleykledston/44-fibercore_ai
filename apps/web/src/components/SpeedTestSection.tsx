@@ -13,6 +13,25 @@ const LOAD_ERROR: Record<string, string> = {
   failed: "Não foi possível carregar o teste de banda agora.",
 };
 const when = (iso: string) => new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+type Pending = { known: string[]; until: number; certain: boolean };
+// O marcador de pedido em curso sobrevive a fechar o painel, trocar de aba e navegar (por aparelho, na sessão do navegador): remontar a seção não pode reabrir o botão sobre um pedido ainda não esclarecido.
+const memo = new Map<string, Pending | null>();
+const KEY = (cpe: string) => `fc-speed-pending:${cpe}`;
+function readPending(cpe: string): Pending | null {
+  if (memo.has(cpe)) return memo.get(cpe) ?? null;
+  try {
+    const raw = window.sessionStorage.getItem(KEY(cpe));
+    const o = raw ? (JSON.parse(raw) as Pending) : null;
+    const ok = !!o && Array.isArray(o.known) && o.known.every((x) => typeof x === "string") && typeof o.until === "number" && typeof o.certain === "boolean";
+    memo.set(cpe, ok ? o : null);
+  } catch { memo.set(cpe, null); }
+  return memo.get(cpe) ?? null;
+}
+function writePending(cpe: string, p: Pending | null) {
+  memo.set(cpe, p);
+  try { if (p) window.sessionStorage.setItem(KEY(cpe), JSON.stringify(p)); else window.sessionStorage.removeItem(KEY(cpe)); } catch { /* sem armazenamento: vale só nesta página */ }
+}
+
 const POLL_MS = 4000;
 const PENDING_MS = 20 * 60_000;   // a vida do pedido na API é de 15 minutos
 const UNCERTAIN_MS = 60_000;
@@ -39,7 +58,10 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
   // e os botões continuam travados (senão um novo clique geraria outro tráfego). Sai quando uma leitura mostra uma execução nova, ou depois do prazo de vida do pedido.
   // `certain` = a resposta da API foi sucesso (a execução EXISTE no servidor, que só responde depois de gravar): só uma leitura que a mostre destrava, nunca o relógio. `certain: false` = a
   // resposta se perdeu: pode ter chegado ou não; destrava só por uma leitura bem-sucedida FEITA DEPOIS do prazo que não mostre execução nova.
-  const [pending, setPending] = useState<{ known: string[]; until: number; certain: boolean } | null>(null);
+  const [pending, setPendingState] = useState<Pending | null>(() => readPending(cpeId));
+  const setPending = useCallback((next: Pending | null | ((p: Pending | null) => Pending | null)) => {
+    setPendingState((prev) => { const v = typeof next === "function" ? next(prev) : next; writePending(cpeId, v); return v; });
+  }, [cpeId]);
   const [refreshFailed, setRefreshFailed] = useState(false);
   const alive = useRef(true);
   const seq = useRef(0);   // cada leitura leva um número: só a MAIS RECENTE pode atualizar a tela (uma resposta lenta e antiga nunca esconde um teste ativo nem reabilita os botões)
@@ -47,7 +69,7 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
   // uma leitura que falha NÃO apaga o que a tela já sabe: só a primeira carga vira erro; depois disso a tela avisa e tenta de novo
   const hasData = useRef(false);
   const keepOrFail = useCallback((code: string) => {
-    if (code === "session" || code === "disabled" || code === "not_found") { setPending(null); setRefreshFailed(false); setLoad({ kind: "error", code }); return; }   // não se recupera sozinho: para de consultar e diz o que fazer
+    if (code === "session" || code === "disabled" || code === "not_found") { setRefreshFailed(false); setLoad({ kind: "error", code }); return; }   // não se recupera sozinho: para de consultar e diz o que fazer (o marcador de pedido em curso é GUARDADO: o travamento não some com o erro)
     if (hasData.current) setRefreshFailed(true);
     else setLoad({ kind: "error", code });
   }, []);
@@ -67,11 +89,11 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
         setPending((p) => (p && (runs.some((x) => !p.known.includes(x.id)) || (!p.certain && startedAt > p.until)) ? null : p));
       } else keepOrFail(j.error && LOAD_ERROR[j.error] ? j.error : "failed");
     } catch (e) { if ((e as Error).name !== "AbortError" && alive.current && mine === seq.current) keepOrFail("failed"); }
-  }, [cpeId, keepOrFail]);
+  }, [cpeId, keepOrFail, setPending]);
 
   useEffect(() => { alive.current = true; const c = new AbortController(); void fetchAll(c.signal); return () => { alive.current = false; c.abort(); }; }, [fetchAll]);
   const active = load.kind === "ready" && load.runs.some((r) => ACTIVE.has(r.status));
-  const following = active || pending !== null;
+  const following = load.kind === "ready" && (active || pending !== null);
   useEffect(() => {   // enquanto há teste em andamento (ou um pedido ainda não confirmado pela leitura), acompanha; parado, não consulta
     if (!following) return;
     const t = setInterval(() => void fetchAll(), POLL_MS);

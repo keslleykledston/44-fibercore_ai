@@ -268,3 +268,28 @@ test("teste de banda (cenário): recusa definitiva (409) não trava e a próxima
   await expect(page.getByTestId("speed-pending")).toHaveCount(0);
   await expect(page.getByTestId("speed-start-download")).toBeEnabled();
 });
+
+test("teste de banda (cenário): fechar o painel ou trocar de aba não destrava um pedido ainda não esclarecido", async ({ page, request }) => {
+  await confirmDemoA2(request);
+  let posts = 0;
+  await page.route("**/bff/cpes/*/speed", (r) => r.fulfill({ json: { caps: CAPS(), runs: [] } }));          // a leitura nunca mostra a execução
+  await page.route("**/bff/cpes/*/speed/runs", (r) => { posts += 1; return r.fulfill({ status: 201, json: { ok: true, outcome: "submitted" } }); });
+  await openTab(page);
+  await page.getByTestId("speed-start-download").click();
+  await expect(page.getByTestId("speed-pending")).toBeVisible();
+  await page.getByRole("tab", { name: "Resumo" }).click();                                                    // sai da aba: a seção desmonta
+  await page.getByRole("tab", { name: "Teste de banda" }).click();                                            // e volta
+  await expect(page.getByTestId("speed-pending")).toBeVisible();
+  await expect(page.getByTestId("speed-start-download")).toBeDisabled();
+  await page.getByTestId("onu-quick-close").click();                                                          // fecha o painel e reabre a mesma ONU
+  await row(page, "DEMOA0002").click();
+  await page.getByRole("tab", { name: "Teste de banda" }).click();
+  await expect(page.getByTestId("speed-pending")).toBeVisible();
+  await expect(page.getByTestId("speed-start-download")).toBeDisabled();
+  await page.reload();                                                                                         // e até recarregar a página (mesma sessão do navegador)
+  await row(page, "DEMOA0002").click();
+  await page.getByRole("tab", { name: "Teste de banda" }).click();
+  await expect(page.getByTestId("speed-pending")).toBeVisible();
+  await expect(page.getByTestId("speed-start-upload")).toBeDisabled();
+  expect(posts).toBe(1);
+});
