@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a192ed-a53c-7bb2-9e38-ae47ef6fd9ef).
+[codex] Turn started (01a192ed-a576-7150-aaff-ec6c765a6843).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir especificamente se os três valores da evidência es...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- docs/operations/SPEED_HOMOL...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- docs/operations/SPEED_HOMOL... (exit 0)
+[codex] Running command: /bin/bash -lc "git status --short && rg -n --hidden --glob '"'!**/.git/**'"' 'ROMTime|BOMTime...
+[codex] Command completed: /bin/bash -lc "git status --short && rg -n --hidden --glob '"'!**/.git/**'"' 'ROMTime|BOMTime... (exit 0)
+[codex] Running command: /bin/bash -lc "cat docs/wiki/reviews/raw/263-speed-probe-3xx-r3.txt && nl -ba docs/wiki/bench...
+[codex] Command completed: /bin/bash -lc "cat docs/wiki/reviews/raw/263-speed-probe-3xx-r3.txt && nl -ba docs/wiki/bench... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: os três valores estão registrados, mas o su...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: os três valores estão registrados, mas o sufixo `Z` os apresenta como UTC apesar de a evidência dizer que o relógio da ONT estava dessincronizado. Isso pode fazer leitores tratarem horários incorretos como referências UTC confiáveis.
+
+Findings:
+- [medium] Timestamps com `Z` contradizem o relógio dessincronizado (docs/wiki/bench/H-speed-sonda-3xx-eg8145v5-2026-10-31.md:25)
+  A linha registra ROMTime/BOMTime/EOMTime com sufixo `Z`, que indica UTC, e em seguida informa que o relógio da ONT estava cerca de quatro horas atrasado e sem NTP. Assim, os valores não sustentam comparação confiável com o horário UTC da sonda ou com outras evidências; o sufixo pode induzir essa interpretação. Registre os valores brutos como horário do dispositivo sem `Z` (ou com indicação explícita de que a zona é desconhecida) e separe deles qualquer conversão UTC estimada, incluindo a incerteza do desvio.
+  Recommendation: Remova a indicação UTC dos valores brutos e documente separadamente o horário de coleta UTC e que o desvio do relógio da ONT é aproximado.

@@ -22,7 +22,7 @@ ACS: exatamente 1 dispositivo com OUI `00259E`, classe `EG8145V5` e o serial de 
 | Visitas em R / em C | 1 / 1 (C atendida 1,1 s depois de R, 2026-10-31 16:58:33–34 UTC) |
 | `DiagnosticsState` | `Completed` |
 | `TestBytesReceived` / `TotalBytesReceived` / `TotalBytesSent` | 1282 / 1512 / 571 (a resposta de C: 1 000 B de corpo + cabeçalhos) |
-| `ROMTime` / `BOMTime` / `EOMTime` | `ROMTime` = `2026-10-31T12:52:09.712Z`, `BOMTime` = `2026-10-31T12:52:09.712Z`, `EOMTime` = `2026-10-31T12:52:09.726Z` (instantes do relógio da ONT; BOM→EOM = 14 ms); o relógio da ONT estava ~4 h atrás do UTC (sem NTP no momento) |
+| `ROMTime` / `BOMTime` / `EOMTime` | valores brutos no horário do DISPOSITIVO (zona desconhecida, não UTC): `ROMTime` = `2026-10-31T12:52:09.712`, `BOMTime` = `2026-10-31T12:52:09.712`, `EOMTime` = `2026-10-31T12:52:09.726`; BOM→EOM = 14 ms. O relógio da ONT estava desalinhado do UTC da coleta (16:58 UTC) por cerca de 4 h, estimativa sem NTP confirmado; só as diferenças entre os três valores são confiáveis |
 | Origem vista pelo nó | endereço público do NAT do provedor (faixa distinta de `100.64.0.0/10`); a lista de origens do nó de teste foi corrigida para esse endereço |
 
 ## Fatos para a planilha de homologação (`docs/operations/SPEED_HOMOLOGACAO.md`)
