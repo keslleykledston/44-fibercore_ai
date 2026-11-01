@@ -10,7 +10,7 @@ Escopo: SOMENTE a ONT de bancada ZTE F670L (firmware `V9.0.11P1N10B`), pela sua 
 - **Versões:** Edge `0.1.0-lab-abb2284` nas duas execuções aprovadas (`0.1.0-lab-777ec89` nas tentativas 1 e 2, abaixo); firmware do CPE `V9.0.11P1N10B`; OLT Huawei MA5608T; nó de teste `tools/speed-node` do LAB, 4 origens permitidas.
 - **Aprovador:** conta de serviço de ensaio diferente da que pediu o teste (quem pede ≠ quem aprova ≠ quem autorizou). Autorização de uso único do responsável com `--first-run` e o par exato `core-lab` + perfil, aberta no chat da sessão.
 - **Horário:** 10 MB: job criado 2026-11-01 04:45:18 UTC, concluído 04:45:37; 200 MB: job criado 04:50:17, concluído 04:50:42 (UTC).
-- **Aceite do responsável:** PENDENTE. Sem aceite escrito a capacidade `speed_test_download` da ZTE segue `identified`.
+- **Aceite do responsável:** dado em 2026-11-01 pelo chat da sessão ("1. aceite", em resposta à pergunta "Você aceita o resultado do download da ZTE?", feita com este documento já escrito e revisado, incluindo as seções de limites e de tentativas falhas), sobre o resultado do download de 200 MB (`completed`, 257,86 Mbps). O 10 MB (`partial`) não é evidência de capacidade.
 
 ## Resultados (gravados pela plataforma)
 | Perfil | Desfecho | Vazão | Duração | Bytes |
@@ -32,5 +32,7 @@ O 200 MB passa do mínimo de 3 s e é o único resultado confiável. É o caminh
 - A identidade física entre este CPE e a ONT 11 da OLT segue sem prova independente.
 
 ## O que ainda falta (homologação do download)
-- Repetições do 200 MB (ao menos 3) para ver a variação; comparação com medição cabeada de referência (precisa de alguém na bancada); upload (verificar antes, só leitura, `UploadDiagnostics` já existe no aparelho).
-- Aceite escrito do responsável sobre este resultado para promover `speed_test_download` a `observed`, no nível de modelo e firmware do CPE do ACS.
+- Repetições do 200 MB (ao menos 3) para ver a variação; comparação com medição cabeada de referência (precisa de alguém na bancada); upload (próximo passo; verificar antes, só leitura, `UploadDiagnostics` já existe no aparelho).
+
+## Alcance do aceite
+`speed_test_download` passa a `observed` para ZTE F670L `V9.0.11P1N10B` por TR-069, no nível de modelo e firmware do CPE do ACS, pela WAN PPPoE dela até o nó `core-lab`, com o aceite de risco de 3xx vigente. Não promove a identidade física do alvo, não vale como velocidade contratada nem como capacidade da PON, e não cobre o upload.
