@@ -257,3 +257,19 @@ test("gestão: as abas internas da configuração do aparelho também respondem 
   await expect(dev.getByLabel("Nome da rede")).toBeVisible();
   await expect(dev.getByRole("tab", { name: "LAN" })).toHaveAttribute("tabindex", "-1");
 });
+
+test("lista da Rede: cada linha tem a régua compacta E o número do Rx; sem leitura mostra traço", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.goto("/rede");
+  const rows = page.locator("tbody tr").filter({ has: page.getByTestId("onu-open") });
+  const n = await rows.count();
+  expect(n).toBeGreaterThan(0);
+  await expect(page.locator('tbody [data-testid="optical-ruler"][data-size="sm"]')).toHaveCount(n);
+  const a1 = rows.filter({ hasText: "DEMOA0001" });
+  await expect(a1.getByTestId("onu-rx")).toHaveText("-21.5");
+  await expect(a1.getByTestId("optical-ruler")).toHaveAttribute("data-state", /critical_low|warn_low|good|warn_high|critical_high|stale/);
+  const los = rows.filter({ hasText: "DEMOC0000" });
+  await expect(los.getByTestId("onu-rx")).toHaveText("—");
+  await expect(los.getByTestId("optical-ruler")).toHaveAttribute("data-state", "none");
+});

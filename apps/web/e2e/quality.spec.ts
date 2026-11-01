@@ -46,6 +46,8 @@ test("qualidade: leitura REAL no aparelho demo mostra 'sem leitura' e dados insu
   await expect(g).toHaveAttribute("data-state", "insufficient_data");
   await expect(g).toContainText("Dados insuficientes para avaliar");
   await expect(page.getByTestId("quality-ind-wifi")).toContainText("Sem leitura");
+  await expect(page.getByTestId("quality-ind-wifi-source")).toContainText("Fonte:");
+  await expect(page.getByTestId("quality-caution")).toContainText("Sem contato com o ACS não significa ONU offline");
   await expect(page.getByTestId("quality-ind-optical")).toContainText("sem faixa de referência");   // nível óptico atual, mas sem perfil homologado: não é "ok"
   await expect(page.getByTestId("quality-section")).not.toContainText("Tudo OK");
   await page.getByTestId("quality-details").locator("summary").click();
@@ -68,6 +70,8 @@ test("qualidade (cenário): anomalia observada e hipótese aparecem com ressalva
   await openTab(page);
   await expect(page.getByTestId("quality-global")).toContainText("Atenção");
   await expect(page.getByTestId("quality-ind-wan")).toHaveAttribute("data-state", "attention");
+  await expect(page.getByTestId("quality-ind-wan-source")).toContainText("Fonte: ACS (cache)");          // fonte da métrica que o indicador cita
+  await expect(page.getByTestId("quality-ind-wifi-source")).toHaveText("Fonte: sem leitura");           // indicador sem métrica: sem fonte inventada
   await expect(page.getByTestId("quality-observations")).toContainText("enlace da WAN");
   const h = page.getByTestId("quality-hypothesis");
   await expect(h).toContainText("Indícios de problema no enlace óptico");

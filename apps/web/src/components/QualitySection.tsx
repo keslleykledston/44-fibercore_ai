@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ageText, CONFIDENCE_TEXT, GLOBAL_TEXT, INDICATOR_TEXT, INDICATOR_TITLE, INDICATORS, LOAD_ERROR, METRIC_TEXT, OBSERVATION_TEXT, readCaps, readRuns,
+  ageText, CONFIDENCE_TEXT, GLOBAL_TEXT, indicatorSource, INDICATOR_TEXT, INDICATOR_TITLE, INDICATORS, LOAD_ERROR, METRIC_TEXT, OBSERVATION_TEXT, readCaps, readRuns,
   REFUSAL_TEXT, SCOPE_TEXT, STATUS_TEXT, UNJUDGED_TEXT, valueText, type QCaps, type QRun,
 } from "@/lib/quality";
 
@@ -96,6 +96,7 @@ export function QualitySection({ cpeId }: { cpeId: string }) {
                 <div key={k} className="rounded-card border border-line p-3" data-testid={`quality-ind-${k}`} data-state={unjudged ? "unjudged" : s}>
                   <p className="text-xs text-muted">{INDICATOR_TITLE[k]}</p>
                   <p className={`text-sm font-semibold ${unjudged ? "text-muted" : TONE[s]}`}>{unjudged ? UNJUDGED_TEXT : INDICATOR_TEXT[s]}</p>
+                  <p className="mt-1 text-xs text-muted" data-testid={`quality-ind-${k}-source`}>{indicatorSource(run.summary.indicators[k], run.metrics)}</p>
                 </div>
               );
             })}
@@ -135,6 +136,7 @@ export function QualitySection({ cpeId }: { cpeId: string }) {
           </details>
         </>
       )}
+      <p className="border-t border-line pt-3 text-xs text-muted" data-testid="quality-caution">Sem contato com o ACS não significa ONU offline. Uma sessão WAN não prova qualidade da internet ou do Wi‑Fi.</p>
       <Link href="/ajuda/rede/qualidade-do-servico" className="text-xs text-accent underline underline-offset-2">Como ler o diagnóstico de qualidade</Link>
     </div>
   );

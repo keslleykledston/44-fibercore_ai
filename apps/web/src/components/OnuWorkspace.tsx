@@ -3,7 +3,8 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { OnuQuickInspector } from "@/components/OnuQuickInspector";
 import { rovingKeys } from "@/lib/roving";
-import { DataFreshness, StatusPill } from "@/components/ui";
+import { OpticalRuler } from "@/components/OpticalRuler";
+import { ago_, DataFreshness, StatusPill } from "@/components/ui";
 import type { Onu } from "@/lib/types";
 
 type F = "todas" | "fora" | "defasado" | "desconhecido";
@@ -46,19 +47,19 @@ export function OnuWorkspace({ onus, oltNames, tree, ontConfig = false, speed = 
           <p role="status" aria-live="polite" className="ml-auto text-sm text-muted" data-testid="onu-count">{rows.length === onus.length ? `${rows.length} ONUs` : `${rows.length} de ${onus.length} ONUs`}</p>
         </div>
         <div className="panel overflow-x-auto">
-          <table className="w-full min-w-[560px] text-sm">
-            <thead className="bg-surface-2 text-left text-xs text-muted"><tr><th className="px-4 py-2 font-medium">Serial</th><th className="px-4 py-2 font-medium">{showOlt ? "OLT / PON" : "PON"}</th><th className="px-4 py-2 font-medium">Status</th><th className="px-4 py-2 text-right font-medium">Rx (dBm)</th><th className="px-4 py-2 font-medium">Dado</th></tr></thead>
+          <table className="w-full min-w-[520px] text-sm">
+            <thead className="bg-surface-2 text-left text-xs text-muted"><tr><th className="px-3 py-2 font-medium">Serial</th><th className="px-3 py-2 font-medium">{showOlt ? "OLT / PON" : "PON"}</th><th className="px-3 py-2 font-medium">Status</th><th className="px-3 py-2 text-right font-medium">Rx (dBm)</th><th className="px-3 py-2 font-medium">Dado</th></tr></thead>
             <tbody className="divide-y divide-line">
               {rows.map((u) => (
                 <tr key={u.id} aria-selected={sel?.id === u.id} className={`h-12 ${sel?.id === u.id ? "bg-accent-soft" : "hover:bg-surface-2"}`}>
-                  <td className="px-4 font-mono">
+                  <td className="px-3 font-mono">
                     <button type="button" data-testid="onu-open" aria-haspopup="true" aria-current={sel?.id === u.id ? "true" : undefined}
                       className="min-h-touch rounded-btn text-left font-mono text-accent underline-offset-4 hover:underline" onClick={(e) => { trigger.current = e.currentTarget; setSelId(u.id); }}>{u.serial}</button>
                   </td>
-                  <td className="whitespace-nowrap px-4">{showOlt ? `${oltNames[u.olt_id] ?? "—"} · ` : ""}{u.pon_path ?? "—"}</td>
-                  <td className="px-4"><StatusPill value={u.status} /></td>
-                  <td className="tabular px-4 text-right">{u.rx_dbm ?? "—"}</td>
-                  <td className="whitespace-nowrap px-4"><DataFreshness freshness={u.freshness} observedAt={u.observed_at} /></td>
+                  <td className="whitespace-nowrap px-3">{showOlt ? `${oltNames[u.olt_id] ?? "—"} · ` : ""}{u.pon_path ?? "—"}</td>
+                  <td className="px-3"><StatusPill value={u.status} /></td>
+                  <td className="px-3"><div className="flex items-center justify-end gap-2"><OpticalRuler rx={u.rx_dbm} freshness={u.freshness} agoText={u.observed_at ? ago_(u.observed_at) : null} size="sm" dense /><span className="tabular w-12 text-right" data-testid="onu-rx">{u.rx_dbm ?? "—"}</span></div></td>
+                  <td className="px-3"><DataFreshness freshness={u.freshness} observedAt={u.observed_at} /></td>
                 </tr>
               ))}
               {rows.length === 0 && <tr><td colSpan={5} className="p-4 text-sm text-muted">Nenhuma ONU com este filtro.</td></tr>}

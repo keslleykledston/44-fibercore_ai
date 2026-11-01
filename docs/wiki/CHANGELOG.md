@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — UX do Diagnóstico a partir do protótipo do Lovable (2026-11-01)
+- Web: a lista da Rede (`OnuWorkspace`) mostra a régua óptica compacta (`dense`: símbolo + só a faixa, rótulo completo no `title`/`aria-label`) ao lado do número do Rx; a coluna "Dado" pode quebrar linha para a lista caber ao lado do painel.
+- Web: na régua grande e na média o valor numérico sobe junto com o marcador (encostado na borda nas pontas do eixo); o rótulo da faixa fica acima.
+- Web: cada indicador da Qualidade ganhou "Fonte · idade" (`indicatorSource`: só as métricas que o indicador cita e que têm leitura; com mais de uma, a idade é a da MAIS ANTIGA; sem leitura: "Fonte: sem leitura"). Rodapé fixo: "Sem contato com o ACS não significa ONU offline. Uma sessão WAN não prova qualidade da internet ou do Wi‑Fi."
+- Decisão: NÃO adotado o rótulo "Confirmado/Hipótese/Indisponível" do protótipo por indicador: a plataforma não julga o sinal ("Sem anomalia observada" não é "Confirmado"), então a confiança continua só nas hipóteses.
+- Testes: `quality-source.spec.ts` (puros), régua média (valor sobre o marcador), lista da Rede (régua + número em cada linha), fonte e frase de cautela na Qualidade. Bateria completa: as mesmas 5 falhas que já existiam na base, nenhuma nova.
+
 ## Unreleased — trava de pedido do teste de banda e aceite do ping da ZTE (2026-11-01)
 - Web: `SpeedTestSection` passa a usar o mesmo protocolo de trava do ping: marcador `{runId, chave, pedido}` gravado ANTES do POST (sem armazenamento, o pedido não sai); só a execução DESTE pedido destrava (lista ou confirmação pelo id); pedido incerto nunca se resolve por tempo e "Confirmar pedido" repete a MESMA chave e o MESMO corpo (inclui `group_id`); `runId` ilegível vira pedido incerto sem apagar a trava. BFF `speed/runs` devolve `run_id`; BFF de leitura (speed e ping) aceita `?run=` e devolve `run_seen`. Codex: 4 rodadas, approve na r4. E2E do speed: 18 passed, 1 skipped.
 - Seed do e2e: `set_wifi_ssid` é operação de bancada e exige o parâmetro `ssid` (a prévia do seed era recusada com 422).
