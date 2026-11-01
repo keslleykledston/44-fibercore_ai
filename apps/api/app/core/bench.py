@@ -42,12 +42,18 @@ BENCH_OPS: dict[str, BenchOp] = {
     # never a URL) and a file-size profile from a closed list; the Edge maps the id to its own local address.
     "speed_test_download": BenchOp("tr069", frozenset({"target", "profile"})),
     "speed_test_upload": BenchOp("tr069", frozenset({"target", "profile"})),
+    # ADR-0030 amendment line Q1 / ADR-0039: the TR-143 IPPing test of the bench CPE through its service WAN. One LOGICAL parameter, the destination id (cloud
+    # catalog `probe_targets`, never an address); the Edge fixes repetitions and timeout and maps the id to its own local IP literal.
+    "ping_test": BenchOp("tr069", frozenset({"target"})),
 }
 SPEED_OPS = frozenset({"speed_test_download", "speed_test_upload"})
 # The Edge half of the speed test (internal/speed, internal/nbi/speed.go) shipped with its tests (ADR-0038 PR 2). It is only a precondition, as EDGE_SUPPORT
 # is: the tenant flags, the bench target, the registry evidence, the redirect evidence and the owner's prior authorization all remain required, and an Edge
 # older than this build ignores speed envelopes. DEPLOY ORDER: the Edge first, then the Cloud.
 SPEED_EDGE_SUPPORT = True
+# The Edge half of the ping test (internal/ping, internal/nbi/ping.go, internal/bench) shipped with its tests; same precondition-only meaning as above.
+PING_OPS = frozenset({"ping_test"})
+PING_EDGE_SUPPORT = True
 SPEED_ENDPOINT_RE = re.compile(r"[a-z0-9][a-z0-9-]{1,30}")
 SPEED_PROFILES = ("10mb", "50mb", "200mb")
 # the ONLY values a parameter may take, per operation (ADR-0030 item 4); anything else is refused at preview, at the gate and again at the Edge
@@ -61,6 +67,9 @@ def params_valid(operation: str, params) -> bool:
     if operation == "set_wifi_ssid":
         v = params["ssid"]
         return isinstance(v, str) and SSID_RE.fullmatch(v) is not None
+    if operation in PING_OPS:
+        t = params["target"]
+        return isinstance(t, str) and SPEED_ENDPOINT_RE.fullmatch(t) is not None
     if operation in SPEED_OPS:
         t, f = params["target"], params["profile"]
         return isinstance(t, str) and SPEED_ENDPOINT_RE.fullmatch(t) is not None and isinstance(f, str) and f in SPEED_PROFILES
@@ -132,7 +141,7 @@ def gate(conn: Connection, tenant_id: UUID, job, *, mode: str, by: UUID | None =
     spec = BENCH_OPS.get(job.operation)
     if spec is None or job.target_type != "cpe":
         return "operation_not_homologated"
-    if not EDGE_SUPPORT or (job.operation in SPEED_OPS and not SPEED_EDGE_SUPPORT):
+    if not EDGE_SUPPORT or (job.operation in SPEED_OPS and not SPEED_EDGE_SUPPORT) or (job.operation in PING_OPS and not PING_EDGE_SUPPORT):
         return "edge_support_missing"
     # promotion of the registry entry (owner CLI, exclusive) and this evaluation (shared) cannot interleave: a decision taken here sees either
     # the whole promotion or none of it, and the promotion waits for this transaction (which also emits the envelope) to finish
@@ -154,6 +163,15 @@ def gate(conn: Connection, tenant_id: UUID, job, *, mode: str, by: UUID | None =
         return "capability_not_observed"
     if job.operation in SPEED_OPS and not features.enabled(conn, tenant_id, "speed_diagnostics"):
         return "speed_disabled"   # the flag hides the feature AND stops what was requested before it was turned off
+    if job.operation in PING_OPS:
+        if not features.enabled(conn, tenant_id, "quality_active_tests"):
+            return "ping_disabled"   # the flag hides the feature AND stops what was requested before it was turned off
+        prm_p = json.loads(job.params) if isinstance(job.params, str) else (job.params or {})
+        # the destination must be an enabled one that THIS job's Edge owns (the Edge also refuses an id it does not list)
+        ok = conn.execute(text("SELECT 1 FROM probe_targets WHERE tenant_id = :t AND id = :i AND enabled AND edge_id = :e"),
+                          {"t": tenant_id, "i": prm_p.get("target"), "e": job.edge_id}).first()
+        if ok is None:
+            return "target_unavailable"
     if job.operation in SPEED_OPS:   # ADR-0038: the test node must not be able to steer the CPE elsewhere (3xx probe, or the confirmed egress ACL)
         from app.core import speed  # local: speed.py is independent of this module's load order
         prm_t = json.loads(job.params) if isinstance(job.params, str) else (job.params or {})

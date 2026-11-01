@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — ping_test na nuvem (2026-11-01)
+- API: `ping_test` entra no catálogo de bancada (ADR-0030 emenda, linha Q1) com UM parâmetro, o id lógico do destino. Endpoints por CPE `GET /v1/cpes/{id}/ping/capabilities`, `GET|POST /v1/cpes/{id}/ping/runs`, `GET .../runs/{run}`; tudo responde 403 `feature_disabled` com a flag `quality_active_tests` desligada. Pedido pelo caminho genérico de jobs é recusado (`use_ping_api`).
+- Permissão nova `diagnostics:ping_run` (R2, MFA recente), mesmos papéis do teste de banda. `ping_test` é autorizável pela API só por `engineer` e `isp_admin`.
+- Migração 0038: `probe_targets` (catálogo de destinos lógicos, dono único = um Edge, sem coluna de endereço, só o CLI do dono escreve) e `ping_test_runs` (uma linha por teste, número só com medição). CLI `probe-target-set` e `bench-authorize --ping-target`.
+- Reserva compartilhada por CPE: um diagnóstico por vez, de qualquer tipo (o teste de banda passa a recusar com `cpe_busy` quando há ping vivo), e no máximo 6 pings por hora por CPE (`rate_limited`).
+- O resultado vem do relatório fechado do Edge: perda calculada das contagens (5 envios fixos), tempos só com ao menos uma resposta, amplitude = máx − mín (não é jitter). Relatório fora do formato = job `FAILED` `invalid_result` e alvo travado, como no teste de banda.
+- Contrato `contracts/job-envelope.schema.json` ganha a variante `{target}` para `ping_test`. Sem DNS (nenhum modelo de bancada expõe `NSLookupDiagnostics`).
+- Ordem de implantação: Edge primeiro (com a seção `ping` na configuração), depois a nuvem; ver `docs/addenda/v2.2-qos/EDGE_PING_CONFIG.md`. A capacidade `ping_test` de cada modelo nasce `identified` (nenhuma execução real ainda).
+
 ## Unreleased — ping_test no Edge (2026-11-01)
 - Edge: `ping_test` (TR-143 IPPing) na bancada, ADR-0030 emenda (linha Q1): catálogo local de destinos (`ping.targets`, IP literal, mesmas regras do speed), forma fixa (5 repetições, 1000 ms), pela WAN de serviço verificada conectada antes da única escrita, relatório fechado (`success`, `failure`, `avg_ms`, `min_ms`, `max_ms`). Pacote `internal/ping`, `nbi/ping.go`, despacho no `bench`, verificação de envelope em `jobs`. `speed.ParseDestination`/`ParseCoreCIDRs` exportados e `postSetValues`/`diagCacheLeaves`/`checkServiceWAN` extraídos do speed sem mudar o comportamento. Testes: `go test ./...` verde.
 - Medido nos dois aparelhos de bancada: ambos expõem `IPPingDiagnostics`; NENHUM expõe `NSLookupDiagnostics`; sem jitter (só mín/méd/máx). Ver `docs/addenda/v2.2-qos/EDGE_PING_CONFIG.md`.

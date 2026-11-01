@@ -25,3 +25,11 @@ Operação `ping_test` (ADR-0030, emenda de 2026-10-31, linha Q1; ADR-0039). Só
 ## Limites conhecidos (medidos nos dois aparelhos de bancada, 2026-11-01)
 - **Sem jitter.** Esses modelos entregam só mínimo, média e máximo. A diferença máximo − mínimo é a **amplitude**, e não o jitter; latência por pacote não existe nesse objeto.
 - **Sem DNS por NSLookup.** Nem a Huawei EG8145V5 nem a ZTE F670L expõem `NSLookupDiagnostics` (nenhuma folha). A latência ao servidor DNS (ping a um destino que seja o resolvedor) mede alcance e latência até ele, não a resolução de nomes.
+
+## Passos do dono na nuvem (depois do Edge)
+1. Migração 0038 aplicada (`migrate`).
+2. `probe-target-set <tenant> <id> "<rótulo>" CORE|INTERNET <região> on --edge <edge_id>` para cada destino que o Edge lista em `ping.targets` (mesmo id; o endereço fica só no Edge).
+3. `capability-set ... ping_test supported identified --evidence ... --verified-at ...` por modelo/firmware (evidência da leitura de `IPPingDiagnostics`); a promoção a `observed` só depois de uma execução real aceita pelo responsável.
+4. `bench-authorize <tenant> ping_test <cpe_id> --from ... --to ... --by ... --ping-target <id> [--first-run]` (uso único; os parâmetros são o hash exato do destino).
+5. Flags `bench_writes` e `quality_active_tests` ligadas só pela janela do teste.
+O pedido pela tela exige `diagnostics:ping_run` e `jobs:request`, e outra pessoa (ou a mesma, como em toda manobra de bancada) aprova; quem autorizou pela API não pode ser quem pede nem quem aprova.

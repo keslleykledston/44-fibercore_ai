@@ -22,6 +22,7 @@ from app.api.members import router as members_router
 from app.api.noc import router as noc_router
 from app.api.olt_queries import router as olt_queries_router
 from app.api.ont_config import router as ont_config_router
+from app.api.ping import router as ping_router
 from app.api.quality import router as quality_router
 from app.api.routes import router
 from app.api.session import router as session_router
@@ -71,6 +72,7 @@ app.include_router(device_actions_router)
 app.include_router(olt_queries_router)
 app.include_router(ont_config_router)
 app.include_router(speed_router)
+app.include_router(ping_router)
 app.include_router(quality_router)
 app.include_router(context_router)
 app.include_router(diagnostics_router)

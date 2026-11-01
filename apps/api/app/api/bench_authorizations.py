@@ -57,6 +57,8 @@ def authorize(body: AuthorizeIn, p: Principal = Depends(require("bench:authorize
         raise HTTPException(422, "parameters outside the bench catalog")
     if body.operation in bench.SPEED_OPS and not bench.SPEED_EDGE_SUPPORT:
         raise HTTPException(409, "edge_support_missing")   # ADR-0038: the Edge half of the speed test is not delivered yet
+    if body.operation in bench.PING_OPS and not bench.PING_EDGE_SUPPORT:
+        raise HTTPException(409, "edge_support_missing")   # ADR-0039: the Edge half of the ping test
     res = _call("SELECT app_bench_authorize(:a, :t, :c, :o, :h, :m)",
                 {"a": p.id, "t": p.tenant_id, "c": body.cpe_id, "o": body.operation, "h": bench.params_hash(body.params), "m": body.minutes})
     return {"id": res["id"], "window_end": res["window_end"], "operation": body.operation, "minutes": body.minutes}

@@ -71,6 +71,7 @@ def main(argv: list[str] | None = None) -> None:
     ba.add_argument("--ssid", help="set_wifi_ssid only: the exact SSID this authorization covers (BANCADA-<A-Z0-9>)")
     ba.add_argument("--speed-target", help="speed_test_* only: the logical endpoint id this authorization covers (no URL, no address)")
     ba.add_argument("--speed-profile", help="speed_test_* only: the file-size profile this authorization covers (10mb, 50mb, 200mb)")
+    ba.add_argument("--ping-target", help="ping_test only: the logical destination id this authorization covers (no address)")
     ba.add_argument("--first-run", action="store_true", help="ADR-0030 amendment: stands in for the missing `observed` registry entry (single use)")
     bu = sub.add_parser("bench-unlock", help="ADR-0030: clear the write lock of a bench target after a documented reconciliation")
     bu.add_argument("tenant_id"); bu.add_argument("cpe_id"); bu.add_argument("--reason", required=True)
@@ -86,6 +87,10 @@ def main(argv: list[str] | None = None) -> None:
     se.add_argument("tenant_id"); se.add_argument("endpoint_id"); se.add_argument("label")
     se.add_argument("kind", choices=["CORE", "INTERNET"]); se.add_argument("region"); se.add_argument("state", choices=["on", "off"])
     se.add_argument("--edge", required=True, help="the Edge that owns this test node (only it can report its health, and only a bench CPE of that Edge can use it)")
+    pt = sub.add_parser("probe-target-set", help="ADR-0039: create/update a LOGICAL ping destination (id, label, CORE|INTERNET, region, enabled). No address: the Edge holds it (owner-only)")
+    pt.add_argument("tenant_id"); pt.add_argument("target_id"); pt.add_argument("label")
+    pt.add_argument("kind", choices=["CORE", "INTERNET"]); pt.add_argument("region"); pt.add_argument("state", choices=["on", "off"])
+    pt.add_argument("--edge", required=True, help="the Edge that owns this destination (it holds the address in its local configuration; only a bench CPE of that Edge can use it)")
     sas = sub.add_parser("speed-acceptance-set", help="ADR-0038 amendment (option C): record the formal acceptance of the 3xx risk for ONE vendor/model/firmware and CORE destinations (owner-only)")
     sas.add_argument("tenant_id"); sas.add_argument("vendor"); sas.add_argument("model"); sas.add_argument("firmware")
     sas.add_argument("--endpoints", required=True, help="comma-separated LOGICAL endpoint ids (CORE only)")
@@ -280,8 +285,13 @@ def main(argv: list[str] | None = None) -> None:
                 if not bench.SPEED_EDGE_SUPPORT:
                     sys.exit("refused: the Edge half of the speed test is not delivered yet (ADR-0038)")
                 params = {"target": a.speed_target, "profile": a.speed_profile}
+            if a.operation in bench.PING_OPS:
+                if not bench.PING_EDGE_SUPPORT:
+                    sys.exit("refused: the Edge half of the ping test is not delivered yet (ADR-0039)")
+                params = {"target": a.ping_target}
             if not bench.params_valid(a.operation, params):
-                sys.exit(f"parameters outside the bench catalog for {a.operation!r} (set_wifi_ssid needs --ssid BANCADA-...; speed_test_* needs --speed-target and --speed-profile; others take none)")
+                sys.exit(f"parameters outside the bench catalog for {a.operation!r} (set_wifi_ssid needs --ssid BANCADA-...; speed_test_* needs --speed-target "
+                     "and --speed-profile; ping_test needs --ping-target; others take none)")
             start, end = datetime.fromisoformat(a.start), datetime.fromisoformat(a.end)
             if start.tzinfo is None or end.tzinfo is None:
                 sys.exit("--from/--to need a time zone (e.g. 2026-10-30T14:00:00+00:00)")
@@ -334,6 +344,20 @@ def main(argv: list[str] | None = None) -> None:
                            "health = CASE WHEN speed_endpoints.edge_id IS DISTINCT FROM EXCLUDED.edge_id THEN 'unknown' ELSE speed_endpoints.health END"),
                       {"t": a.tenant_id, "i": a.endpoint_id, "l": a.label, "k": a.kind, "r": a.region, "e": a.state == "on", "g": a.edge})
             print(f"speed endpoint {a.endpoint_id}: {a.kind}, {'enabled' if a.state == 'on' else 'disabled'} (health is reported by the Edge)")
+        elif a.cmd == "probe-target-set":
+            from app.core import probe
+            if probe.TARGET_ID_RE.fullmatch(a.target_id) is None:
+                sys.exit("target id: lowercase letters, digits and '-', 2..31 characters; it is a name, never an address")
+            if not 1 <= len(a.label) <= 60 or "://" in a.label or "/" in a.label:
+                sys.exit("label: 1..60 characters, a name (no URL, no address)")
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            if c.execute(text("SELECT 1 FROM edges WHERE id = :e AND tenant_id = :t"), {"e": a.edge, "t": a.tenant_id}).first() is None:
+                sys.exit("unknown edge for this tenant")
+            c.execute(text("INSERT INTO probe_targets (tenant_id, id, label, target_kind, region, enabled, edge_id) VALUES (:t,:i,:l,:k,:r,:e,:g) "
+                           "ON CONFLICT (tenant_id, id) DO UPDATE SET label = EXCLUDED.label, target_kind = EXCLUDED.target_kind, "
+                           "region = EXCLUDED.region, enabled = EXCLUDED.enabled, edge_id = EXCLUDED.edge_id"),
+                      {"t": a.tenant_id, "i": a.target_id, "l": a.label, "k": a.kind, "r": a.region, "e": a.state == "on", "g": a.edge})
+            print(f"ping target {a.target_id}: {a.kind}, {'enabled' if a.state == 'on' else 'disabled'} (the Edge must list the same id with its own address)")
         elif a.cmd == "speed-acceptance-set":
             import hashlib
             from datetime import UTC, date, datetime, timedelta

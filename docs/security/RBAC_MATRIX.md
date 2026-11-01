@@ -28,6 +28,7 @@
 | `erp:test` | R2 | não | não | Testar a conexão com o ERP (autentica e nada mais; somente leitura) |
 | `diagnostics:run` | R0 | não | sim | Rodar diagnósticos (somente leitura) |
 | `diagnostics:speed_run` | R2 | sim | sim | Pedir um teste de banda (TR-143) da ONT (gera tráfego no aparelho; só bancada, com autorização prévia) |
+| `diagnostics:ping_run` | R2 | sim | sim | Pedir um teste de ping (TR-143) da ONT pela WAN de serviço (escreve o diagnóstico no aparelho; só bancada, com autorização) |
 | `diagnostics:quality_read` | R0 | não | sim | Ver a leitura de qualidade do serviço da ONT e o histórico (somente leitura) |
 | `diagnostics:quality_run` | R0 | não | sim | Pedir a leitura de qualidade RÁPIDA da ONT (usa só dados já coletados; não toca o aparelho) |
 | `diagnostics:quality_run_full` | R1 | não | sim | Pedir a leitura de qualidade COMPLETA (referencia o teste de banda; não inicia tráfego) |
@@ -66,6 +67,7 @@
 | `erp:test` | ✔ |  |  |  |  |  |  |  |  |
 | `diagnostics:run` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `diagnostics:speed_run` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
+| `diagnostics:ping_run` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `diagnostics:quality_read` | ✔ | ✔ | ✔ | ✔ |  |  |  |  |  |
 | `diagnostics:quality_run` | ✔ | ✔ | ✔ | ✔ |  |  |  |  |  |
 | `diagnostics:quality_run_full` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
@@ -117,6 +119,10 @@
 | POST | `/v1/cpes/{cpe_id}/ont-config/changes/{change_id}/submit` | `ont_config:request` |
 | GET | `/v1/cpes/{cpe_id}/ont-config/configuration` | `inventory:read` |
 | GET | `/v1/cpes/{cpe_id}/ont-config/form-schema` | `inventory:read` |
+| GET | `/v1/cpes/{cpe_id}/ping/capabilities` | `inventory:read` |
+| GET | `/v1/cpes/{cpe_id}/ping/runs` | `inventory:read` |
+| POST | `/v1/cpes/{cpe_id}/ping/runs` | `diagnostics:ping_run` |
+| GET | `/v1/cpes/{cpe_id}/ping/runs/{run_id}` | `inventory:read` |
 | GET | `/v1/cpes/{cpe_id}/quality/capabilities` | `diagnostics:quality_read` |
 | GET | `/v1/cpes/{cpe_id}/quality/runs` | `diagnostics:quality_read` |
 | POST | `/v1/cpes/{cpe_id}/quality/runs` | `diagnostics:quality_run` |
