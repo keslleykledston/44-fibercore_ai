@@ -254,3 +254,7 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 - Aceita a proposta do Lovable; implementados os itens 1 a 4 (régua compacta na lista, valor sobre o marcador, fonte e idade na Qualidade, frase de cautela). Item 5 (selo "Parcial") não feito: a tela já explicava o motivo. Rótulo "Confirmado/Hipótese" NÃO adotado (a plataforma não julga o sinal). Codex approve na r7. Mesclado em `main` localmente; NÃO enviado ao remoto e NÃO implantado na LAB.
 - Pendente: push + deploy do web; medir o contraste (WCAG) das cores da régua; as 5 falhas de e2e antigas (`docs/KNOWN_ISSUES.md`).
 
+## Atualização 2026-11-01 (base do e2e e contraste)
+- E2E 100 % verde (17 + 32 + 48). Contraste da régua medido e corrigido (`--ok` claro, `BAND_TINT`); guarda em `e2e/optics-contrast.spec.ts`. Capturas da ajuda NÃO regeneradas.
+- `scripts/e2e.sh` continua com as portas da LAB (18420/18490): rodar com `FIBERCORE_API_PORT=18421 WEB_PORT=28490`. O `--no-screenshots` não inclui o projeto `inspetor`.
+

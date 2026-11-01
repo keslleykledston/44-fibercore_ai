@@ -1,9 +1,9 @@
-import { ariaLabel, AXIS_MAX, AXIS_MIN, fmtDbm, LEVEL_TEXT, LIMITS, opticalView, position, REFERENCE_NOTICE } from "@/lib/optics";
+import { ariaLabel, AXIS_MAX, AXIS_MIN, BAND_TINT, fmtDbm, LEVEL_TEXT, LIMITS, opticalView, position, REFERENCE_NOTICE } from "@/lib/optics";
 
 const pct = (v: number) => `${position(v).toFixed(2)}%`;
-const tint = (tone: string, n: number) => `color-mix(in srgb, var(--${tone}) ${n}%, var(--surface))`;
+const tint = (tone: string, n: number) => `color-mix(in srgb, var(--${tone}) ${n}%, var(--surface))`;   // n = BAND_TINT
 // gradiente suave perigo → aviso → ok → aviso → perigo, com as transições centradas nos limites
-const GRADIENT = `linear-gradient(to right, ${tint("danger", 38)} 0%, ${tint("danger", 38)} calc(${pct(LIMITS.weak)} - 2%), ${tint("warn", 38)} calc(${pct(LIMITS.weak)} + 2%), ${tint("warn", 38)} calc(${pct(LIMITS.lowMargin)} - 2%), ${tint("ok", 38)} calc(${pct(LIMITS.lowMargin)} + 2%), ${tint("ok", 38)} calc(${pct(LIMITS.strong)} - 1%), ${tint("warn", 38)} calc(${pct(LIMITS.strong)} + 1%), ${tint("warn", 38)} calc(${pct(LIMITS.overload)} - 1%), ${tint("danger", 38)} calc(${pct(LIMITS.overload)} + 1%), ${tint("danger", 38)} 100%)`;
+const GRADIENT = `linear-gradient(to right, ${tint("danger", BAND_TINT)} 0%, ${tint("danger", BAND_TINT)} calc(${pct(LIMITS.weak)} - 2%), ${tint("warn", BAND_TINT)} calc(${pct(LIMITS.weak)} + 2%), ${tint("warn", BAND_TINT)} calc(${pct(LIMITS.lowMargin)} - 2%), ${tint("ok", BAND_TINT)} calc(${pct(LIMITS.lowMargin)} + 2%), ${tint("ok", BAND_TINT)} calc(${pct(LIMITS.strong)} - 1%), ${tint("warn", BAND_TINT)} calc(${pct(LIMITS.strong)} + 1%), ${tint("warn", BAND_TINT)} calc(${pct(LIMITS.overload)} - 1%), ${tint("danger", BAND_TINT)} calc(${pct(LIMITS.overload)} + 1%), ${tint("danger", BAND_TINT)} 100%)`;
 const TICKS = [LIMITS.weak, LIMITS.lowMargin, LIMITS.strong, LIMITS.overload] as const;
 
 export type RulerSize = "lg" | "md" | "sm";
@@ -24,7 +24,7 @@ export function OpticalRuler({ rx, freshness, agoText = null, size = "md", dense
     return (
       <span className="inline-flex items-center gap-2 whitespace-nowrap text-xs" data-testid="optical-ruler" data-size="sm" data-dense={dense ? "true" : undefined} data-state={v.kind === "read" ? v.level : v.kind} role="img" aria-label={dense ? `${aria}. ${REFERENCE_NOTICE}` : aria} title={dense ? `${v.kind === "read" ? info!.label : label}. ${REFERENCE_NOTICE}` : undefined}>
         <span aria-hidden className={`relative inline-block h-2 ${dense ? "w-10" : "w-16"} shrink-0 rounded-full border border-line`} style={{ background: GRADIENT }}>
-          {v.kind !== "none" && <span className="absolute top-1/2 h-3 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border-2" style={{ left: pct(v.rx), borderColor: toneVar, background: v.kind === "read" ? toneVar : "transparent" }} />}
+          {v.kind !== "none" && <span className="absolute top-1/2 h-3 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border-2 shadow-[0_0_0_2px_var(--surface)]" style={{ left: pct(v.rx), borderColor: toneVar, background: v.kind === "read" ? toneVar : "transparent" }} />}
         </span>
         <span aria-hidden style={{ color: v.kind === "read" ? toneVar : undefined }} className={v.kind === "read" ? "font-medium" : "text-muted"}>{dense ? shortLabel : label}</span>
       </span>

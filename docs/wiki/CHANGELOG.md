@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — base do e2e verde e contraste da régua (2026-11-01)
+- E2E: as 5 falhas que já existiam na base foram resolvidas. Causas reais: (1) `/dispositivos/capacidades` tinha uma região rolável sem foco de teclado (axe `scrollable-region-focusable`, claro e escuro): agora `tabIndex=0`, `role="region"` e nome acessível; (2) o teste de refresh de sessão procurava um título "Rede" que a UX nova não tem (o `h1` é o nome da OLT): a sessão já renovava, o teste foi corrigido; (3) três testes do painel/abas assumiam que a `DEMOA0001` não tem roteador vinculado, mas o `app.spec` (projeto `funcional`, que roda antes) a vincula: passaram a usar a `DEMOA0003`. Bateria completa: 17 puros, 32 funcionais, 48 do inspetor, 0 falhas.
+- Contraste (WCAG) medido nos dois temas: no tema claro o `--ok` (#1B7F4B) ficava em 4,36–4,43:1 como texto sobre linha selecionada/hover (precisa 4,5:1) e o marcador da faixa "bom" em 2,92:1 (precisa 3:1). Agora `--ok` claro = #197645 (≥ 4,9:1 em todas as superfícies, inclusive os fundos suaves) e as faixas da régua usam 30 % de intensidade (`BAND_TINT`; marcador ≥ 3,3:1). Tema escuro já passava. Guarda em `e2e/optics-contrast.spec.ts` (lê os tokens de `globals.css`; com o verde antigo o teste falha).
+- O marcador compacto da régua ganhou um anel da cor da superfície (o contraste dele não depende da faixa, inclusive nas transições do gradiente). O guarda de contraste acha os temas pelo seletor, exige todos os tokens, mede texto (4,5:1), fundo/borda (3:1) e marcador, e um teste no Chromium prova que o `color-mix(in srgb)` real é a composição usada. Codex: 3 rodadas, approve na r3.
+- Não regenerei as capturas da ajuda (`docs/help/assets`): as cores mudaram um pouco.
+
 ## Unreleased — UX do Diagnóstico a partir do protótipo do Lovable (2026-11-01)
 - Web: a lista da Rede (`OnuWorkspace`) mostra a régua óptica compacta (`dense`: símbolo + só a faixa, rótulo completo no `title`/`aria-label`) ao lado do número do Rx; a coluna "Dado" pode quebrar linha para a lista caber ao lado do painel.
 - Web: na régua grande e na média o valor numérico sobe junto com o marcador (encostado na borda nas pontas do eixo); o rótulo da faixa fica acima.

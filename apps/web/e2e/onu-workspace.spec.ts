@@ -87,12 +87,13 @@ test("gestão: filtros por estado e por serial, contagem anunciada e painel mant
   await expect(page.getByText("Nenhuma ONU com este filtro.")).toBeVisible();
 });
 
+// Usa DEMOA0003 como a ONU SEM roteador: DEMOA0001 pode ganhar vínculo confirmado no app.spec (projeto `funcional`, que roda antes).
 test("gestão: abas Resumo, Aparelho (só com roteador vinculado) e Histórico; trocar a ONU volta ao Resumo", async ({ page, request }) => {
   await confirmDemoA2(request);
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
   await page.goto("/rede");
-  await row(page, "DEMOA0001").click();
+  await row(page, "DEMOA0003").click();
   const panel = page.getByTestId("onu-quick");
   await expect(panel.getByRole("tab", { name: "Resumo" })).toHaveAttribute("aria-selected", "true");
   await expect(panel.getByRole("tab", { name: "Aparelho" })).toHaveCount(0);   // sem roteador vinculado: a aba não existe (nada inventado)
@@ -210,6 +211,7 @@ test("gestão: recorte inválido na URL é dito (nunca cai em outra OLT em silê
   await expect(page.getByTestId("onu-quick-empty")).toBeVisible();
 });
 
+// Usa DEMOA0003: DEMOA0001 ganha vínculo ONU↔CPE confirmado no app.spec (projeto `funcional`, que roda antes) e ganharia as abas Aparelho/Teste de banda/Qualidade e a linha do roteador.
 test("gestão: abas e filtros seguem o padrão de teclado (setas, Home/End, foco móvel)", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
@@ -227,7 +229,7 @@ test("gestão: abas e filtros seguem o padrão de teclado (setas, Home/End, foco
   await page.keyboard.press("Home");
   await expect(todas).toBeFocused();
   // abas do painel
-  await row(page, "DEMOA0001").click();
+  await row(page, "DEMOA0003").click();
   const panel = page.getByTestId("onu-quick");
   const resumo = panel.getByRole("tab", { name: "Resumo" });
   await expect(panel.getByRole("tab", { name: "Histórico" })).toHaveAttribute("tabindex", "-1");
@@ -272,6 +274,7 @@ test("lista da Rede: cada linha tem a régua compacta E o número do Rx; sem lei
   await expect(page.getByTestId("onu-rx-notice")).toContainText("Não homologada para esta OLT/óptica");   // a ressalva das faixas está na lista
   await expect(a1.getByTestId("optical-ruler")).toHaveAttribute("aria-label", /Não homologada para esta OLT\/óptica/);
   await expect(a1.getByTestId("optical-ruler")).toHaveAttribute("title", /Não homologada para esta OLT\/óptica/);
+  await expect(a1.locator('[data-testid="optical-ruler"] .rounded-sm')).toHaveCSS("box-shadow", /rgb/);        // o marcador tem anel da cor da superfície: o contraste dele não depende da faixa por baixo
   const los = rows.filter({ hasText: "DEMOC0000" });
   await expect(los.getByTestId("onu-rx")).toHaveText("—");
   await expect(los.getByTestId("optical-ruler")).toHaveAttribute("data-state", "none");
