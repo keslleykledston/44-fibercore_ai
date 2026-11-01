@@ -21,12 +21,13 @@ const POLL_MS = 4000;
 type Pending = { runId: string | null; key: string; target: string };   // o destino fica junto da chave: repetir o pedido é repetir a MESMA intenção
 const memo = new Map<string, Pending | null>();
 const KEY = (cpe: string) => `fc-ping-pending:${cpe}`;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function readPending(cpe: string): Pending | null {
   if (memo.has(cpe)) return memo.get(cpe) ?? null;
   try {
     const raw = window.sessionStorage.getItem(KEY(cpe));
     const o = raw ? (JSON.parse(raw) as Pending) : null;
-    const ok = !!o && (o.runId === null || typeof o.runId === "string") && typeof o.key === "string" && /^[A-Za-z0-9_.:-]{8,128}$/.test(o.key) && typeof o.target === "string" && /^[a-z0-9][a-z0-9-]{1,30}$/.test(o.target);
+    const ok = !!o && (o.runId === null || (typeof o.runId === "string" && UUID.test(o.runId))) && typeof o.key === "string" && /^[A-Za-z0-9_.:-]{8,128}$/.test(o.key) && typeof o.target === "string" && /^[a-z0-9][a-z0-9-]{1,30}$/.test(o.target);
     memo.set(cpe, ok ? o : null);
   } catch { memo.set(cpe, null); }
   return memo.get(cpe) ?? null;

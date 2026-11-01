@@ -334,3 +334,44 @@ test("teste de banda (cenário): fechar o painel ou trocar de aba não destrava 
   await expect(page.getByTestId("speed-start-upload")).toBeDisabled();
   expect(posts).toBe(1);
 });
+
+test("teste de banda (cenário): Confirmar pedido repete a MESMA chave, a MESMA intenção e o MESMO group_id de um teste agrupado", async ({ page, request }) => {
+  await confirmDemoA2(request);
+  const upload = RUN({ id: "44444444-4444-4444-8444-444444444444", direction: "upload", status: "completed", mbps: 40, reliable: true, bytes: 10_000_000, duration_ms: 8000 });
+  const sent: { key: string; body: string; group_id?: string }[] = [];
+  await page.route("**/bff/cpes/*/speed", (r) => r.fulfill({ json: { caps: CAPS(), runs: [upload] } }));
+  await page.route("**/bff/cpes/*/speed/runs", (r) => {
+    const b = r.request().postDataJSON() as { key: string; group_id?: string };
+    sent.push({ key: b.key, body: JSON.stringify(b), group_id: b.group_id });
+    return sent.length === 1 ? r.fulfill({ status: 502, json: { error: "failed" } }) : r.fulfill({ status: 200, json: { ok: true, outcome: "existing", run_id: RUN({}).id } });
+  });
+  await openTab(page);
+  await page.getByTestId("speed-start-download").click();                                                               // o upload anterior (10mb, mesmo destino) vira o mesmo grupo
+  await expect(page.getByTestId("speed-pending-confirm")).toBeVisible();
+  await page.getByTestId("speed-pending-confirm").click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[0]!.group_id).toBe(upload.group_id);
+  expect(sent[1]!.key).toBe(sent[0]!.key);
+  expect(sent[1]!.body).toBe(sent[0]!.body);                                                                            // inclui o group_id
+});
+
+test("teste de banda (cenário): um marcador guardado com runId malformado é descartado, nunca interpretado", async ({ page, request }) => {
+  await confirmDemoA2(request);
+  await page.route("**/bff/cpes/*/speed", (r) => r.fulfill({ json: { caps: CAPS(), runs: [] } }));
+  await page.route("**/bff/cpes/*/speed/runs", (r) => r.fulfill({ status: 201, json: { ok: true, outcome: "submitted", run_id: RUN({}).id } }));
+  await openTab(page);
+  await page.getByTestId("speed-start-download").click();
+  await expect(page.getByTestId("speed-pending")).toBeVisible();
+  // a página viva regrava o marcador do estado em memória a cada atualização: a adulteração entra no INÍCIO do documento seguinte, depois de todas as escritas da página antiga
+  await page.addInitScript(() => {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i)!;
+      if (k.startsWith("fc-speed-pending:")) { const o = JSON.parse(sessionStorage.getItem(k)!); o.runId = "não-é-uuid"; sessionStorage.setItem(k, JSON.stringify(o)); }
+    }
+  });
+  await page.reload();
+  await row(page, "DEMOA0002").click();
+  await page.getByRole("tab", { name: "Teste de banda" }).click();
+  await expect(page.getByTestId("speed-pending")).toHaveCount(0);                                                       // formato inválido: o marcador não vale
+  await expect(page.getByTestId("speed-start-download")).toBeEnabled();
+});
