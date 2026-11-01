@@ -18,7 +18,7 @@ Fonte: inventário da plataforma (coletas observadas às 03:06:01, 03:26:01 e 03
 - **Coleta iniciada às 03:06:01 UTC:** a mesma ONU constava `online` (RX -14,66 dBm).
 - **Coleta iniciada às 03:26:01 UTC:** a ONU que o vínculo confirmado por uma pessoa associa à ZTE (PON 0/0/14) constava `offline`.
 - **Coleta iniciada às 03:46:01 UTC:** a mesma ONU constava `online` (RX -14,73 dBm; antes -14,66 dBm).
-- **Contagem:** desde as 03:00 UTC houve 3 transições de estado na OLT inteira: duas desta ONU (as 03:26 e 03:46) e uma de OUTRA ONU, de outra PON, na coleta das 03:46:01 UTC.
+- **Contagem (pelos estados registrados):** desde as 03:00 UTC foram registradas 3 mudanças de estado na OLT inteira: duas desta ONU (observadas entre as coletas de 03:06 e 03:26 e entre as de 03:26 e 03:46) e uma de OUTRA ONU, de outra PON, observada entre as coletas de 03:26 e 03:46.
 - **O que isto diz:** entre as coletas de 03:06 e 03:26 o estado registrado mudou de `online` para `offline`, e entre as de 03:26 e 03:46, de `offline` para `online`. Nada mais.
 - **O que isto NÃO diz:** não atribui a transição ao reinício. O despacho foi às 03:26:26 UTC, 25 s DEPOIS do início da coleta que registrou `offline`; a leitura pode ter ocorrido antes ou depois do despacho (intervalo indeterminado), e os relógios da OLT, do Edge e do ACS não foram correlacionados. O "último down" da OLT (`olt_down_at`) não veio preenchido. A coleta também não é evidência independente de qual equipamento do ACS corresponde à ONT 11: ela só observa a ONU previamente associada por decisão humana.
 
