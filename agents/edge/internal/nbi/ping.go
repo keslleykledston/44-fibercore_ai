@@ -210,11 +210,12 @@ func finishedPing(l map[string]speedLeaf, since time.Time) *PingCounters {
 	}
 }
 
-// freshValue is a leaf's value only when the leaf itself was read after the request: a leaf the CPE did not return keeps its old value AND its old timestamp in
-// the ACS, and an old counter is never presented as the result of this test.
+// freshValue is a leaf's value only when the leaf itself was read STRICTLY after the request: a leaf the CPE did not return keeps its old value AND its old
+// timestamp in the ACS, and an old counter is never presented as the result of this test. Unlike the state leaf (which tolerates the clock difference between
+// the ACS and this host), a counter fails closed: a leaf left out makes the result inconclusive, a stale one would make it wrong.
 func freshValue(l map[string]speedLeaf, name string, since time.Time) any {
 	leaf, ok := l[name]
-	if !ok || leaf.At.Before(since.Add(-taskClockSkew)) {
+	if !ok || !leaf.At.After(since) {
 		return nil
 	}
 	return leaf.Value

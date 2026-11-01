@@ -327,3 +327,20 @@ func TestPingACounterTheCPEDidNotReturnAfterTheRequestIsLeftOutNeverReusedFromAn
 		t.Fatalf("only leaves read after the request may be reported: %+v", cn)
 	}
 }
+
+func TestACounterReadBeforeTheRequestIsNeverReportedEvenInsideTheClockTolerance(t *testing.T) {
+	since := time.Now()
+	inside := since.Add(-taskClockSkew / 2) // older than the request, but within the tolerance the STATE leaf enjoys
+	l := map[string]speedLeaf{speedStateLeaf: {Value: speedCompleted, At: inside}, "SuccessCount": {Value: 5.0, At: inside}, "FailureCount": {Value: 0.0, At: since.Add(time.Second)},
+		"AverageResponseTime": {Value: 12.0, At: since}, "MinimumResponseTime": {Value: 9.0, At: since.Add(time.Second)}, "MaximumResponseTime": {Value: 21.0, At: since.Add(time.Second)}}
+	cn := finishedPing(l, since)
+	if cn == nil || cn.Success != nil || cn.AvgMS != nil || cn.Failure == nil || cn.MinMS == nil || cn.MaxMS == nil {
+		t.Fatalf("ping: a counter stamped at or before the request must be left out: %+v", cn)
+	}
+	sl := map[string]speedLeaf{speedStateLeaf: {Value: speedCompleted, At: inside}, "BOMTime": {Value: "2026-10-31T12:00:00Z", At: inside}, "EOMTime": {Value: "2026-10-31T12:00:08Z", At: since.Add(time.Second)},
+		"TestBytesReceived": {Value: 10_000_000.0, At: since}, "TotalBytesReceived": {Value: 10_001_234.0, At: since.Add(time.Second)}}
+	sc := finishedCounters(sl, since)
+	if sc == nil || sc.BOM != "" || sc.TestBytesReceived != nil || sc.EOM == "" || sc.TotalBytesReceived == nil {
+		t.Fatalf("speed: the same rule: %+v", sc)
+	}
+}
