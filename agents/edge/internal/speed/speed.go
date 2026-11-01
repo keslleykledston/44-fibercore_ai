@@ -113,23 +113,51 @@ func inAny(a netip.Addr, ps []netip.Prefix) bool {
 	return false
 }
 
+// ParseCoreCIDRs validates a `core_cidrs` list (canonical prefixes, never overlapping a range that is never a valid destination). `who` prefixes errors.
+func ParseCoreCIDRs(list []string, who string) ([]netip.Prefix, error) {
+	var core []netip.Prefix
+	for _, s := range list {
+		p, err := netip.ParsePrefix(s)
+		if err != nil || p != p.Masked() || (p.Addr().Is4() && p.Bits() < 8) || (p.Addr().Is6() && p.Bits() < 32) {
+			return nil, fmt.Errorf("%s: core_cidrs entry %q is not a canonical prefix (IPv4 at least /8, IPv6 at least /32)", who, s)
+		}
+		for _, d := range denyAlways {
+			if p.Overlaps(d) {
+				return nil, fmt.Errorf("%s: core_cidrs entry %q overlaps a range that is never a valid destination", who, s)
+			}
+		}
+		core = append(core, p)
+	}
+	return core, nil
+}
+
+// ParseDestination parses an IP literal (no name to resolve, so no rebinding) and applies the rules every test destination obeys, whatever the test: never
+// loopback, link-local (this includes the cloud metadata addresses), multicast or reserved; an INTERNET destination never private, CGNAT, documentation or
+// unique-local; a CORE destination inside `core`. `who` prefixes errors.
+func ParseDestination(who, id, kind, host string, core []netip.Prefix) (netip.Addr, error) {
+	ip, err := netip.ParseAddr(host)
+	if err != nil || ip.Zone() != "" || ip.Is4In6() {
+		return netip.Addr{}, fmt.Errorf("%s: endpoint %q host must be an IP literal", who, id)
+	}
+	switch {
+	case inAny(ip, denyAlways):
+		return netip.Addr{}, fmt.Errorf("%s: endpoint %q address is never a valid destination (loopback, link-local, metadata, multicast or reserved)", who, id)
+	case kind == KindInternet && inAny(ip, notInternet):
+		return netip.Addr{}, fmt.Errorf("%s: endpoint %q is INTERNET but the address is private, CGNAT, documentation or unique-local", who, id)
+	case kind == KindCore && !inAny(ip, core):
+		return netip.Addr{}, fmt.Errorf("%s: endpoint %q is CORE but the address is outside core_cidrs", who, id)
+	}
+	return ip, nil
+}
+
 // New validates the section. Any problem is an error: the module must not start with a partly valid configuration.
 func New(c Config) (*Catalog, error) {
 	if len(c.Endpoints) < 1 || len(c.Endpoints) > maxEndpoints {
 		return nil, fmt.Errorf("speed: endpoints must list 1 to %d entries", maxEndpoints)
 	}
-	var core []netip.Prefix
-	for _, s := range c.CoreCIDRs {
-		p, err := netip.ParsePrefix(s)
-		if err != nil || p != p.Masked() || (p.Addr().Is4() && p.Bits() < 8) || (p.Addr().Is6() && p.Bits() < 32) {
-			return nil, fmt.Errorf("speed: core_cidrs entry %q is not a canonical prefix (IPv4 at least /8, IPv6 at least /32)", s)
-		}
-		for _, d := range denyAlways {
-			if p.Overlaps(d) {
-				return nil, fmt.Errorf("speed: core_cidrs entry %q overlaps a range that is never a valid destination", s)
-			}
-		}
-		core = append(core, p)
+	core, err := ParseCoreCIDRs(c.CoreCIDRs, "speed")
+	if err != nil {
+		return nil, err
 	}
 	cat := &Catalog{byID: map[string]Endpoint{}}
 	for _, e := range c.Endpoints {
@@ -142,20 +170,12 @@ func New(c Config) (*Catalog, error) {
 		if e.Kind != KindCore && e.Kind != KindInternet {
 			return nil, fmt.Errorf("speed: endpoint %q kind must be CORE or INTERNET", e.ID)
 		}
-		ip, err := netip.ParseAddr(e.Host)
-		if err != nil || ip.Zone() != "" || ip.Is4In6() {
-			return nil, fmt.Errorf("speed: endpoint %q host must be an IP literal", e.ID)
-		}
 		if e.Port < 1 || e.Port > 65535 {
 			return nil, fmt.Errorf("speed: endpoint %q port out of range", e.ID)
 		}
-		switch {
-		case inAny(ip, denyAlways):
-			return nil, fmt.Errorf("speed: endpoint %q address is never a valid destination (loopback, link-local, metadata, multicast or reserved)", e.ID)
-		case e.Kind == KindInternet && inAny(ip, notInternet):
-			return nil, fmt.Errorf("speed: endpoint %q is INTERNET but the address is private, CGNAT, documentation or unique-local", e.ID)
-		case e.Kind == KindCore && !inAny(ip, core):
-			return nil, fmt.Errorf("speed: endpoint %q is CORE but the address is outside core_cidrs", e.ID)
+		ip, err := ParseDestination("speed", e.ID, e.Kind, e.Host, core)
+		if err != nil {
+			return nil, err
 		}
 		cat.byID[e.ID] = Endpoint{ID: e.ID, Kind: e.Kind, Addr: netip.AddrPortFrom(ip, uint16(e.Port))}
 	}

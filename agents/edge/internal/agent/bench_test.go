@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -70,6 +71,10 @@ func (r *recACS) RunBenchSpeed(_ context.Context, d nbi.BenchDevice, req nbi.Spe
 	r.speeds = append(r.speeds, req)
 	n := int64(10_000_000)
 	return nbi.SpeedOutcome{Attempted: true, Counters: &nbi.SpeedCounters{State: "Completed", BOM: "2026-10-30T12:00:01Z", EOM: "2026-10-30T12:00:09Z", TestBytesReceived: &n}}, nil
+}
+
+func (r *recACS) RunBenchPing(context.Context, nbi.BenchDevice, nbi.PingRequest, time.Time, time.Duration, time.Duration, func() time.Time) (nbi.PingOutcome, error) {
+	return nbi.PingOutcome{}, errors.New("ping is not exercised by this fake")
 }
 
 func (r *recACS) SetBenchSSID(context.Context, nbi.BenchDevice, string, func(string) bool, time.Time, string, func() time.Time) (nbi.SSIDOutcome, error) {

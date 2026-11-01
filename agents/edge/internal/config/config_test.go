@@ -626,3 +626,39 @@ func TestSpeedSectionValidation(t *testing.T) {
 		t.Errorf("a bench-only configuration must still load: %v", err)
 	}
 }
+
+const okPing = `,"ping":{"enabled":true,"core_cidrs":["10.20.0.0/16"],"targets":[{"id":"core-lab","kind":"CORE","host":"10.20.5.9"},{"id":"dns-publico","kind":"INTERNET","host":"9.9.9.9"}]}`
+
+func TestPingSectionValidation(t *testing.T) {
+	ops := `"ping_test"`
+	if _, err := Load(write(t, 0o600, good(speedCfg(okPing, ops, ``, okWAN))), "v"); err != nil {
+		t.Fatalf("a complete ping configuration must load (no allowlist entry is needed: the CPE sends the ICMP, not the Edge): %v", err)
+	}
+	for name, body := range map[string]string{
+		"no wan interface":          speedCfg(okPing, ops, ``, ``),
+		"bad wan interface":         speedCfg(okPing, ops, ``, `,"speed_wan_interface":"Device.IP.Interface.1;x"`),
+		"ping op not allowed":       speedCfg(okPing, `"reboot_cpe"`, ``, okWAN),
+		"core target outside cidrs": speedCfg(`,"ping":{"enabled":true,"core_cidrs":["10.30.0.0/16"],"targets":[{"id":"core-lab","kind":"CORE","host":"10.20.5.9"}]}`, ops, ``, okWAN),
+		"loopback target":           speedCfg(`,"ping":{"enabled":true,"core_cidrs":["10.20.0.0/16"],"targets":[{"id":"x-loop","kind":"INTERNET","host":"127.0.0.1"}]}`, ops, ``, okWAN),
+		"private as internet":       speedCfg(`,"ping":{"enabled":true,"core_cidrs":["10.20.0.0/16"],"targets":[{"id":"x-priv","kind":"INTERNET","host":"192.168.1.1"}]}`, ops, ``, okWAN),
+		"hostname target":           speedCfg(`,"ping":{"enabled":true,"core_cidrs":["10.20.0.0/16"],"targets":[{"id":"x-name","kind":"INTERNET","host":"dns.example.com"}]}`, ops, ``, okWAN),
+		"no targets":                speedCfg(`,"ping":{"enabled":true,"core_cidrs":["10.20.0.0/16"],"targets":[]}`, ops, ``, okWAN),
+	} {
+		if _, err := Load(write(t, 0o600, good(body)), "v"); err == nil {
+			t.Errorf("%s: must be rejected", name)
+		}
+	}
+	noBench := `,"nbi_url":"http://10.0.0.5:7557","jobs_enabled":true,"job_public_key":"AAAA","allowed_operations":[` + ops + `],"allowlist":["10.0.0.5:7557"]` + okPing
+	if _, err := Load(write(t, 0o600, good(noBench)), "v"); err == nil {
+		t.Error("ping without the bench must be rejected")
+	}
+	off := speedCfg(`,"ping":{"enabled":false}`, ops, ``, okWAN)
+	if _, err := Load(write(t, 0o600, good(off)), "v"); err == nil {
+		t.Error("ping_test without an enabled ping section must be rejected")
+	}
+	// the throughput test and the ping test coexist and share the one service WAN written for the device
+	both := speedCfg(okSpeed+okPing, `"speed_test_download","ping_test"`, `,"10.20.5.9:8080"`, okWAN)
+	if _, err := Load(write(t, 0o600, good(both)), "v"); err != nil {
+		t.Errorf("speed and ping together must load: %v", err)
+	}
+}

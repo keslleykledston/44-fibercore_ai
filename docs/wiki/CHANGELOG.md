@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — ping_test no Edge (2026-11-01)
+- Edge: `ping_test` (TR-143 IPPing) na bancada, ADR-0030 emenda (linha Q1): catálogo local de destinos (`ping.targets`, IP literal, mesmas regras do speed), forma fixa (5 repetições, 1000 ms), pela WAN de serviço verificada conectada antes da única escrita, relatório fechado (`success`, `failure`, `avg_ms`, `min_ms`, `max_ms`). Pacote `internal/ping`, `nbi/ping.go`, despacho no `bench`, verificação de envelope em `jobs`. `speed.ParseDestination`/`ParseCoreCIDRs` exportados e `postSetValues`/`diagCacheLeaves`/`checkServiceWAN` extraídos do speed sem mudar o comportamento. Testes: `go test ./...` verde.
+- Medido nos dois aparelhos de bancada: ambos expõem `IPPingDiagnostics`; NENHUM expõe `NSLookupDiagnostics`; sem jitter (só mín/méd/máx). Ver `docs/addenda/v2.2-qos/EDGE_PING_CONFIG.md`.
+
 ## Unreleased — Speed na WAN de serviço, com fidelidade (2026-11-01)
 - Edge: antes da única escrita do teste de banda, lê o estado da WAN de serviço configurada (`ConnectionStatus`/`Status`) e recusa com `wan_not_connected` se não estiver conectada, ausente ou ilegível. Testes `go test ./internal/nbi ./internal/bench`.
 - Edge: horário de dispositivo com relógio sem sincronismo (1970) passa a valer (só a diferença BOM→EOM é usada); o ADR-0038 só descarta o ano 1.

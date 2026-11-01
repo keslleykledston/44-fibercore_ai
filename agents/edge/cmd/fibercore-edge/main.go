@@ -24,6 +24,7 @@ import (
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/nbi"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/olt"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/oltquery"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/ping"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/queue"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/singleton"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/speed"
@@ -214,6 +215,13 @@ func main() {
 			os.Exit(2)
 		}
 	}
+	var pingCat *ping.Catalog
+	if cfg.Ping != nil && cfg.Ping.Enabled { // validated by config.Validate: a section that does not pass never gets here
+		if pingCat, err = ping.New(*cfg.Ping); err != nil {
+			log.Error("ping section", "err", err)
+			os.Exit(2)
+		}
+	}
 	if cfg.JobsEnabled {
 		pub, err := jobs.ParsePublicKey(cfg.JobPublicKey)
 		if err != nil {
@@ -244,6 +252,9 @@ func main() {
 		verifier = &jobs.Verifier{Pub: pub, EdgeID: cfg.EdgeID, TenantID: cfg.TenantID, Allowed: allowed, BenchEnabled: benchOn, Nonces: q, Now: time.Now}
 		if speedCat != nil {
 			verifier.SpeedEnabled, verifier.SpeedCheck = true, speedCat.Check
+		}
+		if pingCat != nil {
+			verifier.PingEnabled, verifier.PingCheck = true, pingCat.Check
 		}
 		if cfg.OLTQueryEnabled {
 			if oltCol == nil {
@@ -311,6 +322,7 @@ func main() {
 				Guard: &nbi.RefreshGuard{Path: config.BenchGuardFile(cfg.QueuePath), MinPerDevice: minGap, MaxPerHour: perHour},
 			}
 			benchRunner.Speed, benchRunner.WANInterface = speedCat, cfg.Bench.SpeedWANInterfaces()
+			benchRunner.Ping = pingCat
 			if bo := cfg.Bench.OLT; bo != nil {
 				if oltCol == nil {
 					log.Error("bench.olt needs the olts collector")
@@ -364,6 +376,9 @@ func main() {
 	ag := &agent.Agent{
 		EdgeID: cfg.EdgeID, TenantID: cfg.TenantID, Version: cfg.Version, GW: gw, Q: q, Collectors: collectors,
 		Jobs: verifier, Queries: queryStore, OLTLease: oltLease, Refresher: refresher, Bench: benchRunner, JobPollEvery: 15 * time.Second, HeartbeatEvery: cfg.HeartbeatEvery(), CollectEvery: cfg.CollectEvery(), Log: log,
+	}
+	if pingCat != nil {
+		log.Warn("ping tests ENABLED for the bench devices", "destinations", len(pingCat.All()))
 	}
 	if speedCat != nil {
 		go reportSpeedHealth(ctx, speedCat, al.DialContext, ag, log)
