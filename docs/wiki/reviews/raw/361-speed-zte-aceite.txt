@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19580-b7e8-7990-99cb-46f5c2716fc2).
+[codex] Turn started (01a19580-b822-7001-9252-2081014e49d9).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e as referências locais a ADR-0030 item 7 para testar se o ...
+[codex] Running command: /bin/bash -lc 'git diff --unified=60 main...HEAD -- docs/wiki/bench/H-speed_test_download-zte...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=60 main...HEAD -- docs/wiki/bench/H-speed_test_download-zte... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0030-homologacao-em-bancada-escopo-e-gates.md | sed -...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0030-homologacao-em-bancada-escopo-e-gates.md | sed -... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não promover ainda: o texto registra um aceite para u...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não promover ainda: o texto registra um aceite para um resultado, mas a promoção proposta a `observed` contradiz a porta do ADR-0030 item 7 e a evidência não contém todos os campos obrigatórios.
+
+Findings:
+- [high] Aceite não substitui os campos obrigatórios de evidência do ADR-0030 item 7 (docs/wiki/bench/H-speed_test_download-zte-f670l-2026-11-01.md:37-38)
+  O ADR-0030 item 7 exige, para inserir `observed`, arquivo com identidades observadas antes tanto do CPE quanto da ONU (serial e posição), estado antes/depois, resultado de restauração, versões, aprovador, horário, além do aceite. Este documento relata que o vínculo físico CPE↔ONU não está provado e descreve a restauração como “não há valor a restaurar”, mas não registra identidades observadas da ONU nem resultado de restauração por observação. A frase de alcance, portanto, anuncia promoção sem satisfazer a porta documental indicada pelo ADR. O aceite está associado ao download de 200 MB; não demonstra que os campos ausentes foram dispensados.
+  Recommendation: Não declarar a promoção neste documento até completar os campos obrigatórios do item 7 ou registrar uma emenda explícita que defina quais dispensas se aplicam a diagnóstico de download.
+- [medium] O texto mistura observação de capacidade com homologação ainda incompleta (docs/wiki/bench/H-speed_test_download-zte-f670l-2026-11-01.md:21)
+  A linha 38 diz que `speed_test_download` “passa a `observed`” no nível de modelo/firmware, embora o próprio documento diga que há só uma repetição confiável e que faltam ao menos três repetições e uma referência cabeada. O texto não delimita se `observed` significa apenas que um download foi observado nessa combinação, ou se autoriza tratar a capacidade como homologada; o leitor pode interpretar essa promoção mais amplamente que a única medição de 200 MB aceita.
+  Recommendation: Descrever `observed` como evidência de uma execução única, com parâmetros e limitações, e declarar explicitamente que repetibilidade e desempenho de referência continuam sem validação; evitar linguagem de homologação abrangente.
+
+Next steps:
+- Completar ou reconciliar os campos de evidência exigidos pelo ADR-0030 item 7 antes de declarar a promoção.
+- Reescrever o alcance para distinguir observação desta execução de validação de capacidade repetível; manter explícitos os limites já listados de identidade física, velocidade contratada, PON e upload.

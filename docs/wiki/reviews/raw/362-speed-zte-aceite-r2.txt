@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19581-2e22-7030-94ad-3566357304b2).
+[codex] Turn started (01a19581-3062-7cf0-892c-78f5163e07d0).
+[codex] Assistant message captured: Vou conferir o ADR-0030 e o documento completo para verificar se o novo alcance de `observed`...
+[codex] Running command: /bin/bash -lc 'git diff main...HEAD -- docs/wiki/bench/H-speed_test_download-zte-f670l-2026-1...
+[codex] Command completed: /bin/bash -lc 'git diff main...HEAD -- docs/wiki/bench/H-speed_test_download-zte-f670l-2026-1... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,120p' docs/wiki/adr/ADR-0030-homologacao-em-bancada-escopo-e-gates.m...
+[codex] Command completed: /bin/bash -lc "sed -n '1,120p' docs/wiki/adr/ADR-0030-homologacao-em-bancada-escopo-e-gates.m... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não publicar ainda: o documento declara `observed` se...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não publicar ainda: o documento declara `observed` sem demonstrar que a ZTE cumpre o gate de identidade do ADR-0030; a própria evidência diz que o vínculo físico não foi provado.
+
+Findings:
+- [high] `observed` contradiz o gate de identidade exigido para a ZTE (docs/wiki/bench/H-speed_test_download-zte-f670l-2026-11-01.md:37)
+  A linha 37 diz que a capacidade entra como `observed` pelo ADR-0030, mas a linha 6 registra a ONU como associada por decisão humana e admite que a identidade física não foi provada independentemente. O ADR-0030 exige vínculo CPE↔ONU confirmado para admitir uma identidade adicional antes de `bench-target-add` (item 2), e exige identidades observadas, incluindo serial e posição da ONU, na evidência (item 7). Assim, o aceite de uma execução no CPE do ACS não demonstra que a ONT física de bancada autorizada corresponde a esse CPE. Isso pode tornar a promoção inválida segundo o gate citado e deixar o alvo de bancada sem a identidade exigida. Registre evidência e confirmação do vínculo conforme o ADR antes de afirmar a promoção, ou documente a emenda que autoriza explicitamente essa exceção.
+  Recommendation: Confirmar e registrar o vínculo ONU↔CPE segundo o ADR-0030 antes de declarar `observed`, ou atualizar formalmente o ADR com a exceção e seus limites.
+
+Next steps:
+- Resolver a divergência entre o vínculo físico não comprovado e o gate de identidade do ADR-0030 antes de publicar.
