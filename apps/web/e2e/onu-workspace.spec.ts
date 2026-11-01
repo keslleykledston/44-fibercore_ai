@@ -274,6 +274,7 @@ test("lista da Rede: cada linha tem a régua compacta E o número do Rx; sem lei
   await expect(page.getByTestId("onu-rx-notice")).toContainText("Não homologada para esta OLT/óptica");   // a ressalva das faixas está na lista
   await expect(a1.getByTestId("optical-ruler")).toHaveAttribute("aria-label", /Não homologada para esta OLT\/óptica/);
   await expect(a1.getByTestId("optical-ruler")).toHaveAttribute("title", /Não homologada para esta OLT\/óptica/);
+  await expect(a1.locator('[data-testid="optical-ruler"] .rounded-sm')).toHaveCSS("box-shadow", /rgb/);        // o marcador tem anel da cor da superfície: o contraste dele não depende da faixa por baixo
   const los = rows.filter({ hasText: "DEMOC0000" });
   await expect(los.getByTestId("onu-rx")).toHaveText("—");
   await expect(los.getByTestId("optical-ruler")).toHaveAttribute("data-state", "none");

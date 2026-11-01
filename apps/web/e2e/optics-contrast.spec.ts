@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { mix, ratio } from "../src/lib/contrast";
 import { BAND_TINT } from "../src/lib/optics";
 
 // Contraste WCAG dos tokens usados pela régua óptica e pelo restante da UI (funções puras, sem navegador). Lê os tokens de src/app/globals.css: se alguém clarear uma cor, o teste quebra.
@@ -12,13 +13,6 @@ const light = blockOf(/^:root\s*\{([^}]*)\}/m);
 const dark = blockOf(/:root\[data-theme="dark"\]\s*\{([^}]*)\}/);
 const darkAuto = blockOf(/:root:not\(\[data-theme="light"\]\)\s*\{([^}]*)\}/);
 const REQUIRED = ["bg", "surface", "surface-2", "accent-soft", "border", "ok", "warn", "danger", "ok-soft", "warn-soft", "danger-soft"];
-const lum = (hex: string) => {
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
-};
-const ratio = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x! + 0.05) / (y! + 0.05); };
-const mix = (a: string, b: string, p: number) => "#" + [1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * p + parseInt(b.slice(i, i + 2), 16) * (1 - p)).toString(16).padStart(2, "0")).join("");
-
 test("os temas definem TODOS os tokens medidos e os dois blocos escuros são iguais", () => {
   for (const [name, t] of [["claro", light], ["escuro", dark], ["escuro automático", darkAuto]] as const) for (const k of REQUIRED) expect(t[k], `${k} no tema ${name}`).toBeDefined();
   for (const k of REQUIRED) expect(darkAuto[k], `${k}: escuro automático = escuro explícito`).toBe(dark[k]);
