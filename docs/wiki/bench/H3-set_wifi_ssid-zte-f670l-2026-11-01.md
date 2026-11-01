@@ -1,0 +1,16 @@
+# Evidência de manobra de bancada — H3 `set_wifi_ssid` na ZTE F670L — 2026-11-01
+
+Escopo: SOMENTE o rádio 2,4 GHz (`WLANConfiguration.1`) da ONT de bancada ZTE F670L (firmware `V9.0.11P1N10B`). Sem credencial, IP, nome de cliente ou saída crua. O SSID original ficou só no host do Edge (arquivo de restauração); nenhum nome de rede de fábrica consta aqui.
+
+- **Hash da intenção:** `f5fe9b5f04e4611ef8994b8628db1121c49a4b9f57b13a73d0fec3841ca46eef` (job `39f9a510-8eea-45d3-bc3f-92033849957d`, operação `set_wifi_ssid`, parâmetro `ssid = BANCADA-H3ZTE`)
+- **Identidades observadas:** CPE no ACS, exatamente 1 documento: OUI `FC4009`, classe `F670L`, serial `ZTE3BJNP5359122`, device_id `FC4009-F670L-ZTE3BJNP5359122`, igual ao alvo de bancada da nuvem (`992da7cd-4fc0-4ebd-ad04-ffe444d9c5b0`) e à lista local do Edge. ONU na OLT, associada por decisão humana: serial GPON `5A544547D1EDA1A3`, posição PON 0/0/14, ONT-ID 11 (identidade física NÃO provada por evidência independente; ver o H2 da ZTE). Antes da escrita li no ACS, só por leitura: o CPE usa TR-098; `WLANConfiguration.1` = 2,4 GHz (canal 9, `b,g,n`) e `.5` = 5 GHz (canal 64, `a,n,ac`).
+- **Estado antes:** último Inform há 13 s; nenhuma tarefa pendente na ONT; `_lastBoot` = 2026-11-01T03:27:50Z (o do H2). Comprimentos dos SSIDs das 8 instâncias `WLANConfiguration` lidos no ACS: 8, 5, 5, 5, 8, 5, 5, 24. Os valores não constam aqui.
+- **Estado depois:** os mesmos comprimentos (8, 5, 5, 5, 8, 5, 5, 24); `_lastBoot` inalterado (sem reinício); nenhuma tarefa pendente; o SSID da instância 1 não é o de teste. Esta conferência por fora comparou só comprimentos e a ausência do valor de teste; a igualdade do valor original vem da releitura do próprio Edge.
+- **Resultado da restauração:** o Edge gravou o original em disco antes de mudar, trocou uma vez, leu o valor de teste de volta, restaurou o original e leu o original de volta (detalhe do job: "ssid changed, read back, and the original restored and read back"; `postcheck_ok: true`).
+- **Versões:** Edge `0.1.0-lab-777ec89`; firmware do CPE `V9.0.11P1N10B`; OLT Huawei MA5608T, firmware MA5600V800R015C00.
+- **Aprovador:** conta de serviço de ensaio pelo caminho "aprovação da bancada" do ADR-0030, como no H3 da Huawei; autorização prévia `f767b8c4-c15d-448f-a0a2-6de7a1ca9576`, uso único, janela de 30 min, com `--ssid BANCADA-H3ZTE` e `--first-run` (substitui a entrada `observed` que ainda não existia).
+- **Horário:** job criado 2026-11-01 03:59:42 UTC; log do Edge: `job accepted` 03:59:46, `bench job finished`/`succeeded` 03:59:52 (UTC). Intervalo de 30 min respeitado desde o reinício do H2 (despacho às 03:26:26).
+- **Aceite do responsável:** dado em 2026-11-01 pelo chat da sessão ("aceito o H3 prossiga"), depois de o responsável ler que: o resultado prova que o caminho com portões alterou e restaurou o SSID 2,4 GHz do CPE do ACS; a identidade física entre esse CPE e a ONT 11 da OLT NÃO está provada de forma independente; a conferência por fora comparou só comprimentos.
+
+## Alcance
+`set_wifi_ssid` passa a `observed` para ZTE F670L `V9.0.11P1N10B` por TR-069, no nível de modelo e firmware do CPE do ACS, somente para o rádio 2,4 GHz (`WLANConfiguration.1`) e SSID de bancada `BANCADA-<A-Z0-9>`. Não promove a identidade física do alvo, nem o rádio 5 GHz, nem a senha do Wi-Fi.
