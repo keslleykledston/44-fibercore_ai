@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a198ce-fd78-70f0-ac96-dbbd9190b314).
+[codex] Turn started (01a198ce-fdb9-7453-bbd1-8e2130f4058f).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os sete focos pelo fluxo completo, incluindo os no...
+[codex] Running command: /bin/bash -lc "git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/web/s...
+[codex] Command completed: /bin/bash -lc "git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/web/s... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --unified=15 main...HEAD -- apps/web/src/components/SpeedTestSection....
+[codex] Command completed: /bin/bash -lc "git diff --unified=15 main...HEAD -- apps/web/src/components/SpeedTestSection.... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "speed/runs|Idempotency-Key|group_id|run_id|runId" apps/api apps/web/e2e...
+[codex] Command completed: /bin/bash -lc 'rg -n "speed/runs|Idempotency-Key|group_id|run_id|runId" apps/api apps/web/e2e... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '165,240p' apps/api/app/api/speed.py && sed -n '330,390p' apps/web/e2e/...
+[codex] Command completed: /bin/bash -lc "sed -n '165,240p' apps/api/app/api/speed.py && sed -n '330,390p' apps/web/e2e/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: um marcador com `runId` adulterado...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: um marcador com `runId` adulterado apaga também a chave de idempotência e libera um novo pedido, podendo duplicar tráfego.
+
+Findings:
+- [high] RunId inválido descarta a trava idempotente inteira (apps/web/src/components/SpeedTestSection.tsx:31-37)
+  Se `runId` no sessionStorage for alterado ou corrompido após o pedido chegar à API, `readPending` rejeita o objeto inteiro e grava `null` no memo. A interface então habilita um novo pedido com outra chave; o pedido original ainda pode estar pendente ou gerar tráfego, e a proteção de idempotência deixa de valer. O e2e desse cenário confirma justamente que os botões são liberados após descartar o marcador. Ao invalidar apenas o `runId`, preserve a chave e a intenção válidas com `runId: null`, para que a confirmação repita o mesmo pedido; se os demais campos também forem inválidos, mantenha uma trava conservadora ou exija reconciliação antes de liberar novo tráfego.
+  Recommendation: Validar os campos separadamente: um `runId` inválido deve virar `null` sem descartar `key` e `req` válidos. Acrescente um e2e que confirme que o pedido seguinte repete a mesma chave e intenção após essa adulteração.

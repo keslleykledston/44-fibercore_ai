@@ -241,3 +241,12 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 - **Push:** `main` enviada até `74719f0` (scan de segredos exit 0; nenhum IP real no histórico), sem tags.
 - **Rotação do `cwmp.auth`:** fase 1 aplicada (antigo OU novo aceitos; par novo em arquivo 0600 local fora do repo). Faltam fase 2 (alguém configura o par novo nas ONTs de bancada) e fase 3 (remover o antigo). Ver `docs/operations/GENIEACS_CWMP_AUTH_ROTATION.md`.
 - Próximos passos: Lovable aguarda aprovação de plano (projeto 13aaf09e…, mensagem umsg_01m6atbzzrfmr8489m2f1kqn7b); entender os 80 % da Huawei (comparar o ping de outra origem pela mesma WAN, precisa de alguém na bancada) e repetir o ping da ZTE; portar o protocolo de trava do ping para `SpeedTestSection` (KNOWN_ISSUES); registrar `dns_test` como unsupported/observed (evidência da leitura de NSLookup).
+
+## Atualização 2026-11-01 (noite): push, aceite do ping, trava do speed, Lovable
+- **Push:** `main` enviada até `3ebcfb8` (scan de segredos exit 0; nenhum IP real nos commits novos), sem tags. A branch `fix/speed-pending-lock-runid` (4 commits + docs) foi mesclada em `main` localmente e NÃO foi enviada.
+- **Aceite do `ping_test`:** ZTE F670L `V9.0.11P1N10B` → `supported/observed` (2026-11-01). Huawei: não aceita (80 % sem causa).
+- **Trava do teste de banda:** portada do ping (ver CHANGELOG). Codex approve na r4; e2e do speed 18 passed.
+- **E2E:** o seed estava quebrado na `main` (`set_wifi_ssid` sem `ssid`); corrigido. Cinco falhas de e2e já existiam (axe light/dark, refresh rotativo, onu-quick, setas entre abas): ver `docs/KNOWN_ISSUES.md`. A stack `fibercore-dev` foi recriada e derrubada (`down -v`) com o OK do responsável; `scripts/e2e.sh` usa a porta 18420 (a da LAB) e `WEB_PORT` 18490: rodar com `FIBERCORE_API_PORT=18421 WEB_PORT=28490` ao lado da LAB.
+- **Lovable:** plano aprovado e aplicado no projeto 13aaf09e… (commit `c4e39d8`, 7,3 créditos). Falta REVISAR o código antes de qualquer uso (contraste WCAG não medido); nada importado.
+- **Pendências:** rotação do `cwmp.auth` fases 2 e 3; causa dos 80 % da Huawei; repetir o ping da ZTE em outros dias; aplicar a trava com `?run=` também em eventuais novas seções; `dns_test` unsupported/observed; as 5 falhas de e2e antigas.
+
