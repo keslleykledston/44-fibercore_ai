@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1950a-d8fd-7113-ac2b-0b25ad695143).
+[codex] Turn started (01a1950a-d933-76c0-9570-79fb1be637d1).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e o contexto do ramo `owner_physical_evidence`, com foco...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- 'apps/web/src/app/rede/onu/...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- 'apps/web/src/app/rede/onu/... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba 'apps/web/src/app/rede/onu/[id]/page.tsx' | sed -n '157,181p'; rg -n \"...
+[codex] Command failed: /bin/bash -lc "nl -ba 'apps/web/src/app/rede/onu/[id]/page.tsx' | sed -n '157,181p'; rg -n \"... (exit 2)
+[codex] Running command: /bin/bash -lc "sed -n '205,245p' apps/api/app/cli.py; rg -n \"onu-cpe-link-suggest|evidence_r...
+[codex] Command completed: /bin/bash -lc "sed -n '205,245p' apps/api/app/cli.py; rg -n \"onu-cpe-link-suggest|evidence_r... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: o texto ainda afirma mais do que o si...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: o texto ainda afirma mais do que o sistema verifica ao qualificar a evidência como física “de bancada”.
+
+Findings:
+- [medium] “De bancada” não é um fato verificado pelo sistema (apps/web/src/app/rede/onu/[id]/page.tsx:150)
+  A mensagem diz que a sugestão foi registrada por evidência física “de bancada”, mas o fluxo registra um arquivo e metadados fornecidos pelo responsável; não verifica o conteúdo da evidência. Essa qualificação pode levar revisores a confiar que houve uma checagem em bancada que o sistema não comprova. Limite a mensagem ao fato verificável: o responsável registrou a sugestão e o sistema não verificou o conteúdo da evidência.
+  Recommendation: Remova “por evidência física de bancada” e descreva apenas o registro da sugestão pelo responsável e a ausência de verificação do conteúdo pelo sistema.
