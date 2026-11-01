@@ -4,7 +4,7 @@
 
 :root {
   --bg: #F6F7F9; --surface: #FFFFFF; --text: #17202B; --muted: #4F5B68; --border: #DCE2E9; --accent: #1F63B5;
-  --ok: #1B7F4B; --warn: #8A5200; --danger: #B3261E; --on-accent: #FFFFFF; --surface-2: #EEF1F4; --accent-soft: #E6F0FB; --ok-soft: #EFF8F3; --warn-soft: #FDF3E1; --danger-soft: #FDECEA; --stale-soft: #ECEFF3; --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04);
+  --ok: #197645; --warn: #8A5200; --danger: #B3261E; --on-accent: #FFFFFF; --surface-2: #EEF1F4; --accent-soft: #E6F0FB; --ok-soft: #EFF8F3; --warn-soft: #FDF3E1; --danger-soft: #FDECEA; --stale-soft: #ECEFF3; --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {

@@ -1,9 +1,9 @@
-import { ariaLabel, AXIS_MAX, AXIS_MIN, fmtDbm, LEVEL_TEXT, LIMITS, opticalView, position, REFERENCE_NOTICE } from "@/lib/optics";
+import { ariaLabel, AXIS_MAX, AXIS_MIN, BAND_TINT, fmtDbm, LEVEL_TEXT, LIMITS, opticalView, position, REFERENCE_NOTICE } from "@/lib/optics";
 
 const pct = (v: number) => `${position(v).toFixed(2)}%`;
-const tint = (tone: string, n: number) => `color-mix(in srgb, var(--${tone}) ${n}%, var(--surface))`;
+const tint = (tone: string, n: number) => `color-mix(in srgb, var(--${tone}) ${n}%, var(--surface))`;   // n = BAND_TINT
 // gradiente suave perigo → aviso → ok → aviso → perigo, com as transições centradas nos limites
-const GRADIENT = `linear-gradient(to right, ${tint("danger", 38)} 0%, ${tint("danger", 38)} calc(${pct(LIMITS.weak)} - 2%), ${tint("warn", 38)} calc(${pct(LIMITS.weak)} + 2%), ${tint("warn", 38)} calc(${pct(LIMITS.lowMargin)} - 2%), ${tint("ok", 38)} calc(${pct(LIMITS.lowMargin)} + 2%), ${tint("ok", 38)} calc(${pct(LIMITS.strong)} - 1%), ${tint("warn", 38)} calc(${pct(LIMITS.strong)} + 1%), ${tint("warn", 38)} calc(${pct(LIMITS.overload)} - 1%), ${tint("danger", 38)} calc(${pct(LIMITS.overload)} + 1%), ${tint("danger", 38)} 100%)`;
+const GRADIENT = `linear-gradient(to right, ${tint("danger", BAND_TINT)} 0%, ${tint("danger", BAND_TINT)} calc(${pct(LIMITS.weak)} - 2%), ${tint("warn", BAND_TINT)} calc(${pct(LIMITS.weak)} + 2%), ${tint("warn", BAND_TINT)} calc(${pct(LIMITS.lowMargin)} - 2%), ${tint("ok", BAND_TINT)} calc(${pct(LIMITS.lowMargin)} + 2%), ${tint("ok", BAND_TINT)} calc(${pct(LIMITS.strong)} - 1%), ${tint("warn", BAND_TINT)} calc(${pct(LIMITS.strong)} + 1%), ${tint("warn", BAND_TINT)} calc(${pct(LIMITS.overload)} - 1%), ${tint("danger", BAND_TINT)} calc(${pct(LIMITS.overload)} + 1%), ${tint("danger", BAND_TINT)} 100%)`;
 const TICKS = [LIMITS.weak, LIMITS.lowMargin, LIMITS.strong, LIMITS.overload] as const;
 
 export type RulerSize = "lg" | "md" | "sm";

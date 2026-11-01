@@ -1,5 +1,7 @@
 /** Faixas de REFERÊNCIA do nível óptico recebido pela ONU (ITU-T G.984.2 classe B+: sensibilidade −28 dBm, sobrecarga −8 dBm). Só apresentação (ADR-0037, emenda de 2026-11-01):
  *  a API não julga o Rx, e estes limites NÃO estão homologados para nenhuma OLT/óptica. Valor defasado ou ausente nunca é classificado. */
+/** Intensidade (%) da cor de cada faixa da régua sobre a superfície. 30 % mantém o marcador (cor cheia da mesma faixa) acima de 3:1 nos dois temas (WCAG 1.4.11); ver e2e/optics-contrast.spec.ts. */
+export const BAND_TINT = 30;
 export const AXIS_MIN = -34;
 export const AXIS_MAX = -3;
 /** Limites únicos (dBm). Abaixo de WEAK: crítico fraco; [WEAK, LOW_MARGIN): atenção; [LOW_MARGIN, STRONG]: bom; (STRONG, OVERLOAD]: atenção; acima de OVERLOAD: crítico. */

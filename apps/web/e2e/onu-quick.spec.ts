@@ -5,15 +5,16 @@ import { login } from "./helpers";
 // Painel da ONU (UX 2.2 / ADR-0037): dados do seed — OLT-DEMO-01 (DEMOA0001 online, DEMOA0003 online, DEMOC0000 LOS), DEMOQ0001 (OLT-QUICK-01, coleta recente), DEMOQ0002 (OLT-QUICK-02, coleta de 3 h atrás).
 const row = (page: import("@playwright/test").Page, serial: string) => page.getByTestId("onu-open").filter({ hasText: serial });
 
+// Usa DEMOA0003: DEMOA0001 ganha vínculo ONU↔CPE confirmado no app.spec (projeto `funcional`, que roda antes) e ganharia as abas Aparelho/Teste de banda/Qualidade e a linha do roteador.
 test("resumo rápido: painel ao lado da lista, PON e ACS separados, trocar a ONU substitui o conteúdo, Esc fecha e devolve o foco", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
   await page.goto("/rede");
   await expect(page.getByTestId("onu-quick-empty")).toContainText("Selecione uma ONU");   // o painel já existe, vazio, antes de escolher
-  await row(page, "DEMOA0001").click();
+  await row(page, "DEMOA0003").click();
   const panel = page.getByTestId("onu-quick");
   await expect(panel).toHaveAttribute("data-mode", "panel");
-  await expect(panel.getByRole("heading", { name: "DEMOA0001" })).toBeVisible();
+  await expect(panel.getByRole("heading", { name: "DEMOA0003" })).toBeVisible();
   await expect(panel).toContainText("PON registrada");
   await expect(panel).toContainText("Origem: OLT");
   await expect(panel).toContainText("Sem roteador vinculado");           // ACS ausente não vira "offline" nem "ok"
@@ -42,10 +43,10 @@ test("resumo rápido: painel ao lado da lista, PON e ACS separados, trocar a ONU
   await expect(panel.getByTestId("faceplate-mini")).toHaveAttribute("aria-label", /defasado/);
   // o botão leva à ONU 360° e a lista de volta continua igual
   await page.goto("/rede");
-  await row(page, "DEMOA0001").click();
+  await row(page, "DEMOA0003").click();
   await page.getByTestId("onu-360-link").click();
   await expect(page).toHaveURL(/\/rede\/onu\/[0-9a-f-]{36}$/);
-  await expect(page.getByRole("heading", { name: "ONU DEMOA0001" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "ONU DEMOA0003" })).toBeVisible();
 });
 
 test("resumo rápido: resposta atrasada de outra ONU nunca aparece, e uma falha do resumo não derruba a lista", async ({ page }) => {

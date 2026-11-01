@@ -316,7 +316,8 @@ test("sessão renova com o refresh token rotativo quando o access token expira",
   expect(refresh1.httpOnly).toBe(true);
   await context.clearCookies({ name: "fc_token" }); // simula o access token expirado
   await page.goto("/rede");
-  await expect(page.getByRole("heading", { name: "Rede" }).first()).toBeVisible();
+  await expect(page).toHaveURL(/\/rede$/);                                          // não caiu no login: a sessão foi renovada
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();              // o título da Rede é o nome da OLT (UX nova), não a palavra "Rede"
   const jar = await context.cookies();
   expect(jar.find((c) => c.name === "fc_token")).toBeDefined();
   expect(jar.find((c) => c.name === "fc_refresh")!.value).not.toBe(refresh1.value);

@@ -41,7 +41,7 @@ export default async function Capacidades() {
       {cpes.data === null && olts.data === null ? <ErrorState title="Falha ao carregar o inventário" /> : rows.length === 0 && gaps.length === 0 ? <EmptyState title="Nenhum dispositivo coletado" /> : (
         <div data-testid="capabilities-ready">
           {gaps.length > 0 && <div role="status" data-testid="capabilities-incomplete" className="panel mb-4 border-warn p-4 text-sm text-warn"><strong>Matriz incompleta.</strong> {gaps.join(" ")}</div>}
-          <div className="panel overflow-x-auto">
+          <div className="panel overflow-x-auto" tabIndex={0} role="region" aria-label="Capacidades por perfil de dispositivo (role horizontalmente)">   {/* região rolável sem controle dentro: precisa de foco para o teclado rolar (axe: scrollable-region-focusable) */}
             <table className="w-full min-w-[720px] text-sm">
               <caption className="sr-only">Capacidades por perfil de dispositivo</caption>
               <thead className="text-left text-muted"><tr>
