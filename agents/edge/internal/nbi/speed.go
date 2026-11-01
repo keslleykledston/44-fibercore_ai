@@ -232,9 +232,9 @@ func finishedCounters(l map[string]speedLeaf, since time.Time) *SpeedCounters {
 		return nil
 	}
 	return &SpeedCounters{
-		State: state, BOM: speedTime(l["BOMTime"].Value), EOM: speedTime(l["EOMTime"].Value),
-		TestBytesReceived: speedInt(l["TestBytesReceived"].Value), TotalBytesReceived: speedInt(l["TotalBytesReceived"].Value),
-		TestBytesSent: speedInt(l["TestBytesSent"].Value), TotalBytesSent: speedInt(l["TotalBytesSent"].Value),
+		State: state, BOM: speedTime(freshValue(l, "BOMTime", since)), EOM: speedTime(freshValue(l, "EOMTime", since)),
+		TestBytesReceived: speedInt(freshValue(l, "TestBytesReceived", since)), TotalBytesReceived: speedInt(freshValue(l, "TotalBytesReceived", since)),
+		TestBytesSent: speedInt(freshValue(l, "TestBytesSent", since)), TotalBytesSent: speedInt(freshValue(l, "TotalBytesSent", since)),
 	}
 }
 

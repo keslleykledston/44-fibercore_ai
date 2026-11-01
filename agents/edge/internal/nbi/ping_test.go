@@ -314,3 +314,16 @@ func TestPingCounterConversionKeepsOnlyInRangeIntegers(t *testing.T) {
 		}
 	}
 }
+
+func TestPingACounterTheCPEDidNotReturnAfterTheRequestIsLeftOutNeverReusedFromAnEarlierTest(t *testing.T) {
+	since := time.Now()
+	fresh, old := since.Add(time.Second), since.Add(-time.Hour)
+	l := map[string]speedLeaf{
+		speedStateLeaf: {Value: speedCompleted, At: fresh}, "SuccessCount": {Value: 5.0, At: fresh}, "FailureCount": {Value: 0.0, At: fresh},
+		"AverageResponseTime": {Value: 12.0, At: old}, "MinimumResponseTime": {Value: 9.0, At: fresh}, // the average was NOT re-read: it still carries an earlier test's value
+	}
+	cn := finishedPing(l, since)
+	if cn == nil || cn.AvgMS != nil || cn.MaxMS != nil || cn.Success == nil || *cn.Success != 5 || cn.MinMS == nil || *cn.MinMS != 9 {
+		t.Fatalf("only leaves read after the request may be reported: %+v", cn)
+	}
+}

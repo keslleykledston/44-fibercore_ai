@@ -205,9 +205,19 @@ func finishedPing(l map[string]speedLeaf, since time.Time) *PingCounters {
 	}
 	return &PingCounters{
 		State:   state,
-		Success: pingInt(l["SuccessCount"].Value), Failure: pingInt(l["FailureCount"].Value),
-		AvgMS: pingInt(l["AverageResponseTime"].Value), MinMS: pingInt(l["MinimumResponseTime"].Value), MaxMS: pingInt(l["MaximumResponseTime"].Value),
+		Success: pingInt(freshValue(l, "SuccessCount", since)), Failure: pingInt(freshValue(l, "FailureCount", since)),
+		AvgMS: pingInt(freshValue(l, "AverageResponseTime", since)), MinMS: pingInt(freshValue(l, "MinimumResponseTime", since)), MaxMS: pingInt(freshValue(l, "MaximumResponseTime", since)),
 	}
+}
+
+// freshValue is a leaf's value only when the leaf itself was read after the request: a leaf the CPE did not return keeps its old value AND its old timestamp in
+// the ACS, and an old counter is never presented as the result of this test.
+func freshValue(l map[string]speedLeaf, name string, since time.Time) any {
+	leaf, ok := l[name]
+	if !ok || leaf.At.Before(since.Add(-taskClockSkew)) {
+		return nil
+	}
+	return leaf.Value
 }
 
 // pingInt is speedInt with the bound of a ping leaf: a count or a time in ms of at most a day; anything else is "not reported".
