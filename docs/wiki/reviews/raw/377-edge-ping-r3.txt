@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a195af-3c7c-7951-8334-f53e0c8eecb4).
+[codex] Turn started (01a195af-3f75-7121-be3c-dbc347d9d2ac).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main`, com atenção especial às comparações temporais de `fresh...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- agents/edge/internal/nbi/pi...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- agents/edge/internal/nbi/pi... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "freshValue|taskClockSkew|Now|At:|nano|Nanos|repetition|repeat" agents/e...
+[codex] Command completed: /bin/bash -lc 'rg -n "freshValue|taskClockSkew|Now|At:|nano|Nanos|repetition|repeat" agents/e... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/nbi/ping.go | sed -n '145,235p'; nl -ba agents/edg...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/nbi/ping.go | sed -n '145,235p'; nl -ba agents/edg... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: a regra estrita está implementada, ma...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: a regra estrita está implementada, mas os testes não cobrem o relógio falso com resolução de nanossegundos solicitado.
+
+Findings:
+- [medium] Os testes não verificam a fronteira de um nanossegundo (agents/edge/internal/nbi/ping_test.go:318-345)
+  O teste usa `time.Now()` e timestamps iguais, um segundo depois ou bem antes; não demonstra que um carimbo exatamente 1 ns depois de `since` é aceito. Assim, uma regressão que arredonde os timestamps para segundos poderia passar, apesar de a regra exigir comparação estrita. O teste dentro da tolerância cobre o caso anterior ao envio, mas também usa relógio real.
+  Recommendation: Use um instante fixo com nanossegundos e teste explicitamente igualdade, `since - 1ns` e `since + 1ns` para contadores de ping e speed, mantendo o teste de estado dentro da tolerância.
+
+Next steps:
+- Adicionar a cobertura determinística de nanossegundos e executar a suíte relevante oito vezes para verificar flakiness.

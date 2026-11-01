@@ -344,3 +344,35 @@ func TestACounterReadBeforeTheRequestIsNeverReportedEvenInsideTheClockTolerance(
 		t.Fatalf("speed: the same rule: %+v", sc)
 	}
 }
+
+func TestFreshValueBoundaryIsExactAtTheNanosecond(t *testing.T) {
+	since := time.Date(2026, 11, 1, 5, 0, 0, 123_456_789, time.UTC) // a fixed instant with nanoseconds
+	for name, c := range map[string]struct {
+		at   time.Time
+		want bool
+	}{
+		"1 ns before":                {since.Add(-time.Nanosecond), false},
+		"equal":                      {since, false},
+		"1 ns after":                 {since.Add(time.Nanosecond), true},
+		"rounded down to the second": {since.Truncate(time.Second), false},
+	} {
+		l := map[string]speedLeaf{"SuccessCount": {Value: 5.0, At: c.at}}
+		if got := freshValue(l, "SuccessCount", since) != nil; got != c.want {
+			t.Errorf("%s: accepted=%v, want %v", name, got, c.want)
+		}
+		// the same rule for every counter of both diagnostics
+		pl := map[string]speedLeaf{speedStateLeaf: {Value: speedCompleted, At: since.Add(time.Second)}, "SuccessCount": {Value: 5.0, At: c.at}}
+		if cn := finishedPing(pl, since); cn == nil || (cn.Success != nil) != c.want {
+			t.Errorf("ping %s: %+v", name, cn)
+		}
+		sl := map[string]speedLeaf{speedStateLeaf: {Value: speedCompleted, At: since.Add(time.Second)}, "TestBytesReceived": {Value: 10_000_000.0, At: c.at}}
+		if sc := finishedCounters(sl, since); sc == nil || (sc.TestBytesReceived != nil) != c.want {
+			t.Errorf("speed %s: %+v", name, sc)
+		}
+	}
+	// the state leaf keeps its tolerance: stamped slightly before the request it still marks a finished diagnostic
+	inside := map[string]speedLeaf{speedStateLeaf: {Value: speedCompleted, At: since.Add(-taskClockSkew / 2)}}
+	if finishedPing(inside, since) == nil || finishedCounters(inside, since) == nil {
+		t.Fatal("the state leaf must keep its clock tolerance")
+	}
+}
