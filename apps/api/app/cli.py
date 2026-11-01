@@ -176,14 +176,21 @@ def main(argv: list[str] | None = None) -> None:
             )
             print(f"capability {a.operation}/{a.protocol} on {a.vendor} {a.model} {a.firmware}: {a.status}/{a.certification}")
         elif a.cmd == "onu-cpe-link-suggest":
+            import hashlib as _hl
+            import os as _os
             import re as _re
             if not _re.fullmatch(r"docs/wiki/bench/H1-[A-Za-z0-9._-]{3,100}\.md", a.evidence_ref):
                 sys.exit("evidence_ref must be a docs/wiki/bench/H1-*.md path")
+            if _os.path.basename(a.evidence_file) != _os.path.basename(a.evidence_ref):
+                sys.exit("the evidence file must be the referenced H1 (same file name)")
             try:
-                body = open(a.evidence_file, encoding="utf-8").read()
-            except OSError as exc:
+                raw_bytes = open(a.evidence_file, "rb").read()
+                body = raw_bytes.decode("utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
                 sys.exit(f"cannot read the evidence file: {exc}")
-            if len(body.strip()) < 200 or _re.search(r"(?i)(senha|password|secret|token)\s*[:=]|\b\d{1,3}(\.\d{1,3}){3}\b", body):
+            sensitive = (r"(?i)(senha|password|secret|token|credencial|api[_-]?key|chave)\s*[:=]|\b\d{1,3}(\.\d{1,3}){3}\b"
+                         r"|\b(?:[0-9A-Fa-f]{1,4}:){3,7}[0-9A-Fa-f]{1,4}\b")
+            if len(body.strip()) < 200 or _re.search(sensitive, body):
                 sys.exit("the evidence file is empty or carries an address or credential")
             by = a.by.strip()[:120]
             if not by:
@@ -192,7 +199,7 @@ def main(argv: list[str] | None = None) -> None:
             if (c.execute(text("SELECT 1 FROM onus WHERE id = :o AND tenant_id = :t"), {"o": a.onu_id, "t": a.tenant_id}).first() is None  # the owner role bypasses RLS: name the tenant
                     or c.execute(text("SELECT 1 FROM cpes WHERE id = :c AND tenant_id = :t"), {"c": a.cpe_id, "t": a.tenant_id}).first() is None):
                 sys.exit("onu or cpe not found for this tenant")
-            ev = {"rule": "owner_physical_evidence", "ambiguous": False, "evidence_ref": a.evidence_ref, "recorded_by": by,
+            ev = {"rule": "owner_physical_evidence", "ambiguous": False, "evidence_ref": a.evidence_ref, "evidence_sha256": _hl.sha256(raw_bytes).hexdigest(), "recorded_by": by,
                   "note": "recorded by the owner with physical evidence; a person still confirms it"}
             done = c.execute(text("INSERT INTO onu_cpe_links (tenant_id, onu_id, cpe_id, confidence, evidence) VALUES (:t,:o,:c,0.60,CAST(:e AS jsonb)) "
                                   "ON CONFLICT DO NOTHING RETURNING id"), {"t": a.tenant_id, "o": a.onu_id, "c": a.cpe_id, "e": json.dumps(ev)}).first()

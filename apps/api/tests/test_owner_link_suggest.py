@@ -45,7 +45,7 @@ def test_owner_suggests_a_link_with_evidence_and_it_stays_suggested_until_a_pers
     monkeypatch.setenv("ADMIN_DATABASE_URL", admin_url)
     t = str(seed["A"])
     onu, cpe = _ids(client, inv, seed, migrated)
-    ev = tmp_path / "H1-vinculo-teste.md"
+    ev = tmp_path / "H1-vinculo-teste-2026-11-01.md"
     ev.write_text(GOOD, encoding="utf-8")
     args = ["onu-cpe-link-suggest", t, onu, cpe, "--evidence-ref", REF, "--evidence-file", str(ev), "--by", "responsável"]
     cli.main(args)
@@ -54,7 +54,9 @@ def test_owner_suggests_a_link_with_evidence_and_it_stays_suggested_until_a_pers
         c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": t})
         row = c.execute(text("SELECT status, confidence, evidence, reviewed_by FROM onu_cpe_links WHERE onu_id = :o AND cpe_id = :c"), {"o": onu, "c": cpe}).one()
     assert row.status == "suggested" and row.reviewed_by is None and float(row.confidence) == 0.60
+    import hashlib
     assert row.evidence["rule"] == "owner_physical_evidence" and row.evidence["evidence_ref"] == REF and row.evidence["ambiguous"] is False
+    assert row.evidence["evidence_sha256"] == hashlib.sha256(GOOD.encode()).hexdigest()
     cli.main(args)   # idempotent
     assert "already exists" in capsys.readouterr().out
     h = hdr(client, "alice", seed, "A")
@@ -71,23 +73,34 @@ def test_owner_link_suggest_refuses_bad_input(client, seed, inv, migrated, admin
     monkeypatch.setenv("ADMIN_DATABASE_URL", admin_url)
     t = str(seed["A"])
     onu, cpe = _ids(client, inv, seed, migrated)
-    ok = tmp_path / "H1-ok.md"
+    ok = tmp_path / "H1-vinculo-teste-2026-11-01.md"
     ok.write_text(GOOD, encoding="utf-8")
     base = ["onu-cpe-link-suggest", t, onu, cpe, "--by", "x"]
     with pytest.raises(SystemExit, match="docs/wiki/bench/H1"):
         cli.main(base + ["--evidence-ref", "docs/other.md", "--evidence-file", str(ok)])
     with pytest.raises(SystemExit, match="docs/wiki/bench/H1"):
         cli.main(base + ["--evidence-ref", "docs/wiki/bench/../H1-x.md", "--evidence-file", str(ok)])
-    short = tmp_path / "H1-short.md"
+    other = tmp_path / "H1-outro-arquivo.md"
+    other.write_text(GOOD, encoding="utf-8")
+    with pytest.raises(SystemExit, match="same file name"):   # the validated file must be the referenced one
+        cli.main(base + ["--evidence-ref", REF, "--evidence-file", str(other)])
+    short = tmp_path / "H1-vinculo-teste-2026-11-01.md"
+    short.parent.mkdir(exist_ok=True)
+    d1 = tmp_path / "curto"
+    d1.mkdir()
+    short = d1 / "H1-vinculo-teste-2026-11-01.md"
     short.write_text("curto", encoding="utf-8")
     with pytest.raises(SystemExit, match="empty or carries"):
         cli.main(base + ["--evidence-ref", REF, "--evidence-file", str(short)])
-    ip = tmp_path / "H1-ip.md"
-    ip.write_text(GOOD + " 10.1.2.3", encoding="utf-8")
-    with pytest.raises(SystemExit, match="empty or carries"):
-        cli.main(base + ["--evidence-ref", REF, "--evidence-file", str(ip)])
+    for i, bad in enumerate((" 10.1.2.3", " 2001:db8:85a3:0:0:8a2e:370:7334", " senha: x", " api_key = abc", " chave: abc")):
+        d = tmp_path / f"s{i}"
+        d.mkdir()
+        f = d / "H1-vinculo-teste-2026-11-01.md"
+        f.write_text(GOOD + bad, encoding="utf-8")
+        with pytest.raises(SystemExit, match="empty or carries"):
+            cli.main(base + ["--evidence-ref", REF, "--evidence-file", str(f)])
     with pytest.raises(SystemExit, match="cannot read"):
-        cli.main(base + ["--evidence-ref", REF, "--evidence-file", str(tmp_path / "nao-existe.md")])
+        cli.main(base + ["--evidence-ref", REF, "--evidence-file", str(tmp_path / "nao-existe" / "H1-vinculo-teste-2026-11-01.md")])
     with pytest.raises(SystemExit, match="not found"):
         cli.main(["onu-cpe-link-suggest", t, str(uuid4()), cpe, "--evidence-ref", REF, "--evidence-file", str(ok), "--by", "x"])
     with pytest.raises(SystemExit, match="not found"):   # another tenant's CPE is invisible
