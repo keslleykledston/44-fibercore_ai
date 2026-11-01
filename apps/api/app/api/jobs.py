@@ -25,7 +25,7 @@ from sqlalchemy import Connection, text
 
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import audit
-from app.core import bench, features, jobsign, olt_cache, olt_ownership, olt_query, speed
+from app.core import bench, features, jobsign, olt_cache, olt_ownership, olt_query, probe, speed
 from app.core.settings import Settings, get_settings
 from app.events import outbox
 
@@ -54,6 +54,8 @@ OPERATIONS: dict[str, Operation] = {
     # ADR-0038 (bench only): TR-143 throughput test of the bench CPE; the writes are the diagnostic's own parameters, the traffic goes to a logical endpoint
     "speed_test_download": Operation("R2", "cpe", True, 1),
     "speed_test_upload": Operation("R2", "cpe", True, 1),
+    # ADR-0030 amendment Q1 / ADR-0039 (bench only): TR-143 IPPing of the bench CPE; the writes are the diagnostic's own parameters, 5 small ICMP probes to a logical target
+    "ping_test": Operation("R1", "cpe", True, 1),
     "provision_onu": Operation("R3", "olt", True, 2),
     # ADR-0029: a read-only query of the OLT's CLI; no approval, an exact closed intent, off by tenant flag and until the Edge channel exists
     "olt_query": Operation("R0", "olt", False, 0),
@@ -89,7 +91,7 @@ def _write_gate(conn: Connection, tenant_id: UUID, row, mode: str, by: UUID | No
         return reason
     refusal = bench.gate(conn, tenant_id, row, mode=mode, by=by)
     # flag off, or no Edge support yet: the bench path is not visible, the global reason stays
-    return "operation_not_homologated" if refusal in ("bench_writes_disabled", "edge_support_missing", "speed_disabled") else refusal
+    return "operation_not_homologated" if refusal in ("bench_writes_disabled", "edge_support_missing", "speed_disabled", "ping_disabled") else refusal
 
 
 def _query_gate(conn: Connection, tenant_id: UUID, params: dict) -> str | None:
@@ -149,6 +151,8 @@ def preview(
 ) -> dict:
     if body.operation in bench.SPEED_OPS:  # ADR-0038: the speed test has its own entry (flag, endpoint health, PON/CPE/tenant limits, run record); never the generic one
         raise HTTPException(409, "use_speed_api")
+    if body.operation in bench.PING_OPS:   # ADR-0039: the ping test has its own entry (flag, target catalog, shared CPE reservation, hourly ceiling, run record)
+        raise HTTPException(409, "use_ping_api")
     return create_preview(body, idempotency_key, p, conn)
 
 
@@ -450,11 +454,11 @@ def job_result(
         raise HTTPException(403, "job belongs to another edge")
     to = {"accepted": "ACCEPTED", "failed": "FAILED"}.get(body.state) or ("SUCCEEDED" if body.postcheck_ok else "UNKNOWN")
     detail, res = body.detail, {"detail": body.detail, "postcheck_ok": body.postcheck_ok}
-    if row.operation in bench.SPEED_OPS:  # ADR-0038: free text from the Edge could carry an address; only a short code is kept (and later shown)
+    if row.operation in bench.SPEED_OPS or row.operation in bench.PING_OPS:  # ADR-0038/0039: free text from the Edge could carry an address; only a short code is kept (and later shown)
         detail = speed.safe_detail(body.detail)
         res = {"detail": detail, "postcheck_ok": body.postcheck_ok}
-    if body.data is not None and row.operation != "olt_query" and row.operation not in bench.SPEED_OPS:
-        raise HTTPException(422, "data only exists on olt_query and speed test results")
+    if body.data is not None and row.operation != "olt_query" and row.operation not in bench.SPEED_OPS and row.operation not in bench.PING_OPS:
+        raise HTTPException(422, "data only exists on olt_query, speed test and ping test results")
     counters = None
     if row.operation in bench.SPEED_OPS:
         # a success needs the Edge's counters in the exact shape of THIS job (direction, endpoint, profile); otherwise it is a failure and nothing the Edge sent is stored
@@ -462,6 +466,16 @@ def job_result(
             prm = _row_params(row)
             counters = speed.check_counters(speed.OPERATION_DIRECTION[row.operation], prm.get("target", ""), prm.get("profile", ""), body.data)
             if counters is None:
+                to, detail = "FAILED", "invalid_result"
+                res = {"detail": detail, "postcheck_ok": False}
+        elif body.data is not None:
+            raise HTTPException(422, "a typed result comes only with a success")
+    report = None
+    if row.operation in bench.PING_OPS:
+        # a success needs the Edge's report in the exact shape of THIS job (its destination); otherwise it is a failure and nothing the Edge sent is stored
+        if to == "SUCCEEDED":
+            report = probe.check_report(_row_params(row).get("target", ""), body.data)
+            if report is None:
                 to, detail = "FAILED", "invalid_result"
                 res = {"detail": detail, "postcheck_ok": False}
         elif body.data is not None:
@@ -481,6 +495,11 @@ def job_result(
         raise HTTPException(409, f"illegal transition from {row.status} to {to}")
     if counters is not None:
         speed.store_result(conn, p.tenant_id, job_id, speed.OPERATION_DIRECTION[row.operation], _row_params(row)["profile"], counters)
+    if row.operation in bench.PING_OPS:
+        if report is not None:
+            probe.store_result(conn, p.tenant_id, job_id, report)
+        elif to in ("FAILED", "UNKNOWN"):
+            probe.store_failure(conn, p.tenant_id, job_id, detail or "edge_error")
     if to in ("FAILED", "UNKNOWN") and row.operation in bench.BENCH_OPS and _blocked_reason(row.operation):
         bench.lock_target(conn, row.target_id, f"bench write ended {to}")  # no retry, no new write until `bench-unlock`
     if row.operation == "olt_query" and to == "SUCCEEDED" and "data" in res:

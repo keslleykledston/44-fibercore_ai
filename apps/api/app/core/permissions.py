@@ -45,6 +45,7 @@ CATALOG: dict[str, Permission] = dict([
     _p("erp:test", "Testar a conexão com o ERP (autentica e nada mais; somente leitura)", "R2"),
     _p("diagnostics:run", "Rodar diagnósticos (somente leitura)", "R0", scopable=True),
     _p("diagnostics:speed_run", "Pedir um teste de banda (TR-143) da ONT (gera tráfego no aparelho; só bancada, com autorização prévia)", "R2", mfa_recent=True, scopable=True),
+    _p("diagnostics:ping_run", "Pedir um teste de ping (TR-143) da ONT pela WAN de serviço (escreve o diagnóstico no aparelho; só bancada, com autorização)", "R2", mfa_recent=True, scopable=True),
     _p("diagnostics:quality_read", "Ver a leitura de qualidade do serviço da ONT e o histórico (somente leitura)", "R0", scopable=True),
     _p("diagnostics:quality_run", "Pedir a leitura de qualidade RÁPIDA da ONT (usa só dados já coletados; não toca o aparelho)", "R0", scopable=True),
     _p("diagnostics:quality_run_full", "Pedir a leitura de qualidade COMPLETA (referencia o teste de banda; não inicia tráfego)", "R1", scopable=True),

@@ -148,7 +148,12 @@ def busy_reason(conn: Connection, tenant_id: UUID, cpe_id: UUID, pon_id: UUID) -
              "FROM speed_test_runs r JOIN jobs j ON j.tenant_id = r.tenant_id AND j.id = r.job_id "
              "WHERE r.tenant_id = :t AND j.status = ANY(:live) AND (j.status NOT IN ('PENDING_APPROVAL', 'APPROVED') OR j.expires_at > now())"),
         {"t": tenant_id, "c": cpe_id, "p": pon_id, "live": list(ACTIVE_JOB_STATES)}).one()
-    if n.cpe >= LIMIT_PER_CPE:
+    # ADR-0039 item 3: the reservation of a CPE is shared by every diagnostic that writes to it, so a live ping test (app/core/probe.py) also holds the device
+    ping = conn.execute(
+        text("SELECT count(*) FROM ping_test_runs r JOIN jobs j ON j.tenant_id = r.tenant_id AND j.id = r.job_id "
+             "WHERE r.tenant_id = :t AND r.cpe_id = :c AND j.status = ANY(:live) AND (j.status NOT IN ('PENDING_APPROVAL', 'APPROVED') OR j.expires_at > now())"),
+        {"t": tenant_id, "c": cpe_id, "live": list(ACTIVE_JOB_STATES)}).scalar_one()
+    if n.cpe + ping >= LIMIT_PER_CPE:
         return "cpe_busy"
     if n.pon >= LIMIT_PER_PON:
         return "pon_busy"
