@@ -208,7 +208,9 @@ func finishedPing(l map[string]speedLeaf, since time.Time) *PingCounters {
 	if state == pingStateComplete {
 		state = speedCompleted
 	}
-	if !ok || (state != speedCompleted && !strings.HasPrefix(state, "Error_")) || st.At.Before(since.Add(-taskClockSkew)) {
+	// the terminal state must itself have been read STRICTLY after the request, like every counter: a Complete left by an earlier test inside the clock tolerance
+	// must never be paired with counters refreshed after the request (the tolerance of the throughput state does not apply here).
+	if !ok || (state != speedCompleted && !strings.HasPrefix(state, "Error_")) || !st.At.After(since) {
 		return nil
 	}
 	return &PingCounters{

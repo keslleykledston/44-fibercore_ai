@@ -331,7 +331,8 @@ func TestPingACounterTheCPEDidNotReturnAfterTheRequestIsLeftOutNeverReusedFromAn
 func TestACounterReadBeforeTheRequestIsNeverReportedEvenInsideTheClockTolerance(t *testing.T) {
 	since := time.Now()
 	inside := since.Add(-taskClockSkew / 2) // older than the request, but within the tolerance the STATE leaf enjoys
-	l := map[string]speedLeaf{speedStateLeaf: {Value: speedCompleted, At: inside}, "SuccessCount": {Value: 5.0, At: inside}, "FailureCount": {Value: 0.0, At: since.Add(time.Second)},
+	// the ping STATE leaf is strict too (see TestPingAnOldTerminalStateInsideTheClockToleranceIsNotThisTestsResult): only the throughput state keeps the tolerance
+	l := map[string]speedLeaf{speedStateLeaf: {Value: speedCompleted, At: since.Add(time.Second)}, "SuccessCount": {Value: 5.0, At: inside}, "FailureCount": {Value: 0.0, At: since.Add(time.Second)},
 		"AverageResponseTime": {Value: 12.0, At: since}, "MinimumResponseTime": {Value: 9.0, At: since.Add(time.Second)}, "MaximumResponseTime": {Value: 21.0, At: since.Add(time.Second)}}
 	cn := finishedPing(l, since)
 	if cn == nil || cn.Success != nil || cn.AvgMS != nil || cn.Failure == nil || cn.MinMS == nil || cn.MaxMS == nil {
@@ -370,10 +371,13 @@ func TestFreshValueBoundaryIsExactAtTheNanosecond(t *testing.T) {
 			t.Errorf("speed %s: %+v", name, sc)
 		}
 	}
-	// the state leaf keeps its tolerance: stamped slightly before the request it still marks a finished diagnostic
+	// the throughput state leaf keeps its tolerance: stamped slightly before the request it still marks a finished diagnostic. The ping state does not.
 	inside := map[string]speedLeaf{speedStateLeaf: {Value: speedCompleted, At: since.Add(-taskClockSkew / 2)}}
-	if finishedPing(inside, since) == nil || finishedCounters(inside, since) == nil {
-		t.Fatal("the state leaf must keep its clock tolerance")
+	if finishedCounters(inside, since) == nil {
+		t.Fatal("the throughput state leaf must keep its clock tolerance")
+	}
+	if finishedPing(inside, since) != nil {
+		t.Fatal("the ping state leaf must be read strictly after the request")
 	}
 }
 
@@ -388,5 +392,22 @@ func TestPingTheIPPingCompleteStateIsAFinishedTestAndIsReportedAsCompleted(t *te
 	}
 	if finishedPing(map[string]speedLeaf{speedStateLeaf: {Value: "Requested", At: at}}, since) != nil || finishedPing(map[string]speedLeaf{speedStateLeaf: {Value: "Completeness", At: at}}, since) != nil {
 		t.Fatal("only Complete, Completed and Error_* end a ping test")
+	}
+}
+
+func TestPingAnOldTerminalStateInsideTheClockToleranceIsNotThisTestsResult(t *testing.T) {
+	since := time.Now()
+	old := since.Add(-taskClockSkew / 2)
+	fresh := since.Add(time.Second)
+	for _, st := range []string{"Complete", "Completed", "Error_Internal"} {
+		l := map[string]speedLeaf{speedStateLeaf: {Value: st, At: old}, "SuccessCount": {Value: 5.0, At: fresh}, "FailureCount": {Value: 0.0, At: fresh},
+			"AverageResponseTime": {Value: 11.0, At: fresh}, "MinimumResponseTime": {Value: 11.0, At: fresh}, "MaximumResponseTime": {Value: 12.0, At: fresh}}
+		if finishedPing(l, since) != nil {
+			t.Fatalf("a %q state read before the request must not finish this test even with fresh counters", st)
+		}
+		l[speedStateLeaf] = speedLeaf{Value: st, At: fresh}
+		if finishedPing(l, since) == nil {
+			t.Fatalf("a %q state read after the request must finish the test", st)
+		}
 	}
 }
