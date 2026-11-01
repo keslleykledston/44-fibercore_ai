@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1990c-6ae5-7142-9f34-8dd6550aeceb).
+[codex] Turn started (01a1990c-6b21-7af3-a5d1-3ec0a36aea28).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de cálculo, apresentação e testes c...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Onu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Onu... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/web/src/components/Onu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/web/src/components/Onu... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "indicatorSource|quality.*freshness|metric_ids|freshness_s" apps/web/src...
+[codex] Command completed: /bin/bash -lc 'rg -n "indicatorSource|quality.*freshness|metric_ids|freshness_s" apps/web/src... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/lib/quality.ts | sed -n '116,132p'; nl -ba apps/web/src/co...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/lib/quality.ts | sed -n '116,132p'; nl -ba apps/web/src/co... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a idade exibida pode parecer a da ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a idade exibida pode parecer a da leitura mais antiga mesmo quando outra leitura não tem idade conhecida.
+
+Findings:
+- [medium] Idade desconhecida é ignorada ao calcular a leitura mais antiga (apps/web/src/lib/quality.ts:126-127)
+  Quando um indicador cita várias métricas e uma tem `freshness_s: null`, ela é removida de `ages`; se outra métrica tiver idade conhecida, a função ainda mostra essa idade com o rótulo “a mais antiga”. Por exemplo, uma leitura válida de 30 s e uma leitura antiga sem idade aparecem como “a mais antiga agora há pouco”, ocultando que a idade real é desconhecida. Isso pode dar falsa confiança sobre a atualidade do indicador. Se qualquer leitura incluída não tiver idade, omita a idade ou indique explicitamente que ela é desconhecida; só use “a mais antiga” quando todas as leituras tiverem idade.
+  Recommendation: Só mostrar a idade máxima e o rótulo “a mais antiga” quando todas as métricas consideradas tiverem `freshness_s`; caso contrário, sinalizar idade desconhecida ou não informada.

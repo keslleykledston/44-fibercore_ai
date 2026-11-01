@@ -4,6 +4,7 @@
 - Web: a lista da Rede (`OnuWorkspace`) mostra a régua óptica compacta (`dense`: símbolo + só a faixa, rótulo completo no `title`/`aria-label`) ao lado do número do Rx; a coluna "Dado" pode quebrar linha para a lista caber ao lado do painel.
 - Web: na régua grande e na média o valor numérico sobe junto com o marcador (encostado na borda nas pontas do eixo); o rótulo da faixa fica acima.
 - Web: cada indicador da Qualidade ganhou "Fonte · idade" (`indicatorSource`: só as métricas que o indicador cita e que têm leitura; com mais de uma, a idade é a da MAIS ANTIGA; sem leitura: "Fonte: sem leitura"). Rodapé fixo: "Sem contato com o ACS não significa ONU offline. Uma sessão WAN não prova qualidade da internet ou do Wi‑Fi."
+- Critério único `hasReading` (status valid/stale E valor que não seja null, vazio ou só espaços; 0 e false contam): vale para o valor mostrado, a fonte/idade, o estado nos detalhes e o cartão do indicador ("ok" sem leitura citada = "Sem leitura"). A régua compacta da lista leva a ressalva das faixas não homologadas (aria-label, title e nota visível). Codex: 7 rodadas, approve na r7.
 - Decisão: NÃO adotado o rótulo "Confirmado/Hipótese/Indisponível" do protótipo por indicador: a plataforma não julga o sinal ("Sem anomalia observada" não é "Confirmado"), então a confiança continua só nas hipóteses.
 - Testes: `quality-source.spec.ts` (puros), régua média (valor sobre o marcador), lista da Rede (régua + número em cada linha), fonte e frase de cautela na Qualidade. Bateria completa: as mesmas 5 falhas que já existiam na base, nenhuma nova.
 

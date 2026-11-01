@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19911-9fdd-76d1-b319-dd38c342caaa).
+[codex] Turn started (01a19911-a23c-7792-8ec2-799a199177e4).
+[codex] Assistant message captured: Vou comparar a branch com `main` e seguir os fluxos alterados de fonte/idade, régua, acessibi...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=70 main...HEA...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=70 main...HEA... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --unified=35 main...HEAD -- apps/web/src/components/OpticalRuler.tsx ...
+[codex] Command completed: /bin/bash -lc "git diff --unified=35 main...HEAD -- apps/web/src/components/OpticalRuler.tsx ... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/lib/optics.ts | sed -n '1,180p'; nl -ba apps/web/src/compo...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/lib/optics.ts | sed -n '1,180p'; nl -ba apps/web/src/compo... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,55p' apps/web/src/lib/quality.ts; git diff --check main...HEAD; git ...
+[codex] Command completed: /bin/bash -lc "sed -n '1,55p' apps/web/src/lib/quality.ts; git diff --check main...HEAD; git ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviaria ainda: uma métrica válida com `value: \"...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviaria ainda: uma métrica válida com `value: ""` ainda aparece como fonte com idade, embora não exiba leitura.
+
+Findings:
+- [medium] Valor vazio ainda é tratado como leitura (apps/web/src/lib/quality.ts:123)
+  `readMetric` aceita string vazia para métricas `valid`/`stale` (o padrão de validação permite `*`), e `valueText` a renderiza como texto vazio. Como `indicatorSource` só exclui `null`, essa resposta mostra fonte e idade para um indicador cujo valor fica em branco. Isso reabre o problema de honestidade do dado para payloads com string vazia. Trate string vazia como ausência na leitura e na origem, preservando valores válidos como `0` e `false`; acrescente um caso puro para esse payload.
+  Recommendation: Normalize `""` para `null` em `readMetric` ou exclua strings vazias de `indicatorSource`; teste que a UI/resultado indica sem leitura.

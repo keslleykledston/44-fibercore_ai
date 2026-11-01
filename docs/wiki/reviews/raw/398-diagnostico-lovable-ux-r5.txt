@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19912-4653-7ec3-aed6-8aef84bbd55b).
+[codex] Turn started (01a19912-468e-7790-a08e-b5aea8f9a811).
+[codex] Assistant message captured: Vou comparar a branch com `main` e seguir o fluxo de leitura até a régua e a seção Qualidade,...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Onu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Onu... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- apps/web/src/components/Onu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- apps/web/src/components/Onu... (exit 0)
+[codex] Assistant message captured: O critério unificado está sendo usado em `valueText` e `indicatorSource`. Estou conferindo ag...
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/lib/quality.ts | sed -n '1,180p'; nl -ba apps/web/src/comp...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/lib/quality.ts | sed -n '1,180p'; nl -ba apps/web/src/comp... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: valores vazios são tratados como a...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: valores vazios são tratados como ausência na fonte e no valor, mas outros rótulos ainda os apresentam como leitura atual.
+
+Findings:
+- [medium] Métrica vazia ainda recebe rótulos de leitura atual (apps/web/src/components/QualitySection.tsx:94-129)
+  Com status `valid`, `value: ""` e idade conhecida, `valueText` mostra “—” e `indicatorSource` diz “Fonte: sem leitura”, mas os detalhes ainda mostram “Leitura atual · há …” (linha 129). Se o indicador óptico estiver `ok`, a condição desta linha também pode exibir “Leitura atual, sem faixa de referência” (linhas 94–98), apesar da fonte dizer que não há leitura. Isso contradiz a semântica de `hasReading` e pode levar operadores a confiar numa medição inexistente. Use `hasReading` ao apresentar idade/status e ao decidir o texto “Leitura atual” do indicador; cubra esses casos na UI.
+  Recommendation: Aplique `hasReading` às mensagens de leitura atual e à exibição da idade dos detalhes; adicione casos de UI para métrica `valid` vazia ou só com espaços.

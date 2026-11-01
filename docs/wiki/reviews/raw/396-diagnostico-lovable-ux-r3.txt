@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19911-1a2c-71c1-9274-513a6b23266a).
+[codex] Turn started (01a19911-1a67-7e52-9e60-2d46aa767833).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os caminhos de dado, acessibilidade e testes relac...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- apps/web/src/components/Opt...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- apps/web/src/components/Opt... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=15 main...HEAD -- apps/web/src/components/Opt...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=15 main...HEAD -- apps/web/src/components/Opt... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/lib/optics.ts && rg -n \"observed_at|freshness|rx_dbm\" ap...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/lib/optics.ts && rg -n \"observed_at|freshness|rx_dbm\" ap... (exit 0)
+[codex] Assistant message captured: A régua compacta inclui a ressalva nos dois atributos. Estou checando agora os dados que alim...
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: a Qualidade pode afirmar uma fonte e ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: a Qualidade pode afirmar uma fonte e uma idade para uma métrica sem valor de leitura, contradizendo o estado dos dados exibidos.
+
+Findings:
+- [medium] Fonte e idade são atribuídas a métricas sem valor (apps/web/src/lib/quality.ts:122-130)
+  `indicatorSource` considera qualquer métrica com status `valid` ou `stale` como leitura, mas `readMetric` aceita esses status com `value: null`. Nesse caso, os detalhes mostram “—” enquanto o indicador ainda pode exibir, por exemplo, “Fonte: ACS (cache) · agora há pouco”, dando ao operador a impressão de que há um dado disponível. Isso também pode ocorrer para métricas não numéricas cujo valor seja `null`; status sozinho não comprova que houve leitura. Filtre métricas sem valor antes de montar fonte/idade, ou represente explicitamente que a métrica não retornou valor.
+  Recommendation: Exija `m.value !== null` além do status `valid`/`stale` em `indicatorSource` e acrescente cobertura para indicador cuja métrica está `valid` com `value: null`.
