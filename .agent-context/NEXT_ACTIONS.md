@@ -220,3 +220,9 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 - Vínculo ONU↔CPE da ZTE: comando do dono `onu-cpe-link-suggest` pronto (mergeado); falta rodá-lo para a ZTE e uma pessoa confirmar o vínculo na tela (Rede → ONU → vínculo) ou pela API.
 - Nokia: Connection Request OK pela ACS após usar o serial como usuário (ALCL). Falta H1/identidade para ela virar alvo (não autorizado).
 - Limpeza: arquivos de cópia em `/root` do host do ACS e `~/.cr_acs_senha`; rotação do `cwmp.auth`; Edge com `read_only_onus` da ZTE ONT 11 (pode sair quando houver `bench.olt` em lista).
+
+## ZTE F670L — alvo de bancada e H2 executado (2026-11-01 UTC)
+- Vínculo ONU↔CPE da ZTE `confirmed` por uma pessoa em 03:23:52 UTC (decisão humana sobre evidência H1 sugestiva; identidade física NÃO provada); `bench-target-add` feito depois (`owner_epoch 2`); `bench_targets` = Huawei + ZTE.
+- H2 `reboot_cpe` na ZTE executado com `--first-run` (job `a2a22f05-…` `SUCCEEDED`; `_lastBoot` do ACS novo). Evidência: `docs/wiki/bench/H2-reboot_cpe-zte-f670l-2026-11-01.md`. A OLT não registrou a queda (coleta regular de 15 min). NÃO promovido a `observed`: falta aceite escrito do responsável.
+- Próximo: captura supervisionada da OLT (ONT 11) depois do reinício para provar/refutar o vínculo físico; aceite do H2; depois `set_wifi_ssid` e speed na ZTE (exigem vínculo e identidades próprias).
+- Fica pendente a reorganização da Visão 360° (menos cards, resumo no topo; só o bloco de identificação foi feito).

@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19527-62c0-7882-93f5-f8eb5e2d5e09).
+[codex] Turn started (01a19527-65cf-7f31-b162-bc249774aac7).
+[codex] Assistant message captured: Vou conferir o documento contra o ADR-0030 e registros H1/Huawei próximos, especialmente a or...
+[codex] Running command: /bin/bash -lc 'rg -n "ADR-0030|H1 da ZTE|H2 da Huawei|reboot_cpe|first-run|bench-target-add|o...
+[codex] Command completed: /bin/bash -lc 'rg -n "ADR-0030|H1 da ZTE|H2 da Huawei|reboot_cpe|first-run|bench-target-add|o... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "''^## 2|item 2|pré-requisitos|ordem|primeira execução|H1|H2|observed|id...
+[codex] Command completed: /bin/bash -lc 'rg -n "''^## 2|item 2|pré-requisitos|ordem|primeira execução|H1|H2|observed|id... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,115p' docs/wiki/adr/ADR-0030-homologacao-em-bancada-escopo-e-gates.m...
+[codex] Command completed: /bin/bash -lc "sed -n '1,115p' docs/wiki/adr/ADR-0030-homologacao-em-bancada-escopo-e-gates.m... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não publicar como evidência aceita: o documento decla...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não publicar como evidência aceita: o documento declara o vínculo confirmado, mas a própria evidência citada e o texto do documento dizem que ele permanece apenas sugestivo. Isso compromete a identidade do alvo exigida pelo ADR-0030.
+
+Findings:
+- [high] Vínculo ONU↔CPE é declarado confirmado sem evidência que o confirme (docs/wiki/bench/H2-reboot_cpe-zte-f670l-2026-11-01.md:6-18)
+  A linha 6 registra o vínculo como `confirmed`, mas qualifica a evidência H1 como “sugestiva e não conclusiva”; a linha 18 diz que a correspondência com a ONT 11 continua só sugestiva até captura supervisionada posterior. O H1 citado também conclui que o vínculo permanece não confirmado. Assim, o documento não demonstra o pré-requisito de identidade do ADR-0030 item 2; o reinício pode confirmar que o CPE do ACS reiniciou, mas não que esse CPE corresponde à ONU 11. Isso deixa sem sustentação a identidade física do alvo da manobra e a afirmação de que a ordem exigida foi cumprida antes do cadastro do alvo. Registre evidência que confirme o vínculo e sua confirmação antes de `bench-target-add`, ou descreva o vínculo como não confirmado e não trate esta execução como evidência de homologação.
+  Recommendation: Resolver a contradição com o H1: obter confirmação do vínculo compatível com o ADR-0030 e documentar sua ordem em relação ao `bench-target-add`; até lá, não usar esta execução para promover a capacidade.
