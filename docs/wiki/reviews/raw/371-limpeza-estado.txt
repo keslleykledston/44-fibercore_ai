@@ -1,0 +1,34 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19590-c0d1-76f2-996e-42db7946dae1).
+[codex] Turn started (01a19590-c107-7663-9363-3cdba35a8776).
+[codex] Assistant message captured: Vou conferir o diff junto das evidências referenciadas e do estado no `main`, com foco em afi...
+[codex] Running command: /bin/bash -lc 'git status --short && git branch --show-current && git diff --unified=80 main....
+[codex] Command completed: /bin/bash -lc 'git status --short && git branch --show-current && git diff --unified=80 main.... (exit 0)
+[codex] Assistant message captured: O diff contém apenas seis linhas, mas o contexto anterior já documenta contradições important...
+[codex] Running command: /bin/bash -lc 'nl -ba .agent-context/NEXT_ACTIONS.md | tail -18; nl -ba docs/wiki/bench/H-spe...
+[codex] Command completed: /bin/bash -lc 'nl -ba .agent-context/NEXT_ACTIONS.md | tail -18; nl -ba docs/wiki/bench/H-spe... (exit 0)
+[codex] Running command: /bin/bash -lc 'nl -ba docs/wiki/bench/H-speed_test-upload-zte-f670l-2026-11-01.md; nl -ba doc...
+[codex] Command completed: /bin/bash -lc 'nl -ba docs/wiki/bench/H-speed_test-upload-zte-f670l-2026-11-01.md; nl -ba doc... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: o resumo de estado contradiz a evid...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: o resumo de estado contradiz a evidência rastreável em pontos centrais e afirma uma limpeza sem suporte visível no contexto versionado.
+
+Findings:
+- [high] Estado `observed` da ZTE contradiz o H2 registrado (.agent-context/NEXT_ACTIONS.md:231)
+  A linha declara `reboot_cpe = observed`, mas o estado imediatamente anterior diz que o H2 não foi promovido por falta de aceite escrito. A evidência H2 citada também qualifica `observed` como promoção a partir do aceite. O novo resumo não aponta aceite ou alteração do registro que resolva a contradição, então pode induzir operadores a tratar a capacidade como homologada.
+  Recommendation: Corrigir o estado para refletir a evidência H2 e o aceite disponível, ou apontar o aceite e a promoção posteriores que sustentam `observed`.
+- [medium] Limpeza descrita como concluída sem evidência rastreável (.agent-context/NEXT_ACTIONS.md:232)
+  A afirmação lista desativação de várias contas, remoção de arquivos sensíveis no host do ACS com `shred` e apagamento de credenciais locais, mas não cita evidência, inventário dos alvos ou registro de execução. Como o item anterior ainda lista esses arquivos como tarefas pendentes, o resumo pode levar a equipe a presumir que credenciais e cópias foram removidas. A busca no contexto versionado não encontrou comprovação correspondente.
+  Recommendation: Anexar ou referenciar evidência sanitizada de cada desativação e remoção, incluindo o escopo exato; se não houver comprovação preservada, registrar a limpeza como reportada, não verificada.
+- [low] `speed_test_redirect_probe` combina semânticas distintas (.agent-context/NEXT_ACTIONS.md:231)
+  A notação `unsupported/observed` pode ser interpretada como capacidade `unsupported` com evidência `observed`, mas essa relação não é explicada no resumo. A evidência da sonda e o aceite de risco devem esclarecer que `observed` registra o comportamento que segue 3xx, sem indicar que o teste de velocidade seja seguro por si só.
+  Recommendation: Explicitar que a sonda observada segue 3xx e que o aceite de risco vigente é o gate usado, ou separar status da capacidade e estado da evidência.
+
+Next steps:
+- Resolver a divergência de `reboot_cpe` com o registro de capacidade e a evidência H2.
+- Fornecer referências auditáveis para as ações de limpeza e esclarecer o status do probe 3xx.
