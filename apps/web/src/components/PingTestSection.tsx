@@ -53,6 +53,8 @@ export function PingTestSection({ cpeId }: { cpeId: string }) {
   const setPending = useCallback((next: Pending | null | ((p: Pending | null) => Pending | null)) => {
     setPendingState((prev) => { const v = typeof next === "function" ? next(prev) : next; writePending(cpeId, v); return v; });
   }, [cpeId]);
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
   const alive = useRef(true);
   const seq = useRef(0);
   const hasData = useRef(false);
@@ -61,13 +63,14 @@ export function PingTestSection({ cpeId }: { cpeId: string }) {
   const fetchAll = useCallback(async (signal?: AbortSignal) => {
     const mine = ++seq.current;
     try {
-      const r = await fetch(`/bff/cpes/${cpeId}/ping`, { cache: "no-store", signal });
-      const j = (await r.json().catch(() => ({}))) as { caps?: unknown; runs?: unknown; error?: string };
+      const asked = pendingRef.current?.runId ?? null;   // o pedido aceito que a leitura precisa mostrar: a lista só traz as execuções mais recentes, então o BFF também pergunta por ele pelo id
+      const r = await fetch(`/bff/cpes/${cpeId}/ping${asked ? `?run=${asked}` : ""}`, { cache: "no-store", signal });
+      const j = (await r.json().catch(() => ({}))) as { caps?: unknown; runs?: unknown; error?: string; run_seen?: unknown };
       const caps = r.ok ? readPingCaps(j.caps) : null, runs = r.ok ? readPingRuns({ items: j.runs }) : null;
       if (!alive.current || mine !== seq.current) return;
       if (caps && runs) {
         hasData.current = true; setRefreshFailed(false); setLoad({ kind: "ready", caps, runs });
-        setPending((p) => (p && p.runId && runs.some((x) => x.id === p.runId) ? null : p));
+        setPending((p) => (p && p.runId && (runs.some((x) => x.id === p.runId) || (j.run_seen === true && p.runId === asked)) ? null : p));   // só a execução DESTE pedido destrava: vista na lista, ou confirmada pelo id (saiu das mais recentes)
         return;
       }
       const code = j.error && LOAD_ERROR[j.error] ? j.error : "failed";

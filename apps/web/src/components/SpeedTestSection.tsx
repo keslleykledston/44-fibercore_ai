@@ -73,6 +73,8 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
     setPendingState((prev) => { const v = typeof next === "function" ? next(prev) : next; writePending(cpeId, v); return v; });
   }, [cpeId]);
   const [refreshFailed, setRefreshFailed] = useState(false);
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
   const alive = useRef(true);
   const seq = useRef(0);   // cada leitura leva um número: só a MAIS RECENTE pode atualizar a tela (uma resposta lenta e antiga nunca esconde um teste ativo nem reabilita os botões)
 
@@ -87,15 +89,16 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
   const fetchAll = useCallback(async (signal?: AbortSignal) => {
     const mine = ++seq.current;
     try {
-      const r = await fetch(`/bff/cpes/${cpeId}/speed`, { cache: "no-store", signal });
-      const j = (await r.json().catch(() => ({}))) as { caps?: unknown; runs?: unknown; error?: string };
+      const asked = pendingRef.current?.runId ?? null;   // o pedido aceito que a leitura precisa mostrar: a lista só traz as execuções mais recentes, então o BFF também pergunta por ele pelo id
+      const r = await fetch(`/bff/cpes/${cpeId}/speed${asked ? `?run=${asked}` : ""}`, { cache: "no-store", signal });
+      const j = (await r.json().catch(() => ({}))) as { caps?: unknown; runs?: unknown; error?: string; run_seen?: unknown };
       const caps = r.ok ? readCaps(j.caps) : null, runs = r.ok ? readRuns({ items: j.runs }) : null;
       if (!alive.current || mine !== seq.current) return;
       if (caps && runs) {
         hasData.current = true;
         setRefreshFailed(false);
         setLoad({ kind: "ready", caps, runs });
-        setPending((p) => (p && p.runId && runs.some((x) => x.id === p.runId) ? null : p));   // só a execução DESTE pedido destrava
+        setPending((p) => (p && p.runId && (runs.some((x) => x.id === p.runId) || (j.run_seen === true && p.runId === asked)) ? null : p));   // só a execução DESTE pedido destrava: vista na lista, ou confirmada pelo id (saiu das mais recentes)
       } else keepOrFail(j.error && LOAD_ERROR[j.error] ? j.error : "failed");
     } catch (e) { if ((e as Error).name !== "AbortError" && alive.current && mine === seq.current) keepOrFail("failed"); }
   }, [cpeId, keepOrFail, setPending]);
