@@ -531,6 +531,7 @@ def main(argv: list[str] | None = None) -> None:
                 if c.execute(text("SELECT 1 FROM tenant_memberships WHERE user_id = :u AND tenant_id <> :t LIMIT 1"), {"u": uid, "t": a.tenant_id}).first():
                     # sessions and token validity are per USER, not per tenant: ending them here would log the user out of the other tenants too
                     sys.exit("user belongs to other tenants: refused (this command closes accounts used only in this tenant)")
+                c.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"delegation:{a.tenant_id}:{uid}"})   # same lock as grant/revoke
                 if c.execute(text("SELECT 1 FROM membership_delegations WHERE tenant_id = :t AND user_id = :u AND revoked_at IS NULL AND expires_at > clock_timestamp() LIMIT 1"),
                              {"t": a.tenant_id, "u": uid}).first():
                     # a delegation is revoked by a person (`revoked_by`), which the owner CLI is not: revoke it in the product or wait for it to expire (at most 8 h)
