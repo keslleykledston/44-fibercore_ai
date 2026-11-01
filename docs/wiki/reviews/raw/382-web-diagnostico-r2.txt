@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a195c3-230a-7173-8cde-5a36f3ec842e).
+[codex] Turn started (01a195c3-2541-78f0-b4cf-60155490272b).
+[codex] Assistant message captured: Vou comparar a branch com `main` e rastrear os fluxos de ping e códigos de erro até os compon...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Pin...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Pin... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=40 main...HEAD -- apps/web/src/app/rede/onu/[...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=40 main...HEAD -- apps/web/src/app/rede/onu/[... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/components/PingTestSection.tsx | sed -n '25,115p'; nl -ba ...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/components/PingTestSection.tsx | sed -n '25,115p'; nl -ba ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: a trava persistida pode ser removida por um...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: a trava persistida pode ser removida por uma execução antiga ou por uma leitura parcial; os 403 agora distinguem feature_disabled de falta de permissão.
+
+Findings:
+- [high] Uma execução antiga destrava um pedido novo (apps/web/src/components/PingTestSection.tsx:64-66)
+  `known` é capturado antes do POST e a trava é removida quando qualquer ID da resposta não estiver nessa lista. Se outra pessoa criar uma execução depois dessa captura, mas antes ou durante o POST, a próxima leitura encontra esse ID e libera o botão mesmo sem confirmar o pedido atual. Como cada clique usa uma chave de idempotência nova, o usuário pode enviar um segundo teste enquanto o primeiro pedido ainda está sem confirmação.
+  Recommendation: Registre o instante/identificador do pedido e só considere novas execuções criadas após esse instante, ou vincule o POST a uma chave que a lista de execuções devolva; não destrave por qualquer ID ausente da lista capturada.
+- [medium] Falha parcial no GET de capacidades e execuções pode ocultar o erro (apps/web/src/app/bff/cpes/[id]/ping/route.ts:11-19)
+  O BFF consulta capacidades e execuções em paralelo, mas, se qualquer uma falhar, escolhe `bad` com base apenas em `c.status !== 200`. Quando capacidades respondem 200 com corpo inválido/ausente e runs falham com 403, 404 ou 401, essa condição escolhe `c` e retorna `failed`/502 em vez do erro real. O cliente então apresenta uma falha genérica, inclusive podendo mascarar falta de permissão ou sessão expirada.
+  Recommendation: Valide cada resposta independentemente e propague o status/`detail` da resposta que falhou; trate corpos inválidos como 502 somente quando ambos os endpoints responderem com sucesso.

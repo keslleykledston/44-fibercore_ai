@@ -17,8 +17,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   try { b = JSON.parse(raw); } catch { return reply({ error: "bad_request" }, 400); }
   if (typeof b.key !== "string" || !KEY.test(b.key) || typeof b.target_id !== "string" || !TG.test(b.target_id)) return reply({ error: "bad_request" }, 400);
   const r = await apiPost(`/v1/cpes/${id}/ping/runs`, JSON.stringify({ target_id: b.target_id }), { "content-type": "application/json", "Idempotency-Key": b.key });
-  const j = r.json as { outcome?: string; reason?: string | null; detail?: string } | null;
-  if (r.status === 201 || r.status === 200) return reply({ ok: true, outcome: j?.outcome === "existing" ? "existing" : "submitted" });
+  const j = r.json as { outcome?: string; reason?: string | null; detail?: string; run?: { id?: unknown } | null } | null;
+  // o id da execução criada volta para a tela: é o que destrava o botão, e só ele (uma execução de outra pessoa não prova que ESTE pedido foi gravado)
+  const runId = typeof j?.run?.id === "string" && UUID.test(j.run.id) ? j.run.id : null;
+  if (r.status === 201 || r.status === 200) return reply({ ok: true, outcome: j?.outcome === "existing" ? "existing" : "submitted", run_id: runId });
   if (r.status === 409 && j?.outcome === "blocked" && typeof j.reason === "string" && /^[a-z][a-z0-9_]{0,59}$/.test(j.reason)) return reply({ error: "blocked", reason: j.reason }, 409);
   if (r.status === 403) return reply({ error: j?.detail === "feature_disabled" ? "disabled" : "forbidden" }, 403);
   if (r.status === 404) return reply({ error: "not_found" }, 404);
