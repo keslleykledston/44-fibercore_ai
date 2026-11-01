@@ -11,6 +11,7 @@ from tests.conftest import seed as _seed  # noqa: F401  (fixture kept together w
 def _cleanup(migrated):
     yield
     with migrated.begin() as c:
+        c.execute(text("DELETE FROM membership_delegations WHERE user_id IN (SELECT id FROM users_global WHERE email LIKE 'dact-%@example.test')"))
         c.execute(text("DELETE FROM service_accounts WHERE name LIKE 'dact-%'"))
         c.execute(text("DELETE FROM edges WHERE name = 'dact-edge-site'"))
         c.execute(text("DELETE FROM tenant_memberships WHERE user_id IN (SELECT id FROM users_global WHERE email LIKE 'dact-%@example.test')"))
@@ -77,3 +78,21 @@ def test_a_user_who_also_belongs_to_another_tenant_is_refused_and_keeps_every_me
     with migrated.begin() as c:
         assert c.execute(text("SELECT count(*) FROM tenant_memberships m JOIN users_global u ON u.id = m.user_id WHERE u.email = 'dact-two@example.test'")).scalar() == 2
         assert c.execute(text("SELECT is_active FROM users_global WHERE email = 'dact-two@example.test'")).scalar() is True
+
+
+def test_a_user_with_a_live_delegation_in_the_tenant_is_refused_and_keeps_the_membership(seed, migrated, admin_url, monkeypatch):
+    from app import cli
+
+    monkeypatch.setenv("ADMIN_DATABASE_URL", admin_url)
+    t = str(seed["A"])
+    _user(cli, t, "dact-del@example.test", "noc_n1", monkeypatch)
+    with migrated.begin() as c:
+        c.execute(text("INSERT INTO membership_delegations (tenant_id, user_id, granted_by, reason, expires_at) "
+                       "SELECT :t, u.id, (SELECT m.user_id FROM tenant_memberships m WHERE m.tenant_id = :t AND m.user_id <> u.id LIMIT 1), 'delegação de teste do encerramento', now() + interval '1 hour' "
+                       "FROM users_global u WHERE u.email = 'dact-del@example.test'"), {"t": t})
+    with pytest.raises(SystemExit) as e:
+        cli.main(["deactivate-account", t, "--user", "dact-del@example.test"])
+    assert "live delegation" in str(e.value)
+    with migrated.begin() as c:
+        assert c.execute(text("SELECT count(*) FROM tenant_memberships m JOIN users_global u ON u.id = m.user_id WHERE u.email = 'dact-del@example.test'")).scalar() == 1
+        assert c.execute(text("SELECT is_active FROM users_global WHERE email = 'dact-del@example.test'")).scalar() is True

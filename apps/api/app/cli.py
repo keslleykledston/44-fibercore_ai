@@ -531,6 +531,10 @@ def main(argv: list[str] | None = None) -> None:
                 if c.execute(text("SELECT 1 FROM tenant_memberships WHERE user_id = :u AND tenant_id <> :t LIMIT 1"), {"u": uid, "t": a.tenant_id}).first():
                     # sessions and token validity are per USER, not per tenant: ending them here would log the user out of the other tenants too
                     sys.exit("user belongs to other tenants: refused (this command closes accounts used only in this tenant)")
+                if c.execute(text("SELECT 1 FROM membership_delegations WHERE tenant_id = :t AND user_id = :u AND revoked_at IS NULL AND expires_at > clock_timestamp() LIMIT 1"),
+                             {"t": a.tenant_id, "u": uid}).first():
+                    # a delegation is revoked by a person (`revoked_by`), which the owner CLI is not: revoke it in the product or wait for it to expire (at most 8 h)
+                    sys.exit("user has a live delegation in this tenant: revoke it in the product or wait for it to expire")
                 c.execute(text("DELETE FROM tenant_memberships WHERE tenant_id = :t AND user_id = :u"), {"t": a.tenant_id, "u": uid})
                 c.execute(text("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = :u AND revoked_at IS NULL"), {"u": uid})
                 c.execute(text("UPDATE users_global SET tokens_valid_after = clock_timestamp(), is_active = false WHERE id = :u"), {"u": uid})

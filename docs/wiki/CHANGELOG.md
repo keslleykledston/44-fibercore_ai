@@ -7,7 +7,7 @@
 - Docs: `docs/operations/SPEED_HOMOLOGACAO.md` seção 7 (o que o teste mede e seus limites).
 
 ## Unreleased — encerramento de contas de homologação (2026-11-01)
-- CLI do dono `deactivate-account`: desativa contas de serviço por nome exato e encerra o vínculo de usuários num tenant (recusa contas `edge_agent`, usuários `isp_admin` e usuários que pertencem a outro tenant); um evento `account.deactivated` por conta, sem e-mail no payload. Testes em `apps/api/tests/test_owner_deactivate.py`.
+- CLI do dono `deactivate-account`: desativa contas de serviço por nome exato e encerra o vínculo de usuários num tenant (recusa contas `edge_agent`, usuários `isp_admin`, usuários que pertencem a outro tenant e usuários com delegação viva no tenant); um evento `account.deactivated` por conta, sem e-mail no payload. Testes em `apps/api/tests/test_owner_deactivate.py`.
 
 ## [0.0.0-spec] - 2026-10-27
 
