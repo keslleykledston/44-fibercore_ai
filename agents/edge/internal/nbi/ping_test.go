@@ -376,3 +376,17 @@ func TestFreshValueBoundaryIsExactAtTheNanosecond(t *testing.T) {
 		t.Fatal("the state leaf must keep its clock tolerance")
 	}
 }
+
+func TestPingTheIPPingCompleteStateIsAFinishedTestAndIsReportedAsCompleted(t *testing.T) {
+	since := time.Now()
+	at := since.Add(time.Second)
+	l := map[string]speedLeaf{speedStateLeaf: {Value: "Complete", At: at}, "SuccessCount": {Value: 5.0, At: at}, "FailureCount": {Value: 0.0, At: at},
+		"AverageResponseTime": {Value: 11.0, At: at}, "MinimumResponseTime": {Value: 11.0, At: at}, "MaximumResponseTime": {Value: 12.0, At: at}}
+	cn := finishedPing(l, since)
+	if cn == nil || cn.State != speedCompleted || cn.Success == nil || *cn.Success != 5 || cn.AvgMS == nil || *cn.AvgMS != 11 {
+		t.Fatalf("a Complete IPPing must be a finished test reported as %q, got %+v", speedCompleted, cn)
+	}
+	if finishedPing(map[string]speedLeaf{speedStateLeaf: {Value: "Requested", At: at}}, since) != nil || finishedPing(map[string]speedLeaf{speedStateLeaf: {Value: "Completeness", At: at}}, since) != nil {
+		t.Fatal("only Complete, Completed and Error_* end a ping test")
+	}
+}

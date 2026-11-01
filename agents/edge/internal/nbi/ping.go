@@ -195,11 +195,19 @@ func (c *Client) RunBenchPing(parent context.Context, d BenchDevice, req PingReq
 	}
 }
 
-// finishedPing returns the counters when the state is terminal (Completed or Error_*) AND was read after the request (a leaf older than the request is the
+// pingStateComplete is how the IPPing diagnostic names a finished test (see finishedPing).
+const pingStateComplete = "Complete"
+
+// finishedPing returns the counters when the state is terminal (Complete/Completed or Error_*) AND was read after the request (a leaf older than the request is the
 // result of an earlier test and is ignored).
 func finishedPing(l map[string]speedLeaf, since time.Time) *PingCounters {
 	st, ok := l[speedStateLeaf]
 	state, _ := st.Value.(string)
+	// the IPPing object ends in "Complete" (TR-098/TR-181); the throughput objects end in "Completed". A ZTE F670L was measured ending in "Complete" (2026-11-01):
+	// both mean a finished test and the report carries the one name the Cloud's closed shape knows.
+	if state == pingStateComplete {
+		state = speedCompleted
+	}
 	if !ok || (state != speedCompleted && !strings.HasPrefix(state, "Error_")) || st.At.Before(since.Add(-taskClockSkew)) {
 		return nil
 	}
