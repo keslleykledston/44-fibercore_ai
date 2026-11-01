@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1958c-ed72-70b3-81f9-3f420ac56b7b).
+[codex] Turn started (01a1958c-eda7-7621-899d-762533913a52).
+[codex] Assistant message captured: Vou inspecionar o diff completo contra `main` e seguir o caminho do comando, incluindo os mod...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/cli.py apps/ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/cli.py apps/ap... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/cli.py | tail ...
+[codex] Command failed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/cli.py | tail ... (exit 2)
+[codex] Running command: /bin/bash -lc "cat apps/api/app/core/memberships.py && sed -n '1,115p' apps/api/app/api/deleg...
+[codex] Command completed: /bin/bash -lc "cat apps/api/app/core/memberships.py && sed -n '1,115p' apps/api/app/api/deleg... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não shippar ainda: a verificação de delegação pode pa...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não shippar ainda: a verificação de delegação pode passar e, logo depois, uma nova delegação ser concedida antes da remoção do vínculo; o usuário ficaria desativado com acesso delegado ainda válido.
+
+Findings:
+- [high] Corrida entre a checagem de delegação e a remoção do vínculo (apps/api/app/cli.py:530-540)
+  O comando consulta delegações vivas e, em seguida, apaga o vínculo e desativa a conta, mas não usa o mesmo lock `delegation:{tenant}:{user}` que `grant_delegation` usa ao conceder acesso. Uma concessão concorrente pode ocorrer após a checagem e antes da desativação; a nova delegação permanece sem revogação e o usuário passa a estar inativo, contrariando a recusa pretendida e deixando estado de acesso inconsistente. A consulta de delegações também não considera `users_global.is_active`, portanto essa delegação não dá acesso enquanto a conta estiver inativa; ainda assim, a checagem não impede que o registro vivo sobreviva à desativação. Use o lock de delegação compartilhado com concessão/revogação e faça a checagem final sob esse lock antes das mutações.
+  Recommendation: Adquirir `pg_advisory_xact_lock` com a chave `delegation:{tenant_id}:{user_id}` antes de verificar delegações, seguindo a ordem de locks do fluxo de delegação, e manter o lock até o commit.
+
+Next steps:
+- Sincronizar a concessão concorrente no teste com barreiras para verificar que desativação e criação de delegação não deixam estado incompatível.

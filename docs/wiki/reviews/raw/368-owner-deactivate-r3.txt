@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1958b-399b-7c53-9070-8a70ded5d692).
+[codex] Turn started (01a1958b-39d3-7d70-8c5c-bf6f8851c449).
+[codex] Assistant message captured: Vou revisar o diff contra `main` e seguir especificamente o fluxo do comando para identificar...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/cli.py apps/ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/cli.py apps/ap... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/app/cli.py apps/ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/app/cli.py apps/ap... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "CREATE TABLE (users_global|tenant_memberships|service_accounts)|is_acti...
+[codex] Command failed: /bin/bash -lc 'rg -n "CREATE TABLE (users_global|tenant_memberships|service_accounts)|is_acti... (exit 2)
+[codex] Running command: /bin/bash -lc "sed -n '55,125p' apps/api/app/api/members.py; rg -n \"CREATE TABLE.*membership...
+[codex] Command completed: /bin/bash -lc "sed -n '55,125p' apps/api/app/api/members.py; rg -n \"CREATE TABLE.*membership... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: o comando remove membership, mas de...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: o comando remove membership, mas deixa delegações ativas da mesma conta no tenant; essa pessoa continua com acesso apesar de `deactivate-account` reportar sucesso.
+
+Findings:
+- [high] Delegações ativas sobrevivem à desativação da membership (apps/api/app/cli.py:534-538)
+  Quando um usuário sem memberships em outros tenants recebe `--user`, o comando apaga sua membership e desativa a conta, mas não revoga linhas em `membership_delegations`. `active_roles()` considera delegações não revogadas e só consulta se a conta está ativa e marcada como platform operator; este comando não limpa essa marca. Portanto, se o usuário tiver uma delegação ativa no tenant alvo, a chamada reporta sucesso enquanto a autorização delegada pode continuar concedendo acesso. Isso é uma inferência baseada no fluxo de `active_roles()`/`get_principal`; a correção deve revogar as delegações dessa conta no tenant antes de confirmar a desativação, ou recusar o caso.
+  Recommendation: Na transação, revogar as delegações não revogadas do usuário para o tenant antes de remover a membership e incluir esse caminho em teste; alternativamente, recusar a operação se houver delegações ativas.
