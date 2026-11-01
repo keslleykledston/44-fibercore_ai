@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — trava de pedido do teste de banda e aceite do ping da ZTE (2026-11-01)
+- Web: `SpeedTestSection` passa a usar o mesmo protocolo de trava do ping: marcador `{runId, chave, pedido}` gravado ANTES do POST (sem armazenamento, o pedido não sai); só a execução DESTE pedido destrava (lista ou confirmação pelo id); pedido incerto nunca se resolve por tempo e "Confirmar pedido" repete a MESMA chave e o MESMO corpo (inclui `group_id`); `runId` ilegível vira pedido incerto sem apagar a trava. BFF `speed/runs` devolve `run_id`; BFF de leitura (speed e ping) aceita `?run=` e devolve `run_seen`. Codex: 4 rodadas, approve na r4. E2E do speed: 18 passed, 1 skipped.
+- Seed do e2e: `set_wifi_ssid` é operação de bancada e exige o parâmetro `ssid` (a prévia do seed era recusada com 422).
+- `ping_test` da ZTE F670L `V9.0.11P1N10B` promovido a `observed` com o aceite do responsável (2026-11-01), evidência de UMA execução confiável (5 de 5, 11/12/12 ms). Huawei EG8145V5 NÃO aceita (1 de 5 sem causa conhecida): segue `identified`.
+- Lovable aplicou o plano aprovado do protótipo de Diagnóstico (projeto próprio do Lovable, dados sintéticos, commit `c4e39d8`); nada foi importado para este repositório ainda e o contraste WCAG não foi medido.
+
 ## Unreleased — Diagnóstico da ONU e régua de sinal óptico (2026-11-01)
 - Web: página `/rede/onu/{id}/diagnostico` (flag `onu_quick_inspector`) com abas por link (Resumo, Velocidade, Qualidade, Latência e DNS), reaproveitando `SpeedTestSection`/`QualitySection` e a nova `PingTestSection`; cada teste só aparece com roteador vinculado e a flag própria ligada, e o Resumo diz em texto por que um teste está indisponível. Botão "Diagnóstico" na ONU 360° e no painel lateral da ONU.
 - Web: `OpticalRuler` (três tamanhos) no lugar do número solto do Rx, com faixas de REFERÊNCIA G.984.2 classe B+ (−28/−25/−10/−8 dBm) em `src/lib/optics.ts`, texto e símbolo sempre, aviso "não homologada", e dado defasado/ausente nunca classificado. ADR-0037 ganhou a emenda que permite isso só na apresentação (a API segue sem julgar o Rx).

@@ -6,6 +6,7 @@ import { API_URL, EMAIL, login, PASSWORD } from "./helpers";
 // homologação em equipamento e de um nó de teste, que não existem aqui: são CENÁRIOS, com a resposta da rota BFF simulada no navegador (rotulados assim nas capturas da ajuda).
 const row = (page: Page, serial: string) => page.getByTestId("onu-open").filter({ hasText: serial });
 const CPE = "00000000-0000-4000-8000-000000000001";
+const SPEED_URL = /\/bff\/cpes\/[^/]+\/speed(\?.*)?$/;   // com ou sem `?run=` (a leitura pergunta pelo pedido aceito)
 const RUN = (over: Record<string, unknown>) => ({
   id: "11111111-1111-4111-8111-111111111111", group_id: "22222222-2222-4222-8222-222222222222", direction: "download", endpoint_id: "core-sp-1", profile: "10mb", status: "completed",
   created_at: new Date().toISOString(), mbps: null, bytes: null, duration_ms: null, reliable: false, reason: null, basis: null, ...over,
@@ -52,11 +53,11 @@ test("teste de banda (cenário): pedir o download envia só nomes lógicos e pas
   await confirmDemoA2(request);
   let posted: Record<string, unknown> | null = null;
   let runs: unknown[] = [];
-  await page.route("**/bff/cpes/*/speed", (r) => r.fulfill({ json: { caps: CAPS(), runs } }));
+  await page.route(SPEED_URL, (r) => r.fulfill({ json: { caps: CAPS(), runs } }));
   await page.route("**/bff/cpes/*/speed/runs", async (r) => {
     posted = r.request().postDataJSON();
     runs = [RUN({ status: "awaiting_approval" })];
-    await r.fulfill({ status: 201, json: { ok: true, outcome: "submitted" } });
+    await r.fulfill({ status: 201, json: { ok: true, outcome: "submitted", run_id: RUN({}).id } });
   });
   await openTab(page);
   await expect(page.getByTestId("speed-target")).toContainText("Core");
@@ -78,7 +79,7 @@ test("teste de banda (cenário): resultado confiável, parcial e erro do aparelh
     RUN({ status: "completed", mbps: 94.25, reliable: true, bytes: 10_000_000, duration_ms: 8000, basis: "test_bytes_received" }),
     RUN({ id: "44444444-4444-4444-8444-444444444444", status: "error", reason: "device_error" }),
   ];
-  await page.route("**/bff/cpes/*/speed", (r) => r.fulfill({ json: { caps: CAPS(), runs } }));
+  await page.route(SPEED_URL, (r) => r.fulfill({ json: { caps: CAPS(), runs } }));
   await openTab(page);
   await expect(page.getByTestId("speed-kpi-upload")).toContainText("40 Mbps");
   await expect(page.getByTestId("speed-kpi-upload")).toContainText("Parcial");
@@ -94,7 +95,7 @@ test("teste de banda (cenário): resultado confiável, parcial e erro do aparelh
 
 test("teste de banda (cenário): a recusa da API aparece em palavras e nada fica em andamento", async ({ page, request }) => {
   await confirmDemoA2(request);
-  await page.route("**/bff/cpes/*/speed", (r) => r.fulfill({ json: { caps: CAPS(), runs: [] } }));
+  await page.route(SPEED_URL, (r) => r.fulfill({ json: { caps: CAPS(), runs: [] } }));
   await page.route("**/bff/cpes/*/speed/runs", (r) => r.fulfill({ status: 409, json: { error: "blocked", reason: "pon_busy" } }));
   await openTab(page);
   await page.getByTestId("speed-start-upload").click();
@@ -105,7 +106,7 @@ test("teste de banda (cenário): a recusa da API aparece em palavras e nada fica
 test("teste de banda (cenário): sem destino pronto não há botão, e a falha de carga tem nova tentativa", async ({ page, request }) => {
   await confirmDemoA2(request);
   let n = 0;
-  await page.route("**/bff/cpes/*/speed", (r) => {
+  await page.route(SPEED_URL, (r) => {
     n += 1;
     return n === 1 ? r.fulfill({ status: 502, json: { error: "failed" } }) : r.fulfill({ json: { caps: CAPS({ ready: false, endpoints: [{ id: "core-sp-1", label: "Nó", target_kind: "CORE", region: "DC-1", ready: false }] }), runs: [] } });
   });
@@ -135,7 +136,7 @@ test("teste de banda (cenário): uma leitura lenta e antiga nunca sobrescreve o 
   await confirmDemoA2(request);
   let n = 0;
   const done = RUN({ status: "completed", mbps: 93.7, reliable: true, bytes: 10_000_000, duration_ms: 8000 });
-  await page.route("**/bff/cpes/*/speed", async (r) => {
+  await page.route(SPEED_URL, async (r) => {
     n += 1;
     const mine = n;
     if (mine === 1) return r.fulfill({ json: { caps: CAPS(), runs: [] } });                                         // abrir a aba
@@ -143,7 +144,7 @@ test("teste de banda (cenário): uma leitura lenta e antiga nunca sobrescreve o 
     if (mine === 3) { await new Promise((res) => setTimeout(res, 6500)); return r.fulfill({ json: { caps: CAPS(), runs: [] } }); }   // leitura LENTA e antiga: "sem teste ativo"
     return r.fulfill({ json: { caps: CAPS(), runs: [done] } });                                                      // a seguinte, mais nova, já com o resultado
   });
-  await page.route("**/bff/cpes/*/speed/runs", (r) => r.fulfill({ status: 201, json: { ok: true, outcome: "submitted" } }));
+  await page.route("**/bff/cpes/*/speed/runs", (r) => r.fulfill({ status: 201, json: { ok: true, outcome: "submitted", run_id: RUN({}).id } }));
   await openTab(page);
   await page.getByTestId("speed-start-download").click();
   await expect(page.getByTestId("speed-active")).toBeVisible();
@@ -157,14 +158,14 @@ test("teste de banda (cenário): pedido aceito continua em curso se a leitura se
   test.setTimeout(90_000);
   await confirmDemoA2(request);
   let reads = 0, posts = 0;
-  await page.route("**/bff/cpes/*/speed", (r) => {
+  await page.route(SPEED_URL, (r) => {
     reads += 1;
     if (reads === 1) return r.fulfill({ json: { caps: CAPS(), runs: [] } });                                          // abrir a aba
     if (reads === 2) return r.fulfill({ status: 502, json: { error: "failed" } });                                    // a leitura logo após o pedido FALHA
     if (reads === 3) return r.fulfill({ json: { caps: CAPS(), runs: [] } });                                          // a seguinte chega VELHA (ainda sem a execução)
     return r.fulfill({ json: { caps: CAPS(), runs: [RUN({ status: "awaiting_approval" })] } });                      // por fim a execução aparece
   });
-  await page.route("**/bff/cpes/*/speed/runs", (r) => { posts += 1; return r.fulfill({ status: 201, json: { ok: true, outcome: "submitted" } }); });
+  await page.route("**/bff/cpes/*/speed/runs", (r) => { posts += 1; return r.fulfill({ status: 201, json: { ok: true, outcome: "submitted", run_id: RUN({}).id } }); });
   await openTab(page);
   await page.getByTestId("speed-start-download").click();
   await expect(page.getByTestId("speed-pending")).toBeVisible();
@@ -198,21 +199,25 @@ test("flag speed_diagnostics desligada: sem aba, sem cartão na ONU 360° e o BF
   expect([403, 404]).toContain(r.status());
 });
 
-test("teste de banda (cenário): pedido aceito que a leitura não mostra NUNCA destrava pelo relógio; só uma leitura que mostre a execução", async ({ page, request }) => {
+test("teste de banda (cenário): pedido aceito que a leitura não mostra NUNCA destrava pelo relógio; só uma leitura que mostre ESSA execução", async ({ page, request }) => {
   await confirmDemoA2(request);
-  let showRun = false;
-  await page.route("**/bff/cpes/*/speed", (r) => r.fulfill({ json: { caps: CAPS(), runs: showRun ? [RUN({ status: "awaiting_approval" })] : [] } }));
+  let mode: "none" | "other" | "mine" = "none";
+  await page.route(SPEED_URL, (r) => r.fulfill({ json: { caps: CAPS(), runs: mode === "none" ? [] : mode === "other" ? [RUN({ id: "33333333-3333-4333-8333-333333333333", status: "completed", mbps: 50, reliable: true })] : [RUN({ status: "awaiting_approval" })] } }));
   let posts = 0;
-  await page.route("**/bff/cpes/*/speed/runs", (r) => { posts += 1; return r.fulfill({ status: 201, json: { ok: true, outcome: "submitted" } }); });
+  await page.route("**/bff/cpes/*/speed/runs", (r) => { posts += 1; return r.fulfill({ status: 201, json: { ok: true, outcome: "submitted", run_id: RUN({}).id } }); });
   await openTab(page);
   await page.clock.install();
   await page.getByTestId("speed-start-download").click();
   await expect(page.getByTestId("speed-pending")).toBeVisible();
-  await page.clock.fastForward("21:00");                                                                               // passa o prazo de vida do pedido (e do que o relógio local sabe)
-  await expect(page.getByTestId("speed-pending")).toContainText("a leitura ainda não mostra a execução");
+  await page.clock.fastForward("21:00");                                                                               // passa qualquer prazo: o relógio não prova nada
+  await expect(page.getByTestId("speed-pending")).toContainText("Aguardando a leitura mostrar a execução");
   await expect(page.getByTestId("speed-start-download")).toBeDisabled();
   await expect(page.getByTestId("speed-start-upload")).toBeDisabled();
-  showRun = true;
+  mode = "other";                                                                                                      // a execução de OUTRA pessoa aparece: não é a deste pedido
+  await page.getByTestId("speed-pending-refresh").click();
+  await expect(page.getByTestId("speed-pending")).toBeVisible();
+  await expect(page.getByTestId("speed-start-download")).toBeDisabled();
+  mode = "mine";
   await page.getByTestId("speed-pending-refresh").click();
   await expect(page.getByTestId("speed-active")).toContainText("Aguardando aprovação");
   await expect(page.getByTestId("speed-pending")).toHaveCount(0);
@@ -223,11 +228,11 @@ test("teste de banda (cenário): sessão expirada durante o acompanhamento para 
   test.setTimeout(60_000);
   await confirmDemoA2(request);
   let reads = 0;
-  await page.route("**/bff/cpes/*/speed", (r) => {
+  await page.route(SPEED_URL, (r) => {
     reads += 1;
     return reads <= 2 ? r.fulfill({ json: { caps: CAPS(), runs: [] } }) : r.fulfill({ status: 401, json: { error: "session" } });
   });
-  await page.route("**/bff/cpes/*/speed/runs", (r) => r.fulfill({ status: 201, json: { ok: true, outcome: "submitted" } }));
+  await page.route("**/bff/cpes/*/speed/runs", (r) => r.fulfill({ status: 201, json: { ok: true, outcome: "submitted", run_id: RUN({}).id } }));
   await openTab(page);
   await page.getByTestId("speed-start-download").click();                                                                // a leitura seguinte (a 2ª, logo após o pedido, ainda vem vazia; a 3ª, do acompanhamento, responde 401)
   await expect(page.getByTestId("speed-error")).toContainText("Sua sessão expirou", { timeout: 15_000 });
@@ -238,29 +243,66 @@ test("teste de banda (cenário): sessão expirada durante o acompanhamento para 
   expect(reads).toBe(seen);                                                                                              // parou de consultar
 });
 
-test("teste de banda (cenário): resposta 502 ao pedido é ambígua, trava os botões e só destrava por uma leitura feita depois do prazo sem execução nova", async ({ page, request }) => {
+test("teste de banda (cenário): resposta 502 ao pedido é ambígua, trava os botões, não destrava pelo relógio e Confirmar pedido repete O MESMO pedido", async ({ page, request }) => {
   await confirmDemoA2(request);
-  let posts = 0;
-  await page.route("**/bff/cpes/*/speed", (r) => r.fulfill({ json: { caps: CAPS(), runs: [] } }));
-  await page.route("**/bff/cpes/*/speed/runs", (r) => { posts += 1; return r.fulfill({ status: 502, json: { error: "failed" } }); });
+  const sent: { key: string; body: string }[] = [];
+  let showRun = false;
+  await page.route(SPEED_URL, (r) => r.fulfill({ json: { caps: CAPS(), runs: showRun ? [RUN({ status: "awaiting_approval" })] : [] } }));
+  await page.route("**/bff/cpes/*/speed/runs", (r) => {
+    const b = r.request().postDataJSON() as { key: string };
+    sent.push({ key: b.key, body: JSON.stringify(b) });
+    return sent.length === 1 ? r.fulfill({ status: 502, json: { error: "failed" } }) : r.fulfill({ status: 200, json: { ok: true, outcome: "existing", run_id: RUN({}).id } });
+  });
   await openTab(page);
   await page.clock.install();
   await page.getByTestId("speed-start-download").click();
-  await expect(page.getByTestId("speed-refusal")).toContainText("Não foi possível confirmar o pedido");
-  await expect(page.getByTestId("speed-pending")).toBeVisible();
+  await expect(page.getByTestId("speed-refusal")).toContainText("Use Confirmar pedido");
+  await expect(page.getByTestId("speed-pending")).toContainText("a confirmação não chegou");
   await expect(page.getByTestId("speed-start-download")).toBeDisabled();
   await expect(page.getByTestId("speed-start-upload")).toBeDisabled();
-  await page.getByTestId("speed-pending-refresh").click();                                                              // uma leitura ANTES do prazo não basta
+  await page.clock.fastForward("30:00");                                                                                // nem o tempo, nem uma leitura sem a execução destravam
+  await page.getByTestId("speed-pending-refresh").click();
   await expect(page.getByTestId("speed-start-download")).toBeDisabled();
-  await page.clock.fastForward("01:05");                                                                                // passa o prazo; a leitura periódica seguinte começa DEPOIS dele, sem execução nova: destrava sozinha
-  await expect(page.getByTestId("speed-start-download")).toBeEnabled();
+  await expect(page.getByTestId("speed-pending-confirm")).toBeVisible();
+  showRun = true;
+  await page.getByTestId("speed-pending-confirm").click();                                                              // repete o MESMO pedido
+  await expect(page.getByTestId("speed-active")).toContainText("Aguardando aprovação");
   await expect(page.getByTestId("speed-pending")).toHaveCount(0);
-  expect(posts).toBe(1);
+  expect(sent).toHaveLength(2);
+  expect(sent[1]!.key).toBe(sent[0]!.key);                                                                              // MESMA chave de idempotência...
+  expect(sent[1]!.body).toBe(sent[0]!.body);                                                                            // ...e MESMA intenção
+});
+
+test("teste de banda (cenário): se a confirmação do pedido incerto é recusada de forma definitiva, a trava sai", async ({ page, request }) => {
+  await confirmDemoA2(request);
+  let posts = 0;
+  await page.route(SPEED_URL, (r) => r.fulfill({ json: { caps: CAPS(), runs: [] } }));
+  await page.route("**/bff/cpes/*/speed/runs", (r) => { posts += 1; return posts === 1 ? r.fulfill({ status: 502, json: { error: "failed" } }) : r.fulfill({ status: 409, json: { error: "blocked", reason: "tenant_busy" } }); });
+  await openTab(page);
+  await page.getByTestId("speed-start-download").click();
+  await expect(page.getByTestId("speed-pending-confirm")).toBeVisible();
+  await page.getByTestId("speed-pending-confirm").click();
+  await expect(page.getByTestId("speed-refusal")).toContainText("limite de testes simultâneos");
+  await expect(page.getByTestId("speed-pending")).toHaveCount(0);
+  await expect(page.getByTestId("speed-start-download")).toBeEnabled();
+});
+
+test("teste de banda (cenário): sem como guardar a trava no navegador, o pedido NÃO sai", async ({ page, request }) => {
+  await confirmDemoA2(request);
+  let posts = 0;
+  await page.addInitScript(() => { Storage.prototype.setItem = () => { throw new Error("cheio"); }; });
+  await page.route(SPEED_URL, (r) => r.fulfill({ json: { caps: CAPS(), runs: [] } }));
+  await page.route("**/bff/cpes/*/speed/runs", (r) => { posts += 1; return r.fulfill({ status: 201, json: { ok: true, outcome: "submitted", run_id: RUN({}).id } }); });
+  await openTab(page);
+  await page.getByTestId("speed-start-download").click();
+  await expect(page.getByTestId("speed-refusal")).toContainText("não permite guardar o pedido em andamento");
+  await expect(page.getByTestId("speed-pending")).toHaveCount(0);
+  expect(posts).toBe(0);
 });
 
 test("teste de banda (cenário): recusa definitiva (409) não trava e a próxima tentativa é possível", async ({ page, request }) => {
   await confirmDemoA2(request);
-  await page.route("**/bff/cpes/*/speed", (r) => r.fulfill({ json: { caps: CAPS(), runs: [] } }));
+  await page.route(SPEED_URL, (r) => r.fulfill({ json: { caps: CAPS(), runs: [] } }));
   await page.route("**/bff/cpes/*/speed/runs", (r) => r.fulfill({ status: 409, json: { error: "blocked", reason: "tenant_busy" } }));
   await openTab(page);
   await page.getByTestId("speed-start-download").click();
@@ -272,8 +314,8 @@ test("teste de banda (cenário): recusa definitiva (409) não trava e a próxima
 test("teste de banda (cenário): fechar o painel ou trocar de aba não destrava um pedido ainda não esclarecido", async ({ page, request }) => {
   await confirmDemoA2(request);
   let posts = 0;
-  await page.route("**/bff/cpes/*/speed", (r) => r.fulfill({ json: { caps: CAPS(), runs: [] } }));          // a leitura nunca mostra a execução
-  await page.route("**/bff/cpes/*/speed/runs", (r) => { posts += 1; return r.fulfill({ status: 201, json: { ok: true, outcome: "submitted" } }); });
+  await page.route(SPEED_URL, (r) => r.fulfill({ json: { caps: CAPS(), runs: [] } }));          // a leitura nunca mostra a execução
+  await page.route("**/bff/cpes/*/speed/runs", (r) => { posts += 1; return r.fulfill({ status: 201, json: { ok: true, outcome: "submitted", run_id: RUN({}).id } }); });
   await openTab(page);
   await page.getByTestId("speed-start-download").click();
   await expect(page.getByTestId("speed-pending")).toBeVisible();
@@ -292,4 +334,79 @@ test("teste de banda (cenário): fechar o painel ou trocar de aba não destrava 
   await expect(page.getByTestId("speed-pending")).toBeVisible();
   await expect(page.getByTestId("speed-start-upload")).toBeDisabled();
   expect(posts).toBe(1);
+});
+
+test("teste de banda (cenário): Confirmar pedido repete a MESMA chave, a MESMA intenção e o MESMO group_id de um teste agrupado", async ({ page, request }) => {
+  await confirmDemoA2(request);
+  const upload = RUN({ id: "44444444-4444-4444-8444-444444444444", direction: "upload", status: "completed", mbps: 40, reliable: true, bytes: 10_000_000, duration_ms: 8000 });
+  const sent: { key: string; body: string; group_id?: string }[] = [];
+  await page.route(SPEED_URL, (r) => r.fulfill({ json: { caps: CAPS(), runs: [upload] } }));
+  await page.route("**/bff/cpes/*/speed/runs", (r) => {
+    const b = r.request().postDataJSON() as { key: string; group_id?: string };
+    sent.push({ key: b.key, body: JSON.stringify(b), group_id: b.group_id });
+    return sent.length === 1 ? r.fulfill({ status: 502, json: { error: "failed" } }) : r.fulfill({ status: 200, json: { ok: true, outcome: "existing", run_id: RUN({}).id } });
+  });
+  await openTab(page);
+  await page.getByTestId("speed-start-download").click();                                                               // o upload anterior (10mb, mesmo destino) vira o mesmo grupo
+  await expect(page.getByTestId("speed-pending-confirm")).toBeVisible();
+  await page.getByTestId("speed-pending-confirm").click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[0]!.group_id).toBe(upload.group_id);
+  expect(sent[1]!.key).toBe(sent[0]!.key);
+  expect(sent[1]!.body).toBe(sent[0]!.body);                                                                            // inclui o group_id
+});
+
+test("teste de banda (cenário): runId malformado no marcador guardado vira pedido INCERTO: a trava fica e Confirmar pedido repete a MESMA chave e intenção", async ({ page, request }) => {
+  await confirmDemoA2(request);
+  const sent: { key: string; body: string }[] = [];
+  await page.route(SPEED_URL, (r) => r.fulfill({ json: { caps: CAPS(), runs: [] } }));
+  await page.route("**/bff/cpes/*/speed/runs", (r) => {
+    const b = r.request().postDataJSON() as { key: string };
+    sent.push({ key: b.key, body: JSON.stringify(b) });
+    return r.fulfill({ status: 201, json: { ok: true, outcome: "submitted", run_id: RUN({}).id } });
+  });
+  await openTab(page);
+  await page.getByTestId("speed-start-download").click();
+  await expect(page.getByTestId("speed-pending")).toContainText("Aguardando a leitura mostrar a execução");
+  // a página viva regrava o marcador do estado em memória a cada atualização: a adulteração entra no INÍCIO do documento seguinte, depois de todas as escritas da página antiga
+  await page.addInitScript(() => {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i)!;
+      if (k.startsWith("fc-speed-pending:")) { const o = JSON.parse(sessionStorage.getItem(k)!); o.runId = "não-é-uuid"; sessionStorage.setItem(k, JSON.stringify(o)); }
+    }
+  });
+  await page.reload();
+  await row(page, "DEMOA0002").click();
+  await page.getByRole("tab", { name: "Teste de banda" }).click();
+  await expect(page.getByTestId("speed-pending")).toContainText("a confirmação não chegou");                            // o runId ilegível não vale como prova, mas a trava NÃO sai
+  await expect(page.getByTestId("speed-start-download")).toBeDisabled();
+  await expect(page.getByTestId("speed-start-upload")).toBeDisabled();
+  await page.getByTestId("speed-pending-confirm").click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[1]!.key).toBe(sent[0]!.key);                                                                              // repete o MESMO pedido, nunca um novo
+  expect(sent[1]!.body).toBe(sent[0]!.body);
+});
+
+test("teste de banda (cenário): pedido aceito cuja execução saiu da lista das mais recentes destrava só quando o BFF confirma o id; sem confirmação, a trava fica", async ({ page, request }) => {
+  await confirmDemoA2(request);
+  let seen: boolean | null = null;
+  const asked: string[] = [];
+  await page.route(SPEED_URL, (r) => {
+    const q = new URL(r.request().url()).searchParams.get("run");
+    if (q) asked.push(q);
+    return r.fulfill({ json: { caps: CAPS(), runs: [], run_seen: q ? seen : null } });                                 // a lista nunca traz a execução (20 mais recentes de outras pessoas)
+  });
+  await page.route("**/bff/cpes/*/speed/runs", (r) => r.fulfill({ status: 201, json: { ok: true, outcome: "submitted", run_id: RUN({}).id } }));
+  await openTab(page);
+  await page.getByTestId("speed-start-download").click();
+  await expect(page.getByTestId("speed-pending")).toContainText("Aguardando a leitura mostrar a execução");
+  seen = false;                                                                                                          // a API diz que o id NÃO existe: nada prova o pedido
+  await page.getByTestId("speed-pending-refresh").click();
+  await expect(page.getByTestId("speed-pending")).toBeVisible();
+  await expect(page.getByTestId("speed-start-download")).toBeDisabled();
+  seen = true;                                                                                                           // a API confirma o id
+  await page.getByTestId("speed-pending-refresh").click();
+  await expect(page.getByTestId("speed-pending")).toHaveCount(0);
+  await expect(page.getByTestId("speed-start-download")).toBeEnabled();
+  expect(new Set(asked)).toEqual(new Set([RUN({}).id]));                                                                 // só perguntou pelo id deste pedido
 });

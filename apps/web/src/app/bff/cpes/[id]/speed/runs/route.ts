@@ -20,8 +20,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     typeof b.profile !== "string" || !(PROFILES as readonly string[]).includes(b.profile) || (b.group_id !== undefined && (typeof b.group_id !== "string" || !UUID.test(b.group_id)))) return reply({ error: "bad_request" }, 400);
   const body = JSON.stringify({ direction: b.direction, endpoint_id: b.endpoint_id, profile: b.profile, ...(b.group_id ? { group_id: b.group_id } : {}) });
   const r = await apiPost(`/v1/cpes/${id}/speed/runs`, body, { "content-type": "application/json", "Idempotency-Key": b.key });
-  const j = r.json as { outcome?: string; reason?: string | null } | null;
-  if (r.status === 201 || r.status === 200) return reply({ ok: true, outcome: j?.outcome === "existing" ? "existing" : "submitted" });
+  const j = r.json as { outcome?: string; reason?: string | null; run?: { id?: unknown } | null } | null;
+  // o id da execução criada volta para a tela: é o que destrava o botão, e só ele (uma execução de outra pessoa não prova que ESTE pedido foi gravado)
+  const runId = typeof j?.run?.id === "string" && UUID.test(j.run.id) ? j.run.id : null;
+  if (r.status === 201 || r.status === 200) return reply({ ok: true, outcome: j?.outcome === "existing" ? "existing" : "submitted", run_id: runId });
   if (r.status === 409 && j?.outcome === "blocked" && typeof j.reason === "string" && /^[a-z][a-z0-9_]{0,59}$/.test(j.reason)) return reply({ error: "blocked", reason: j.reason }, 409);
   if (r.status === 403) return reply({ error: String((j as { detail?: string } | null)?.detail) === "feature_disabled" ? "disabled" : "forbidden" }, 403);
   if (r.status === 404) return reply({ error: "not_found" }, 404);

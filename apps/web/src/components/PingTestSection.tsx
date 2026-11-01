@@ -21,13 +21,15 @@ const POLL_MS = 4000;
 type Pending = { runId: string | null; key: string; target: string };   // o destino fica junto da chave: repetir o pedido é repetir a MESMA intenção
 const memo = new Map<string, Pending | null>();
 const KEY = (cpe: string) => `fc-ping-pending:${cpe}`;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function readPending(cpe: string): Pending | null {
   if (memo.has(cpe)) return memo.get(cpe) ?? null;
   try {
     const raw = window.sessionStorage.getItem(KEY(cpe));
     const o = raw ? (JSON.parse(raw) as Pending) : null;
-    const ok = !!o && (o.runId === null || typeof o.runId === "string") && typeof o.key === "string" && /^[A-Za-z0-9_.:-]{8,128}$/.test(o.key) && typeof o.target === "string" && /^[a-z0-9][a-z0-9-]{1,30}$/.test(o.target);
-    memo.set(cpe, ok ? o : null);
+    // key e destino válidos são o que permite repetir O MESMO pedido: um runId ilegível não os apaga (viraria um botão livre sobre um pedido que pode ter gerado tráfego); vira "incerto" (runId null)
+    const ok = !!o && typeof o.key === "string" && /^[A-Za-z0-9_.:-]{8,128}$/.test(o.key) && typeof o.target === "string" && /^[a-z0-9][a-z0-9-]{1,30}$/.test(o.target);
+    memo.set(cpe, ok && o ? { ...o, runId: typeof o.runId === "string" && UUID.test(o.runId) ? o.runId : null } : null);
   } catch { memo.set(cpe, null); }
   return memo.get(cpe) ?? null;
 }
@@ -51,6 +53,8 @@ export function PingTestSection({ cpeId }: { cpeId: string }) {
   const setPending = useCallback((next: Pending | null | ((p: Pending | null) => Pending | null)) => {
     setPendingState((prev) => { const v = typeof next === "function" ? next(prev) : next; writePending(cpeId, v); return v; });
   }, [cpeId]);
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
   const alive = useRef(true);
   const seq = useRef(0);
   const hasData = useRef(false);
@@ -59,13 +63,14 @@ export function PingTestSection({ cpeId }: { cpeId: string }) {
   const fetchAll = useCallback(async (signal?: AbortSignal) => {
     const mine = ++seq.current;
     try {
-      const r = await fetch(`/bff/cpes/${cpeId}/ping`, { cache: "no-store", signal });
-      const j = (await r.json().catch(() => ({}))) as { caps?: unknown; runs?: unknown; error?: string };
+      const asked = pendingRef.current?.runId ?? null;   // o pedido aceito que a leitura precisa mostrar: a lista só traz as execuções mais recentes, então o BFF também pergunta por ele pelo id
+      const r = await fetch(`/bff/cpes/${cpeId}/ping${asked ? `?run=${asked}` : ""}`, { cache: "no-store", signal });
+      const j = (await r.json().catch(() => ({}))) as { caps?: unknown; runs?: unknown; error?: string; run_seen?: unknown };
       const caps = r.ok ? readPingCaps(j.caps) : null, runs = r.ok ? readPingRuns({ items: j.runs }) : null;
       if (!alive.current || mine !== seq.current) return;
       if (caps && runs) {
         hasData.current = true; setRefreshFailed(false); setLoad({ kind: "ready", caps, runs });
-        setPending((p) => (p && p.runId && runs.some((x) => x.id === p.runId) ? null : p));
+        setPending((p) => (p && p.runId && (runs.some((x) => x.id === p.runId) || (j.run_seen === true && p.runId === asked)) ? null : p));   // só a execução DESTE pedido destrava: vista na lista, ou confirmada pelo id (saiu das mais recentes)
         return;
       }
       const code = j.error && LOAD_ERROR[j.error] ? j.error : "failed";

@@ -10,7 +10,7 @@ Escopo: SOMENTE as duas ONTs de bancada, pela WAN PPPoE de serviço de cada uma.
 - **Versões:** Edge `0.1.0-lab-74719f0` na tentativa 1 e `0.1.0-lab-90d6b9d` nas demais; firmware ZTE `V9.0.11P1N10B`, Huawei `V5R019C10S350`; nuvem com a migração 0038.
 - **Aprovador:** conta de serviço de ensaio diferente da que pediu o teste (quem pede ≠ quem aprova ≠ quem autorizou). Autorizações de uso único com `--first-run`, abertas a partir da ordem do responsável no chat ("Ping real: pode executar agora", 2026-11-01).
 - **Horário:** tentativa 1 (ZTE) 10:19:52 UTC; ZTE concluído 10:37:19; Huawei 10:38:23 e repetição 10:40:30 (UTC). Intervalo mínimo de 1 min do Edge respeitado.
-- **Aceite do responsável:** PENDENTE. Sem aceite escrito, `ping_test` segue `identified` nos dois modelos.
+- **Aceite do responsável:** ZTE F670L `V9.0.11P1N10B`: ACEITO em 2026-11-01 ("aceito", em resposta à pergunta sobre aceitar a ZTE com 5 de 5 respostas); vale para UMA execução confiável. Huawei EG8145V5: NÃO aceito (1 de 5 respostas sem causa conhecida); `ping_test` segue `identified` na Huawei.
 
 ## Resultados (gravados pela plataforma)
 | Aparelho | Execução | Enviados | Respostas | Perda | Mín / média / máx |
@@ -27,7 +27,7 @@ Escopo: SOMENTE as duas ONTs de bancada, pela WAN PPPoE de serviço de cada uma.
 
 ## O que ainda falta
 - Repetições (ao menos 3, em dias diferentes para qualquer promoção além da bancada) e a causa dos 80 % da Huawei.
-- Aceite escrito do responsável, por modelo, sobre o que quiser aceitar.
+- Aceite da Huawei (depende da causa dos 80 %).
 
 ## Alcance
-Quando houver aceite, `ping_test` entra como `observed` só para o modelo/firmware aceito, como evidência de UMA execução confiável. A Huawei, no estado atual, não deveria ser aceita sem a causa dos 80 %. Não é homologação abrangente.
+`ping_test` entrou como `observed` só para a ZTE F670L `V9.0.11P1N10B`, como evidência de UMA execução confiável. A Huawei não foi aceita enquanto a causa dos 80 % for desconhecida. Não é homologação abrangente.

@@ -1,3 +1,3 @@
 
-## SpeedTestSection: trava de pedido duplicado ainda pelo padrão de "ids conhecidos" (2026-11-01)
-O `PingTestSection` (revisado em 7 rodadas) resolve o pedido incerto repetindo a MESMA chave de idempotência e só destrava pela execução do próprio pedido; a trava é gravada antes do POST e o pedido não sai se o navegador não guarda a trava. A `SpeedTestSection` ainda destrava por "qualquer execução nova" e, no pedido sem resposta, pelo relógio: uma execução de outra pessoa, ou uma leitura depois do prazo com o POST ainda em processamento, pode reabrir o botão com chave nova. Ação: portar o protocolo do ping (marcador `{runId, chave, parâmetros}`, "Confirmar pedido") para o teste de banda, com o BFF devolvendo `run_id`.
+## E2E: falhas que já existiam na main (2026-11-01)
+Na stack efêmera (`fibercore-dev`) falham, também sem as mudanças do speed: `app.spec.ts` (axe tema light e dark; renovação de sessão com refresh rotativo) e `onu-quick.spec.ts` (resumo rápido) / `onu-workspace.spec.ts` (setas entre abas). Medido na `main` com a bateria `funcional` + `inspetor`: 5 falhas antes e depois. Investigar à parte.
