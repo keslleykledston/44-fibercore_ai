@@ -155,7 +155,7 @@ func (c *Client) RunBenchSpeed(parent context.Context, d BenchDevice, req SpeedR
 	wanReadAt := now()
 	wan, err := c.readSpeedLeaves(ctx, d.DeviceID, req.Interface, []string{wanLeaf})
 	if err != nil {
-		return SpeedOutcome{}, fmt.Errorf("%w: %v", ErrSpeedWANDown, err) // any failure to verify the WAN is "not verified connected": the cause stays in the wrapped error
+		return SpeedOutcome{}, fmt.Errorf("%w: %w", ErrSpeedWANDown, err) // any failure to verify the WAN is "not verified connected": the cause stays in the wrapped error
 	}
 	if s, _ := wan[wanLeaf].Value.(string); s != wanUp || wan[wanLeaf].At.Before(wanReadAt.Add(-taskClockSkew)) {
 		return SpeedOutcome{}, ErrSpeedWANDown

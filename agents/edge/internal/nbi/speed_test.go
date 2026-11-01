@@ -586,4 +586,7 @@ func TestSpeedRefusesBeforeWritingWhenTheNBIFailsWhileReadingTheServiceWAN(t *te
 	if !errors.Is(err, ErrSpeedWANDown) || out.Attempted || f.sentSets() != 0 {
 		t.Fatalf("a failed read of the WAN must refuse as not verified, before any write: err=%v attempted=%v sets=%d", err, out.Attempted, f.sentSets())
 	}
+	if !errors.Is(err, ErrSpeedRead) {
+		t.Fatalf("the cause of the failed read must stay in the error chain: %v", err)
+	}
 }
