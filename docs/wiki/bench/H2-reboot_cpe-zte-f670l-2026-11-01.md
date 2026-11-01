@@ -5,13 +5,13 @@ Escopo: SOMENTE a ONT de bancada ZTE F670L (firmware `V9.0.11P1N10B`). Sem crede
 - **Hash da intenção:** `ed602fbed41c51779421219d87d7797c5c4fdd4186d8fcdeab1a1c52e8eaaace` (job `a2a22f05-847d-4199-89e1-237db6c41ae6`, operação `reboot_cpe`, sem parâmetros)
 - **Pré-requisitos formais (ADR-0030 item 2) e seu limite:** o vínculo ONU↔CPE foi marcado `confirmed` por uma pessoa em 2026-11-01 03:23:52 UTC, ANTES do `bench-target-add` (`owner_epoch 2`). Essa confirmação é uma DECISÃO HUMANA sobre o H1 da ZTE, cuja evidência é sugestiva e não conclusiva; ela NÃO prova a correspondência física entre o CPE do ACS e a ONT 11 da OLT. Também existem: autorização de escrita do responsável no chat da sessão, identidade na lista local do Edge e capacidade `reboot_cpe` registrada como `supported`/`identified` para este modelo e firmware.
 - **Autorização prévia:** `c6630dfb-5ed3-471a-a558-1d3419109551`, uso único, janela de 30 min, com `--first-run` (substitui a entrada `observed` que ainda não existe no registro).
-- **Identidades observadas:** no ACS, exatamente 1 documento com o id `FC4009-F670L-ZTE3BJNP5359122` (fabricante ZTE, modelo F670L, firmware `V9.0.11P1N10B`), igual à identidade do alvo de bancada da nuvem e da lista local do Edge. A releitura de identidade do Edge antes do envio faz parte do caminho com portões que terminou em `SUCCEEDED`; não conferi o log do Edge nesta sessão.
+- **Identidades observadas:** CPE no ACS, exatamente 1 documento: OUI `FC4009`, classe `F670L`, serial `ZTE3BJNP5359122`, device_id `FC4009-F670L-ZTE3BJNP5359122`, igual ao alvo de bancada da nuvem (`992da7cd-4fc0-4ebd-ad04-ffe444d9c5b0`) e à lista local do Edge. ONU na OLT, associada por decisão humana: serial GPON `5A544547D1EDA1A3`, posição PON 0/0/14, ONT-ID 11 (identidade física NÃO provada, ver abaixo). O log do Edge registra `job accepted` (03:26:16 UTC) e `bench job finished`/`succeeded` (03:27:57 UTC) para este job; a releitura de identidade antes do envio não tem linha própria no log, e a evidência dela é o próprio gate do Edge ter liberado o job.
 - **Estado antes:** `_lastBoot` no ACS = 2026-10-31T22:22:41Z; último Inform há 126 s; nenhuma tarefa pendente na ONT.
 - **Estado depois:** `_lastBoot` no ACS = 2026-11-01T03:27:50Z (posterior ao envio, lido por fora no ACS); nenhuma tarefa pendente.
 - **Resultado:** job `SUCCEEDED`; detalhe da pós-checagem do Edge: "reboot delivered and the device came back", `postcheck_ok: true`.
 - **Horário:** (UTC) job criado 03:26:16; despacho 03:26:26 (hora local da sessão 23:26); `_lastBoot` novo 03:27:50; job `SUCCEEDED` 03:27:57.
 - **Aprovador:** conta de serviço de ensaio, pelo caminho "aprovação da bancada" do ADR-0030, como no H2 da Huawei.
-- **Versões:** firmware do CPE `V9.0.11P1N10B`; OLT Huawei MA5608T.
+- **Versões:** Edge `0.1.0-lab-777ec89`; firmware do CPE `V9.0.11P1N10B`; OLT Huawei MA5608T, firmware MA5600V800R015C00.
 - **Resultado da restauração:** não há estado a restaurar num reinício; o retorno foi OBSERVADO pelo novo boot informado ao ACS.
 
 ## Observação da OLT (coleta regular, sem captura nova)
