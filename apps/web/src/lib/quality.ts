@@ -155,7 +155,7 @@ export const metricAgeSuffix = (m: QMetric): string => (hasReading(m) && m.fresh
 /** O que o cartão do indicador afirma: "ok" só vale se alguma métrica que ele cita TEM leitura; sem isso o cartão diz "Sem leitura". O nível óptico "ok" sem faixa homologada vira "Leitura atual, sem faixa de referência" só com leitura. */
 export function indicatorDisplay(k: (typeof INDICATORS)[number], ind: QIndicator, metrics: QMetric[]): { state: QIndicator["state"] | "unjudged"; text: string } {
   const reads = metrics.filter((m) => ind.metric_ids.includes(m.id) && hasReading(m));
-  if (ind.state === "ok" && ind.metric_ids.length > 0 && reads.length === 0) return { state: "unknown", text: INDICATOR_TEXT.unknown };
+  if (ind.state === "ok" && reads.length === 0) return { state: "unknown", text: INDICATOR_TEXT.unknown };
   if (k === "optical" && ind.state === "ok" && !metrics.some((m) => m.id === "optical.rx_dbm" && m.status === "valid" && m.judged === true && hasReading(m))) return { state: "unjudged", text: UNJUDGED_TEXT };
   return { state: ind.state, text: INDICATOR_TEXT[ind.state] };
 }

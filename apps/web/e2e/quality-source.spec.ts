@@ -76,6 +76,10 @@ test("o cartão do indicador só diz 'ok' ou 'Leitura atual, sem faixa' quando h
   // com leitura, mas sem faixa homologada (judged não é true)
   expect(indicatorDisplay("optical", ok(["optical.rx_dbm"]), [rx({})]).state).toBe("unjudged");
   expect(indicatorDisplay("optical", ok(["optical.rx_dbm"]), [rx({ judged: true })])).toEqual({ state: "ok", text: "Sem anomalia observada" });
+  // "ok" sem nenhuma métrica citada também não é leitura (nem "Leitura atual, sem faixa de referência")
+  expect(indicatorDisplay("optical", ok([]), [rx({ judged: true })])).toEqual({ state: "unknown", text: "Sem leitura" });
+  expect(indicatorDisplay("optical", ok([]), [])).toEqual({ state: "unknown", text: "Sem leitura" });
+  expect(indicatorDisplay("wan", ok([]), [M({})])).toEqual({ state: "unknown", text: "Sem leitura" });
   // um "judged" sem valor não conta
   expect(indicatorDisplay("optical", ok(["optical.rx_dbm"]), [rx({ judged: true, value: "" })]).state).toBe("unknown");
   // outros estados passam como a API disse
