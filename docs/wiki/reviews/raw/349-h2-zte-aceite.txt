@@ -1,0 +1,22 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19540-e4a9-7452-91d3-0c039c2b16cb).
+[codex] Turn started (01a19540-e79e-7980-a36b-dcc1e52d6f64).
+[codex] Running command: /bin/bash -lc 'cat /home/suporte/.codex/skills/code-review/SKILL.md && rg -n "ADR-0030|item 7...
+[codex] Command completed: /bin/bash -lc 'cat /home/suporte/.codex/skills/code-review/SKILL.md && rg -n "ADR-0030|item 7... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0030-homologacao-em-bancada-escopo-e-gates.md | sed -...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0030-homologacao-em-bancada-escopo-e-gates.md | sed -... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "## 7|item 7|aceite.*evidência|Hash da intenção" docs/wiki/adr/ADR-0030-...
+[codex] Command completed: /bin/bash -lc 'rg -n "## 7|item 7|aceite.*evidência|Hash da intenção" docs/wiki/adr/ADR-0030-... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não promover ainda: a evidência não contém todos os c...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não promover ainda: a evidência não contém todos os campos obrigatórios do ADR-0030 item 7, então não demonstra que a promoção a `observed` passou pelo gate documental.
+
+Findings:
+- [high] Evidência incompleta para o gate de promoção (docs/wiki/bench/H2-reboot_cpe-zte-f670l-2026-11-01.md:8-14)
+  O ADR-0030 item 7 exige identidades observadas antes para CPE (OUI, classe, serial e device_id) e ONU (serial e posição), além das versões do Edge, firmware do CPE e OLT. O registro informa um id do ACS e firmware/modelo do CPE, mas não registra todos esses identificadores nem a versão do Edge. Também declara que o log do Edge não foi conferido. Assim, o arquivo não demonstra todos os campos exigidos para o owner CLI inserir `observed`; a promoção documentada pode ficar sem evidência verificável conforme o gate.
+  Recommendation: Complete a evidência com os campos de identidade e versão exigidos pelo item 7, sem incluir credenciais, IP, nome de cliente ou saída crua, e só registre a promoção depois de confirmar que o owner CLI aceitou o arquivo completo.
