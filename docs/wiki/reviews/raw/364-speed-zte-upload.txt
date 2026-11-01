@@ -1,0 +1,33 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19588-dd40-7b33-bcc9-4b960023d6cc).
+[codex] Turn started (01a19588-dd77-7102-87fe-8f2e604c4c09).
+[codex] Assistant message captured: Vou conferir o diff e os documentos locais citados para testar se a evidência sustenta cada a...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/bench/H-speed_tes...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/bench/H-speed_tes... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0030-homologacao-em-bancada-escopo-e-gates.md | sed -...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0030-homologacao-em-bancada-escopo-e-gates.md | sed -... (exit 0)
+[codex] Assistant message captured: O documento explicita que a identidade física não está provada, mas o ADR exige confirmação d...
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/bench/H1-vinculo-zte-f670l-2026-10-31.md | sed -n '1,120p'; n...
+[codex] Command failed: /bin/bash -lc "nl -ba docs/wiki/bench/H1-vinculo-zte-f670l-2026-10-31.md | sed -n '1,120p'; n... (exit 2)
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/bench/H-speed_test_download-zte-f670l-2026-11-01.md | sed -n ...
+[codex] Command failed: /bin/bash -lc "nl -ba docs/wiki/bench/H-speed_test_download-zte-f670l-2026-11-01.md | sed -n ... (exit 1)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: a identidade física não cumpre o g...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: a identidade física não cumpre o gate do ADR-0030 e o texto afirma que a gravabilidade foi comprovada sem registrar a verificação da escrita/leitura das folhas de upload.
+
+Findings:
+- [high] Vínculo físico não satisfaz o pré-requisito do ADR-0030 (docs/wiki/bench/H-speed_test_upload-zte-f670l-2026-11-01.md:6)
+  O relatório reconhece que a identidade física não tem prova independente, mas declara o vínculo `confirmed` e situa essa confirmação antes de `bench-target-add`. O H1 citado conclui que o vínculo permanece não confirmado, e o ADR-0030 item 2 exige vínculo confirmado com evidência H1 antes do cadastro. Assim, a cronologia do gate está registrada, mas sua condição substantiva não está demonstrada; a execução não sustenta homologação da ZTE como alvo de bancada. Obtenha e registre a confirmação compatível com o ADR antes de usar esta execução como evidência de capacidade, ou marque o vínculo como não confirmado e corrija qualquer estado de alvo que dependa dele.
+  Recommendation: Resolver o conflito com H1 e ADR-0030; não promover `speed_test_upload` com esta execução enquanto o requisito de identidade permanecer sem evidência.
+- [medium] Afirmação de gravabilidade comprovada não é demonstrada no registro (docs/wiki/bench/H-speed_test_upload-zte-f670l-2026-11-01.md:16)
+  O texto diz que a leitura prévia só mostra gravabilidade declarada pelo aparelho e que a gravabilidade é comprovada pelo teste real. Porém, os resultados registrados demonstram conclusão e contadores, sem indicar quais valores foram efetivamente escritos em `Interface`, `UploadURL`, `TestFileLength` e `DiagnosticsState`, nem leitura posterior desses valores para confirmar a gravação. O status `completed` e os bytes enviados sustentam que houve execução do diagnóstico, mas não comprovam individualmente todas as folhas declaradas graváveis. Isso pode levar leitores a tratar suporte de escrita integral como verificado. Registre a confirmação observada das folhas escritas e lidas de volta, ou limite a conclusão ao que os resultados realmente demonstram.
+  Recommendation: Anexar os valores/resultado de escrita e leitura posterior, sem incluir saída crua ou dados sensíveis, ou remover a afirmação de que o teste comprova a gravabilidade das folhas.
+
+Next steps:
+- Alinhar o estado do vínculo ONU↔CPE com H1 e ADR-0030 antes de usar a execução para promover capacidade.
+- Documentar a evidência de escrita/leitura das folhas UploadDiagnostics ou restringir a alegação à execução concluída.
