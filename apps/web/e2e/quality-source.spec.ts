@@ -14,6 +14,13 @@ test("sem métrica com leitura o indicador diz 'sem leitura', nunca uma fonte in
   expect(indicatorSource(IND(["wan.link_status"]), [M({ status: "failed" }), M({ status: "not_supported" })])).toBe("Fonte: sem leitura");
 });
 
+test("métrica válida ou antiga SEM valor não conta como leitura: não ganha fonte nem idade", () => {
+  expect(indicatorSource(IND(["wan.link_status"]), [M({ status: "valid", value: null })])).toBe("Fonte: sem leitura");
+  expect(indicatorSource(IND(["wan.link_status"]), [M({ status: "stale", value: null })])).toBe("Fonte: sem leitura");
+  const ms = [M({ id: "wan.link_status", value: null, freshness_s: 5 }), M({ id: "wan.connection_status", source: "TR069_READ", freshness_s: 120 })];
+  expect(indicatorSource(IND(["wan.link_status", "wan.connection_status"]), ms)).toBe("Fonte: ACS (leitura) · há 2 min");   // só a métrica com valor entra
+});
+
 test("uma métrica: fonte em palavras e a idade dela", () => {
   expect(indicatorSource(IND(["optical.rx_dbm"]), [M({ id: "optical.rx_dbm", source: "OLT_ADAPTER", freshness_s: 120 })])).toBe("Fonte: OLT · há 2 min");
   expect(indicatorSource(IND(["wan.link_status"]), [M({ freshness_s: 30 })])).toBe("Fonte: ACS (cache) · agora há pouco");

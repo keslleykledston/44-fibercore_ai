@@ -118,9 +118,9 @@ export const OBSERVATION_TEXT: Record<string, string> = {
 };
 export const SCOPE_TEXT: Record<string, string> = { WAN_UNCLASSIFIED: "WAN não classificada (serviço ou gerência)", SERVICE_WAN: "WAN de serviço", MGMT_WAN: "WAN de gerência", PON: "PON", WIFI: "Wi‑Fi", CPE: "Aparelho", LAN: "LAN" };
 export const SOURCE_TEXT: Record<string, string> = { TR069_READ: "ACS (leitura)", TR069_ACTIVE: "ACS (teste ativo)", OLT_ADAPTER: "OLT", SD001: "teste de banda", ACS_CACHE: "ACS (cache)" };
-/** "Fonte · idade" de um indicador: só as métricas que ele cita e que têm leitura (atual ou antiga). Com mais de uma, a idade é a da MAIS ANTIGA (a mais fresca esconderia a velha); se QUALQUER uma não tem idade, a idade é desconhecida. Sem nenhuma: sem leitura. */
+/** "Fonte · idade" de um indicador: só as métricas que ele cita e que têm leitura (atual ou antiga, COM valor). Com mais de uma, a idade é a da MAIS ANTIGA (a mais fresca esconderia a velha); se QUALQUER uma não tem idade, a idade é desconhecida. Sem nenhuma: sem leitura. */
 export function indicatorSource(ind: QIndicator, metrics: QMetric[]): string {
-  const ms = metrics.filter((m) => ind.metric_ids.includes(m.id) && (m.status === "valid" || m.status === "stale"));
+  const ms = metrics.filter((m) => ind.metric_ids.includes(m.id) && (m.status === "valid" || m.status === "stale") && m.value !== null);   // o status sozinho não prova leitura: sem valor a tela mostra "—", e a fonte não pode dizer o contrário
   if (ms.length === 0) return "Fonte: sem leitura";
   const sources = [...new Set(ms.map((m) => SOURCE_TEXT[m.source] ?? "outra fonte"))];
   const ages = ms.map((m) => m.freshness_s);
