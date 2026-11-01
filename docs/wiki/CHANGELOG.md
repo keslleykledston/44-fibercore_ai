@@ -366,3 +366,6 @@
 
 ## Speed: `speed_test_upload` da ZTE F670L promovido a `observed` (2026-11-01)
 - Aceite do responsável pelo chat ("Aceito upload ZTE") sobre o upload de 200 MB (`completed`, 346,17 Mbps), gravado no próprio documento de evidência. Promoção feita no registro da LAB pelo owner CLI com `--evidence-file` (todos os campos checados). Escopo: UMA execução confiável; repetições, referência cabeada, multiconexão e identidade física seguem sem validação. Nada de produção afetado.
+
+## Ping: primeiro ping real mostrou que o IPPing termina em `Complete` (2026-11-01)
+- Implantação na LAB: migração 0038, API e web, Edge `0.1.0-lab-74719f0` com `ping_test`, destino lógico `core-lab` e capacidades `ping_test` (`identified`) na ZTE e na Huawei. O 1º ping real na ZTE F670L: o aparelho mediu (5 de 5, 11/11/12 ms), mas informa `DiagnosticsState = Complete`; o Edge só aceitava `Completed` e o job falhou por `timeout` (alvo travado e depois destravado com motivo). Correção no Edge: `Complete` é terminal e sai como `Completed`; o estado terminal do ping é lido estritamente depois do pedido. O fake dos testes usava `Completed` e não pegou isso: só o aparelho real.
