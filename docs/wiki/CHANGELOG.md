@@ -330,3 +330,8 @@
 ## Edge — `bench.read_only_onus` e H1 de vínculo da ZTE (2026-10-31)
 - Edge: nova lista `bench.read_only_onus` (até 4 ONUs de bancada adicionais, só para capturas de LEITURA, escopo de ONU com posição exata, nunca PON, sem manobra). Implantado no LAB (`0.1.0-lab-9ec5221`).
 - Captura supervisionada de 2 consultas da ONT 11 da PON 0/0/14 e `docs/wiki/bench/H1-vinculo-zte-f670l-2026-10-31.md`: a OLT registra tipo `F670LV9.0` e serial GPON compatíveis com a ZTE do ACS. Vínculo apenas sugerido (não confirmado); nenhuma ZTE cadastrada como alvo de bancada.
+
+## Bancada: ZTE F670L cadastrada, firmware ZTE no Edge e Nokia com Connection Request (2026-11-01)
+- ZTE F670L cadastrada como alvo de bancada (aceite do responsável e autorização de escrita no chat); `reboot_cpe` registrado `supported`/`identified` para ZTE F670L `V9.0.11P1N10B`. NENHUMA manobra foi executada nela. O vínculo ONU↔CPE continua inferido e não registrado (H1).
+- Edge `0.1.0-lab-777ec89`: aceita o formato de firmware ZTE (`V<n>(.<n>){1,3}P<n>N<n>[A-Z]?`, gramática estrita); a ZTE está em `bench.devices`; lista `capture` retirada. Pendência conhecida do filtro genérico `firmwareToken` em `KNOWN_ISSUES.md`.
+- ACS: provision `inform` usa o serial como usuário de Connection Request só para o fabricante ALCL (Nokia); o Connection Request da Nokia passou a funcionar.
