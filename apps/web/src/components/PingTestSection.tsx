@@ -109,7 +109,7 @@ export function PingTestSection({ cpeId }: { cpeId: string }) {
       const r = await fetch(`/bff/cpes/${cpeId}/ping/runs`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: crypto.randomUUID(), target_id: target }) });
       const j = (await r.json().catch(() => ({}))) as { error?: string; reason?: string; run_id?: unknown };
       const definitive = [400, 401, 403, 404, 409, 413].includes(r.status);   // só estes garantem que NADA foi criado
-      if (r.ok) setPending({ runId: typeof j.run_id === "string" ? j.run_id : null, until: Date.now() + (typeof j.run_id === "string" ? PENDING_MS : UNCERTAIN_MS) });   // aceito: lembrado até uma leitura mostrar ESTA execução
+      if (r.ok) setPending({ runId: typeof j.run_id === "string" ? j.run_id : null, until: Date.now() + PENDING_MS });   // a API grava a execução ANTES de responder 2xx: sem id é anômalo, e então só vale o prazo de vida do pedido (15 min), nunca o curto; aceito: lembrado até uma leitura mostrar ESTA execução
       else if (!definitive) { setPending({ runId: null, until: Date.now() + UNCERTAIN_MS }); setRefusal("Não foi possível confirmar o pedido. Aguarde a atualização antes de pedir de novo."); }
       else {   // recusa definitiva: nada foi criado, a trava provisória sai
         setPending(null);
