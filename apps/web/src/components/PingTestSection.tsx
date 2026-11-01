@@ -31,9 +31,13 @@ function readPending(cpe: string): Pending | null {
   } catch { memo.set(cpe, null); }
   return memo.get(cpe) ?? null;
 }
-function writePending(cpe: string, p: Pending | null) {
+/** false = o navegador NÃO guardou a trava (armazenamento bloqueado/cheio): quem chama não pode enviar um pedido novo, porque um recarregamento perderia a chave de um pedido incerto. */
+function writePending(cpe: string, p: Pending | null): boolean {
   memo.set(cpe, p);
-  try { if (p) window.sessionStorage.setItem(KEY(cpe), JSON.stringify(p)); else window.sessionStorage.removeItem(KEY(cpe)); } catch { /* sem armazenamento: vale só nesta página */ }
+  try {
+    if (p) window.sessionStorage.setItem(KEY(cpe), JSON.stringify(p)); else window.sessionStorage.removeItem(KEY(cpe));
+    return true;
+  } catch { return false; }
 }
 
 /** Ping da ONT pela WAN de serviço (TR-143 IPPing, ADR-0039). Mede latência mínima/média/máxima e perda até um destino do provedor; NÃO mede jitter (o aparelho não informa tempo por pacote: mostramos a amplitude
@@ -118,7 +122,17 @@ export function PingTestSection({ cpeId }: { cpeId: string }) {
       setRefusal("Não foi possível confirmar o pedido. Use Confirmar pedido: ele repete o mesmo pedido sem criar outro.");
     } finally { setBusy(false); }
   };
-  const start = () => { if (!target || locked) return; void send(crypto.randomUUID(), target); };
+  const start = () => {
+    if (!target || locked) return;
+    const marker: Pending = { runId: null, key: crypto.randomUUID(), target };
+    if (!writePending(cpeId, marker)) {   // sem como guardar a chave, um pedido incerto não poderia ser repetido com segurança depois de recarregar: não envia
+      writePending(cpeId, null);
+      setRefusal("Este navegador não permite guardar o pedido em andamento, então o teste não pode ser pedido com segurança daqui. Libere o armazenamento do site ou use outro navegador.");
+      return;
+    }
+    setPendingState(marker);
+    void send(marker.key, marker.target);
+  };
 
   const blockedReason = !caps.offered ? (caps.reason ?? "operation_not_homologated") : null;
   const done = last && (last.status === "completed");
