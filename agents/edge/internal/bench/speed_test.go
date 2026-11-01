@@ -200,3 +200,15 @@ func TestEverySpeedDetailIsAShortCode(t *testing.T) {
 		t.Error("known details map to codes")
 	}
 }
+
+func TestSpeedAServiceWANThatIsNotConnectedIsRefusedWithItsOwnCodeAndNothingIsSpent(t *testing.T) {
+	e := speedSetup(t)
+	e.acs.speedOut, e.acs.speedErr = nbi.SpeedOutcome{}, nbi.ErrSpeedWANDown
+	res := e.r.Run(context.Background(), speedEnvelope("speed_test_download", "core-sp-1", "10mb"))
+	if res.State != "failed" || res.Detail != "wan_not_connected" || res.Data != nil || res.Postcheck {
+		t.Fatalf("%+v", res)
+	}
+	if e.cl.State(authID) != jobs.ClaimFailed {
+		t.Fatalf("a refusal before any write must not spend the authorization as unknown: %q", e.cl.State(authID))
+	}
+}

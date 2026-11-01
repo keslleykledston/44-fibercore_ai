@@ -27,26 +27,29 @@ const (
 
 // speedACS simulates the NBI for the bench CPE (a TR-143 object under one data-model root) AND a production CPE that must never be touched.
 type speedACS struct {
-	mu          sync.Mutex
-	root        string          // "tr181" | "tr098" | "both" | "" (no object cached)
-	leaves      map[string]bool // result leaves the cached object lists; nil = the standard set
-	writable    bool
-	state       string // DiagnosticsState on the CPE now
-	stateAt     time.Time
-	informAt    string
-	setCode     int  // 0/200 = apply; 202 = queued; other = refused/ambiguous
-	fault       bool // the CPE faults the set
-	getCode     int
-	completeAt  int    // number of result reads after the set at which the test finishes (0 = never)
-	final       string // state it finishes in
-	staleResult bool   // the finished state carries an OLD timestamp (a previous test's result)
-	counters    map[string]any
-	log         []string
-	sets        [][][]string
-	tasks       []map[string]any
-	seq, reads  int
-	armed       bool
-	other       map[string]int // writes seen per device
+	mu           sync.Mutex
+	root         string          // "tr181" | "tr098" | "both" | "" (no object cached)
+	leaves       map[string]bool // result leaves the cached object lists; nil = the standard set
+	writable     bool
+	state        string // DiagnosticsState on the CPE now
+	stateAt      time.Time
+	informAt     string
+	setCode      int  // 0/200 = apply; 202 = queued; other = refused/ambiguous
+	fault        bool // the CPE faults the set
+	getCode      int
+	completeAt   int    // number of result reads after the set at which the test finishes (0 = never)
+	final        string // state it finishes in
+	staleResult  bool   // the finished state carries an OLD timestamp (a previous test's result)
+	counters     map[string]any
+	log          []string
+	sets         [][][]string
+	tasks        []map[string]any
+	seq, reads   int
+	armed        bool
+	other        map[string]int // writes seen per device
+	wanDown      bool           // the service WAN is not connected
+	noWAN        bool           // the CPE does not list the service WAN at all
+	wanReadFails bool           // the NBI answers 500 to the read of the service WAN (only that read)
 }
 
 func newSpeedACS(root string) *speedACS {
@@ -105,6 +108,18 @@ func (f *speedACS) object() map[string]any {
 func (f *speedACS) doc() map[string]any {
 	d := map[string]any{"_id": benchID, "_lastBoot": t0Boot, "_lastInform": f.informAt,
 		"_deviceId": map[string]any{"_OUI": "00259E", "_ProductClass": "EG8145V5", "_SerialNumber": "48575443E2247AA5"}}
+	if !f.noWAN {
+		up, down := map[string]string{"tr181": "Up", "tr098": "Connected"}, map[string]string{"tr181": "Down", "tr098": "Disconnected"}
+		for _, w := range []struct{ root, path, leaf string }{{"tr181", ifaceTR181, "Status"}, {"tr098", ifaceTR098, "ConnectionStatus"}} {
+			if f.root == w.root || f.root == "both" {
+				v := up[w.root]
+				if f.wanDown {
+					v = down[w.root]
+				}
+				merge(d, nest(w.path, map[string]any{w.leaf: spLeaf(v, time.Now(), false)}))
+			}
+		}
+	}
 	for _, p := range []struct{ root, path string }{{"tr181", speedObjDL}, {"tr181", speedObjUL}, {"tr098", speedObjDL8}, {"tr098", speedObjUL8}} {
 		if f.root == p.root || f.root == "both" {
 			merge(d, nest(p.path, f.object()))
@@ -145,9 +160,18 @@ func (f *speedACS) handler() http.Handler {
 			var b struct {
 				Name   string     `json:"name"`
 				Values [][]string `json:"parameterValues"`
+				Names  []string   `json:"parameterNames"`
 			}
 			_ = json.NewDecoder(r.Body).Decode(&b)
 			if b.Name == "getParameterValues" {
+				if f.wanReadFails {
+					for _, n := range b.Names {
+						if strings.HasSuffix(n, ".Status") || strings.HasSuffix(n, ".ConnectionStatus") {
+							w.WriteHeader(500)
+							return
+						}
+					}
+				}
 				if f.getCode != 0 {
 					w.WriteHeader(f.getCode)
 					return
@@ -528,5 +552,41 @@ func TestSpeedSourceWritesOneTaskShapeAndTouchesNoOtherObject(t *testing.T) {
 	}
 	if strings.Count(s, "http.MethodPost") != 1 {
 		t.Error("exactly one POST call site")
+	}
+}
+
+func TestSpeedRefusesBeforeWritingWhenTheServiceWANIsNotConnected(t *testing.T) {
+	for _, root := range []string{"tr181", "tr098"} {
+		f := newSpeedACS(root)
+		f.wanDown = true
+		req := dlReq()
+		if root == "tr098" {
+			req = SpeedRequest{Direction: "download", Root: "tr098", Interface: ifaceTR098, URL: urlDL}
+		}
+		out, err := runSpeed(t, f, req)
+		if !errors.Is(err, ErrSpeedWANDown) || out.Attempted || f.sentSets() != 0 {
+			t.Fatalf("%s: a WAN that is not connected must refuse before any write: err=%v attempted=%v sets=%d", root, err, out.Attempted, f.sentSets())
+		}
+	}
+}
+
+func TestSpeedRefusesBeforeWritingWhenTheServiceWANCannotBeRead(t *testing.T) {
+	f := newSpeedACS("tr181")
+	f.noWAN = true
+	out, err := runSpeed(t, f, dlReq())
+	if !errors.Is(err, ErrSpeedWANDown) || out.Attempted || f.sentSets() != 0 {
+		t.Fatalf("an unverified WAN is never measured, and says so: err=%v attempted=%v sets=%d", err, out.Attempted, f.sentSets())
+	}
+}
+
+func TestSpeedRefusesBeforeWritingWhenTheNBIFailsWhileReadingTheServiceWAN(t *testing.T) {
+	f := newSpeedACS("tr181")
+	f.wanReadFails = true
+	out, err := runSpeed(t, f, dlReq())
+	if !errors.Is(err, ErrSpeedWANDown) || out.Attempted || f.sentSets() != 0 {
+		t.Fatalf("a failed read of the WAN must refuse as not verified, before any write: err=%v attempted=%v sets=%d", err, out.Attempted, f.sentSets())
+	}
+	if !errors.Is(err, ErrSpeedRead) {
+		t.Fatalf("the cause of the failed read must stay in the error chain: %v", err)
 	}
 }

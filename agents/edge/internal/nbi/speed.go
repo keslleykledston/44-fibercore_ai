@@ -32,6 +32,7 @@ const (
 var (
 	ErrSpeedUnsupported = errors.New("nbi speed: the CPE does not expose a writable TR-143 diagnostics object in the interface's data model")
 	ErrSpeedBusy        = errors.New("nbi speed: a diagnostic is already requested on this CPE")
+	ErrSpeedWANDown     = errors.New("nbi speed: the configured service WAN is not reported connected by the CPE; nothing was sent")
 	ErrSpeedInvalid     = errors.New("nbi speed: request outside the accepted shape")
 	ErrSpeedRead        = errors.New("nbi speed: could not read the diagnostics object from the CPE")
 	ErrSpeedTimeout     = errors.New("nbi speed: the diagnostic did not finish inside the wait; the CPE may still be generating traffic")
@@ -144,6 +145,20 @@ func (c *Client) RunBenchSpeed(parent context.Context, d BenchDevice, req SpeedR
 	}
 	if s, _ := cur[speedStateLeaf].Value.(string); s == speedRequested {
 		return SpeedOutcome{}, ErrSpeedBusy
+	}
+	// Fidelity: the test must measure what the ISP delivers on the SERVICE WAN. Read that WAN's own status NOW and refuse (before the single send, nothing
+	// written) unless the CPE reports it connected. A missing or unreadable leaf refuses too: an unverified WAN is never measured.
+	wanLeaf, wanUp := "ConnectionStatus", "Connected"
+	if req.Root == "tr181" {
+		wanLeaf, wanUp = "Status", "Up"
+	}
+	wanReadAt := now()
+	wan, err := c.readSpeedLeaves(ctx, d.DeviceID, req.Interface, []string{wanLeaf})
+	if err != nil {
+		return SpeedOutcome{}, fmt.Errorf("%w: %w", ErrSpeedWANDown, err) // any failure to verify the WAN is "not verified connected": the cause stays in the wrapped error
+	}
+	if s, _ := wan[wanLeaf].Value.(string); s != wanUp || wan[wanLeaf].At.Before(wanReadAt.Add(-taskClockSkew)) {
+		return SpeedOutcome{}, ErrSpeedWANDown
 	}
 	since := now()
 	if !since.Before(notAfter) {

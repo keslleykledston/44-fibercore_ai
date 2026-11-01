@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19574-3179-7be2-ab8c-562f783df69d).
+[codex] Turn started (01a19574-31b3-76f1-acf6-279bf8a76b3e).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir o fluxo completo da execução, incluindo a leitu...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/bench/...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/bench/... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- agents/edge/internal/nbi/sp...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- agents/edge/internal/nbi/sp... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '350,425p' agents/edge/internal/nbi/speed.go; rg -n \"taskClockSkew|spe...
+[codex] Command completed: /bin/bash -lc "sed -n '350,425p' agents/edge/internal/nbi/speed.go; rg -n \"taskClockSkew|spe... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '100,145p' agents/edge/internal/nbi/speed_test.go; sed -n '500,575p' ag...
+[codex] Command completed: /bin/bash -lc "sed -n '100,145p' agents/edge/internal/nbi/speed_test.go; sed -n '500,575p' ag... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: uma falha ao ler a WAN fecha a esc...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: uma falha ao ler a WAN fecha a escrita, mas retorna o código errado e contradiz a UI e a seção 7.
+
+Findings:
+- [medium] Falha de leitura da WAN não retorna `wan_not_connected` (agents/edge/internal/nbi/speed.go:156-158)
+  Se `readSpeedLeaves` falhar na leitura da interface — por exemplo, timeout, erro HTTP ou falha ao obter o documento — este ramo retorna `ErrSpeedRead` diretamente. O Edge ainda recusa antes de `postSetSpeed`, mas `speedTest` classifica esse resultado como `speed_not_started`, não `wan_not_connected`. A UI e a seção 7 afirmam que WAN ilegível produz `wan_not_connected`; esse caso não é coberto pelo teste, que verifica apenas a ausência do leaf. Mapeie erros de leitura da WAN para `ErrSpeedWANDown` (preservando o detalhe interno nos logs, se necessário) e teste uma falha real de leitura.
+  Recommendation: Converter qualquer erro da leitura do status da WAN em `ErrSpeedWANDown` e adicionar um teste em que o NBI falha nessa leitura; confirmar que o resultado é `wan_not_connected`, sem escrita e com claim `ClaimFailed`.

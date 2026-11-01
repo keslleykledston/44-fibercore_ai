@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — Speed na WAN de serviço, com fidelidade (2026-11-01)
+- Edge: antes da única escrita do teste de banda, lê o estado da WAN de serviço configurada (`ConnectionStatus`/`Status`) e recusa com `wan_not_connected` se não estiver conectada, ausente ou ilegível. Testes `go test ./internal/nbi ./internal/bench`.
+- Edge: horário de dispositivo com relógio sem sincronismo (1970) passa a valer (só a diferença BOM→EOM é usada); o ADR-0038 só descarta o ano 1.
+- ZTE F670L: 3xx observado (segue), aceite de risco registrado, download 10 MB (parcial) e 200 MB (completo, 257,86 Mbps em 6,2 s) pela WAN PPPoE da ZTE. Evidência em `docs/wiki/bench/`.
+- Docs: `docs/operations/SPEED_HOMOLOGACAO.md` seção 7 (o que o teste mede e seus limites).
+
 ## [0.0.0-spec] - 2026-10-27
 
 - PRD e arquitetura dual TR-069/TR-369.
