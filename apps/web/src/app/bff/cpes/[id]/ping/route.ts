@@ -13,8 +13,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const caps = readPingCaps(c.data), runs = readPingRuns(r.data);
     return caps && runs ? reply({ caps, runs }) : reply({ error: "failed" }, 502);
   }
-  const st = c.status !== 200 ? c.status : r.status;
-  if (st === 403) return reply({ error: "disabled" }, 403);
+  const bad = c.status !== 200 ? c : r;
+  const st = bad.status;
+  // só o código explícito da API vira "recurso desligado"; qualquer outro 403 é falta de permissão
+  if (st === 403) return reply({ error: bad.detail === "feature_disabled" ? "disabled" : "forbidden" }, 403);
   if (st === 404) return reply({ error: "not_found" }, 404);
   if (st === 401) return reply({ error: "session" }, 401);
   return reply({ error: "failed" }, 502);

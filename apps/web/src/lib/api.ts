@@ -5,7 +5,7 @@ import { getSession } from "./session";
 const API = process.env.API_INTERNAL_URL ?? "http://api-core:8000";
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) { super(message); }
+  constructor(public status: number, message: string, public detail?: string) { super(message); }
 }
 
 /** Chamada server-side à API: o token HttpOnly nunca chega ao browser (ADR-0014). */
@@ -19,13 +19,16 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   });
   if (res.status === 401) redirect("/login");
   if (res.status === 403 && (await res.clone().json().catch(() => null))?.detail === "mfa_enrolment_required") redirect("/conta/seguranca?obrigatorio=1");
-  if (!res.ok) throw new ApiError(res.status, `API ${res.status}`);
+  if (!res.ok) {
+    const d = (await res.clone().json().catch(() => null) as { detail?: unknown } | null)?.detail;   // só um código estável da API (ex.: feature_disabled); texto livre nunca passa
+    throw new ApiError(res.status, `API ${res.status}`, typeof d === "string" && /^[a-z][a-z0-9_]{0,59}$/.test(d) ? d : undefined);
+  }
   return (await res.json()) as T;
 }
 
-export async function apiSafe<T>(path: string): Promise<{ data: T | null; status: number }> {
+export async function apiSafe<T>(path: string): Promise<{ data: T | null; status: number; detail?: string }> {
   try { return { data: await api<T>(path), status: 200 }; }
-  catch (e) { if (e instanceof ApiError) return { data: null, status: e.status }; throw e; }
+  catch (e) { if (e instanceof ApiError) return { data: null, status: e.status, detail: e.detail }; throw e; }
 }
 
 export type LoginResult =
