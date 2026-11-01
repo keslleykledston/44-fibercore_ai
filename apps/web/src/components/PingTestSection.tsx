@@ -27,8 +27,9 @@ function readPending(cpe: string): Pending | null {
   try {
     const raw = window.sessionStorage.getItem(KEY(cpe));
     const o = raw ? (JSON.parse(raw) as Pending) : null;
-    const ok = !!o && (o.runId === null || (typeof o.runId === "string" && UUID.test(o.runId))) && typeof o.key === "string" && /^[A-Za-z0-9_.:-]{8,128}$/.test(o.key) && typeof o.target === "string" && /^[a-z0-9][a-z0-9-]{1,30}$/.test(o.target);
-    memo.set(cpe, ok ? o : null);
+    // key e destino válidos são o que permite repetir O MESMO pedido: um runId ilegível não os apaga (viraria um botão livre sobre um pedido que pode ter gerado tráfego); vira "incerto" (runId null)
+    const ok = !!o && typeof o.key === "string" && /^[A-Za-z0-9_.:-]{8,128}$/.test(o.key) && typeof o.target === "string" && /^[a-z0-9][a-z0-9-]{1,30}$/.test(o.target);
+    memo.set(cpe, ok && o ? { ...o, runId: typeof o.runId === "string" && UUID.test(o.runId) ? o.runId : null } : null);
   } catch { memo.set(cpe, null); }
   return memo.get(cpe) ?? null;
 }

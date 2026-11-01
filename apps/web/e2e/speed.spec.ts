@@ -355,13 +355,18 @@ test("teste de banda (cenário): Confirmar pedido repete a MESMA chave, a MESMA 
   expect(sent[1]!.body).toBe(sent[0]!.body);                                                                            // inclui o group_id
 });
 
-test("teste de banda (cenário): um marcador guardado com runId malformado é descartado, nunca interpretado", async ({ page, request }) => {
+test("teste de banda (cenário): runId malformado no marcador guardado vira pedido INCERTO: a trava fica e Confirmar pedido repete a MESMA chave e intenção", async ({ page, request }) => {
   await confirmDemoA2(request);
+  const sent: { key: string; body: string }[] = [];
   await page.route("**/bff/cpes/*/speed", (r) => r.fulfill({ json: { caps: CAPS(), runs: [] } }));
-  await page.route("**/bff/cpes/*/speed/runs", (r) => r.fulfill({ status: 201, json: { ok: true, outcome: "submitted", run_id: RUN({}).id } }));
+  await page.route("**/bff/cpes/*/speed/runs", (r) => {
+    const b = r.request().postDataJSON() as { key: string };
+    sent.push({ key: b.key, body: JSON.stringify(b) });
+    return r.fulfill({ status: 201, json: { ok: true, outcome: "submitted", run_id: RUN({}).id } });
+  });
   await openTab(page);
   await page.getByTestId("speed-start-download").click();
-  await expect(page.getByTestId("speed-pending")).toBeVisible();
+  await expect(page.getByTestId("speed-pending")).toContainText("Aguardando a leitura mostrar a execução");
   // a página viva regrava o marcador do estado em memória a cada atualização: a adulteração entra no INÍCIO do documento seguinte, depois de todas as escritas da página antiga
   await page.addInitScript(() => {
     for (let i = 0; i < sessionStorage.length; i++) {
@@ -372,6 +377,11 @@ test("teste de banda (cenário): um marcador guardado com runId malformado é de
   await page.reload();
   await row(page, "DEMOA0002").click();
   await page.getByRole("tab", { name: "Teste de banda" }).click();
-  await expect(page.getByTestId("speed-pending")).toHaveCount(0);                                                       // formato inválido: o marcador não vale
-  await expect(page.getByTestId("speed-start-download")).toBeEnabled();
+  await expect(page.getByTestId("speed-pending")).toContainText("a confirmação não chegou");                            // o runId ilegível não vale como prova, mas a trava NÃO sai
+  await expect(page.getByTestId("speed-start-download")).toBeDisabled();
+  await expect(page.getByTestId("speed-start-upload")).toBeDisabled();
+  await page.getByTestId("speed-pending-confirm").click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[1]!.key).toBe(sent[0]!.key);                                                                              // repete o MESMO pedido, nunca um novo
+  expect(sent[1]!.body).toBe(sent[0]!.body);
 });
