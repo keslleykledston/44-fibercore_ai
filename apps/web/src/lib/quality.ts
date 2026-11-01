@@ -118,13 +118,15 @@ export const OBSERVATION_TEXT: Record<string, string> = {
 };
 export const SCOPE_TEXT: Record<string, string> = { WAN_UNCLASSIFIED: "WAN não classificada (serviço ou gerência)", SERVICE_WAN: "WAN de serviço", MGMT_WAN: "WAN de gerência", PON: "PON", WIFI: "Wi‑Fi", CPE: "Aparelho", LAN: "LAN" };
 export const SOURCE_TEXT: Record<string, string> = { TR069_READ: "ACS (leitura)", TR069_ACTIVE: "ACS (teste ativo)", OLT_ADAPTER: "OLT", SD001: "teste de banda", ACS_CACHE: "ACS (cache)" };
-/** "Fonte · idade" de um indicador: só as métricas que ele cita e que têm leitura (atual ou antiga). Com mais de uma, a idade é a da MAIS ANTIGA (a mais fresca esconderia a velha). Sem nenhuma: sem leitura. */
+/** "Fonte · idade" de um indicador: só as métricas que ele cita e que têm leitura (atual ou antiga). Com mais de uma, a idade é a da MAIS ANTIGA (a mais fresca esconderia a velha); se QUALQUER uma não tem idade, a idade é desconhecida. Sem nenhuma: sem leitura. */
 export function indicatorSource(ind: QIndicator, metrics: QMetric[]): string {
   const ms = metrics.filter((m) => ind.metric_ids.includes(m.id) && (m.status === "valid" || m.status === "stale"));
   if (ms.length === 0) return "Fonte: sem leitura";
   const sources = [...new Set(ms.map((m) => SOURCE_TEXT[m.source] ?? "outra fonte"))];
-  const ages = ms.map((m) => m.freshness_s).filter((s): s is number => s !== null);
-  const age = ages.length > 0 ? `${ms.length > 1 ? " · a mais antiga " : " · "}${ageText(Math.max(...ages))}` : "";
+  const ages = ms.map((m) => m.freshness_s);
+  // uma leitura sem idade conhecida não pode ser escondida atrás da idade das outras: basta UMA para a linha dizer que a idade é desconhecida
+  const known = ages.filter((s): s is number => s !== null);
+  const age = known.length < ages.length ? " · idade desconhecida" : `${ms.length > 1 ? " · a mais antiga " : " · "}${ageText(Math.max(...known))}`;
   return `Fonte: ${sources.join(" + ")}${age}`;
 }
 export const CONFIDENCE_TEXT: Record<string, string> = { low: "confiança baixa", medium: "confiança média", high: "confiança alta" };

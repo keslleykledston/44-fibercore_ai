@@ -26,6 +26,12 @@ test("várias métricas: a idade é a da MAIS ANTIGA e as fontes aparecem sem re
   expect(indicatorSource(IND(["wan.link_status", "cpe.uptime_s"]), ms)).toBe("Fonte: ACS (cache) · a mais antiga agora há pouco");
 });
 
+test("uma leitura sem idade conhecida nunca fica escondida atrás da idade das outras", () => {
+  expect(indicatorSource(IND(["wan.link_status"]), [M({ freshness_s: null })])).toBe("Fonte: ACS (cache) · idade desconhecida");
+  const ms = [M({ id: "wan.link_status", freshness_s: 30 }), M({ id: "wan.connection_status", status: "stale", freshness_s: null })];
+  expect(indicatorSource(IND(["wan.link_status", "wan.connection_status"]), ms)).toBe("Fonte: ACS (cache) · idade desconhecida");
+});
+
 test("métricas fora do indicador e fonte desconhecida não vazam para a linha", () => {
   expect(indicatorSource(IND(["wan.link_status"]), [M({ id: "optical.rx_dbm", source: "OLT_ADAPTER" })])).toBe("Fonte: sem leitura");
   expect(indicatorSource(IND(["wan.link_status"]), [M({ source: "NOVA_FONTE" })])).toBe("Fonte: outra fonte · agora há pouco");
