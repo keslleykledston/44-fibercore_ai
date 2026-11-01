@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1957d-7d92-7cc3-8db0-76a06220d6dd).
+[codex] Turn started (01a1957d-7fdc-70e0-bef1-0b63d1b7f4e7).
+[codex] Assistant message captured: Vou conferir o documento contra o diff e os registros disponíveis no repositório, com foco em...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/bench/H-speed_tes...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/bench/H-speed_tes... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/bench/H-speed_test_download-zte-f670l-2026-11-01.md; nl -ba d...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/wiki/bench/H-speed_test_download-zte-f670l-2026-11-01.md; nl -ba d... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0030-homologacao-em-bancada-escopo-e-gates.md | sed -...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0030-homologacao-em-bancada-escopo-e-gates.md | sed -... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não publicar ainda como evidência de causas: as falha...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não publicar ainda como evidência de causas: as falhas são atribuídas a causas específicas sem registro que demonstre que elas causaram cada desfecho. O resultado principal e os limites de identidade/aceite estão devidamente qualificados no texto.
+
+Findings:
+- [medium] Causas das tentativas falhas não estão demonstradas (docs/wiki/bench/H-speed_test_download-zte-f670l-2026-11-01.md:24-25)
+  As tentativas 1 e 2 atribuem causalidade à regra de firewall e ao relógio da ZTE, e afirmam que nenhum byte trafegou na primeira. O texto cita apenas a lista atual de regras do `ufw` para a primeira; não registra regra e horário vigentes na execução, captura de SYN descartado nem contadores de bytes. Para a segunda, informa `TestBytesReceived` e horário de 1970, mas não apresenta evidência que ligue o descarte de timestamps à falha observada. Assim, essas explicações podem ser hipóteses plausíveis, mas estão redigidas como causas comprovadas e podem induzir diagnósticos ou alterações operacionais incorretos.
+  Recommendation: Anexar ou referenciar registros contemporâneos que sustentem cada nexo causal (estado da regra e tráfego/contadores; valores de timestamp recebidos e motivo do descarte). Sem isso, rotular as causas como hipóteses e remover a afirmação categórica de que nenhum byte trafegou.
+
+Next steps:
+- Sustentar as causas das tentativas 1 e 2 com evidência contemporânea ou reescrevê-las como hipóteses antes de publicar.
