@@ -120,7 +120,7 @@ export const SCOPE_TEXT: Record<string, string> = { WAN_UNCLASSIFIED: "WAN não 
 export const SOURCE_TEXT: Record<string, string> = { TR069_READ: "ACS (leitura)", TR069_ACTIVE: "ACS (teste ativo)", OLT_ADAPTER: "OLT", SD001: "teste de banda", ACS_CACHE: "ACS (cache)" };
 /** "Fonte · idade" de um indicador: só as métricas que ele cita e que têm leitura (atual ou antiga, COM valor). Com mais de uma, a idade é a da MAIS ANTIGA (a mais fresca esconderia a velha); se QUALQUER uma não tem idade, a idade é desconhecida. Sem nenhuma: sem leitura. */
 export function indicatorSource(ind: QIndicator, metrics: QMetric[]): string {
-  const ms = metrics.filter((m) => ind.metric_ids.includes(m.id) && (m.status === "valid" || m.status === "stale") && m.value !== null);   // o status sozinho não prova leitura: sem valor a tela mostra "—", e a fonte não pode dizer o contrário
+  const ms = metrics.filter((m) => ind.metric_ids.includes(m.id) && hasReading(m));   // o status sozinho não prova leitura: sem valor a tela mostra "—", e a fonte não pode dizer o contrário
   if (ms.length === 0) return "Fonte: sem leitura";
   const sources = [...new Set(ms.map((m) => SOURCE_TEXT[m.source] ?? "outra fonte"))];
   const ages = ms.map((m) => m.freshness_s);
@@ -140,9 +140,11 @@ export const REFUSAL_TEXT: Record<string, string> = {
   not_found: "Este aparelho não existe mais.",
 };
 
+/** Uma métrica TEM leitura quando o status é valid/stale E há valor: null, texto vazio ou só espaços não são leitura (0 e false são). Um só critério para o valor mostrado e para a fonte/idade, para um nunca contradizer o outro. */
+export const hasReading = (m: QMetric): boolean =>
+  (m.status === "valid" || m.status === "stale") && m.value !== null && m.value !== undefined && !(typeof m.value === "string" && m.value.trim() === "");
 export const valueText = (m: QMetric): string => {
-  if (m.status !== "valid" && m.status !== "stale") return "—";
-  if (m.value === null) return "—";
+  if (!hasReading(m)) return "—";
   if (typeof m.value === "boolean") return m.value ? "Sim" : "Não";
   const n = typeof m.value === "number" ? m.value.toLocaleString("pt-BR", { maximumFractionDigits: 2 }) : m.value;
   return m.unit ? `${n} ${m.unit}` : String(n);

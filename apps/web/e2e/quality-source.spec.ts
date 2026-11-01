@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { indicatorSource, type QIndicator, type QMetric } from "../src/lib/quality";
+import { hasReading, indicatorSource, type QIndicator, type QMetric, valueText } from "../src/lib/quality";
 
 // "Fonte · idade" de cada indicador da Qualidade (funções puras, sem navegador nem API).
 const M = (over: Partial<QMetric>): QMetric => ({
@@ -19,6 +19,17 @@ test("métrica válida ou antiga SEM valor não conta como leitura: não ganha f
   expect(indicatorSource(IND(["wan.link_status"]), [M({ status: "stale", value: null })])).toBe("Fonte: sem leitura");
   const ms = [M({ id: "wan.link_status", value: null, freshness_s: 5 }), M({ id: "wan.connection_status", source: "TR069_READ", freshness_s: 120 })];
   expect(indicatorSource(IND(["wan.link_status", "wan.connection_status"]), ms)).toBe("Fonte: ACS (leitura) · há 2 min");   // só a métrica com valor entra
+});
+
+test("texto vazio ou só espaços também não é leitura, mas 0 e false são", () => {
+  for (const value of ["", "   "]) {
+    expect(indicatorSource(IND(["wan.link_status"]), [M({ value })]), JSON.stringify(value)).toBe("Fonte: sem leitura");
+    expect(valueText(M({ value })), JSON.stringify(value)).toBe("—");
+  }
+  expect(hasReading(M({ value: 0 }))).toBe(true);
+  expect(hasReading(M({ value: false }))).toBe(true);
+  expect(indicatorSource(IND(["wan.link_status"]), [M({ value: 0 })])).toBe("Fonte: ACS (cache) · agora há pouco");
+  expect(valueText(M({ value: false }))).toBe("Não");
 });
 
 test("uma métrica: fonte em palavras e a idade dela", () => {
