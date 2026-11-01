@@ -150,3 +150,21 @@ test("qualidade (cenário): resposta fora do formato fechado (escopo/grupo/valor
     await page.unroute("**/bff/cpes/*/quality");
   }
 });
+
+test("qualidade (cenário): métrica 'valid' com valor vazio aparece como sem leitura em todo lugar (cartão, fonte e detalhes)", async ({ page, request }) => {
+  await confirmDemoA2(request);
+  await page.route("**/bff/cpes/*/quality", (r) => r.fulfill({
+    json: { caps: CAPS, runs: [RUN({ metrics: [M({ value: "" }), M({ id: "optical.rx_dbm", group: "OPTICAL", value: "", source: "OLT_ADAPTER", scope: "PON", judged: true })] })] },
+  }));
+  await openTab(page);
+  await expect(page.getByTestId("quality-ind-wan")).toHaveAttribute("data-state", "unknown");
+  await expect(page.getByTestId("quality-ind-wan")).toContainText("Sem leitura");
+  await expect(page.getByTestId("quality-ind-wan-source")).toHaveText("Fonte: sem leitura");
+  await expect(page.getByTestId("quality-ind-optical")).toHaveAttribute("data-state", "unknown");
+  await expect(page.getByTestId("quality-ind-optical")).not.toContainText("sem faixa de referência");
+  await page.getByTestId("quality-details").locator("summary").click();
+  const wan = page.getByTestId("quality-metric").first();
+  await expect(wan).toContainText("Sem leitura");
+  await expect(wan).not.toContainText("Leitura atual");
+  await expect(wan).not.toContainText("agora há pouco");
+});

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { hasReading, indicatorSource, type QIndicator, type QMetric, valueText } from "../src/lib/quality";
+import { hasReading, indicatorDisplay, indicatorSource, metricAgeSuffix, metricStatusText, type QIndicator, type QMetric, valueText } from "../src/lib/quality";
 
 // "Fonte · idade" de cada indicador da Qualidade (funções puras, sem navegador nem API).
 const M = (over: Partial<QMetric>): QMetric => ({
@@ -53,4 +53,32 @@ test("uma leitura sem idade conhecida nunca fica escondida atrás da idade das o
 test("métricas fora do indicador e fonte desconhecida não vazam para a linha", () => {
   expect(indicatorSource(IND(["wan.link_status"]), [M({ id: "optical.rx_dbm", source: "OLT_ADAPTER" })])).toBe("Fonte: sem leitura");
   expect(indicatorSource(IND(["wan.link_status"]), [M({ source: "NOVA_FONTE" })])).toBe("Fonte: outra fonte · agora há pouco");
+});
+
+test("métrica valid/stale sem valor não é 'Leitura atual/antiga' nem ganha idade nos detalhes", () => {
+  for (const status of ["valid", "stale"] as const) {
+    const m = M({ status, value: "", freshness_s: 30 });
+    expect(metricStatusText(m)).toBe("Sem leitura");
+    expect(metricAgeSuffix(m)).toBe("");
+  }
+  expect(metricStatusText(M({ status: "valid", value: "Up" }))).toBe("Leitura atual");
+  expect(metricAgeSuffix(M({ status: "valid", value: "Up", freshness_s: 30 }))).toBe(" · agora há pouco");
+  expect(metricStatusText(M({ status: "stale", value: 0, freshness_s: 7200 }))).toBe("Leitura antiga");
+  expect(metricStatusText(M({ status: "not_available" }))).toBe("Sem leitura");
+});
+
+test("o cartão do indicador só diz 'ok' ou 'Leitura atual, sem faixa' quando há leitura de verdade", () => {
+  const ok = (ids: string[]): QIndicator => ({ state: "ok", metric_ids: ids });
+  const rx = (over: Partial<QMetric>) => M({ id: "optical.rx_dbm", group: "OPTICAL", source: "OLT_ADAPTER", value: -18.75, unit: "dBm", ...over });
+  // sem leitura (valor vazio): nada de "ok" nem de "Leitura atual"
+  expect(indicatorDisplay("optical", ok(["optical.rx_dbm"]), [rx({ value: "" })])).toEqual({ state: "unknown", text: "Sem leitura" });
+  expect(indicatorDisplay("wan", ok(["wan.link_status"]), [M({ value: "   " })])).toEqual({ state: "unknown", text: "Sem leitura" });
+  // com leitura, mas sem faixa homologada (judged não é true)
+  expect(indicatorDisplay("optical", ok(["optical.rx_dbm"]), [rx({})]).state).toBe("unjudged");
+  expect(indicatorDisplay("optical", ok(["optical.rx_dbm"]), [rx({ judged: true })])).toEqual({ state: "ok", text: "Sem anomalia observada" });
+  // um "judged" sem valor não conta
+  expect(indicatorDisplay("optical", ok(["optical.rx_dbm"]), [rx({ judged: true, value: "" })]).state).toBe("unknown");
+  // outros estados passam como a API disse
+  expect(indicatorDisplay("wan", { state: "attention", metric_ids: ["wan.link_status"] }, [M({})])).toEqual({ state: "attention", text: "Atenção" });
+  expect(indicatorDisplay("wifi", { state: "unknown", metric_ids: [] }, [])).toEqual({ state: "unknown", text: "Sem leitura" });
 });
