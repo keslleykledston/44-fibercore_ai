@@ -6,7 +6,7 @@ export function DataFreshness({ freshness, observedAt }: { freshness?: string | 
   const ago = observedAt ? ` · ${ago_(observedAt)}` : "";
   return <span data-testid="freshness" className={`text-xs ${freshness === "stale" ? "text-warn" : "text-muted"}`}>{label}{ago}</span>;
 }
-function ago_(iso: string) {
+export function ago_(iso: string) {
   const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
   if (s < 90) return "agora há pouco";
   if (s < 5400) return `há ${Math.round(s / 60)} min`;

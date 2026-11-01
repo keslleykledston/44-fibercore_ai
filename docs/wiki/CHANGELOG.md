@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — Diagnóstico da ONU e régua de sinal óptico (2026-11-01)
+- Web: página `/rede/onu/{id}/diagnostico` (flag `onu_quick_inspector`) com abas por link (Resumo, Velocidade, Qualidade, Latência e DNS), reaproveitando `SpeedTestSection`/`QualitySection` e a nova `PingTestSection`; cada teste só aparece com roteador vinculado e a flag própria ligada, e o Resumo diz em texto por que um teste está indisponível. Botão "Diagnóstico" na ONU 360° e no painel lateral da ONU.
+- Web: `OpticalRuler` (três tamanhos) no lugar do número solto do Rx, com faixas de REFERÊNCIA G.984.2 classe B+ (−28/−25/−10/−8 dBm) em `src/lib/optics.ts`, texto e símbolo sempre, aviso "não homologada", e dado defasado/ausente nunca classificado. ADR-0037 ganhou a emenda que permite isso só na apresentação (a API segue sem julgar o Rx).
+- Web: BFF `/bff/cpes/{id}/ping` e `/ping/runs` (formato fechado, só id lógico do destino). Jitter e DNS aparecem como "ainda não disponível" com o motivo (o aparelho só informa mín/méd/máx; os modelos de bancada não expõem NSLookup).
+- Testes puros da régua em `apps/web/e2e/optics.spec.ts` (projeto `puros`). Os e2e de página não rodaram: a stack efêmera não tem o seed demo com vínculo ONU↔CPE.
+
 ## Unreleased — ping_test na nuvem (2026-11-01)
 - API: `ping_test` entra no catálogo de bancada (ADR-0030 emenda, linha Q1) com UM parâmetro, o id lógico do destino. Endpoints por CPE `GET /v1/cpes/{id}/ping/capabilities`, `GET|POST /v1/cpes/{id}/ping/runs`, `GET .../runs/{run}`; tudo responde 403 `feature_disabled` com a flag `quality_active_tests` desligada. Pedido pelo caminho genérico de jobs é recusado (`use_ping_api`).
 - Permissão nova `diagnostics:ping_run` (R2, MFA recente), mesmos papéis do teste de banda. `ping_test` é autorizável pela API só por `engineer` e `isp_admin`.

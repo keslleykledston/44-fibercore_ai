@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FaceplateMini } from "@/components/Faceplate";
 import { EntityDetailDrawer } from "@/components/EntityDetailDrawer";
 import { OnuHistoryTab } from "@/components/OnuHistoryTab";
+import { OpticalRuler } from "@/components/OpticalRuler";
 import { QualitySection } from "@/components/QualitySection";
 import { SpeedTestSection } from "@/components/SpeedTestSection";
 import { OntFormBody, ago, useOntForm } from "@/components/OntConfigView";
@@ -61,14 +62,16 @@ function Body({ row, state, oltName, retry }: { row: Onu; state: State | null; o
             <Line k="Comunicação ACS"><span className={`font-medium ${TONE_CLASS[m.acs.tone]}`}>{m.acs.label}</span>
               {m.acs.vendor_model && <span className="block text-xs text-muted">{m.acs.vendor_model}</span>}
               {m.acs.source && <span className="block text-xs text-muted">Origem: ACS{when(m.acs.observed_at) ? ` · observado em ${when(m.acs.observed_at)}` : ""}</span>}</Line>
-            <Line k="Potência recebida"><span className="font-medium">{m.optical.label}</span>
-              <span className="block text-xs text-muted">{m.optical.rx_dbm === null ? "Sem medição." : `Origem: OLT · sem limiar homologado, por isso sem cor de severidade.`}</span></Line>
+            <Line k="Potência recebida">
+              {m.optical.rx_dbm === null ? <span className="font-medium">{m.optical.label}</span> : <OpticalRuler rx={m.optical.rx_dbm} freshness={row.freshness} agoText={row.observed_at ? ago(row.observed_at) : null} size="md" />}
+              <span className="block text-xs text-muted">{m.optical.rx_dbm === null ? "Sem medição." : "Origem: OLT · faixa de referência do padrão, sem homologação para esta OLT/óptica."}</span></Line>
             <Line k="Cliente"><span className="font-medium" data-testid="onu-quick-customer">{m.association.customer ?? m.association.label}</span>
               {m.association.customer && <span className="block text-xs text-muted">{m.association.label}</span>}</Line>
           </>
         )}
         <Line k="Status e frescor"><span className="text-xs text-muted">{row.freshness === "fresh" ? "Dado recente" : row.freshness === "stale" ? "Dados defasados" : "Sem coleta"}{when(row.observed_at) ? ` · última coleta em ${when(row.observed_at)}` : ""}</span></Line>
       </dl>
+      <Link href={`/rede/onu/${row.id}/diagnostico`} data-testid="onu-diag-link" className="inline-flex min-h-touch items-center justify-center rounded-btn border border-line px-4 font-medium text-accent">Diagnóstico</Link>
       <Link href={`/rede/onu/${row.id}`} data-testid="onu-360-link" className="inline-flex min-h-touch items-center justify-center rounded-btn bg-accent px-4 font-medium text-[color:var(--on-accent)]">Abrir Visão 360°</Link>
       <Link href="/ajuda/rede/consultar-onu" className="text-xs text-accent underline underline-offset-2">Como consultar uma ONU</Link>
     </div>
