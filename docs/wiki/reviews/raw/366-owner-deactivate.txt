@@ -1,0 +1,16 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1958a-4ed3-7f92-9d26-5bcb54a15dc2).
+[codex] Turn started (01a1958a-4f0d-7780-9b70-8fcd957cc3af).
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: removing one user membership revokes...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: removing one user membership revokes that user's sessions and invalidates tokens across every tenant.
+
+Findings:
+- [high] Tenant-scoped removal revokes credentials globally (apps/api/app/cli.py:528-530)
+  After deleting only the requested tenant membership, this path revokes every refresh token for the user and advances the user's global `tokens_valid_after` timestamp. A user who remains a member of another tenant is therefore logged out there too, and previously issued tokens may be invalidated across tenants. That contradicts the command's tenant-scoped membership behavior and makes closing one tenant's account affect unrelated access. Revoke only credentials scoped to the removed membership or tenant, or explicitly reject this operation for users with memberships in other tenants.
+  Recommendation: Make session and token invalidation tenant-aware; add a regression case where the same user belongs to two tenants and verify deactivation in one preserves access in the other.

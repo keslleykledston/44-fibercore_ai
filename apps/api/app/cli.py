@@ -528,11 +528,12 @@ def main(argv: list[str] | None = None) -> None:
                 if role == "isp_admin":
                     sys.exit("user is an isp_admin: refused (this command closes homologation accounts, it does not remove administrators)")
                 c.execute(text("SELECT pg_advisory_xact_lock(hashtextextended('account:' || CAST(:u AS text), 0))"), {"u": str(uid)})
+                if c.execute(text("SELECT 1 FROM tenant_memberships WHERE user_id = :u AND tenant_id <> :t LIMIT 1"), {"u": uid, "t": a.tenant_id}).first():
+                    # sessions and token validity are per USER, not per tenant: ending them here would log the user out of the other tenants too
+                    sys.exit("user belongs to other tenants: refused (this command closes accounts used only in this tenant)")
                 c.execute(text("DELETE FROM tenant_memberships WHERE tenant_id = :t AND user_id = :u"), {"t": a.tenant_id, "u": uid})
                 c.execute(text("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = :u AND revoked_at IS NULL"), {"u": uid})
-                c.execute(text("UPDATE users_global SET tokens_valid_after = clock_timestamp() WHERE id = :u"), {"u": uid})
-                if not c.execute(text("SELECT 1 FROM tenant_memberships WHERE user_id = :u LIMIT 1"), {"u": uid}).first():
-                    c.execute(text("UPDATE users_global SET is_active = false WHERE id = :u"), {"u": uid})
+                c.execute(text("UPDATE users_global SET tokens_valid_after = clock_timestamp(), is_active = false WHERE id = :u"), {"u": uid})
                 c.execute(text("INSERT INTO events_outbox (tenant_id, aggregate_type, aggregate_id, event_type, schema_version, payload) "
                                "VALUES (:t,'user',:u,'account.deactivated','1',CAST(:p AS jsonb))"), {"t": a.tenant_id, "u": uid, "p": json.dumps({"kind": "membership"})})
                 done_users += 1

@@ -62,3 +62,18 @@ def test_refuses_edge_agents_isp_admin_users_unknown_names_and_an_empty_request(
         with pytest.raises(SystemExit) as e:
             cli.main(["deactivate-account", t, *args])
         assert why in str(e.value), (args, str(e.value))
+
+
+def test_a_user_who_also_belongs_to_another_tenant_is_refused_and_keeps_every_membership(seed, migrated, admin_url, monkeypatch, capsys):
+    from app import cli
+
+    monkeypatch.setenv("ADMIN_DATABASE_URL", admin_url)
+    a, b = str(seed["A"]), str(seed["B"])
+    _user(cli, a, "dact-two@example.test", "noc_n1", monkeypatch)
+    cli.main(["add-member", b, "dact-two@example.test", "noc_n1"])
+    with pytest.raises(SystemExit) as e:
+        cli.main(["deactivate-account", a, "--user", "dact-two@example.test"])
+    assert "other tenants" in str(e.value)
+    with migrated.begin() as c:
+        assert c.execute(text("SELECT count(*) FROM tenant_memberships m JOIN users_global u ON u.id = m.user_id WHERE u.email = 'dact-two@example.test'")).scalar() == 2
+        assert c.execute(text("SELECT is_active FROM users_global WHERE email = 'dact-two@example.test'")).scalar() is True
