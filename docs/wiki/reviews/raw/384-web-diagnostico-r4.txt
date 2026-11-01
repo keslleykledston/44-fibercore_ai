@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a195c4-232e-72f0-8d71-c73bee77180f).
+[codex] Turn started (01a195c4-2367-7990-8f96-205ab290cb2f).
+[codex] Assistant message captured: I’ll inspect the branch diff against `main` and trace the pending-marker flow, then report on...
+[codex] Running command: /bin/bash -lc "git diff --unified=80 main...HEAD -- apps/web/src/components/PingTestSection.t...
+[codex] Command completed: /bin/bash -lc "git diff --unified=80 main...HEAD -- apps/web/src/components/PingTestSection.t... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --unified=25 main...HEAD -- apps/web/src/components/PingTestSection.tsx'
+[codex] Command completed: /bin/bash -lc 'git diff --unified=25 main...HEAD -- apps/web/src/components/PingTestSection.tsx' (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/components/PingTestSection.tsx | sed -n '18,115p'; git sta...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/components/PingTestSection.tsx | sed -n '18,115p'; git sta... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"No-ship: when the POST succeeds without returning a r...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+No-ship: when the POST succeeds without returning a run ID, the persisted lock can expire on a later successful read without confirming that this request appears in history, allowing a duplicate ping if visibility is delayed.
+
+Findings:
+- [medium] Unconfirmed accepted request unlocks after 60 seconds (apps/web/src/components/PingTestSection.tsx:112)
+  A successful POST with no `run_id` stores a provisional marker that expires after 60 seconds. Once a successful GET starts after that deadline, line 66 clears the marker without checking whether the accepted request appears in `runs`. If the run is not yet visible, the button unlocks and a new request uses a fresh idempotency key; this can permit duplicate traffic. Keep the lock until the request is correlated to a run or a definitive server-side outcome establishes that it was not created.
+  Recommendation: Do not treat the short uncertainty deadline as confirmation. Have the BFF return a correlation identifier for every accepted request, or retain the lock until the server confirms the request or an operator resolves the uncertainty.

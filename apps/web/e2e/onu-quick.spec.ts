@@ -17,8 +17,8 @@ test("resumo rápido: painel ao lado da lista, PON e ACS separados, trocar a ONU
   await expect(panel).toContainText("PON registrada");
   await expect(panel).toContainText("Origem: OLT");
   await expect(panel).toContainText("Sem roteador vinculado");           // ACS ausente não vira "offline" nem "ok"
-  await expect(panel).toContainText("RX -21,5 dBm");
-  await expect(panel).toContainText("sem limiar homologado");
+  await expect(panel).toContainText("-21,50 dBm");
+  await expect(panel).toContainText("sem homologação para esta OLT/óptica");
   await expect(panel.getByTestId("faceplate-mini")).toHaveAttribute("aria-label", /Energia e sincronismo presentes/);
   await expect(panel).toContainText("Painel conceitual");
   // não modal: a lista segue clicável com o painel aberto e o painel troca de conteúdo (nunca mostra o da anterior)

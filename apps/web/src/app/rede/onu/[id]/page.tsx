@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { Card, Row } from "@/components/Panel";
 import { SourceChip } from "@/components/SourceChip";
-import { DataFreshness, ErrorState, PageHeader, StatusPill } from "@/components/ui";
+import { ago_, DataFreshness, ErrorState, PageHeader, StatusPill } from "@/components/ui";
+import { OpticalRuler } from "@/components/OpticalRuler";
 import { apiSafe } from "@/lib/api";
 import { featuresOn } from "@/lib/features";
 import { CapabilityGate } from "@/components/CapabilityGate";
@@ -43,6 +44,7 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
   return (
     <AppShell active="/rede" user="1">
       <PageHeader title={`ONU ${o.serial}`} subtitle="Visão completa de uma ONU, com a origem de cada dado" helpSlug="rede/onu-360">
+        {newUx && <Link href={`/rede/onu/${id}/diagnostico`} data-testid="onu360-diag-link" className="inline-flex min-h-touch items-center rounded-btn border border-line px-3 text-sm font-medium text-accent hover:underline">Diagnóstico</Link>}
         <Link href="/rede" className="inline-flex min-h-touch items-center rounded-btn px-3 text-sm text-accent hover:underline">← Voltar para Rede</Link>
       </PageHeader>
       {newUx && <nav aria-label="Trilha" className="mb-4 flex flex-wrap items-center gap-1 text-sm text-muted" data-testid="onu360-breadcrumb">
@@ -60,7 +62,7 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
                 ? <span className="font-semibold">{[o.cpe.device.vendor, o.cpe.device.model].filter(Boolean).join(" ")}{o.cpe.device.firmware ? <span className="block text-xs font-normal text-muted">Firmware {o.cpe.device.firmware}</span> : null}</span>
                 : <span className="text-muted">Indisponível sem vínculo confirmado com o roteador.</span>}</dd></div>
             <div><dt className="text-xs text-muted">Local</dt><dd>{o.olt.name}<span className="block text-xs text-muted">PON {o.pon?.path ?? "—"}</span></dd></div>
-            <div><dt className="text-xs text-muted">Agora</dt><dd><StatusPill value={o.status} /><span className="ml-2">{o.rx_dbm !== null ? `${o.rx_dbm} dBm` : "—"}</span>
+            <div><dt className="text-xs text-muted">Agora</dt><dd><StatusPill value={o.status} /><span className="ml-2 align-middle"><OpticalRuler rx={o.rx_dbm} freshness={o.freshness} agoText={o.observed_at ? ago_(o.observed_at) : null} size="sm" /></span>
               <span className="block text-xs text-muted"><DataFreshness freshness={o.freshness} observedAt={o.observed_at} /></span></dd></div>
           </dl>
         </section>}

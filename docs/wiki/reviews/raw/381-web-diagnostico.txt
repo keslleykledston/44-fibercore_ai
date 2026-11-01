@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a195c2-2be6-7111-b2a2-2653a4c481fd).
+[codex] Turn started (01a195c2-2c22-70f3-b2cf-c7f084a0c824).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os fluxos de autorização, validação e estados d...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/lib/optics.ts ...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/lib/optics.ts ... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/components/OpticalRuler.tsx; nl -ba apps/web/src/component...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/components/OpticalRuler.tsx; nl -ba apps/web/src/component... (exit 0)
+[codex] Assistant message captured: Encontrei um ponto de risco no bloqueio após resposta ambígua: a trava é local e expira em um...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- apps/web/src/components/Onu...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- apps/web/src/components/Onu... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: a tela pode liberar um segundo test...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: a tela pode liberar um segundo teste após uma resposta aceita ou ambígua, e o BFF classifica qualquer 403 de leitura como recurso desligado.
+
+Findings:
+- [high] A trava contra testes duplicados não sobrevive a falhas de leitura nem ao prazo de 60 segundos (apps/web/src/components/PingTestSection.tsx:70-81)
+  A trava só existe no estado local do componente e expira após 60 segundos. Depois de uma resposta ambígua, `fetchAll()` pode falhar sem manter o botão bloqueado; mesmo quando o POST retorna sucesso, uma falha ao atualizar a lista também deixa `active` falso e permite outro clique. Cada clique gera uma nova chave de idempotência, então a API não pode reconhecer o segundo pedido como repetição do primeiro. Isso pode gerar testes de tráfego duplicados sem nova confirmação informada. Mantenha o pedido bloqueado após aceitação ou incerteza até a API confirmar um estado terminal ou fornecer uma garantia de idempotência que sobreviva a retries e recargas.
+  Recommendation: Persistir o estado do pedido e sua chave idempotente; em sucesso ou resposta ambígua, bloquear novos pedidos até uma leitura autoritativa confirmar o resultado, sem liberar apenas por timeout local.
+- [medium] 403 de autorização aparece como recurso desligado (apps/web/src/app/bff/cpes/[id]/ping/route.ts:16-17)
+  Se qualquer uma das leituras de capabilities ou runs retornar 403, o BFF responde `error: disabled`, sem distinguir falta de permissão de flag desativada. A interface então informa que o teste está desligado para o provedor, o que pode levar a uma conclusão operacional errada e ocultar um problema de autorização.
+  Recommendation: Mapear separadamente os motivos estáveis retornados pela API; exibir estado de permissão quando o 403 não indicar explicitamente `feature_disabled`.

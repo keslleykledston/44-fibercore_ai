@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a195c5-506b-7f22-b05d-92b90d48d88e).
+[codex] Turn started (01a195c5-50a1-7203-9a68-905280ad2c30).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir o fluxo de retry/idempotência do botão até o endpo...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Pin...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Pin... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=40 main...HEAD -- apps/web/src/app/rede/onu/'...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=40 main...HEAD -- apps/web/src/app/rede/onu/'... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"Idempotency-Key|same.key|idempotency|ping/runs\" apps/api apps 2>/dev/...
+[codex] Command completed: /bin/bash -lc "rg -n \"Idempotency-Key|same.key|idempotency|ping/runs\" apps/api apps 2>/dev/... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/components/PingTestSection.tsx | sed -n '20,125p'; nl -ba ...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/components/PingTestSection.tsx | sed -n '20,125p'; nl -ba ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: se o sessionStorage falhar, a trav...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: se o sessionStorage falhar, a trava incerta some após recarregar e um novo pedido pode criar outro teste.
+
+Findings:
+- [high] Falha ao persistir a trava permite duplicar um pedido incerto (apps/web/src/components/PingTestSection.tsx:34-36)
+  `writePending` engole erros de `sessionStorage` e mantém a trava apenas no `memo` em memória. Se o POST chegar à API, mas a resposta se perder, um recarregamento apaga esse `memo`; a tela então permite gerar uma nova chave e pedir outro teste enquanto o primeiro pode estar em andamento. Isso quebra a garantia de que a confirmação repete a mesma chave e pode causar testes duplicados. Torne a falha de persistência visível e impeça um novo pedido até a incerteza ser resolvida por outro mecanismo confiável.
+  Recommendation: Não permita iniciar o teste quando não conseguir persistir a chave e o destino antes do POST; apresente uma falha explícita ou use armazenamento durável adequado ao escopo do pedido.
+
+Next steps:
+- Tratar falha de persistência como bloqueio antes de enviar o POST e cobrir o caso de armazenamento indisponível.
