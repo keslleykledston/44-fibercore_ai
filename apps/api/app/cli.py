@@ -191,7 +191,14 @@ def main(argv: list[str] | None = None) -> None:
                 try:
                     if not _st.S_ISREG(_os.fstat(fd).st_mode):
                         sys.exit("the referenced evidence must be a regular file directly under the evidence root")
-                    raw_bytes = _os.read(fd, (256 << 10) + 1)
+                    chunks, got = [], 0
+                    while got <= 256 << 10:   # read to EOF (a read may return less than asked), at most 256 KiB + 1 byte
+                        chunk = _os.read(fd, (256 << 10) + 1 - got)
+                        if not chunk:
+                            break
+                        chunks.append(chunk)
+                        got += len(chunk)
+                    raw_bytes = b"".join(chunks)
                 finally:
                     _os.close(fd)
                 if len(raw_bytes) > 256 << 10:
@@ -201,7 +208,7 @@ def main(argv: list[str] | None = None) -> None:
                 sys.exit(f"cannot read the evidence file: {exc}")
             import ipaddress as _ip
             def _has_address(text_: str) -> bool:
-                for tok in _re.findall(r"[0-9A-Fa-f:.]{3,}", text_):
+                for tok in _re.findall(r"\[([0-9A-Fa-f:.]+)\]", text_) + _re.findall(r"[0-9A-Fa-f:.]{3,}", text_):   # "[v6]:port" is checked without the port
                     if ":" in tok or "." in tok:
                         try:
                             _ip.ip_address(tok.rstrip(".:"))

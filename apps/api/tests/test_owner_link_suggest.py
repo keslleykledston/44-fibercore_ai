@@ -98,8 +98,11 @@ def test_owner_link_suggest_refuses_bad_input(client, seed, inv, migrated, admin
     os.mkfifo(root / "H1-fifo-2026-11-01.md")   # a FIFO must be refused without blocking
     with pytest.raises(SystemExit, match="regular file"):
         cli.main(base + ["--evidence-ref", "docs/wiki/bench/H1-fifo-2026-11-01.md"])
+    (root / "H1-grande-2026-11-01.md").write_text(GOOD + "x" * (257 << 10), encoding="utf-8")   # above 256 KiB: refused, never validated by a prefix
+    with pytest.raises(SystemExit, match="larger than"):
+        cli.main(base + ["--evidence-ref", "docs/wiki/bench/H1-grande-2026-11-01.md"])
     bad = {"curto": "curto"}
-    for i, extra in enumerate((" 10.1.2.3", " 2001:db8:85a3:0:0:8a2e:370:7334", " 2001:db8::1", " ::1", " 10.1.2.3:8080", " [2001:db8::1]:443", " senha: x", " api_key = abc", " chave: abc")):
+    for i, extra in enumerate((" 10.1.2.3", " 2001:db8:85a3:0:0:8a2e:370:7334", " 2001:db8::1", " ::1", " 10.1.2.3:8080", " [2001:db8::1]:443", " [2001:db8:0:0:0:0:0:1]:443", " senha: x", " api_key = abc", " chave: abc")):
         bad[f"s{i}"] = GOOD + extra
     for name, content in bad.items():
         (root / f"H1-{name}-2026-11-01.md").write_text(content, encoding="utf-8")

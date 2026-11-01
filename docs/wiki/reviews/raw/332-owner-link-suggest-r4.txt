@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19477-5d7a-7c33-b1fe-19037cf0938a).
+[codex] Turn started (01a19477-5db3-7201-b467-5d95a5b500a8).
+[codex] Assistant message captured: Vou conferir o diff contra `main`, com atenção à abertura segura do H1, aos limites de leitur...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/api/a...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/api/a... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/cli.py | sed -n '198,255p'; git diff --check main...HEAD"
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/cli.py | sed -n '198,255p'; git diff --check main...HEAD" (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/cli.py | sed -n '175,205p'"
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/cli.py | sed -n '175,205p'" (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"No-ship: leitura única pode aceitar arquivo truncado ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+No-ship: leitura única pode aceitar arquivo truncado e registrar hash de evidência incompleta; a validação de endereço também deixa escapar IPv6 não comprimido com porta.
+
+Findings:
+- [medium] Uma única leitura pode validar e hashear apenas parte do H1 (apps/api/app/cli.py:194-198)
+  `os.read` pode retornar menos bytes que o solicitado, mesmo antes do EOF. O código então verifica tamanho, conteúdo e SHA-256 somente desse prefixo e grava o vínculo como sustentado pelo H1, embora o arquivo referenciado possa conter conteúdo adicional, inclusive um endereço ou credencial fora do trecho lido. O limite de 256 KiB também pode ser contornado por essa leitura parcial. Leia até EOF, acumulando no máximo 256 KiB + 1 bytes, antes de validar e calcular o hash.
+  Recommendation: Substitua a leitura única por um loop até EOF que acumule no máximo 256 KiB + 1; rejeite ao exceder o limite e valide/hash somente o conteúdo completo.
+- [medium] IPv6 completo com porta não é reconhecido como endereço (apps/api/app/cli.py:203-210)
+  A expressão de tokens captura os caracteres hexadecimais, pontos e dois-pontos, mas descarta os colchetes. Para `[2001:db8:0:0:0:0:0:1]:443`, o token passa a incluir `:443`, formando nove grupos IPv6; `ip_address` rejeita esse token e o código não tenta validar o endereço interno sem a porta. A regex IPv4 separada não cobre esse caso, então um H1 com IPv6 explícito e porta pode ser aceito apesar da regra de rejeição. O teste cobre IPv6 comprimido, cujo token interno ainda é detectado, mas não esta forma completa.
+  Recommendation: Detecte e valide separadamente `[IPv6]:porta` extraindo o conteúdo entre colchetes e verificando que a porta está no intervalo válido; inclua um caso IPv6 não comprimido no teste.
