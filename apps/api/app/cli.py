@@ -99,6 +99,8 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("set-password", help="set a user's password (owner-only); ends all their sessions")
     sp.add_argument("email"); sp.add_argument("--password-env")
     ul = sub.add_parser("unlock-login"); ul.add_argument("key", help="e-mail, or svc:<client_id>, or ip:<addr>")
+    da = sub.add_parser("deactivate-account", help="owner-only: deactivate service accounts by exact name and/or end users' membership of one tenant; refuses Edge agents and isp_admin users")
+    da.add_argument("tenant_id"); da.add_argument("--service-account", action="append", default=[]); da.add_argument("--user", action="append", default=[], help="e-mail")
     a = ap.parse_args(argv)
     eng = _engine()
     with eng.begin() as c:
@@ -501,6 +503,40 @@ def main(argv: list[str] | None = None) -> None:
         elif a.cmd == "unlock-login":  # recovery path for a locked account (owner-only)
             n = c.execute(text("DELETE FROM login_attempts WHERE key = :k"), {"k": a.key.lower() if "@" in a.key else a.key}).rowcount
             print(f"cleared {n} attempt(s) for {a.key}")
+        elif a.cmd == "deactivate-account":  # closing a homologation: owner-only, explicit tenant filter (the owner role bypasses RLS), one outbox event each
+            if not a.service_account and not a.user:
+                sys.exit("name at least one --service-account or --user")
+            done_sa = done_users = 0
+            for name in a.service_account:
+                rows = c.execute(text("SELECT id, role, is_active FROM service_accounts WHERE tenant_id = :t AND name = :n"), {"t": a.tenant_id, "n": name}).all()
+                if len(rows) != 1:
+                    sys.exit(f"service account {name!r}: expected exactly one, found {len(rows)}")
+                sid, role, active = rows[0]
+                if role == "edge_agent":
+                    sys.exit(f"service account {name!r} is an Edge agent account: refused")
+                if active:
+                    c.execute(text("UPDATE service_accounts SET is_active = false WHERE tenant_id = :t AND id = :i"), {"t": a.tenant_id, "i": sid})
+                    c.execute(text("INSERT INTO events_outbox (tenant_id, aggregate_type, aggregate_id, event_type, schema_version, payload) "
+                                   "VALUES (:t,'service_account',:i,'account.deactivated','1',CAST(:p AS jsonb))"), {"t": a.tenant_id, "i": sid, "p": json.dumps({"kind": "service_account"})})
+                    done_sa += 1
+            for email in a.user:
+                rows = c.execute(text("SELECT u.id, m.role FROM users_global u JOIN tenant_memberships m ON m.user_id = u.id "
+                                      "WHERE m.tenant_id = :t AND lower(u.email) = lower(:e)"), {"t": a.tenant_id, "e": email}).all()
+                if len(rows) != 1:
+                    sys.exit("user: not a member of this tenant")
+                uid, role = rows[0]
+                if role == "isp_admin":
+                    sys.exit("user is an isp_admin: refused (this command closes homologation accounts, it does not remove administrators)")
+                c.execute(text("SELECT pg_advisory_xact_lock(hashtextextended('account:' || CAST(:u AS text), 0))"), {"u": str(uid)})
+                c.execute(text("DELETE FROM tenant_memberships WHERE tenant_id = :t AND user_id = :u"), {"t": a.tenant_id, "u": uid})
+                c.execute(text("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = :u AND revoked_at IS NULL"), {"u": uid})
+                c.execute(text("UPDATE users_global SET tokens_valid_after = clock_timestamp() WHERE id = :u"), {"u": uid})
+                if not c.execute(text("SELECT 1 FROM tenant_memberships WHERE user_id = :u LIMIT 1"), {"u": uid}).first():
+                    c.execute(text("UPDATE users_global SET is_active = false WHERE id = :u"), {"u": uid})
+                c.execute(text("INSERT INTO events_outbox (tenant_id, aggregate_type, aggregate_id, event_type, schema_version, payload) "
+                               "VALUES (:t,'user',:u,'account.deactivated','1',CAST(:p AS jsonb))"), {"t": a.tenant_id, "u": uid, "p": json.dumps({"kind": "membership"})})
+                done_users += 1
+            print(f"deactivated {done_sa} service account(s) and ended {done_users} membership(s)")
         elif a.cmd == "register-edge":
             print(c.execute(text("INSERT INTO edges(tenant_id,name,site_name) VALUES (:t,:n,:s) RETURNING id"),
                             {"t": a.tenant_id, "n": a.name, "s": a.site}).scalar())
