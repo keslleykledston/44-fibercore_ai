@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a195c3-ac43-7283-87cb-cc1a2df0a194).
+[codex] Turn started (01a195c3-ac7b-7fd2-a9af-14a59caccafe).
+[codex] Assistant message captured: Vou conferir o diff real contra `main`, com atenção ao ciclo POST/GET do ping, estados ambígu...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Pin...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Pin... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=35 main...HEAD -- apps/web/src/lib/api.ts app...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=35 main...HEAD -- apps/web/src/lib/api.ts app... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/components/PingTestSection.tsx | sed -n '105,143p'; git di...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/components/PingTestSection.tsx | sed -n '105,143p'; git di... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: sair ou recarregar durante o POST pod...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: sair ou recarregar durante o POST pode perder a trava antes de ela ser persistida e permitir pedido duplicado após uma resposta ambígua.
+
+Findings:
+- [high] A trava só é gravada depois que o POST responde (apps/web/src/components/PingTestSection.tsx:105-116)
+  O marcador persistente é escrito apenas nos ramos de resposta ou erro, depois do `await fetch` e da leitura do corpo. Se a pessoa recarregar ou navegar para outra página enquanto o POST está em andamento, o navegador pode encerrar a requisição depois de a API aceitá-la, sem executar esses ramos. Ao voltar, a nova seção não encontra marcador e pode enviar outro teste, contrariando a proteção contra duplicação em respostas ambíguas. Grave uma trava provisória antes de iniciar o POST e remova-a somente diante de uma recusa definitiva; atualize-a com o `run_id` ou prazo adequado quando a resposta chegar.
+  Recommendation: Persistir um marcador sem `runId` antes do `fetch`; conservar a trava após interrupções e limpar apenas com evidência de recusa definitiva ou uma leitura pós-prazo.
