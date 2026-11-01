@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a195bc-e22a-7a50-a20b-80437df05f01).
+[codex] Turn started (01a195bc-e526-7812-b7c1-3fdeca0b516e).
+[codex] Assistant message captured: I’ll inspect the branch diff and the relevant surrounding code, then trace the request, reser...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=60 main...HEAD -- apps/api/a...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=60 main...HEAD -- apps/api/a... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --unified=12 main...HEAD -- apps/api/app/core/bench.py apps/api/app/a...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=12 main...HEAD -- apps/api/app/core/bench.py apps/api/app/a... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/ping.py | sed -n '55,210p'; nl -ba apps/api/app/api/jo...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/ping.py | sed -n '55,210p'; nl -ba apps/api/app/api/jo... (exit 0)
+[codex] Running command: /bin/bash -lc "rg 'STATE_RE|ACTIVE_JOB_STATES|def submit|def approve|def _load|def require' a...
+[codex] Command completed: /bin/bash -lc "rg 'STATE_RE|ACTIVE_JOB_STATES|def submit|def approve|def _load|def require' a... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '452,510p';"
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '452,510p';" (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Do not ship yet: the ping result path can mark a fail...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Do not ship yet: the ping result path can mark a failed device measurement as a successful job.
+
+Findings:
+- [medium] A device error report can leave the job marked SUCCEEDED (apps/api/app/api/jobs.py:455-480)
+  When the Edge reports `body.state="succeeded"` with `postcheck_ok=true`, the job is set to `SUCCEEDED` before the ping report is computed. `check_report` accepts any syntactically valid state, and `probe.compute` maps states other than `Completed` to an `error` outcome. The API can therefore expose a successful job alongside a failed ping run, and the success avoids the existing bench-target lock applied to `FAILED`/`UNKNOWN`. Reject non-`Completed` reports as job success or derive the job transition from the validated report outcome.
+  Recommendation: For ping jobs, require a `Completed` report before allowing `SUCCEEDED`; map device error/non-completion reports to `FAILED` or `UNKNOWN` and apply the existing bench failure handling.
