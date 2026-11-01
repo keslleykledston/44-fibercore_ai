@@ -13,9 +13,16 @@ Escopo: SOMENTE a ONT de bancada ZTE F670L (firmware `V9.0.11P1N10B`). Sem crede
 - **Versões:** firmware do CPE `V9.0.11P1N10B`; OLT Huawei MA5608T.
 - **Restauração:** não há estado a restaurar num reinício; o retorno foi OBSERVADO pelo novo boot informado ao ACS.
 
+## Observação da OLT (coleta regular, sem captura nova)
+Fonte: inventário da plataforma (coleta de 15 em 15 minutos pelo Edge, somente leitura). Nenhum comando novo foi enviado à OLT.
+- **Coleta de 03:26:01 UTC:** a ONU declarada como par da ZTE pelo vínculo confirmado por uma pessoa (PON 0/0/14) apareceu `offline` (transição `online→offline`). O reinício foi despachado às 03:26:26 UTC.
+- **Coleta de 03:46:01 UTC:** a mesma ONU voltou `online` (RX -14,73 dBm; antes -14,66 dBm).
+- **Especificidade:** desde as 03:00 UTC houve 3 transições de estado em toda a OLT. Duas são desta ONU (as de cima). A terceira é de OUTRA ONU, de outra PON, às 03:46:01 UTC, sem relação com a manobra. Na PON 0/0/14 só esta ONU mudou de estado na janela.
+- **Limites:** `observed_at` marca o INÍCIO da coleta, que leva alguns minutos, então a ordem exata entre a leitura da ONU e o despacho às 03:26:26 não está estabelecida (a coleta começou 25 s antes do despacho). Os relógios da OLT, do Edge e do ACS não foram correlacionados. O "último down" da OLT (`olt_down_at`) não veio preenchido; nenhum horário de queda lido na OLT foi comparado com o `_lastBoot` do ACS.
+- **Leitura honesta:** é um indício coerente com o vínculo (a ONU da PON 0/0/14 que caiu e voltou na janela do reinício da ZTE), não uma prova. Não distingue a ZTE de outra ONU da mesma PON que tivesse caído nessa janela sem outra mudança de estado registrada; também não exclui coincidência.
+
 ## O que NÃO foi observado
-- **Lado da OLT:** a última coleta da OLT anterior à manobra é de 03:06 UTC (`online`, RX -14,66 dBm). Nenhuma transição `offline` da ONU foi registrada pela coleta regular, e o reinício durou cerca de 2 minutos. Este documento não afirma que a OLT viu a queda e a volta.
-- **Identidade física do alvo:** o reinício comprova que a manobra atingiu o CPE do ACS (`_lastBoot` novo). Que esse CPE seja a ONT 11 da OLT continua NÃO provado: depende de uma captura supervisionada da OLT depois da manobra.
+- **Identidade física do alvo:** o reinício comprova que a manobra atingiu o CPE do ACS (`_lastBoot` novo). Que esse CPE seja a ONT 11 da OLT continua NÃO provado; o indício da coleta regular acima é coerente, mas não conclusivo. Uma captura supervisionada com horários de queda lidos na OLT só se justifica se o responsável quiser mais prova.
 
 ## Uso desta execução
 Esta execução NÃO é evidência de homologação do `reboot_cpe` na ZTE e não promove a capacidade. Ela só registra que o caminho com portões entregou o reinício ao CPE do ACS.
