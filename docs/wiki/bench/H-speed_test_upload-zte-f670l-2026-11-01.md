@@ -10,7 +10,7 @@ Escopo: SOMENTE a ONT de bancada ZTE F670L (firmware `V9.0.11P1N10B`), pela sua 
 - **Versões:** Edge `0.1.0-lab-2a49480`; firmware do CPE `V9.0.11P1N10B`; OLT Huawei MA5608T; nó de teste `tools/speed-node` do LAB.
 - **Aprovador:** conta de serviço de ensaio diferente da que pediu o teste (quem pede ≠ quem aprova ≠ quem autorizou). Autorizações de uso único com `--first-run` e o par exato `core-lab` + perfil: `2191e6ec-844b-4e4e-8bac-27ddd810212c` (10 MB) e `41f00630-79fa-4f7c-8a39-32978a0cef7c` (200 MB), abertas a partir da ordem do responsável no chat ("comece pelo upload e prossiga", 2026-11-01).
 - **Horário:** 10 MB: job criado 2026-11-01 05:12:03 UTC, concluído 05:12:23; 200 MB: job criado 05:14:22, concluído 05:14:42 (UTC). Intervalo mínimo de 1 min do Edge respeitado entre os dois.
-- **Aceite do responsável:** PENDENTE. Sem aceite escrito a capacidade `speed_test_upload` da ZTE segue `identified`.
+- **Aceite do responsável:** dado em 2026-11-01 pelo chat da sessão ("Aceito upload ZTE"), com este documento já escrito e revisado, incluindo as seções de limites e do que ainda falta, sobre o resultado do upload de 200 MB (`completed`, 346,17 Mbps). O 10 MB (`partial`) não é evidência de capacidade.
 
 ## Leitura prévia (H1, só leitura, sem tráfego)
 `refreshObject` em `InternetGatewayDevice.UploadDiagnostics` (2026-11-01 ~05:10 UTC): o aparelho lista as folhas de resultado que o Edge exige (`DiagnosticsState`, `BOMTime`, `EOMTime`, `TotalBytesSent`, além de `TestBytesSent` e `TotalBytesReceived`) e declara graváveis `UploadURL`, `TestFileLength`, `Interface` e `DiagnosticsState`. Lista também `NumberOfConnections` (gravável) e as folhas de teste por tempo, que este teste NÃO usa: ele roda uma conexão por arquivo de tamanho fixo. A gravabilidade é a DECLARADA pelo aparelho. O teste real abaixo mostra que o CONJUNTO das escritas funcionou (o aparelho executou o envio e mediu); não li de volta cada folha individualmente depois da escrita, então não afirmo que cada folha declarada gravável foi comprovada.
@@ -35,5 +35,5 @@ O 200 MB passa do mínimo de 3 s e é o único resultado confiável. É o caminh
 - Repetições do 200 MB (ao menos 3, em dias diferentes para qualquer promoção além da bancada) e referência cabeada (precisa de alguém na bancada).
 - Aceite escrito do responsável sobre este resultado.
 
-## Alcance
-Ao ser aceito, `speed_test_upload` entra como `observed` para ZTE F670L `V9.0.11P1N10B` por TR-069 como evidência de UMA execução confiável (200 MB, 346,17 Mbps, 4,6 s), pelo CPE do ACS e pela WAN PPPoE até o nó `core-lab`. Continuam SEM validação: repetibilidade, referência cabeada, identidade física do alvo, velocidade contratada, capacidade da PON e multiconexão. Não é homologação abrangente.
+## Alcance do aceite
+Com o aceite acima, `speed_test_upload` entra como `observed` para ZTE F670L `V9.0.11P1N10B` por TR-069 como evidência de UMA execução confiável (200 MB, 346,17 Mbps, 4,6 s), pelo CPE do ACS e pela WAN PPPoE até o nó `core-lab`. Continuam SEM validação: repetibilidade, referência cabeada, identidade física do alvo, velocidade contratada, capacidade da PON e multiconexão. Não é homologação abrangente.
