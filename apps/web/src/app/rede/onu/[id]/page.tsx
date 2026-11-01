@@ -147,7 +147,7 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
                 {o.cpe.suggestions.map((s) => (
                   <li key={s.id}>
                     {s.rule === "owner_physical_evidence" ? (
-                      <p data-testid="cpe-suggest-physical">Esta sugestão veio da regra <strong>evidência física</strong>, não da igualdade de serial, e aguarda revisão. Confira a evidência antes de confirmar (confiança {Math.round(s.confidence * 100)}%).</p>
+                      <p data-testid="cpe-suggest-physical">Sugestão registrada pela regra <strong>evidência física</strong>; aguarda revisão.</p>
                     ) : (
                       <p>Há um roteador com o <strong>mesmo serial</strong> desta ONU. Igualdade de serial é um indício, não uma prova (confiança {Math.round(s.confidence * 100)}%).</p>
                     )}
