@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19475-177e-77f0-a311-3cea3da1ac2d).
+[codex] Turn started (01a19475-1a77-7e02-924e-43f054659623).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e rastrear as funções de banco, armazenamento e outbox c...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/cli.py apps/ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/cli.py apps/ap... (exit 0)
+[codex] Running command: /bin/bash -lc "cat apps/api/tests/test_owner_link_suggest.py && rg -n \"CREATE TABLE.*onu_cpe...
+[codex] Command completed: /bin/bash -lc "cat apps/api/tests/test_owner_link_suggest.py && rg -n \"CREATE TABLE.*onu_cpe... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"CREATE TABLE onu_cpe_links|onu_cpe_links \\(\" apps/api -g '*.sql' -g ...
+[codex] Command completed: /bin/bash -lc "rg -n \"CREATE TABLE onu_cpe_links|onu_cpe_links \\(\" apps/api -g '*.sql' -g ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não deve ser aprovado ainda: o comando aceita evidênc...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não deve ser aprovado ainda: o comando aceita evidência diferente da referenciada e a validação não garante ausência de credenciais/IPs; isso pode registrar um vínculo como sustentado por prova não verificada.
+
+Findings:
+- [high] O arquivo validado não precisa corresponder à evidência referenciada (apps/api/app/cli.py:182-198)
+  O comando valida o conteúdo de `--evidence-file`, mas persiste somente `--evidence-ref`; não abre o caminho referenciado nem compara os arquivos. Assim, uma evidência inócua qualquer pode ser validada enquanto o registro aponta para um H1 inexistente ou com conteúdo distinto. Isso permite criar sugestões com trilha de auditoria enganosa, inclusive para revisão humana. Exija que o arquivo lido seja o próprio caminho resolvido a partir da raiz autorizada, ou valide hash/conteúdo do arquivo referenciado antes de inserir.
+  Recommendation: Vincule a validação ao artefato referenciado: resolva `evidence_ref` sob a raiz permitida, rejeite escapes/symlinks e valide esse arquivo; persista também hash do conteúdo para detectar alterações.
+- [medium] A checagem de segredo e endereço cobre apenas padrões estreitos (apps/api/app/cli.py:186-187)
+  A expressão rejeita IPv4 pontuado e alguns rótulos de credencial seguidos de `:` ou `=`, mas aceita IPv6, credenciais sem esses rótulos e outras representações comuns. O texto integral do arquivo não é persistido, mas o comando ainda certifica e registra uma referência sem provar que o documento está livre de tais dados; isso contradiz a garantia descrita na CLI e deixa material sensível no artefato referenciado. A inferência é que H1 pode conter esses formatos, pois o filtro não os cobre.
+  Recommendation: Use uma validação estruturada que reconheça IPv4 e IPv6 e formatos de credencial definidos para H1; rejeite conteúdo não classificável ou exija um formato de evidência com campos permitidos.
