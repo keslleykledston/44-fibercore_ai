@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ageText, CONFIDENCE_TEXT, GLOBAL_TEXT, INDICATOR_TEXT, INDICATOR_TITLE, INDICATORS, LOAD_ERROR, METRIC_TEXT, OBSERVATION_TEXT, readCaps, readRuns,
-  REFUSAL_TEXT, SCOPE_TEXT, STATUS_TEXT, UNJUDGED_TEXT, valueText, type QCaps, type QRun,
+  CONFIDENCE_TEXT, GLOBAL_TEXT, indicatorDisplay, indicatorSource, INDICATOR_TITLE, INDICATORS, LOAD_ERROR, METRIC_TEXT, metricAgeSuffix, metricStatusText, OBSERVATION_TEXT, readCaps, readRuns,
+  REFUSAL_TEXT, SCOPE_TEXT, valueText, type QCaps, type QRun,
 } from "@/lib/quality";
 
 type Load = { kind: "loading" } | { kind: "error"; code: string } | { kind: "ready"; caps: QCaps; runs: QRun[] };
@@ -90,12 +90,12 @@ export function QualitySection({ cpeId }: { cpeId: string }) {
           </div>
           <div className="grid grid-cols-2 gap-3" data-testid="quality-indicators">
             {INDICATORS.map((k) => {
-              const s = run.summary.indicators[k].state;
-              const unjudged = k === "optical" && s === "ok" && !run.metrics.some((m) => m.id === "optical.rx_dbm" && m.status === "valid" && m.judged === true);
+              const d = indicatorDisplay(k, run.summary.indicators[k], run.metrics);
               return (
-                <div key={k} className="rounded-card border border-line p-3" data-testid={`quality-ind-${k}`} data-state={unjudged ? "unjudged" : s}>
+                <div key={k} className="rounded-card border border-line p-3" data-testid={`quality-ind-${k}`} data-state={d.state}>
                   <p className="text-xs text-muted">{INDICATOR_TITLE[k]}</p>
-                  <p className={`text-sm font-semibold ${unjudged ? "text-muted" : TONE[s]}`}>{unjudged ? UNJUDGED_TEXT : INDICATOR_TEXT[s]}</p>
+                  <p className={`text-sm font-semibold ${d.state === "unjudged" ? "text-muted" : TONE[d.state]}`}>{d.text}</p>
+                  <p className="mt-1 text-xs text-muted" data-testid={`quality-ind-${k}-source`}>{indicatorSource(run.summary.indicators[k], run.metrics)}</p>
                 </div>
               );
             })}
@@ -125,7 +125,7 @@ export function QualitySection({ cpeId }: { cpeId: string }) {
                   <p className="text-xs font-medium uppercase text-muted">{g}</p>
                   {ms.map((m, i) => (
                     <div key={`${m.id}${m.instance ?? ""}${i}`} className="rounded-card border border-line p-2" data-testid="quality-metric" data-status={m.status}>
-                      <p className="font-medium">{METRIC_TEXT[m.id] ?? m.id}: {valueText(m)} <span className="text-xs font-normal text-muted">· {STATUS_TEXT[m.status]}{m.freshness_s !== null && (m.status === "valid" || m.status === "stale") ? ` · ${ageText(m.freshness_s)}` : ""}</span></p>
+                      <p className="font-medium">{METRIC_TEXT[m.id] ?? m.id}: {valueText(m)} <span className="text-xs font-normal text-muted">· {metricStatusText(m)}{metricAgeSuffix(m)}</span></p>
                       <p className="text-xs text-muted">{SCOPE_TEXT[m.scope] ?? m.scope}{m.instance ? ` · ${m.instance}` : ""}</p>
                     </div>
                   ))}
@@ -135,6 +135,7 @@ export function QualitySection({ cpeId }: { cpeId: string }) {
           </details>
         </>
       )}
+      <p className="border-t border-line pt-3 text-xs text-muted" data-testid="quality-caution">Sem contato com o ACS não significa ONU offline. Uma sessão WAN não prova qualidade da internet ou do Wi‑Fi.</p>
       <Link href="/ajuda/rede/qualidade-do-servico" className="text-xs text-accent underline underline-offset-2">Como ler o diagnóstico de qualidade</Link>
     </div>
   );

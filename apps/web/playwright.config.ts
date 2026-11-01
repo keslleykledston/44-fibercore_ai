@@ -16,7 +16,7 @@ export default defineConfig({
   },
   // Capturas primeiro (estado do seed intacto), depois os testes funcionais que mutam dados.
   projects: [
-    { name: "puros", testMatch: /optics\.spec\.ts/, use: { browserName: "chromium" } },   // funções puras: sem navegador nem API
+    { name: "puros", testMatch: /(optics|quality-source)\.spec\.ts/, use: { browserName: "chromium" } },   // funções puras: sem navegador nem API
     { name: "capturas", testMatch: /help-(screenshots|speed|quality)\.spec\.ts/, use: { browserName: "chromium" } },
     { name: "funcional", testMatch: /app\.spec\.ts/, dependencies: ["capturas"], use: { browserName: "chromium" } },
     // Por último: reconhecer o incidente demo muda o estado que os testes acima assumem (não reconhecido).

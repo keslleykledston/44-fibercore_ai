@@ -127,3 +127,16 @@ test("resumo rápido: no celular vira gaveta modal sem rolagem lateral", async (
   await page.keyboard.press("Escape");
   await expect(dlg).toBeHidden();
 });
+
+test("régua média: o valor numérico fica sobre o marcador e acima dele", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.goto("/rede");
+  await row(page, "DEMOA0001").click();
+  const ruler = page.getByTestId("onu-quick").getByTestId("optical-ruler").first();
+  const num = await ruler.getByTestId("optical-ruler-number").boundingBox();
+  const mk = await ruler.getByTestId("optical-ruler-marker").boundingBox();
+  expect(num && mk).toBeTruthy();
+  expect(Math.abs((num!.x + num!.width / 2) - (mk!.x + mk!.width / 2))).toBeLessThan(3);        // −21,50 dBm fica no meio do eixo: valor e marcador alinhados
+  expect(num!.y + num!.height).toBeLessThanOrEqual(mk!.y + 2);                                  // o valor fica ACIMA do marcador
+});

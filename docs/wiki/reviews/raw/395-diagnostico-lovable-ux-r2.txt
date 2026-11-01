@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1990d-1e13-7390-8070-263ba171c861).
+[codex] Turn started (01a1990d-1e4c-7ab3-ba02-6d9a9e25469b).
+[codex] Assistant message captured: Vou comparar o diff inteiro com `main` e rastrear os componentes, a lógica de freshness e os ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Onu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Onu... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- apps/web/src/components/Onu...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- apps/web/src/components/Onu... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/lib/optics.ts | sed -n '1,130p'; rg -n \"OpticalRuler|onu-...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/lib/optics.ts | sed -n '1,130p'; rg -n \"OpticalRuler|onu-... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviaria ainda: a régua compacta da lista classif...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviaria ainda: a régua compacta da lista classifica o Rx sem mostrar a ressalva de que as faixas não foram homologadas para esta OLT/óptica, ao contrário dos tamanhos maiores.
+
+Findings:
+- [medium] Régua compacta omite a ressalva das faixas (apps/web/src/components/OpticalRuler.tsx:22-28)
+  A variante `size="sm"` retorna antes do aviso `REFERENCE_NOTICE`; com `dense`, ainda exibe rótulos como “Bom”, “Atenção” e “Crítico” e cores derivadas dessas faixas. Como o próprio módulo declara que os limites não estão homologados para nenhuma OLT/óptica, a lista pode apresentar uma classificação visual com aparência de diagnóstico aplicável ao equipamento. O aviso existe nos tamanhos maiores, mas não nesta nova exibição por linha.
+  Recommendation: Inclua uma ressalva acessível na variante compacta — por exemplo, no nome acessível e no texto de ajuda associado — ou evite apresentar a faixa como classificação na lista sem esse contexto.

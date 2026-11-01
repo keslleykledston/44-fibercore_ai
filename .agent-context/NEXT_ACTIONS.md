@@ -250,3 +250,7 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 - **Lovable:** plano aprovado e aplicado no projeto 13aaf09e… (commit `c4e39d8`, 7,3 créditos). Falta REVISAR o código antes de qualquer uso (contraste WCAG não medido); nada importado.
 - **Pendências:** rotação do `cwmp.auth` fases 2 e 3; causa dos 80 % da Huawei; repetir o ping da ZTE em outros dias; aplicar a trava com `?run=` também em eventuais novas seções; `dns_test` unsupported/observed; as 5 falhas de e2e antigas.
 
+## Atualização 2026-11-01 (UX do Diagnóstico do Lovable)
+- Aceita a proposta do Lovable; implementados os itens 1 a 4 (régua compacta na lista, valor sobre o marcador, fonte e idade na Qualidade, frase de cautela). Item 5 (selo "Parcial") não feito: a tela já explicava o motivo. Rótulo "Confirmado/Hipótese" NÃO adotado (a plataforma não julga o sinal). Codex approve na r7. Mesclado em `main` localmente; NÃO enviado ao remoto e NÃO implantado na LAB.
+- Pendente: push + deploy do web; medir o contraste (WCAG) das cores da régua; as 5 falhas de e2e antigas (`docs/KNOWN_ISSUES.md`).
+

@@ -117,6 +117,18 @@ export const OBSERVATION_TEXT: Record<string, string> = {
   ONU_NOT_ONLINE: "A OLT não vê a ONU online.",
 };
 export const SCOPE_TEXT: Record<string, string> = { WAN_UNCLASSIFIED: "WAN não classificada (serviço ou gerência)", SERVICE_WAN: "WAN de serviço", MGMT_WAN: "WAN de gerência", PON: "PON", WIFI: "Wi‑Fi", CPE: "Aparelho", LAN: "LAN" };
+export const SOURCE_TEXT: Record<string, string> = { TR069_READ: "ACS (leitura)", TR069_ACTIVE: "ACS (teste ativo)", OLT_ADAPTER: "OLT", SD001: "teste de banda", ACS_CACHE: "ACS (cache)" };
+/** "Fonte · idade" de um indicador: só as métricas que ele cita e que têm leitura (atual ou antiga, COM valor). Com mais de uma, a idade é a da MAIS ANTIGA (a mais fresca esconderia a velha); se QUALQUER uma não tem idade, a idade é desconhecida. Sem nenhuma: sem leitura. */
+export function indicatorSource(ind: QIndicator, metrics: QMetric[]): string {
+  const ms = metrics.filter((m) => ind.metric_ids.includes(m.id) && hasReading(m));   // o status sozinho não prova leitura: sem valor a tela mostra "—", e a fonte não pode dizer o contrário
+  if (ms.length === 0) return "Fonte: sem leitura";
+  const sources = [...new Set(ms.map((m) => SOURCE_TEXT[m.source] ?? "outra fonte"))];
+  const ages = ms.map((m) => m.freshness_s);
+  // uma leitura sem idade conhecida não pode ser escondida atrás da idade das outras: basta UMA para a linha dizer que a idade é desconhecida
+  const known = ages.filter((s): s is number => s !== null);
+  const age = known.length < ages.length ? " · idade desconhecida" : `${ms.length > 1 ? " · a mais antiga " : " · "}${ageText(Math.max(...known))}`;
+  return `Fonte: ${sources.join(" + ")}${age}`;
+}
 export const CONFIDENCE_TEXT: Record<string, string> = { low: "confiança baixa", medium: "confiança média", high: "confiança alta" };
 export const LOAD_ERROR: Record<string, string> = {
   not_found: "Este aparelho não existe mais.",
@@ -128,11 +140,23 @@ export const REFUSAL_TEXT: Record<string, string> = {
   not_found: "Este aparelho não existe mais.",
 };
 
+/** Uma métrica TEM leitura quando o status é valid/stale E há valor: null, texto vazio ou só espaços não são leitura (0 e false são). Um só critério para o valor mostrado e para a fonte/idade, para um nunca contradizer o outro. */
+export const hasReading = (m: QMetric): boolean =>
+  (m.status === "valid" || m.status === "stale") && m.value !== null && m.value !== undefined && !(typeof m.value === "string" && m.value.trim() === "");
 export const valueText = (m: QMetric): string => {
-  if (m.status !== "valid" && m.status !== "stale") return "—";
-  if (m.value === null) return "—";
+  if (!hasReading(m)) return "—";
   if (typeof m.value === "boolean") return m.value ? "Sim" : "Não";
   const n = typeof m.value === "number" ? m.value.toLocaleString("pt-BR", { maximumFractionDigits: 2 }) : m.value;
   return m.unit ? `${n} ${m.unit}` : String(n);
 };
+/** Texto de estado e idade de UMA métrica nos detalhes: status valid/stale sem valor NÃO é "Leitura atual/antiga" e não ganha idade (mesmo critério de `hasReading`). */
+export const metricStatusText = (m: QMetric): string => ((m.status === "valid" || m.status === "stale") && !hasReading(m) ? "Sem leitura" : STATUS_TEXT[m.status]);
+export const metricAgeSuffix = (m: QMetric): string => (hasReading(m) && m.freshness_s !== null ? ` · ${ageText(m.freshness_s)}` : "");
+/** O que o cartão do indicador afirma: "ok" só vale se alguma métrica que ele cita TEM leitura; sem isso o cartão diz "Sem leitura". O nível óptico "ok" sem faixa homologada vira "Leitura atual, sem faixa de referência" só com leitura. */
+export function indicatorDisplay(k: (typeof INDICATORS)[number], ind: QIndicator, metrics: QMetric[]): { state: QIndicator["state"] | "unjudged"; text: string } {
+  const reads = metrics.filter((m) => ind.metric_ids.includes(m.id) && hasReading(m));
+  if (ind.state === "ok" && reads.length === 0) return { state: "unknown", text: INDICATOR_TEXT.unknown };
+  if (k === "optical" && ind.state === "ok" && !metrics.some((m) => m.id === "optical.rx_dbm" && m.status === "valid" && m.judged === true && hasReading(m))) return { state: "unjudged", text: UNJUDGED_TEXT };
+  return { state: ind.state, text: INDICATOR_TEXT[ind.state] };
+}
 export const ageText = (s: number | null): string => (s === null ? "" : s < 90 ? "agora há pouco" : s < 5400 ? `há ${Math.round(s / 60)} min` : s < 172800 ? `há ${Math.round(s / 3600)} h` : `há ${Math.round(s / 86400)} dias`);

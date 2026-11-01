@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19916-99fa-7472-9246-6706801083d0).
+[codex] Turn started (01a19916-9db6-7b10-be59-cf3ac9e11e18).
+[codex] Assistant message captured: Vou comparar o diff completo com `main` e seguir especialmente os caminhos de valor ausente a...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Onu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Onu... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=25 main...HEAD -- apps/web/src/components/Qua...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=25 main...HEAD -- apps/web/src/components/Qua... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/lib/quality.ts | sed -n '118,160p'; rg -n \"indicatorDispl...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/lib/quality.ts | sed -n '118,160p'; rg -n \"indicatorDispl... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o cartão óptico ainda pode afirmar...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o cartão óptico ainda pode afirmar “Leitura atual, sem faixa de referência” quando o indicador não cita nenhuma métrica, contradizendo a regra de sem leitura.
+
+Findings:
+- [medium] Indicador óptico sem métricas ainda afirma leitura atual (apps/web/src/lib/quality.ts:157-159)
+  Se `ind.metric_ids` estiver vazio e o estado vier como `ok`, o primeiro guard não retorna porque exige `metric_ids.length > 0`. Para `k === "optical"`, a checagem seguinte também não exige que exista uma leitura citada pelo indicador: basta não encontrar um RX julgado para exibir `unjudged` com o texto “Leitura atual, sem faixa de referência”. Assim, um payload sem evidência pode parecer uma leitura atual; `indicatorSource` simultaneamente mostra “Fonte: sem leitura”. Faça o fallback para “Sem leitura” sempre que `reads.length === 0`, inclusive com `metric_ids` vazio, antes do caso óptico sem faixa.
+  Recommendation: Remover a condição `metric_ids.length > 0` do guard de ausência de leitura e garantir que o caso `unjudged` óptico só seja alcançado quando houver uma leitura elegível. Acrescentar teste puro para indicador óptico `ok` com `metric_ids: []`.
+
+Next steps:
+- Corrigir o fallback do indicador óptico sem métricas e cobrir esse caso com teste.

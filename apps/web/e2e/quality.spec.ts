@@ -46,6 +46,8 @@ test("qualidade: leitura REAL no aparelho demo mostra 'sem leitura' e dados insu
   await expect(g).toHaveAttribute("data-state", "insufficient_data");
   await expect(g).toContainText("Dados insuficientes para avaliar");
   await expect(page.getByTestId("quality-ind-wifi")).toContainText("Sem leitura");
+  await expect(page.getByTestId("quality-ind-wifi-source")).toContainText("Fonte:");
+  await expect(page.getByTestId("quality-caution")).toContainText("Sem contato com o ACS não significa ONU offline");
   await expect(page.getByTestId("quality-ind-optical")).toContainText("sem faixa de referência");   // nível óptico atual, mas sem perfil homologado: não é "ok"
   await expect(page.getByTestId("quality-section")).not.toContainText("Tudo OK");
   await page.getByTestId("quality-details").locator("summary").click();
@@ -68,6 +70,8 @@ test("qualidade (cenário): anomalia observada e hipótese aparecem com ressalva
   await openTab(page);
   await expect(page.getByTestId("quality-global")).toContainText("Atenção");
   await expect(page.getByTestId("quality-ind-wan")).toHaveAttribute("data-state", "attention");
+  await expect(page.getByTestId("quality-ind-wan-source")).toContainText("Fonte: ACS (cache)");          // fonte da métrica que o indicador cita
+  await expect(page.getByTestId("quality-ind-wifi-source")).toHaveText("Fonte: sem leitura");           // indicador sem métrica: sem fonte inventada
   await expect(page.getByTestId("quality-observations")).toContainText("enlace da WAN");
   const h = page.getByTestId("quality-hypothesis");
   await expect(h).toContainText("Indícios de problema no enlace óptico");
@@ -145,4 +149,22 @@ test("qualidade (cenário): resposta fora do formato fechado (escopo/grupo/valor
     await expect(page.getByTestId("quality-global")).toHaveCount(0);
     await page.unroute("**/bff/cpes/*/quality");
   }
+});
+
+test("qualidade (cenário): métrica 'valid' com valor vazio aparece como sem leitura em todo lugar (cartão, fonte e detalhes)", async ({ page, request }) => {
+  await confirmDemoA2(request);
+  await page.route("**/bff/cpes/*/quality", (r) => r.fulfill({
+    json: { caps: CAPS, runs: [RUN({ metrics: [M({ value: "" }), M({ id: "optical.rx_dbm", group: "OPTICAL", value: "", source: "OLT_ADAPTER", scope: "PON", judged: true })] })] },
+  }));
+  await openTab(page);
+  await expect(page.getByTestId("quality-ind-wan")).toHaveAttribute("data-state", "unknown");
+  await expect(page.getByTestId("quality-ind-wan")).toContainText("Sem leitura");
+  await expect(page.getByTestId("quality-ind-wan-source")).toHaveText("Fonte: sem leitura");
+  await expect(page.getByTestId("quality-ind-optical")).toHaveAttribute("data-state", "unknown");
+  await expect(page.getByTestId("quality-ind-optical")).not.toContainText("sem faixa de referência");
+  await page.getByTestId("quality-details").locator("summary").click();
+  const wan = page.getByTestId("quality-metric").first();
+  await expect(wan).toContainText("Sem leitura");
+  await expect(wan).not.toContainText("Leitura atual");
+  await expect(wan).not.toContainText("agora há pouco");
 });
