@@ -234,11 +234,13 @@ func finishedCounters(l map[string]speedLeaf, since time.Time) *SpeedCounters {
 	}
 }
 
-// speedTime keeps a device time only when it carries a zone and is not the TR-143 "unset" value (year 1).
+// speedTime keeps a device time only when it carries a zone and is not the TR-143 "unset" value (year 1). A device whose clock was never synchronised
+// reports a time near 1970 (the ZTE F670L does): that is kept, because only the BOM→EOM difference is ever used, never the date. A pair that carries no
+// difference (equal or reversed) is refused later as an invalid duration.
 func speedTime(v any) string {
 	s, _ := v.(string)
 	t, err := time.Parse(time.RFC3339Nano, s)
-	if err != nil || t.Year() < 2000 {
+	if err != nil || t.Year() < 1970 {
 		return ""
 	}
 	return t.UTC().Format(time.RFC3339Nano)
