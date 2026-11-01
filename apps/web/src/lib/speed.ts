@@ -77,6 +77,7 @@ export const REASON_TEXT: Record<string, string> = {
   negligible_rate: "Quase nada foi transferido.", device_error: "O aparelho informou erro ao executar o teste.", not_completed: "O aparelho não terminou o teste.",
   timeout: "Sem resultado dentro do prazo; o aparelho pode ainda estar gerando tráfego.", outcome_unknown: "Não foi possível confirmar o que aconteceu; o alvo fica travado até conferência.",
   invalid_result: "O relatório do Edge não tinha o formato esperado e foi descartado.", edge_error: "O Edge reportou uma falha.", speed_not_started: "O teste não chegou a começar.",
+  wan_not_connected: "A WAN de serviço da ONT não estava conectada; nada foi enviado ao aparelho.", pacing: "Intervalo mínimo entre testes no aparelho ainda não passou; nada foi enviado.",
 };
 
 export const mbpsText = (n: number | null): string => (n === null ? "—" : `${n.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} Mbps`);

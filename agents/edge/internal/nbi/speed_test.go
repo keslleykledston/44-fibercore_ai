@@ -47,6 +47,8 @@ type speedACS struct {
 	seq, reads  int
 	armed       bool
 	other       map[string]int // writes seen per device
+	wanDown     bool           // the service WAN is not connected
+	noWAN       bool           // the CPE does not list the service WAN at all
 }
 
 func newSpeedACS(root string) *speedACS {
@@ -105,6 +107,18 @@ func (f *speedACS) object() map[string]any {
 func (f *speedACS) doc() map[string]any {
 	d := map[string]any{"_id": benchID, "_lastBoot": t0Boot, "_lastInform": f.informAt,
 		"_deviceId": map[string]any{"_OUI": "00259E", "_ProductClass": "EG8145V5", "_SerialNumber": "48575443E2247AA5"}}
+	if !f.noWAN {
+		up, down := map[string]string{"tr181": "Up", "tr098": "Connected"}, map[string]string{"tr181": "Down", "tr098": "Disconnected"}
+		for _, w := range []struct{ root, path, leaf string }{{"tr181", ifaceTR181, "Status"}, {"tr098", ifaceTR098, "ConnectionStatus"}} {
+			if f.root == w.root || f.root == "both" {
+				v := up[w.root]
+				if f.wanDown {
+					v = down[w.root]
+				}
+				merge(d, nest(w.path, map[string]any{w.leaf: spLeaf(v, time.Now(), false)}))
+			}
+		}
+	}
 	for _, p := range []struct{ root, path string }{{"tr181", speedObjDL}, {"tr181", speedObjUL}, {"tr098", speedObjDL8}, {"tr098", speedObjUL8}} {
 		if f.root == p.root || f.root == "both" {
 			merge(d, nest(p.path, f.object()))
@@ -528,5 +542,29 @@ func TestSpeedSourceWritesOneTaskShapeAndTouchesNoOtherObject(t *testing.T) {
 	}
 	if strings.Count(s, "http.MethodPost") != 1 {
 		t.Error("exactly one POST call site")
+	}
+}
+
+func TestSpeedRefusesBeforeWritingWhenTheServiceWANIsNotConnected(t *testing.T) {
+	for _, root := range []string{"tr181", "tr098"} {
+		f := newSpeedACS(root)
+		f.wanDown = true
+		req := dlReq()
+		if root == "tr098" {
+			req = SpeedRequest{Direction: "download", Root: "tr098", Interface: ifaceTR098, URL: urlDL}
+		}
+		out, err := runSpeed(t, f, req)
+		if !errors.Is(err, ErrSpeedWANDown) || out.Attempted || f.sentSets() != 0 {
+			t.Fatalf("%s: a WAN that is not connected must refuse before any write: err=%v attempted=%v sets=%d", root, err, out.Attempted, f.sentSets())
+		}
+	}
+}
+
+func TestSpeedRefusesBeforeWritingWhenTheServiceWANCannotBeRead(t *testing.T) {
+	f := newSpeedACS("tr181")
+	f.noWAN = true
+	out, err := runSpeed(t, f, dlReq())
+	if err == nil || out.Attempted || f.sentSets() != 0 {
+		t.Fatalf("an unverified WAN is never measured: err=%v attempted=%v sets=%d", err, out.Attempted, f.sentSets())
 	}
 }

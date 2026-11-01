@@ -307,6 +307,9 @@ func (r *Runner) speedTest(ctx context.Context, env *jobs.Envelope, dev nbi.Benc
 		r.finish(env, jobs.ClaimDone)
 		data := speedData(env, req, out.Counters, r.now().Sub(started))
 		return Result{State: "succeeded", Detail: "speed_done", Postcheck: true, Data: data}
+	case errors.Is(err, nbi.ErrSpeedWANDown):
+		r.finish(env, jobs.ClaimFailed)
+		return fail("wan_not_connected")
 	case !out.Attempted || nbi.IsNotDelivered(err):
 		r.finish(env, jobs.ClaimFailed)
 		return fail("speed_not_started")
