@@ -13,7 +13,7 @@ Escopo: SOMENTE a ONT de bancada ZTE F670L (firmware `V9.0.11P1N10B`), pela sua 
 - **Aceite do responsável:** PENDENTE. Sem aceite escrito a capacidade `speed_test_upload` da ZTE segue `identified`.
 
 ## Leitura prévia (H1, só leitura, sem tráfego)
-`refreshObject` em `InternetGatewayDevice.UploadDiagnostics` (2026-11-01 ~05:10 UTC): o aparelho lista as folhas de resultado que o Edge exige (`DiagnosticsState`, `BOMTime`, `EOMTime`, `TotalBytesSent`, além de `TestBytesSent` e `TotalBytesReceived`) e declara graváveis `UploadURL`, `TestFileLength`, `Interface` e `DiagnosticsState`. Lista também `NumberOfConnections` (gravável) e as folhas de teste por tempo, que este teste NÃO usa: ele roda uma conexão por arquivo de tamanho fixo. A gravabilidade é a DECLARADA pelo aparelho; o que a comprova é o teste real abaixo.
+`refreshObject` em `InternetGatewayDevice.UploadDiagnostics` (2026-11-01 ~05:10 UTC): o aparelho lista as folhas de resultado que o Edge exige (`DiagnosticsState`, `BOMTime`, `EOMTime`, `TotalBytesSent`, além de `TestBytesSent` e `TotalBytesReceived`) e declara graváveis `UploadURL`, `TestFileLength`, `Interface` e `DiagnosticsState`. Lista também `NumberOfConnections` (gravável) e as folhas de teste por tempo, que este teste NÃO usa: ele roda uma conexão por arquivo de tamanho fixo. A gravabilidade é a DECLARADA pelo aparelho. O teste real abaixo mostra que o CONJUNTO das escritas funcionou (o aparelho executou o envio e mediu); não li de volta cada folha individualmente depois da escrita, então não afirmo que cada folha declarada gravável foi comprovada.
 
 ## Resultados (gravados pela plataforma)
 | Perfil | Desfecho | Vazão | Duração | Bytes |
@@ -24,6 +24,7 @@ Escopo: SOMENTE a ONT de bancada ZTE F670L (firmware `V9.0.11P1N10B`), pela sua 
 O 200 MB passa do mínimo de 3 s e é o único resultado confiável. É o caminho ONT → nó de teste do LAB pela WAN PPPoE da ZTE, no sentido de subida: um único sentido, uma repetição, sem referência cabeada. Não é a velocidade contratada, a capacidade da PON nem a do aparelho.
 
 ## Leitura e limites
+- **Conflito aparente com o H1 do vínculo, resolvido assim:** o H1 da ZTE concluiu que a evidência é sugestiva e NÃO conclusiva. O ADR-0030 item 2 exige o vínculo `confirmed` por uma pessoa antes do `bench-target-add`, e não uma prova independente: isso foi cumprido em 2026-11-01 03:23:52 UTC. A decisão do responsável de confirmar sobre evidência sugestiva está registrada no H2; a falta de prova independente da identidade física é uma limitação ACEITA e segue registrada, sem ser tratada como resolvida.
 - A ZTE SEGUE 3xx; o teste só é elegível com o aceite vigente (`7f71b13a-…`, até 2026-11-30, `core-lab`).
 - O nó não tem controle de taxa nem de volume; a origem pública da ZTE foi incluída na lista sem confirmar quem mais a usa (ver o aceite de risco).
 - A identidade física entre este CPE e a ONT 11 da OLT segue sem prova independente.
