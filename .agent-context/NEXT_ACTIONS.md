@@ -224,7 +224,7 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 ## ZTE F670L — alvo de bancada e H2 executado (2026-11-01 UTC)
 - Vínculo ONU↔CPE da ZTE `confirmed` por uma pessoa em 03:23:52 UTC (decisão humana sobre evidência H1 sugestiva; identidade física NÃO provada); `bench-target-add` feito depois (`owner_epoch 2`); `bench_targets` = Huawei + ZTE.
 - H2 `reboot_cpe` na ZTE executado com `--first-run` (job `a2a22f05-…` `SUCCEEDED`; `_lastBoot` do ACS novo). Evidência: `docs/wiki/bench/H2-reboot_cpe-zte-f670l-2026-11-01.md`. A OLT não registrou a queda (coleta regular de 15 min). (Atualizado em 2026-11-01: o responsável aceitou o H2 no chat; `reboot_cpe` da ZTE foi promovido a `observed` depois do aceite registrado no próprio H2 e da aprovação do Codex.)
-- Próximo: captura supervisionada da OLT (ONT 11) depois do reinício para provar/refutar o vínculo físico; aceite do H2; depois `set_wifi_ssid` e speed na ZTE (exigem vínculo e identidades próprias).
+- Pendência separada: captura supervisionada da OLT (ONT 11) para provar ou refutar o vínculo físico (a coleta regular da OLT não o prova; ver o H2). `set_wifi_ssid`, download e upload na ZTE já foram executados (ver a seção de estado final abaixo).
 - Fica pendente a reorganização da Visão 360° (menos cards, resumo no topo; só o bloco de identificação foi feito).
 
 ## Estado em 2026-11-01 (UTC) — fim do ciclo de homologação das ONTs de bancada
