@@ -108,7 +108,8 @@ def main() -> None:
     cfg_cpe = next(x["id"] for x in u.get("/v1/cpes", headers=uh).json() if x["canonical_serial"] == "DEMOA0002")
     cli("ont-config-mock", tenant, cfg_cpe, "dualband")  # configuração SINTÉTICA (rotulada como tal) do aparelho DEMOA0002
     for i, (op, tgt) in enumerate([("collect", olt_id), ("reboot_cpe", cpe_id), ("set_wifi_ssid", cpe_id)]):
-        j = u.post("/v1/jobs/preview", headers={**uh, "Idempotency-Key": f"demo-seed-job-{i:04d}"}, json={"operation": op, "target_id": tgt})
+        params = {"ssid": "BANCADA-DEMO"} if op == "set_wifi_ssid" else {}   # operação de bancada (ADR-0030): só a prévia, o seed nunca envia nem aprova
+        j = u.post("/v1/jobs/preview", headers={**uh, "Idempotency-Key": f"demo-seed-job-{i:04d}"}, json={"operation": op, "target_id": tgt, "params": params})
         assert j.status_code == 201, j.text
         if op == "collect":
             sub = u.post(f"/v1/jobs/{j.json()['id']}/submit", headers=uh)

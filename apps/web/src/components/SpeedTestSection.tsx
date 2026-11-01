@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ACTIVE, BLOCKED_TEXT, DIRECTION_TEXT, mbpsText, PROFILE_TEXT, qualityText, REASON_TEXT, STATUS_TEXT,
+  ACTIVE, BLOCKED_TEXT, DIRECTION_TEXT, mbpsText, PROFILE_TEXT, PROFILES, qualityText, REASON_TEXT, STATUS_TEXT,
   type SpeedCaps, type SpeedDirection, type SpeedRun, readCaps, readRuns,
 } from "@/lib/speed";
 
@@ -13,28 +13,39 @@ const LOAD_ERROR: Record<string, string> = {
   failed: "Não foi possível carregar o teste de banda agora.",
 };
 const when = (iso: string) => new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-type Pending = { known: string[]; until: number; certain: boolean };
-// O marcador de pedido em curso sobrevive a fechar o painel, trocar de aba e navegar (por aparelho, na sessão do navegador): remontar a seção não pode reabrir o botão sobre um pedido ainda não esclarecido.
+// Marcador de pedido em curso, por aparelho, que sobrevive a fechar o painel, trocar de aba e recarregar (sessão do navegador): remontar a seção não pode reabrir o botão sobre um pedido ainda não
+// esclarecido, e cada clique leva uma chave de idempotência nova, então só a trava impede um segundo tráfego.
+// `runId` = a API respondeu sucesso e disse QUAL execução criou: só uma leitura que mostre ESSA execução destrava (a de outra pessoa não prova nada), nunca o relógio. Sem `runId` (resposta perdida, ou 2xx
+// sem o id) o pedido é INCERTO e nunca se resolve por tempo: "Confirmar pedido" repete o MESMO pedido com a MESMA chave de idempotência, e a API responde com a execução já criada ou cria a única que faltava
+// (nunca duas). Uma recusa definitiva na confirmação limpa a trava.
+type Req = { direction: SpeedDirection; endpoint_id: string; profile: string; group_id?: string };   // o pedido fica junto da chave: repetir é repetir a MESMA intenção
+type Pending = { runId: string | null; key: string; req: Req };
 const memo = new Map<string, Pending | null>();
 const KEY = (cpe: string) => `fc-speed-pending:${cpe}`;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function readPending(cpe: string): Pending | null {
   if (memo.has(cpe)) return memo.get(cpe) ?? null;
   try {
     const raw = window.sessionStorage.getItem(KEY(cpe));
     const o = raw ? (JSON.parse(raw) as Pending) : null;
-    const ok = !!o && Array.isArray(o.known) && o.known.every((x) => typeof x === "string") && typeof o.until === "number" && typeof o.certain === "boolean";
+    const q = o?.req;
+    const ok = !!o && (o.runId === null || typeof o.runId === "string") && typeof o.key === "string" && /^[A-Za-z0-9_.:-]{8,128}$/.test(o.key) && !!q
+      && (q.direction === "download" || q.direction === "upload") && typeof q.endpoint_id === "string" && /^[a-z0-9][a-z0-9-]{1,30}$/.test(q.endpoint_id)
+      && typeof q.profile === "string" && (PROFILES as readonly string[]).includes(q.profile) && (q.group_id === undefined || (typeof q.group_id === "string" && UUID.test(q.group_id)));
     memo.set(cpe, ok ? o : null);
   } catch { memo.set(cpe, null); }
   return memo.get(cpe) ?? null;
 }
-function writePending(cpe: string, p: Pending | null) {
+/** false = o navegador NÃO guardou a trava (armazenamento bloqueado/cheio): quem chama não pode enviar um pedido novo, porque um recarregamento perderia a chave de um pedido incerto. */
+function writePending(cpe: string, p: Pending | null): boolean {
   memo.set(cpe, p);
-  try { if (p) window.sessionStorage.setItem(KEY(cpe), JSON.stringify(p)); else window.sessionStorage.removeItem(KEY(cpe)); } catch { /* sem armazenamento: vale só nesta página */ }
+  try {
+    if (p) window.sessionStorage.setItem(KEY(cpe), JSON.stringify(p)); else window.sessionStorage.removeItem(KEY(cpe));
+    return true;
+  } catch { return false; }
 }
 
 const POLL_MS = 4000;
-const PENDING_MS = 20 * 60_000;   // a vida do pedido na API é de 15 minutos
-const UNCERTAIN_MS = 60_000;
 
 function Kpi({ title, run }: { title: string; run: SpeedRun | undefined }) {
   const ok = run && (run.status === "completed" || run.status === "partial");
@@ -54,11 +65,9 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
   const [profile, setProfile] = useState("10mb");
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
-  // Um pedido ACEITO pela API é lembrado à parte do último retrato das execuções: se a leitura seguinte falha ou chega velha, a tela continua dizendo que há um pedido em curso
-  // e os botões continuam travados (senão um novo clique geraria outro tráfego). Sai quando uma leitura mostra uma execução nova, ou depois do prazo de vida do pedido.
-  // `certain` = a resposta da API foi sucesso (a execução EXISTE no servidor, que só responde depois de gravar): só uma leitura que a mostre destrava, nunca o relógio. `certain: false` = a
-  // resposta se perdeu: pode ter chegado ou não; destrava só por uma leitura bem-sucedida FEITA DEPOIS do prazo que não mostre execução nova.
-  const [pending, setPendingState] = useState<Pending | null>(() => readPending(cpeId));
+  // Um pedido é lembrado à parte do último retrato das execuções: se a leitura seguinte falha ou chega velha, a tela continua dizendo que há um pedido em curso e os botões continuam travados
+  // (senão um novo clique geraria outro tráfego). Ver o protocolo (`runId`, chave, "Confirmar pedido") no comentário do marcador acima.
+  const [pending, setPendingState] = useState<Pending | null>(() => (typeof window === "undefined" ? null : readPending(cpeId)));
   const setPending = useCallback((next: Pending | null | ((p: Pending | null) => Pending | null)) => {
     setPendingState((prev) => { const v = typeof next === "function" ? next(prev) : next; writePending(cpeId, v); return v; });
   }, [cpeId]);
@@ -76,7 +85,6 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
 
   const fetchAll = useCallback(async (signal?: AbortSignal) => {
     const mine = ++seq.current;
-    const startedAt = Date.now();
     try {
       const r = await fetch(`/bff/cpes/${cpeId}/speed`, { cache: "no-store", signal });
       const j = (await r.json().catch(() => ({}))) as { caps?: unknown; runs?: unknown; error?: string };
@@ -86,7 +94,7 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
         hasData.current = true;
         setRefreshFailed(false);
         setLoad({ kind: "ready", caps, runs });
-        setPending((p) => (p && (runs.some((x) => !p.known.includes(x.id)) || (!p.certain && startedAt > p.until)) ? null : p));
+        setPending((p) => (p && p.runId && runs.some((x) => x.id === p.runId) ? null : p));   // só a execução DESTE pedido destrava
       } else keepOrFail(j.error && LOAD_ERROR[j.error] ? j.error : "failed");
     } catch (e) { if ((e as Error).name !== "AbortError" && alive.current && mine === seq.current) keepOrFail("failed"); }
   }, [cpeId, keepOrFail, setPending]);
@@ -117,28 +125,40 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
   const endpoint = readyOf(kind);
   const lastOf = (d: SpeedDirection) => runs.find((r) => r.direction === d);
   const history = runs.slice(0, 5);
+  const locked = busy || active || pending !== null;
 
-  const start = async (direction: SpeedDirection) => {
-    if (!endpoint || busy) return;
+  // Um pedido, uma chave: `send` grava a trava (com a chave) ANTES do POST e só a limpa diante de recusa definitiva; repetir com a mesma chave é seguro (idempotente na API).
+  const send = async (key: string, q: Req) => {
     setBusy(true); setRefusal(null);
-    const other = lastOf(direction === "download" ? "upload" : "download");
-    const group = other && other.endpoint_id === endpoint.id && other.profile === profile && !runs.some((r) => r.group_id === other.group_id && r.direction === direction) ? other.group_id : undefined;
+    setPending((p) => ({ runId: p?.key === key ? p.runId : null, key, req: q }));
     try {
-      const r = await fetch(`/bff/cpes/${cpeId}/speed/runs`, {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ key: crypto.randomUUID(), direction, endpoint_id: endpoint.id, profile, ...(group ? { group_id: group } : {}) }),
-      });
-      const j = (await r.json().catch(() => ({}))) as { error?: string; reason?: string };
+      const r = await fetch(`/bff/cpes/${cpeId}/speed/runs`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key, ...q }) });
+      const j = (await r.json().catch(() => ({}))) as { error?: string; reason?: string; run_id?: unknown };
       // Só estes códigos garantem, pelo contrato do BFF/API, que NADA foi criado (recusa definitiva). Qualquer outra falha (5xx, 502, resposta ilegível) é AMBÍGUA: o pedido pode ter sido gravado.
       const definitive = [400, 401, 403, 404, 409, 413].includes(r.status);
-      if (r.ok) setPending({ known: runs.map((x) => x.id), until: Date.now() + PENDING_MS, certain: true });   // aceito: lembrado até uma leitura mostrar a execução
-      else if (!definitive) { setPending({ known: runs.map((x) => x.id), until: Date.now() + UNCERTAIN_MS, certain: false }); setRefusal("Não foi possível confirmar o pedido. Aguarde a atualização antes de pedir de novo."); }
-      else setRefusal(j.error === "blocked" && j.reason ? BLOCKED_TEXT[j.reason] ?? "O pedido foi recusado." : j.error === "forbidden" ? BLOCKED_TEXT.not_permitted! : "Não foi possível pedir o teste agora.");
+      if (r.ok) setPending({ runId: typeof j.run_id === "string" ? j.run_id : null, key, req: q });   // aceito: lembrado até uma leitura mostrar ESTA execução
+      else if (!definitive) setRefusal("Não foi possível confirmar o pedido. Use Confirmar pedido: ele repete o mesmo pedido sem criar outro.");
+      else {   // recusa definitiva: nada foi criado, a trava sai
+        setPending(null);
+        setRefusal(j.error === "blocked" && j.reason ? BLOCKED_TEXT[j.reason] ?? "O pedido foi recusado." : j.error === "forbidden" ? BLOCKED_TEXT.not_permitted! : "Não foi possível pedir o teste agora.");
+      }
       await fetchAll();
-    } catch {   // o pedido pode ter chegado: não se sabe. Trava por pouco tempo e deixa a leitura dizer
-      setPending({ known: runs.map((x) => x.id), until: Date.now() + UNCERTAIN_MS, certain: false });
-      setRefusal("Não foi possível confirmar o pedido. Aguarde a atualização antes de pedir de novo.");
+    } catch {   // o pedido pode ter chegado: não se sabe; a trava (com a chave) fica
+      setRefusal("Não foi possível confirmar o pedido. Use Confirmar pedido: ele repete o mesmo pedido sem criar outro.");
     } finally { setBusy(false); }
+  };
+  const start = (direction: SpeedDirection) => {
+    if (!endpoint || locked) return;
+    const other = lastOf(direction === "download" ? "upload" : "download");
+    const group = other && other.endpoint_id === endpoint.id && other.profile === profile && !runs.some((r) => r.group_id === other.group_id && r.direction === direction) ? other.group_id : undefined;
+    const marker: Pending = { runId: null, key: crypto.randomUUID(), req: { direction, endpoint_id: endpoint.id, profile, ...(group ? { group_id: group } : {}) } };
+    if (!writePending(cpeId, marker)) {   // sem como guardar a chave, um pedido incerto não poderia ser repetido com segurança depois de recarregar: não envia
+      writePending(cpeId, null);
+      setRefusal("Este navegador não permite guardar o pedido em andamento, então o teste não pode ser pedido com segurança daqui. Libere o armazenamento do site ou use outro navegador.");
+      return;
+    }
+    setPendingState(marker);
+    void send(marker.key, marker.req);
   };
 
   const blockedReason = !anyOffered ? (dl.reason ?? ul.reason ?? "operation_not_homologated") : null;
@@ -179,7 +199,7 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
           </div>
           <div className="flex flex-wrap gap-2">
             {(["download", "upload"] as const).map((d) => (
-              <button key={d} type="button" data-testid={`speed-start-${d}`} onClick={() => void start(d)} disabled={busy || active || pending !== null || !endpoint || !caps.directions[d].offered}
+              <button key={d} type="button" data-testid={`speed-start-${d}`} onClick={() => start(d)} disabled={locked || !endpoint || !caps.directions[d].offered}
                 className="min-h-touch rounded-btn bg-accent px-4 text-sm font-medium text-[color:var(--on-accent)] disabled:opacity-50">
                 Testar {d === "download" ? "download" : "upload"}
               </button>
@@ -192,10 +212,13 @@ export function SpeedTestSection({ cpeId }: { cpeId: string }) {
       {refreshFailed && <p role="status" className="text-xs text-warn" data-testid="speed-refresh-failed">Não foi possível atualizar agora. O que aparece pode estar desatualizado; tentando de novo.</p>}
       {pending && !active && (
         <div role="status" className="grid gap-2 rounded-card border border-line p-3 text-sm" data-testid="speed-pending">
-          <p>{pending.certain && Date.now() > pending.until
-            ? "O pedido foi aceito, mas a leitura ainda não mostra a execução. Não peça de novo: use Atualizar. Se continuar assim, chame quem administra o Edge."
-            : "Pedido enviado. Aguardando a confirmação da leitura; os botões ficam travados até lá."}</p>
-          <button type="button" onClick={() => void fetchAll()} data-testid="speed-pending-refresh" className="min-h-touch w-fit rounded-btn border border-line px-3">Atualizar agora</button>
+          <p>{pending.runId
+            ? "Pedido enviado. Aguardando a leitura mostrar a execução; os botões ficam travados até lá."
+            : "Pedido enviado, mas a confirmação não chegou. Os botões ficam travados: use Confirmar pedido para repetir O MESMO pedido (a API não cria um segundo teste)."}</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void fetchAll()} data-testid="speed-pending-refresh" className="min-h-touch w-fit rounded-btn border border-line px-3">Atualizar agora</button>
+            {!pending.runId && <button type="button" onClick={() => void send(pending.key, pending.req)} disabled={busy} data-testid="speed-pending-confirm" className="min-h-touch w-fit rounded-btn border border-line px-3 text-accent">Confirmar pedido</button>}
+          </div>
         </div>
       )}
       {active && (
