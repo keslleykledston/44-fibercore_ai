@@ -146,19 +146,8 @@ func (c *Client) RunBenchSpeed(parent context.Context, d BenchDevice, req SpeedR
 	if s, _ := cur[speedStateLeaf].Value.(string); s == speedRequested {
 		return SpeedOutcome{}, ErrSpeedBusy
 	}
-	// Fidelity: the test must measure what the ISP delivers on the SERVICE WAN. Read that WAN's own status NOW and refuse (before the single send, nothing
-	// written) unless the CPE reports it connected. A missing or unreadable leaf refuses too: an unverified WAN is never measured.
-	wanLeaf, wanUp := "ConnectionStatus", "Connected"
-	if req.Root == "tr181" {
-		wanLeaf, wanUp = "Status", "Up"
-	}
-	wanReadAt := now()
-	wan, err := c.readSpeedLeaves(ctx, d.DeviceID, req.Interface, []string{wanLeaf})
-	if err != nil {
-		return SpeedOutcome{}, fmt.Errorf("%w: %w", ErrSpeedWANDown, err) // any failure to verify the WAN is "not verified connected": the cause stays in the wrapped error
-	}
-	if s, _ := wan[wanLeaf].Value.(string); s != wanUp || wan[wanLeaf].At.Before(wanReadAt.Add(-taskClockSkew)) {
-		return SpeedOutcome{}, ErrSpeedWANDown
+	if err := c.checkServiceWAN(ctx, d.DeviceID, req.Root, req.Interface, now); err != nil {
+		return SpeedOutcome{}, err
 	}
 	since := now()
 	if !since.Before(notAfter) {
@@ -243,9 +232,9 @@ func finishedCounters(l map[string]speedLeaf, since time.Time) *SpeedCounters {
 		return nil
 	}
 	return &SpeedCounters{
-		State: state, BOM: speedTime(l["BOMTime"].Value), EOM: speedTime(l["EOMTime"].Value),
-		TestBytesReceived: speedInt(l["TestBytesReceived"].Value), TotalBytesReceived: speedInt(l["TotalBytesReceived"].Value),
-		TestBytesSent: speedInt(l["TestBytesSent"].Value), TotalBytesSent: speedInt(l["TotalBytesSent"].Value),
+		State: state, BOM: speedTime(freshValue(l, "BOMTime", since)), EOM: speedTime(freshValue(l, "EOMTime", since)),
+		TestBytesReceived: speedInt(freshValue(l, "TestBytesReceived", since)), TotalBytesReceived: speedInt(freshValue(l, "TotalBytesReceived", since)),
+		TestBytesSent: speedInt(freshValue(l, "TestBytesSent", since)), TotalBytesSent: speedInt(freshValue(l, "TotalBytesSent", since)),
 	}
 }
 
@@ -294,6 +283,12 @@ func (c *Client) postSetSpeed(ctx context.Context, deviceID, obj string, r Speed
 		values = append(values, []string{obj + "." + urlLeaf, r.URL, "xsd:string"})
 	}
 	values = append(values, []string{obj + "." + speedStateLeaf, speedRequested, "xsd:string"})
+	return c.postSetValues(ctx, deviceID, values)
+}
+
+// postSetValues POSTs ONE setParameterValues task with a connection request and returns the ACS's answer: 200 = the CPE acknowledged, 202 = queued (the CPE
+// did not answer the connection request), a fault = refused. The caller decides what each means; nothing here retries.
+func (c *Client) postSetValues(ctx context.Context, deviceID string, values [][]string) (status int, taskID string, err error) {
 	body, _ := json.Marshal(map[string]any{"name": "setParameterValues", "parameterValues": values})
 	u := *c.base
 	u.Path = strings.TrimRight(u.Path, "/") + "/devices/" + deviceID + "/tasks"
@@ -328,6 +323,11 @@ func (c *Client) speedCacheLeaves(ctx context.Context, deviceID, root, direction
 	}
 	mine, _ := speedObject(root, direction)
 	theirs, _ := speedObject(other, direction)
+	return c.diagCacheLeaves(ctx, deviceID, mine, theirs)
+}
+
+// diagCacheLeaves is the shared half of that read for any TR-143 style diagnostics object: `mine` in the interface's data model, `theirs` in the other one.
+func (c *Client) diagCacheLeaves(ctx context.Context, deviceID, mine, theirs string) (map[string]bool, error) {
 	doc, err := c.deviceDoc(ctx, deviceID, []string{mine, theirs})
 	if err != nil {
 		return nil, ErrSpeedRead
@@ -417,4 +417,22 @@ func walk(doc map[string]any, path string) (map[string]any, bool) {
 	}
 	m, ok := cur.(map[string]any)
 	return m, ok
+}
+
+// checkServiceWAN: a diagnostic must go through the SERVICE WAN of the CPE and measure what the ISP delivers there. Read that WAN's own status NOW and refuse
+// (before the single send, nothing written) unless the CPE reports it connected. A missing or unreadable leaf refuses too: an unverified WAN is never used.
+func (c *Client) checkServiceWAN(ctx context.Context, deviceID, root, iface string, now func() time.Time) error {
+	wanLeaf, wanUp := "ConnectionStatus", "Connected"
+	if root == "tr181" {
+		wanLeaf, wanUp = "Status", "Up"
+	}
+	wanReadAt := now()
+	wan, err := c.readSpeedLeaves(ctx, deviceID, iface, []string{wanLeaf})
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrSpeedWANDown, err) // any failure to verify the WAN is "not verified connected": the cause stays in the wrapped error
+	}
+	if s, _ := wan[wanLeaf].Value.(string); s != wanUp || wan[wanLeaf].At.Before(wanReadAt.Add(-taskClockSkew)) {
+		return ErrSpeedWANDown
+	}
+	return nil
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/jobs"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/nbi"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/olt"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/ping"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/speed"
 )
 
@@ -24,6 +25,7 @@ type ACS interface {
 	SetBenchSSID(ctx context.Context, d nbi.BenchDevice, ssid string, valid func(string) bool, notAfter time.Time, restoreFile string, now func() time.Time) (nbi.SSIDOutcome, error)
 	RebootBench(ctx context.Context, d nbi.BenchDevice, notAfter time.Time, wait, poll time.Duration, now func() time.Time) (nbi.BenchOutcome, error)
 	RunBenchSpeed(ctx context.Context, d nbi.BenchDevice, req nbi.SpeedRequest, notAfter time.Time, wait, poll time.Duration, now func() time.Time) (nbi.SpeedOutcome, error)
+	RunBenchPing(ctx context.Context, d nbi.BenchDevice, req nbi.PingRequest, notAfter time.Time, wait, poll time.Duration, now func() time.Time) (nbi.PingOutcome, error)
 }
 
 type Guard interface{ Reserve(deviceID string) error }
@@ -50,13 +52,17 @@ type Runner struct {
 	// SERVICE WAN interface path (written by the owner into the local configuration, never taken from the Cloud).
 	Speed        *speed.Catalog
 	WANInterface map[string]string
-	SpeedWait    time.Duration // how long to wait for a diagnostic to finish; 0 = 120 s
-	SpeedPoll    time.Duration // between two result reads; 0 = 4 s
-	RestoreFile  string        // H3: where the original SSID is kept (local only) until the restore is confirmed
-	Wait         time.Duration // how long to wait for the CPE to boot again
-	Poll         time.Duration
-	Now          func() time.Time
-	Log          *slog.Logger
+	// Ping (ADR-0030 amendment, ADR-0039) is the validated local catalog of ping destinations; nil = the ping tests fail closed. Its WAN is the same service WAN.
+	Ping        *ping.Catalog
+	PingWait    time.Duration // how long to wait for a ping to finish; 0 = 60 s
+	PingPoll    time.Duration // between two result reads; 0 = 3 s
+	SpeedWait   time.Duration // how long to wait for a diagnostic to finish; 0 = 120 s
+	SpeedPoll   time.Duration // between two result reads; 0 = 4 s
+	RestoreFile string        // H3: where the original SSID is kept (local only) until the restore is confirmed
+	Wait        time.Duration // how long to wait for the CPE to boot again
+	Poll        time.Duration
+	Now         func() time.Time
+	Log         *slog.Logger
 
 	busy atomic.Bool
 }
@@ -81,8 +87,8 @@ func (r *Runner) deny(env *jobs.Envelope, detail string, err error) Result {
 // Run executes one verified bench envelope. At most one runs at a time on this Edge.
 func (r *Runner) Run(ctx context.Context, env *jobs.Envelope) Result {
 	res := r.run(ctx, env)
-	if jobs.SpeedOps[env.Operation] {
-		res.Detail = speedDetail(res.Detail) // what travels for a speed test is a short code, never a sentence
+	if jobs.SpeedOps[env.Operation] || jobs.PingOps[env.Operation] {
+		res.Detail = speedDetail(res.Detail) // what travels for a speed or ping test is a short code, never a sentence
 	}
 	return res
 }
@@ -117,6 +123,13 @@ func (r *Runner) run(ctx context.Context, env *jobs.Envelope) Result {
 			return *res
 		}
 	}
+	var preq nbi.PingRequest
+	if jobs.PingOps[env.Operation] {
+		var res *Result
+		if preq, res = r.pingPrepare(env, env.TargetRef); res != nil {
+			return *res
+		}
+	}
 	if err := r.ACS.BenchIdentity(ctx, dev, r.now()); err != nil {
 		if errors.Is(err, nbi.ErrBenchOffline) {
 			return r.deny(env, "device not recently online", err)
@@ -145,6 +158,9 @@ func (r *Runner) run(ctx context.Context, env *jobs.Envelope) Result {
 	// From here the authorization is spent.
 	if jobs.SpeedOps[env.Operation] {
 		return r.speedTest(ctx, env, dev, sreq, notAfter)
+	}
+	if jobs.PingOps[env.Operation] {
+		return r.pingTest(ctx, env, dev, preq, notAfter)
 	}
 	if env.Operation == "set_wifi_ssid" {
 		return r.setSSID(ctx, env, dev, notAfter)
@@ -363,6 +379,8 @@ func speedDetail(d string) string {
 		"speed tests are not enabled on this edge":         "speed_disabled",
 		"endpoint or profile unknown on this edge":         "endpoint_unknown",
 		"wan reference missing or invalid for this device": "wan_reference_missing",
+		"ping tests are not enabled on this edge":          "ping_disabled",
+		"ping destination unknown on this edge":            "target_unknown",
 	}
 	if c, ok := codes[d]; ok {
 		return c
@@ -371,4 +389,72 @@ func speedDetail(d string) string {
 		return d // already a code
 	}
 	return "refused"
+}
+
+// pingPrepare builds the request from the Edge's OWN catalog and configuration. The Cloud only named a logical destination id: the address, the number of
+// repetitions and the timeout are the Edge's, and the interface is the service WAN the owner wrote for this device.
+func (r *Runner) pingPrepare(env *jobs.Envelope, deviceID string) (nbi.PingRequest, *Result) {
+	if r.Ping == nil {
+		res := r.deny(env, "ping tests are not enabled on this edge", nil)
+		return nbi.PingRequest{}, &res
+	}
+	tg, ok := r.Ping.Target(env.Params.String("target"))
+	if !ok {
+		res := r.deny(env, "ping destination unknown on this edge", nil)
+		return nbi.PingRequest{}, &res
+	}
+	iface := r.WANInterface[deviceID]
+	root, err := speed.InterfaceRoot(iface)
+	if err != nil {
+		res := r.deny(env, "wan reference missing or invalid for this device", err)
+		return nbi.PingRequest{}, &res
+	}
+	return nbi.PingRequest{Root: root, Interface: iface, Host: tg.Addr.String(), Repetitions: ping.Repetitions, TimeoutMS: ping.TimeoutMS}, nil
+}
+
+// pingTest runs the single request and turns its outcome into the Cloud's closed report, with the same rules as the throughput test: a finished diagnostic
+// is a clear RESULT; anything the Edge cannot be sure about is UNKNOWN (the target is locked in the Cloud and nothing is repeated).
+func (r *Runner) pingTest(ctx context.Context, env *jobs.Envelope, dev nbi.BenchDevice, req nbi.PingRequest, notAfter time.Time) Result {
+	wait, poll := r.PingWait, r.PingPoll
+	if wait <= 0 {
+		wait = 60 * time.Second
+	}
+	if poll <= 0 {
+		poll = 3 * time.Second
+	}
+	started := r.now()
+	out, err := r.ACS.RunBenchPing(ctx, dev, req, notAfter, wait, poll, r.now)
+	r.logOutcome(env, out.Detail, err)
+	switch {
+	case err == nil && out.Counters != nil:
+		r.finish(env, jobs.ClaimDone)
+		return Result{State: "succeeded", Detail: "ping_done", Postcheck: true, Data: pingData(env, out.Counters, r.now().Sub(started))}
+	case errors.Is(err, nbi.ErrSpeedWANDown):
+		r.finish(env, jobs.ClaimFailed)
+		return fail("wan_not_connected")
+	case !out.Attempted || nbi.IsNotDelivered(err):
+		r.finish(env, jobs.ClaimFailed)
+		return fail("ping_not_started")
+	default:
+		r.finish(env, jobs.ClaimUnknown)
+		if errors.Is(err, nbi.ErrPingTimeout) {
+			return Result{State: "failed", Detail: "timeout"}
+		}
+		return Result{State: "failed", Detail: "outcome_unknown"}
+	}
+}
+
+// pingData is the closed report (the Cloud refuses any other shape): the logical destination of THIS job, the device's state and the raw leaves it gave. A
+// leaf the CPE did not give is left out, never filled in.
+func pingData(env *jobs.Envelope, c *nbi.PingCounters, took time.Duration) map[string]any {
+	d := map[string]any{"target": env.Params.String("target"), "state": c.State}
+	for k, v := range map[string]*int64{"success": c.Success, "failure": c.Failure, "avg_ms": c.AvgMS, "min_ms": c.MinMS, "max_ms": c.MaxMS} {
+		if v != nil {
+			d[k] = *v
+		}
+	}
+	if ms := took.Milliseconds(); ms > 0 && ms <= 600_000 {
+		d["polling_ms"] = ms
+	}
+	return d
 }

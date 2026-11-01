@@ -23,11 +23,15 @@ var ReadOnlyOps = map[string]bool{"collect": true, "refresh": true}
 // BenchWriteOps (ADR-0030) is a SEPARATE compile-time set: the only writes this Edge can ever run, and only on the configured bench devices,
 // with a single-use prior authorization, a durable claim, a valid lease and the device confirmed against the ACS. ReadOnlyOps never grows.
 var BenchWriteOps = map[string]bool{"reboot_cpe": true, "set_wifi_ssid": true, "onu_reset": true, "onu_deactivate": true,
-	"speed_test_download": true, "speed_test_upload": true}
+	"speed_test_download": true, "speed_test_upload": true, "ping_test": true}
 
 // SpeedOps (ADR-0038) are the bench operations that are a TR-143 throughput test. They need, besides everything a bench write needs, the local `speed`
 // section (SpeedEnabled + SpeedCheck): without it they are refused here, whatever the Cloud signs.
 var SpeedOps = map[string]bool{"speed_test_download": true, "speed_test_upload": true}
+
+// PingOps (ADR-0030 amendment of 2026-10-31, ADR-0039) are the bench operations that are a TR-143 IPPing test. They need the local `ping` section (PingEnabled +
+// PingCheck): without it they are refused here, whatever the Cloud signs.
+var PingOps = map[string]bool{"ping_test": true}
 
 // QueryOps (ADR-0029) is a THIRD compile-time set: read-only queries of the OLT's CLI. It runs only when the local switch is on and a checker for the
 // intent is wired in; whatever the Cloud signs, an unknown or unwired query operation is refused here. ReadOnlyOps and BenchWriteOps never grow.
@@ -124,6 +128,10 @@ type Verifier struct {
 	// validated catalog (ADR-0038). Without both, a speed test envelope is refused here.
 	SpeedEnabled bool
 	SpeedCheck   func(target, profile string) error
+	// PingEnabled is the local `ping.enabled` switch and PingCheck validates the one signed parameter (the logical destination id) against the Edge's own
+	// validated catalog. Without both, a ping test envelope is refused here.
+	PingEnabled bool
+	PingCheck   func(target string) error
 	// QueryEnabled is the local `olt_query_enabled` switch (ADR-0029) and QueryCheck validates the closed intent against the Edge's own catalog and
 	// OLT identity. Without both, an olt_query envelope is refused here, whatever the Cloud signs.
 	QueryEnabled bool
@@ -168,7 +176,7 @@ func (v *Verifier) Verify(ctx context.Context, raw []byte) (*Envelope, error) {
 	}
 	bench := BenchWriteOps[env.Operation]
 	query := QueryOps[env.Operation]
-	speedOK := !SpeedOps[env.Operation] || (v.SpeedEnabled && v.SpeedCheck != nil)
+	speedOK := (!SpeedOps[env.Operation] || (v.SpeedEnabled && v.SpeedCheck != nil)) && (!PingOps[env.Operation] || (v.PingEnabled && v.PingCheck != nil))
 	if !(ReadOnlyOps[env.Operation] || (bench && v.BenchEnabled && speedOK) || (query && v.QueryEnabled && v.QueryCheck != nil)) || !v.Allowed[env.Operation] {
 		return nil, fmt.Errorf("%w: %s", ErrOperation, env.Operation)
 	}
@@ -202,6 +210,15 @@ func (v *Verifier) Verify(ctx context.Context, raw []byte) (*Envelope, error) {
 				return nil, fmt.Errorf("%w: intent hash does not cover the parameters", ErrFormat)
 			}
 			if err := v.SpeedCheck(env.Params.String("target"), env.Params.String("profile")); err != nil {
+				return nil, fmt.Errorf("%w: %v", ErrFormat, err)
+			}
+		}
+		if PingOps[env.Operation] {
+			// the signed hash must be the hash of the parameter actually carried, and it must be a destination name the Edge itself knows
+			if h, err := IntentHash(env.Operation, "cpe", env.TargetID, env.Params); err != nil || h != env.IntentSHA256 {
+				return nil, fmt.Errorf("%w: intent hash does not cover the parameters", ErrFormat)
+			}
+			if err := v.PingCheck(env.Params.String("target")); err != nil {
 				return nil, fmt.Errorf("%w: %v", ErrFormat, err)
 			}
 		}
@@ -241,6 +258,10 @@ func checkBench(env *Envelope, iss, exp, now time.Time) error {
 	case "speed_test_download", "speed_test_upload":
 		if len(env.Params) != 2 || env.Params.String("target") == "" || env.Params.String("profile") == "" {
 			return fmt.Errorf("%w: a speed test takes exactly a target and a profile", ErrFormat)
+		}
+	case "ping_test":
+		if len(env.Params) != 1 || env.Params.String("target") == "" {
+			return fmt.Errorf("%w: a ping test takes exactly a target", ErrFormat)
 		}
 	case "set_wifi_ssid":
 		if len(env.Params) != 1 || !BenchSSIDRe.MatchString(env.Params.String("ssid")) {

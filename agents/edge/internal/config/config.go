@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/olt"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/ping"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/speed"
 )
 
@@ -40,6 +41,9 @@ type Config struct {
 	// Speed (ADR-0038): the TR-143 throughput test of the bench devices. Its endpoints are THIS host's own list of test nodes (validated here; the Cloud only
 	// names an id). Needs the bench section, the speed operations in allowed_operations and every node's host:port in `allowlist`. nil/disabled = no test runs.
 	Speed *speed.Config `json:"speed"`
+	// Ping (ADR-0030 amendment of 2026-10-31, ADR-0039): the TR-143 IPPing test of the bench devices. Its destinations are THIS host's own list (validated here; the
+	// Cloud only names an id). Needs the bench section, ping_test in allowed_operations and a service WAN (`speed_wan_interface`) on a bench device. nil/disabled = none.
+	Ping *ping.Config `json:"ping"`
 	// OLTQueryEnabled (ADR-0029): run the Cloud's approved read-only OLT queries, in the collection's own CLI session. Needs jobs_enabled, "olt_query" in
 	// allowed_operations (explicit) and at least one huawei_ma56_r015 OLT with cloud_id. Off by default.
 	OLTQueryEnabled bool   `json:"olt_query_enabled"`
@@ -92,7 +96,7 @@ type BenchDeviceConfig struct {
 	OUI          string `json:"oui"`
 	ProductClass string `json:"product_class"`
 	Serial       string `json:"serial"`
-	// SpeedWANInterface (ADR-0038): the SERVICE WAN interface the throughput test must use, as the data-model path (never the management WAN). Written by the
+	// SpeedWANInterface (ADR-0038): the SERVICE WAN interface every TR-143 diagnostic of this device (throughput and ping) must use, as the data-model path (never the management WAN). Written by the
 	// owner at homologation; without it that device is refused for speed tests.
 	SpeedWANInterface string `json:"speed_wan_interface"`
 }
@@ -329,13 +333,14 @@ func (c *Config) Validate() error {
 		}
 		ok := false
 		for _, o := range c.AllowedOps {
-			ok = ok || o == "reboot_cpe" || o == "set_wifi_ssid" || o == "onu_reset" || o == "onu_deactivate" || o == "speed_test_download" || o == "speed_test_upload"
+			ok = ok || o == "reboot_cpe" || o == "set_wifi_ssid" || o == "onu_reset" || o == "onu_deactivate" || o == "speed_test_download" || o == "speed_test_upload" || o == "ping_test"
 		}
 		if !ok {
-			errs = append(errs, errors.New("bench writes need \"reboot_cpe\", \"set_wifi_ssid\" and/or a speed test listed in allowed_operations (explicit)"))
+			errs = append(errs, errors.New("bench writes need \"reboot_cpe\", \"set_wifi_ssid\" and/or a speed or ping test listed in allowed_operations (explicit)"))
 		}
 	}
 	errs = append(errs, c.validateSpeed()...)
+	errs = append(errs, c.validatePing()...)
 	if c.OLTQueryEnabled {
 		withOpt := false
 		for _, o := range c.AllowedOps {
@@ -686,6 +691,46 @@ func (c *Config) validateSpeed() []error {
 	}
 	if withWAN == 0 {
 		errs = append(errs, errors.New("speed.enabled needs at least one bench device with a valid speed_wan_interface (the service WAN, written by the owner)"))
+	}
+	return errs
+}
+
+// validatePing checks the `ping` section against everything it depends on. ping_test in allowed_operations without the section, or the section without the
+// bench, is an error: the module is either fully configured or not there. The ping uses the same service WAN the owner wrote for the throughput test.
+func (c *Config) validatePing() []error {
+	var errs []error
+	ops := false
+	for _, o := range c.AllowedOps {
+		ops = ops || o == "ping_test"
+	}
+	if c.Ping == nil || !c.Ping.Enabled {
+		if ops {
+			errs = append(errs, errors.New("ping_test in allowed_operations needs an enabled ping section"))
+		}
+		return errs
+	}
+	if c.Bench == nil || !c.Bench.Enabled {
+		return append(errs, errors.New("ping.enabled requires the bench section enabled (the ping test is a bench write)"))
+	}
+	if !ops {
+		errs = append(errs, errors.New("ping.enabled needs ping_test listed in allowed_operations (explicit)"))
+	}
+	if _, err := ping.New(*c.Ping); err != nil {
+		return append(errs, err)
+	}
+	withWAN := 0
+	for _, d := range c.Bench.Devices {
+		if d.SpeedWANInterface == "" {
+			continue
+		}
+		if _, err := speed.InterfaceRoot(d.SpeedWANInterface); err != nil {
+			errs = append(errs, fmt.Errorf("bench.devices[%s].speed_wan_interface: %v", d.ID(), err))
+			continue
+		}
+		withWAN++
+	}
+	if withWAN == 0 {
+		errs = append(errs, errors.New("ping.enabled needs at least one bench device with a valid speed_wan_interface (the service WAN, written by the owner)"))
 	}
 	return errs
 }

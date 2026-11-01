@@ -62,7 +62,7 @@ func newSpeedACS(root string) *speedACS {
 var stdLeaves = map[string]bool{"DiagnosticsState": true, "BOMTime": true, "EOMTime": true, "TestBytesReceived": true, "TotalBytesReceived": true, "TotalBytesSent": true, "Interface": true}
 
 func spLeaf(v any, at time.Time, writable bool) map[string]any {
-	return map[string]any{"_value": v, "_timestamp": at.UTC().Format(time.RFC3339), "_writable": writable}
+	return map[string]any{"_value": v, "_timestamp": at.UTC().Format(time.RFC3339Nano), "_writable": writable}
 }
 
 func nest(path string, node map[string]any) map[string]any {

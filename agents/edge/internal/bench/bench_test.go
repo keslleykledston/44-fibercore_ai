@@ -34,11 +34,19 @@ type fakeACS struct {
 	speedCalls       []nbi.SpeedRequest
 	speedOut         nbi.SpeedOutcome
 	speedErr         error
+	pingCalls        []nbi.PingRequest
+	pingOut          nbi.PingOutcome
+	pingErr          error
 }
 
 func (f *fakeACS) RunBenchSpeed(_ context.Context, d nbi.BenchDevice, req nbi.SpeedRequest, _ time.Time, _, _ time.Duration, _ func() time.Time) (nbi.SpeedOutcome, error) {
 	f.speedCalls = append(f.speedCalls, req)
 	return f.speedOut, f.speedErr
+}
+
+func (f *fakeACS) RunBenchPing(_ context.Context, d nbi.BenchDevice, req nbi.PingRequest, _ time.Time, _, _ time.Duration, _ func() time.Time) (nbi.PingOutcome, error) {
+	f.pingCalls = append(f.pingCalls, req)
+	return f.pingOut, f.pingErr
 }
 
 func (f *fakeACS) SetBenchSSID(_ context.Context, d nbi.BenchDevice, ssid string, _ func(string) bool, _ time.Time, _ string, _ func() time.Time) (nbi.SSIDOutcome, error) {
