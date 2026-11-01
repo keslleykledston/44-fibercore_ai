@@ -492,7 +492,7 @@ func TestSpeedRequestShapeIsClosed(t *testing.T) {
 
 func TestSpeedCounterConversion(t *testing.T) {
 	for in, want := range map[string]string{"2026-10-31T12:00:00Z": "2026-10-31T12:00:00Z", "2026-10-31T12:00:00.123456Z": "2026-10-31T12:00:00.123456Z",
-		"2026-10-31T09:00:00-03:00": "2026-10-31T12:00:00Z", "2026-10-31T12:00:00": "", "0001-01-01T00:00:00Z": "", "garbage": "", "": ""} {
+		"2026-10-31T09:00:00-03:00": "2026-10-31T12:00:00Z", "2026-10-31T12:00:00": "", "0001-01-01T00:00:00Z": "", "1969-12-31T23:59:59Z": "", "1970-01-01T01:07:39.332Z": "1970-01-01T01:07:39.332Z", "garbage": "", "": ""} {
 		if got := speedTime(in); got != want {
 			t.Errorf("time %q = %q want %q", in, got, want)
 		}

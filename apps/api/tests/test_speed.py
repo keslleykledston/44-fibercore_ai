@@ -93,6 +93,14 @@ def test_a_short_interval_or_a_short_transfer_is_partial_never_reliable():
     assert (short_b.outcome, short_b.reason) == ("partial", "short_transfer")
 
 
+def test_a_device_clock_near_1970_still_gives_the_duration_difference():
+    """The ZTE F670L never synchronised its clock: BOMTime/EOMTime are in 1970. Only EOM - BOM is used, never the date."""
+    c = counters(test_bytes_received=10_000_000)
+    c["bom"], c["eom"] = "1970-01-01T01:07:39.332Z", "1970-01-01T01:07:39.679Z"
+    r = speed.compute("download", "10mb", speed.check_counters("download", EP, "10mb", c))
+    assert (r.outcome, r.reason, r.duration_ms) == ("partial", "too_short", 347) and r.mbps == 230.55
+
+
 @pytest.mark.parametrize("kw,reason", [
     ({"bom": None}, "no_timestamps"), ({"eom": None}, "no_timestamps"),
     ({"seconds": 0.0}, "invalid_duration"), ({"seconds": 0.0004}, "invalid_duration"),    # 0.4 ms would truncate to a stored duration of 0 ({"seconds": -3.0}, "invalid_duration"), ({"seconds": 601.0}, "invalid_duration"),
