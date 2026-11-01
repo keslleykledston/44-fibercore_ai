@@ -1,4 +1,4 @@
-# GenieACS — autenticação CWMP e rotação de credenciais (plano; nada aplicado)
+# GenieACS — autenticação CWMP e rotação de credenciais (fase 1 aplicada em 2026-11-01; fases 2 e 3 pendentes)
 
 **Estado observado (2026-10-30, somente leitura):** o ACS exige autenticação CWMP (`cwmp.auth`) e usa um par FIXO para o Connection Request (`cwmp.connectionRequestAuth`). Os valores não estão neste arquivo nem no repositório. Só a ONT de bancada tem as credenciais certas; as ONTs de produção aparecem como `DISCOVERYSERVICE` e falham com `Authentication failure`.
 
@@ -19,3 +19,10 @@
 3. Atualizar as ONTs do lote e confirmar Inform aceito pelo log.
 4. Remover o par antigo só depois de zerar as falhas do lote; guardar o novo par fora do repositório (cofre).
 5. Fazer o mesmo para a credencial de Connection Request; o Connection Request precisa também da origem coincidir com o endereço de ACS configurado na ONT (ver `EDGE_GENIEACS_LAB.md`).
+
+## Andamento da rotação (2026-11-01, ordem do responsável)
+- **Medição (somente leitura, 24 h):** só a Huawei EG8145V5 e a ZTE F670L de bancada informam com a autenticação aceita; as 32 falhas de autenticação vinham de um MikroTik que já falhava. Nenhuma ONT de produção usa o par atual: a rotação só afeta as ONTs de bancada.
+- **Fase 1 APLICADA:** `cwmp.auth` agora é `AUTH(antigo) OR AUTH(novo)` (o motor de expressões do GenieACS 1.2.16 avalia cada `AUTH` como booleano). Backup 0600 da config `cwmp.*` no host do ACS (fora do repositório); o par novo está num arquivo 0600 local fora do repositório (nunca impresso). Provado: sem credencial e credencial errada → 401; as duas ONTs de bancada continuaram informando com o par antigo sem nenhuma falha. NÃO provado: que o par novo é aceito (só uma ONT configurada com ele prova).
+- **Fase 2 (precisa de alguém na bancada):** configurar o par novo nas ONTs de bancada pela interface de cada uma (usuário/senha do ACS). Eu não escrevo isso nas ONTs: não existe operação de bancada aprovada para essa escrita (ADR-0030, catálogo fechado).
+- **Fase 3 (só depois de ver Inform aceito com o par novo em cada ONT):** deixar `cwmp.auth` só com o par novo e apagar o backup e o arquivo local do par antigo/novo conforme a política de cofre. Reversão a qualquer momento: restaurar `cwmp.auth` do backup 0600.
+- `cwmp.connectionRequestAuth` já foi tratado antes (credencial por dispositivo); não faz parte desta rotação.

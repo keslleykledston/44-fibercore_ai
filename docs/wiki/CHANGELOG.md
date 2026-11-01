@@ -369,3 +369,6 @@
 
 ## Ping: primeiro ping real mostrou que o IPPing termina em `Complete` (2026-11-01)
 - Implantação na LAB: migração 0038, API e web, Edge `0.1.0-lab-74719f0` com `ping_test`, destino lógico `core-lab` e capacidades `ping_test` (`identified`) na ZTE e na Huawei. O 1º ping real na ZTE F670L: o aparelho mediu (5 de 5, 11/11/12 ms), mas informa `DiagnosticsState = Complete`; o Edge só aceitava `Completed` e o job falhou por `timeout` (alvo travado e depois destravado com motivo). Correção no Edge: `Complete` é terminal e sai como `Completed`; o estado terminal do ping é lido estritamente depois do pedido. O fake dos testes usava `Completed` e não pegou isso: só o aparelho real.
+
+## ACS: rotação do `cwmp.auth`, fase 1 (2026-11-01)
+- Medição das últimas 24 h: só as duas ONTs de bancada informam com autenticação aceita. Fase 1 aplicada: o ACS aceita o par antigo E um par novo (gerado e guardado fora do repositório); backup 0600 da config; testes de credencial ausente/errada (401) e Informs reais das duas ONTs de bancada continuaram aceitos. Faltam a fase 2 (configurar o par novo nas ONTs, por alguém na bancada) e a fase 3 (remover o par antigo). Detalhes em `docs/operations/GENIEACS_CWMP_AUTH_ROTATION.md`.
