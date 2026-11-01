@@ -52,18 +52,18 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
         <span aria-hidden>›</span><span className="text-text">ONU</span>
       </nav>}
       <div data-testid="onu360-ready" className="grid gap-4 md:grid-cols-2">
-        <section aria-label="Identificação da ONU" data-testid="onu360-identity" className="panel p-4 md:col-span-2">
+        {newUx && <section aria-label="Identificação da ONU" data-testid="onu360-identity" className="panel p-4 md:col-span-2">
           <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div><dt className="text-xs text-muted">Serial</dt><dd className="font-mono text-base font-semibold">{o.serial}</dd></div>
             <div><dt className="text-xs text-muted">Modelo</dt>
               <dd data-testid="onu360-identity-model">{o.cpe?.link === "confirmed" && o.cpe.device && (o.cpe.device.model || o.cpe.device.vendor)
                 ? <span className="font-semibold">{[o.cpe.device.vendor, o.cpe.device.model].filter(Boolean).join(" ")}{o.cpe.device.firmware ? <span className="block text-xs font-normal text-muted">Firmware {o.cpe.device.firmware}</span> : null}</span>
-                : <span className="text-muted">Não informado. A OLT não envia o modelo; ele aparece depois que o vínculo com o roteador for confirmado.</span>}</dd></div>
+                : <span className="text-muted">Indisponível sem vínculo confirmado com o roteador.</span>}</dd></div>
             <div><dt className="text-xs text-muted">Local</dt><dd>{o.olt.name}<span className="block text-xs text-muted">PON {o.pon?.path ?? "—"}</span></dd></div>
             <div><dt className="text-xs text-muted">Agora</dt><dd><StatusPill value={o.status} /><span className="ml-2">{o.rx_dbm !== null ? `${o.rx_dbm} dBm` : "—"}</span>
               <span className="block text-xs text-muted"><DataFreshness freshness={o.freshness} observedAt={o.observed_at} /></span></dd></div>
           </dl>
-        </section>
+        </section>}
         {/* padrão Lovable (ADR-0037): painel frontal e números de óptica no alto, sem um clique até a aba; o estado dos LEDs é derivado do que a OLT reportou */}
         {newUx && <div className="md:col-span-2" data-testid="onu360-faceplate">
           <FaceplateCard model={o.cpe?.link === "confirmed" && o.cpe.device ? [o.cpe.device.vendor, o.cpe.device.model].filter(Boolean).join(" ") : null} reported={{ status: o.status, freshness: o.freshness }}

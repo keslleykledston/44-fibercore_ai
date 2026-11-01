@@ -144,7 +144,7 @@ test("ONU↔CPE: serial igual só gera SUGESTÃO; vale depois da confirmação h
   await expect(card).toBeVisible();
   if (await page.getByTestId("cpe-confirm").count()) {  // primeira execução: ainda sugerido
     await expect(card).toContainText("mesmo serial");
-    await expect(page.getByTestId("onu360-identity-model")).toContainText("Não informado");  // sem vínculo confirmado a OLT não dá o modelo
+    await expect(page.getByTestId("onu360-identity-model")).toContainText("Indisponível sem vínculo confirmado");
     await expect(card).toContainText("indício, não uma prova");
     await expect(card).not.toContainText("Huawei HG8245H");  // nada do equipamento aparece antes da confirmação
     await page.getByTestId("cpe-confirm").click();
