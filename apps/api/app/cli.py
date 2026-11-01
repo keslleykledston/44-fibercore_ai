@@ -57,6 +57,11 @@ def main(argv: list[str] | None = None) -> None:
     cs.add_argument("--evidence-file", help="bench operations (ADR-0030): path of the bench evidence file; every field is checked")
     bt = sub.add_parser("bench-target-add", help="ADR-0030: add a CPE to the closed list of bench targets (owner-only)")
     bt.add_argument("tenant_id"); bt.add_argument("cpe_id"); bt.add_argument("edge_id"); bt.add_argument("--note")
+    ls = sub.add_parser("onu-cpe-link-suggest", help="ADR-0030 item 2(a): record a SUGGESTED ONU<->CPE link backed by an H1 evidence file; never confirms (a person reviews it)")
+    ls.add_argument("tenant_id"); ls.add_argument("onu_id"); ls.add_argument("cpe_id")
+    ls.add_argument("--evidence-ref", required=True, help="repo path of the H1 evidence, docs/wiki/bench/H1-*.md")
+    ls.add_argument("--evidence-file", required=True, help="the same file as readable here (checked: non-empty, no address or credential)")
+    ls.add_argument("--by", required=True, help="who records it (the owner)")
     br = sub.add_parser("bench-target-remove", help="ADR-0030: remove a bench target (refused while it has open authorizations or jobs)")
     br.add_argument("tenant_id"); br.add_argument("cpe_id")
     ba = sub.add_parser("bench-authorize", help="ADR-0030: record the PRIOR single-use authorization for one bench maneuver (owner-only)")
@@ -170,6 +175,34 @@ def main(argv: list[str] | None = None) -> None:
                     "status": a.status, "certification": a.certification})},
             )
             print(f"capability {a.operation}/{a.protocol} on {a.vendor} {a.model} {a.firmware}: {a.status}/{a.certification}")
+        elif a.cmd == "onu-cpe-link-suggest":
+            import re as _re
+            if not _re.fullmatch(r"docs/wiki/bench/H1-[A-Za-z0-9._-]{3,100}\.md", a.evidence_ref):
+                sys.exit("evidence_ref must be a docs/wiki/bench/H1-*.md path")
+            try:
+                body = open(a.evidence_file, encoding="utf-8").read()
+            except OSError as exc:
+                sys.exit(f"cannot read the evidence file: {exc}")
+            if len(body.strip()) < 200 or _re.search(r"(?i)(senha|password|secret|token)\s*[:=]|\b\d{1,3}(\.\d{1,3}){3}\b", body):
+                sys.exit("the evidence file is empty or carries an address or credential")
+            by = a.by.strip()[:120]
+            if not by:
+                sys.exit("--by is required")
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            if (c.execute(text("SELECT 1 FROM onus WHERE id = :o AND tenant_id = :t"), {"o": a.onu_id, "t": a.tenant_id}).first() is None  # the owner role bypasses RLS: name the tenant
+                    or c.execute(text("SELECT 1 FROM cpes WHERE id = :c AND tenant_id = :t"), {"c": a.cpe_id, "t": a.tenant_id}).first() is None):
+                sys.exit("onu or cpe not found for this tenant")
+            ev = {"rule": "owner_physical_evidence", "ambiguous": False, "evidence_ref": a.evidence_ref, "recorded_by": by,
+                  "note": "recorded by the owner with physical evidence; a person still confirms it"}
+            done = c.execute(text("INSERT INTO onu_cpe_links (tenant_id, onu_id, cpe_id, confidence, evidence) VALUES (:t,:o,:c,0.60,CAST(:e AS jsonb)) "
+                                  "ON CONFLICT DO NOTHING RETURNING id"), {"t": a.tenant_id, "o": a.onu_id, "c": a.cpe_id, "e": json.dumps(ev)}).first()
+            if done is None:
+                print("a link for this ONU and CPE already exists; nothing changed")
+            else:
+                c.execute(text("INSERT INTO events_outbox (tenant_id, aggregate_type, aggregate_id, event_type, schema_version, payload) "
+                               "VALUES (:t,'onu_cpe_link',:i,'onu_cpe_link.suggested','1',CAST(:p AS jsonb))"),
+                          {"t": a.tenant_id, "i": done.id, "p": json.dumps({"onu_id": a.onu_id, "cpe_id": a.cpe_id, "rule": "owner_physical_evidence"})})
+                print(f"suggested link {done.id} (owner_physical_evidence); a person must confirm it")
         elif a.cmd == "bench-target-add":
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
             cpe = c.execute(text("SELECT edge_id FROM cpes WHERE id = :c"), {"c": a.cpe_id}).first()

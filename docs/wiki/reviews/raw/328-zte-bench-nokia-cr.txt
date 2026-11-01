@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1946b-0164-7692-aade-da0ca171eafc).
+[codex] Turn started (01a1946b-019e-7c20-9508-bed0efe96592).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e ler os documentos ao redor das afirmações, incluindo ADR-...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- .agent-context/NEXT_ACTIONS...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- .agent-context/NEXT_ACTIONS... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=4 main...HEAD -- .agent-context/NEXT_ACTIONS....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=4 main...HEAD -- .agent-context/NEXT_ACTIONS.... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não deve ser aprovado ainda: a ZTE foi cadastrada com...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não deve ser aprovado ainda: a ZTE foi cadastrada como alvo apesar do gate vigente do ADR-0030 exigir vínculo confirmado antes do cadastro.
+
+Findings:
+- [high] Cadastro da ZTE contradiz o gate de vínculo confirmado do ADR-0030 (docs/wiki/CHANGELOG.md:335)
+  O changelog afirma que a ZTE foi cadastrada como alvo, mas também admite que o vínculo ONU↔CPE continua apenas inferido e não registrado. O ADR-0030 exige vínculo `confirmed` antes de `bench-target-add` e declara que a autorização nominal para ZTE não está aberta; a autorização escrita no chat, por si só, não elimina esse requisito. Isso deixa o alvo cadastrado fora do gate documentado e pode permitir que operações futuras atinjam uma ONU sem vínculo físico comprovado. Registre o vínculo como confirmado com a evidência exigida ou reverta o cadastro; atualize o ADR formalmente se o responsável aprovou uma exceção.
+  Recommendation: Impedir o uso da ZTE como alvo até registrar o vínculo `confirmed`, ou documentar uma emenda explícita ao ADR-0030 que autorize o cadastro sem esse vínculo.
+
+Next steps:
+- Ajustar o estado documentado do alvo ZTE para cumprir o ADR-0030 ou registrar a emenda aprovada antes do merge.
