@@ -1,0 +1,19 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1953b-0b17-7721-96d6-df9b73e9d54e).
+[codex] Turn started (01a1953b-0b52-74b2-a510-b0ad6992c0bb).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e o contexto próximo do documento, focando se a contagem su...
+[codex] Running command: /bin/bash -lc "git diff --unified=80 main...HEAD -- docs/wiki/bench/H2-reboot_cpe-zte-f670l-2...
+[codex] Command completed: /bin/bash -lc "git diff --unified=80 main...HEAD -- docs/wiki/bench/H2-reboot_cpe-zte-f670l-2... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: a contagem é descrita como mudança...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: a contagem é descrita como mudanças entre coletas, mas o texto mistura isso com “transição” e não deixa claro que contabiliza apenas diferenças de estado observadas, sem reconstruir eventos ocorridos entre as amostras.
+
+Findings:
+- [medium] Contagem pode ser lida como total de mudanças reais (docs/wiki/bench/H2-reboot_cpe-zte-f670l-2026-11-01.md:21-23)
+  A linha diz que “foram registradas 3 mudanças de estado na OLT inteira”, mas os dados citados são apenas três coletas espaçadas por 20 minutos. Eventos intermediários não observados — inclusive múltiplas mudanças com retorno ao estado anterior — não entram nessa contagem. A linha seguinte e o título da seção também usam “transição”, o que pode sugerir eventos ou horários que a coleta não estabeleceu. Isso pode levar leitores a tratar 3 como total de mudanças ocorridas, em vez de diferenças de estado entre amostras. Declare que são três diferenças de estado registradas entre coletas e que não representam necessariamente todas as mudanças ocorridas no intervalo.
+  Recommendation: Trocar “3 mudanças de estado” por “3 diferenças de estado registradas entre coletas”; usar “estado observado mudou entre as coletas” e explicitar que a contagem não determina o instante nem detecta mudanças intermediárias não amostradas.

@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1953a-3bbc-7920-84a1-ae288ac0f855).
+[codex] Turn started (01a1953a-3bf5-7580-9927-5f55c45ce280).
+[codex] Running command: /bin/bash -lc 'nl -ba docs/wiki/bench/H2-reboot_cpe-zte-f670l-2026-11-01.md'
+[codex] Command completed: /bin/bash -lc 'nl -ba docs/wiki/bench/H2-reboot_cpe-zte-f670l-2026-11-01.md' (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: as ressalvas são boas, mas a narrativa aind...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: as ressalvas são boas, mas a narrativa ainda transforma timestamps de início de coleta em uma sequência causal aparente e sugere uma associação de identidade que os dados não sustentam.
+
+Findings:
+- [medium] A cronologia descrita pode sugerir causalidade sem delimitar quando a OLT leu o estado (docs/wiki/bench/H2-reboot_cpe-zte-f670l-2026-11-01.md:18-22)
+  A coleta que registra `offline` começou 25 segundos antes do despacho, mas pode durar alguns minutos e os relógios não foram correlacionados. Assim, essa leitura pode ter ocorrido antes ou depois do reinício; `03:26:01` não é o horário da transição. Dizer que a ONU caiu e voltou “na janela do reinício” ainda aproxima os eventos temporalmente mais do que os dados permitem, sobretudo porque a coleta seguinte só fixa o início da coleta às 03:46:01. Isso pode levar leitores a tratar a observação como confirmação da manobra. Explique que os timestamps são inícios das coletas e que as leituras não localizam as transições dentro dos intervalos nem permitem ordenar a queda em relação ao despacho.
+  Recommendation: Reescreva a conclusão para dizer que duas coletas sucessivas registraram estados diferentes, sem atribuir a transição ao reinício nem afirmar que ocorreu na janela dele; inclua explicitamente o intervalo temporal indeterminado.
+- [low] A observação não reforça a identidade física entre ACS e ONU (docs/wiki/bench/H2-reboot_cpe-zte-f670l-2026-11-01.md:18-25)
+  O texto corretamente diz que o vínculo foi confirmado por uma pessoa e que não há prova física, mas a formulação “indício coerente com o vínculo” pode ser lida como evidência independente da associação. Os dados descritos identificam apenas a ONU vinculada por decisão humana e sua mudança de estado; como o próprio texto admite que outra ONU da mesma PON poderia ter mudado sem registro, eles não corroboram qual equipamento ACS corresponde à ONU 11. A consequência é uma confiança maior na identidade do alvo do que a coleta sustenta.
+  Recommendation: Descreva os estados como observação da ONU previamente associada pelo vínculo humano e afirme que a coleta não fornece evidência independente de identidade; evite chamá-la de indício do vínculo.
+
+Next steps:
+- Revisar a seção para separar os horários de início das coletas dos horários desconhecidos das leituras/transições.
