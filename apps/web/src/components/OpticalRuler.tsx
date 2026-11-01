@@ -22,7 +22,7 @@ export function OpticalRuler({ rx, freshness, agoText = null, size = "md", dense
 
   if (size === "sm") {
     return (
-      <span className="inline-flex items-center gap-2 whitespace-nowrap text-xs" data-testid="optical-ruler" data-size="sm" data-dense={dense ? "true" : undefined} data-state={v.kind === "read" ? v.level : v.kind} role="img" aria-label={aria} title={dense ? (v.kind === "read" ? info!.label : label) : undefined}>
+      <span className="inline-flex items-center gap-2 whitespace-nowrap text-xs" data-testid="optical-ruler" data-size="sm" data-dense={dense ? "true" : undefined} data-state={v.kind === "read" ? v.level : v.kind} role="img" aria-label={dense ? `${aria}. ${REFERENCE_NOTICE}` : aria} title={dense ? `${v.kind === "read" ? info!.label : label}. ${REFERENCE_NOTICE}` : undefined}>
         <span aria-hidden className={`relative inline-block h-2 ${dense ? "w-10" : "w-16"} shrink-0 rounded-full border border-line`} style={{ background: GRADIENT }}>
           {v.kind !== "none" && <span className="absolute top-1/2 h-3 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border-2" style={{ left: pct(v.rx), borderColor: toneVar, background: v.kind === "read" ? toneVar : "transparent" }} />}
         </span>

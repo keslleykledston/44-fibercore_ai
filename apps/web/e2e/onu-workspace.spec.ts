@@ -269,6 +269,9 @@ test("lista da Rede: cada linha tem a régua compacta E o número do Rx; sem lei
   const a1 = rows.filter({ hasText: "DEMOA0001" });
   await expect(a1.getByTestId("onu-rx")).toHaveText("-21.5");
   await expect(a1.getByTestId("optical-ruler")).toHaveAttribute("data-state", /critical_low|warn_low|good|warn_high|critical_high|stale/);
+  await expect(page.getByTestId("onu-rx-notice")).toContainText("Não homologada para esta OLT/óptica");   // a ressalva das faixas está na lista
+  await expect(a1.getByTestId("optical-ruler")).toHaveAttribute("aria-label", /Não homologada para esta OLT\/óptica/);
+  await expect(a1.getByTestId("optical-ruler")).toHaveAttribute("title", /Não homologada para esta OLT\/óptica/);
   const los = rows.filter({ hasText: "DEMOC0000" });
   await expect(los.getByTestId("onu-rx")).toHaveText("—");
   await expect(los.getByTestId("optical-ruler")).toHaveAttribute("data-state", "none");

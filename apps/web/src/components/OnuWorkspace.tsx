@@ -4,6 +4,7 @@ import { useMemo, useRef, useState, type ReactNode } from "react";
 import { OnuQuickInspector } from "@/components/OnuQuickInspector";
 import { rovingKeys } from "@/lib/roving";
 import { OpticalRuler } from "@/components/OpticalRuler";
+import { REFERENCE_NOTICE } from "@/lib/optics";
 import { ago_, DataFreshness, StatusPill } from "@/components/ui";
 import type { Onu } from "@/lib/types";
 
@@ -66,6 +67,7 @@ export function OnuWorkspace({ onus, oltNames, tree, ontConfig = false, speed = 
             </tbody>
           </table>
         </div>
+        <p className="text-xs text-muted" data-testid="onu-rx-notice">Régua do Rx: {REFERENCE_NOTICE} A plataforma não julga o sinal; dado defasado não é classificado.</p>
       </div>
       <OnuQuickInspector ontConfig={ontConfig} speed={speed} quality={quality} row={sel} oltName={sel ? oltNames[sel.olt_id] ?? "—" : "—"} onClose={close} />
     </div>
