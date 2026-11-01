@@ -144,12 +144,14 @@ test("ONU↔CPE: serial igual só gera SUGESTÃO; vale depois da confirmação h
   await expect(card).toBeVisible();
   if (await page.getByTestId("cpe-confirm").count()) {  // primeira execução: ainda sugerido
     await expect(card).toContainText("mesmo serial");
+    await expect(page.getByTestId("onu360-identity-model")).toContainText("Indisponível sem vínculo confirmado");
     await expect(card).toContainText("indício, não uma prova");
     await expect(card).not.toContainText("Huawei HG8245H");  // nada do equipamento aparece antes da confirmação
     await page.getByTestId("cpe-confirm").click();
     await expect(page.getByTestId("onu360-cpe")).toContainText("Vínculo confirmado.");
   }
   await expect(page.getByTestId("onu360-cpe")).toContainText("Huawei HG8245H");
+  await expect(page.getByTestId("onu360-identity-model")).toContainText("Huawei HG8245H");
   await expect(page.getByTestId("onu360-cpe")).toContainText("TR069");
   await expect(page.getByTestId("onu360-cpe").getByTestId("source-chip")).toContainText("GenieACS (NBI)");
   const res = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();

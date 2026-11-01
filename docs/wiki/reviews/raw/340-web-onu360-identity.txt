@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19517-7145-73f1-af39-affc493b8f90).
+[codex] Turn started (01a19517-7396-7912-b40d-114dce1ddef0).
+[codex] Assistant message captured: Vou conferir o fluxo que monta `o` e o uso de `newUx`, além do contexto de acesso à página, p...
+[codex] Running command: /bin/bash -lc "git diff main...HEAD -- apps/web/src/app/rede/onu/'[id]'/page.tsx apps/web/e2e...
+[codex] Command completed: /bin/bash -lc "git diff main...HEAD -- apps/web/src/app/rede/onu/'[id]'/page.tsx apps/web/e2e... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/app/rede/onu/'[id]'/page.tsx | sed -n '1,95p'; rg -n \"typ...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/app/rede/onu/'[id]'/page.tsx | sed -n '1,95p'; rg -n \"typ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não deve ir ao ar ainda: o bloco aparece mesmo com `n...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não deve ir ao ar ainda: o bloco aparece mesmo com `newUx` desligada e atribui à OLT uma limitação que o código não comprova.
+
+Findings:
+- [medium] Bloco ignora a flag `newUx` (apps/web/src/app/rede/onu/[id]/page.tsx:55)
+  `newUx` controla a trilha e o painel frontal, mas a seção de identificação é renderizada incondicionalmente. Com `onu_quick_inspector` desligada, usuários ainda recebem o novo bloco e podem ver modelo/firmware do CPE confirmado, alterando a tela anterior apesar da flag ser apresentada como controle dessa experiência. Condicionalize a seção com `newUx` ou ajuste explicitamente o escopo da flag e cubra os dois estados.
+  Recommendation: Renderizar `onu360-identity` sob `newUx`, ou documentar e testar que a flag não governa esse bloco.
+- [low] Texto sobre modelo faz afirmação não sustentada pelo contexto (apps/web/src/app/rede/onu/[id]/page.tsx:61)
+  Quando não há vínculo confirmado, o texto afirma que a OLT não envia o modelo e que ele aparecerá após confirmar o vínculo. O trecho só mostra que o modelo é obtido de `o.cpe.device`; não estabelece que todas as OLTs não enviam modelo nem que todo vínculo confirmado terá modelo. Isso pode induzir operadores a interpretar ausência como certeza sobre a origem ou a esperar dado que pode continuar ausente. Use texto limitado ao estado observado, como “Modelo indisponível sem vínculo confirmado”, sem prometer disponibilidade futura.
+  Recommendation: Substituir a explicação causal e a promessa por uma descrição do dado atualmente indisponível.
