@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19553-f576-7f60-be0d-b935b123ee76).
+[codex] Turn started (01a19553-f7bb-7253-8472-6a417dd9c779).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e os trechos relacionados do ADR-0038 e dos documentos de b...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/bench/H-speed-son...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/bench/H-speed-son... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/bench/H-speed-sonda-3xx-zte-f670l-2026-11-01.md && nl -ba doc...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/wiki/bench/H-speed-sonda-3xx-zte-f670l-2026-11-01.md && nl -ba doc... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: o aceite afirma como fato uma orig...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: o aceite afirma como fato uma origem NAT compartilhada sem prova, e a sonda extrapola a evidência ao atribuir a falha das duas primeiras tentativas à origem bloqueada. O diff não contém o endereço público em claro.
+
+Findings:
+- [high] O aceite trata NAT compartilhado como fato sem confirmação (docs/wiki/bench/ACEITE-risco-3xx-f670l-2026-11-01.md:16)
+  A sonda diz que NAT do provedor é apenas provável e que não confirmou quem mais usa a origem (linhas 32 e 27). O aceite, porém, afirma que a origem é um endereço de NAT do provedor e usa isso para descrever o risco de outros clientes alcançarem o nó. Essa afirmação não está sustentada pela evidência registrada e pode levar a dimensionar incorretamente quem consegue acessar o nó após a inclusão da origem na allowlist.
+  Recommendation: Reescrever como hipótese explicitamente não confirmada e condicionar a inclusão na allowlist à confirmação da propriedade e do compartilhamento da origem, ou documentar evidência de rede que comprove esses pontos.
+- [medium] A causa das duas falhas iniciais é apresentada como comprovada (docs/wiki/bench/H-speed-sonda-3xx-zte-f670l-2026-11-01.md:17-18)
+  A captura de SYN ocorreu apenas na tentativa 2; ela mostra que a tentativa alcançou o host e foi descartada pelo firewall. A tentativa 3 teve sucesso após liberar a origem, o que sustenta essa explicação para a tentativa 2, mas não demonstra que a tentativa 1 teve a mesma causa. Ainda assim, o texto conclui que a origem não liberada era a causa, não um erro do aparelho. Isso registra como diagnóstico confirmado algo que a evidência não distingue para a tentativa 1.
+  Recommendation: Limitar a conclusão à tentativa 2 e registrar a causa da tentativa 1 como indeterminada, salvo se houver captura ou outro registro independente daquela tentativa.
+
+Next steps:
+- Corrigir as duas afirmações e conferir o aceite contra os dados efetivamente registrados no banco antes de usar a opção C.

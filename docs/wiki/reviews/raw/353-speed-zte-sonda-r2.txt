@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19554-79a8-7953-b2be-fad34c147321).
+[codex] Turn started (01a19554-79e1-73c2-ae2b-b82fe7b176fa).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e validar se o texto da sonda, o aceite e o hash mantêm coe...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/bench/ACEITE-risc...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/bench/ACEITE-risc... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,240p' docs/wiki/bench/ACEITE-risco-3xx-eg8145v5-2026-10-31.md && sed...
+[codex] Command completed: /bin/bash -lc "sed -n '1,240p' docs/wiki/bench/ACEITE-risco-3xx-eg8145v5-2026-10-31.md && sed... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,180p' docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md; sed -n '60,...
+[codex] Command completed: /bin/bash -lc "sed -n '1,180p' docs/wiki/adr/ADR-0038-speed-diagnostics-tr143.md; sed -n '60,... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberaria ainda: a incerteza sobre NAT está regis...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberaria ainda: a incerteza sobre NAT está registrada, mas o aceite descreve como limitada uma exposição que o limite de concorrência não limita ao longo do tempo.
+
+Findings:
+- [medium] Limite de concorrência não limita o tráfego acumulado (docs/wiki/bench/ACEITE-risco-3xx-f670l-2026-11-01.md:16)
+  O aceite reconhece que, se a origem pública for compartilhada, outros equipamentos podem pedir dados ao nó e afirma que isso é “limitado pelo número de transferências simultâneas”. Esse limite só restringe pedidos ativos ao mesmo tempo; não impede pedidos repetidos em sequência nem limita o volume total de tráfego. Como a inclusão da origem no allowlist permite esse acesso e a natureza compartilhada segue desconhecida, a avaliação pode subestimar o risco de consumo de banda e recursos do nó.
+  Recommendation: Antes de usar o aceite para liberar execuções, documente controles efetivos de taxa/volume no nó ou descreva explicitamente a exposição sem sugerir que o limite de concorrência limita o tráfego acumulado; atualize o hash após a alteração.
+
+Next steps:
+- Revisar a descrição e as mitigações do risco de origem compartilhada; recalcular o hash do aceite se o documento mudar.
