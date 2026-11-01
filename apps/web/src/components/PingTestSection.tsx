@@ -12,14 +12,13 @@ const LOAD_ERROR: Record<string, string> = {
 };
 const when = (iso: string) => new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 const POLL_MS = 4000;
-const PENDING_MS = 20 * 60_000;   // a vida do pedido na API é de 15 minutos
-const UNCERTAIN_MS = 60_000;
 
 // Marcador de pedido em curso, por aparelho, que sobrevive a fechar o painel, trocar de aba e recarregar (sessão do navegador): remontar a seção não pode reabrir o botão sobre um pedido ainda não
 // esclarecido, e cada clique leva uma chave de idempotência nova, então só a trava impede um segundo tráfego.
-// `runId` = a API respondeu sucesso e disse QUAL execução criou: só uma leitura que mostre ESSA execução destrava (a de outra pessoa não prova nada), nunca o relógio. Sem `runId` (resposta perdida ou sem
-// o id): destrava só por uma leitura bem-sucedida FEITA DEPOIS do prazo.
-type Pending = { runId: string | null; until: number };
+// `runId` = a API respondeu sucesso e disse QUAL execução criou: só uma leitura que mostre ESSA execução destrava (a de outra pessoa não prova nada), nunca o relógio. Sem `runId` (resposta perdida, ou 2xx
+// sem o id) o pedido é INCERTO e nunca se resolve por tempo: "Confirmar pedido" repete o MESMO pedido com a MESMA chave de idempotência, e a API responde com a execução já criada ou cria a única que faltava
+// (nunca duas). Uma recusa definitiva na confirmação limpa a trava.
+type Pending = { runId: string | null; key: string; target: string };   // o destino fica junto da chave: repetir o pedido é repetir a MESMA intenção
 const memo = new Map<string, Pending | null>();
 const KEY = (cpe: string) => `fc-ping-pending:${cpe}`;
 function readPending(cpe: string): Pending | null {
@@ -27,7 +26,7 @@ function readPending(cpe: string): Pending | null {
   try {
     const raw = window.sessionStorage.getItem(KEY(cpe));
     const o = raw ? (JSON.parse(raw) as Pending) : null;
-    const ok = !!o && (o.runId === null || typeof o.runId === "string") && typeof o.until === "number";
+    const ok = !!o && (o.runId === null || typeof o.runId === "string") && typeof o.key === "string" && /^[A-Za-z0-9_.:-]{8,128}$/.test(o.key) && typeof o.target === "string" && /^[a-z0-9][a-z0-9-]{1,30}$/.test(o.target);
     memo.set(cpe, ok ? o : null);
   } catch { memo.set(cpe, null); }
   return memo.get(cpe) ?? null;
@@ -55,7 +54,6 @@ export function PingTestSection({ cpeId }: { cpeId: string }) {
 
   const fetchAll = useCallback(async (signal?: AbortSignal) => {
     const mine = ++seq.current;
-    const startedAt = Date.now();
     try {
       const r = await fetch(`/bff/cpes/${cpeId}/ping`, { cache: "no-store", signal });
       const j = (await r.json().catch(() => ({}))) as { caps?: unknown; runs?: unknown; error?: string };
@@ -63,7 +61,7 @@ export function PingTestSection({ cpeId }: { cpeId: string }) {
       if (!alive.current || mine !== seq.current) return;
       if (caps && runs) {
         hasData.current = true; setRefreshFailed(false); setLoad({ kind: "ready", caps, runs });
-        setPending((p) => (p && (p.runId ? runs.some((x) => x.id === p.runId) : startedAt > p.until) ? null : p));
+        setPending((p) => (p && p.runId && runs.some((x) => x.id === p.runId) ? null : p));
         return;
       }
       const code = j.error && LOAD_ERROR[j.error] ? j.error : "failed";
@@ -101,26 +99,26 @@ export function PingTestSection({ cpeId }: { cpeId: string }) {
   const last = runs[0];
   const locked = busy || active || pending !== null;
 
-  const start = async () => {
-    if (!target || locked) return;
+  // Um pedido, uma chave: `send` grava a trava (com a chave) ANTES do POST e só a limpa diante de recusa definitiva; repetir com a mesma chave é seguro (idempotente na API).
+  const send = async (key: string, tg: string) => {
     setBusy(true); setRefusal(null);
-    setPending({ runId: null, until: Date.now() + UNCERTAIN_MS });   // trava provisória ANTES do POST: recarregar ou sair durante ele não pode reabrir o botão sobre um pedido que a API pode ter gravado
+    setPending((p) => ({ runId: p?.key === key ? p.runId : null, key, target: tg }));
     try {
-      const r = await fetch(`/bff/cpes/${cpeId}/ping/runs`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: crypto.randomUUID(), target_id: target }) });
+      const r = await fetch(`/bff/cpes/${cpeId}/ping/runs`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key, target_id: tg }) });
       const j = (await r.json().catch(() => ({}))) as { error?: string; reason?: string; run_id?: unknown };
       const definitive = [400, 401, 403, 404, 409, 413].includes(r.status);   // só estes garantem que NADA foi criado
-      if (r.ok) setPending({ runId: typeof j.run_id === "string" ? j.run_id : null, until: Date.now() + PENDING_MS });   // a API grava a execução ANTES de responder 2xx: sem id é anômalo, e então só vale o prazo de vida do pedido (15 min), nunca o curto; aceito: lembrado até uma leitura mostrar ESTA execução
-      else if (!definitive) { setPending({ runId: null, until: Date.now() + UNCERTAIN_MS }); setRefusal("Não foi possível confirmar o pedido. Aguarde a atualização antes de pedir de novo."); }
-      else {   // recusa definitiva: nada foi criado, a trava provisória sai
+      if (r.ok) setPending({ runId: typeof j.run_id === "string" ? j.run_id : null, key, target: tg });   // aceito: lembrado até uma leitura mostrar ESTA execução
+      else if (!definitive) setRefusal("Não foi possível confirmar o pedido. Use Confirmar pedido: ele repete o mesmo pedido sem criar outro.");
+      else {   // recusa definitiva: nada foi criado, a trava sai
         setPending(null);
         setRefusal(j.error === "blocked" && j.reason ? PING_BLOCKED_TEXT[j.reason] ?? "O pedido foi recusado." : j.error === "forbidden" ? PING_BLOCKED_TEXT.not_permitted! : "Não foi possível pedir o teste agora.");
       }
       await fetchAll();
-    } catch {   // o pedido pode ter chegado: não se sabe. Trava até uma leitura mostrar ou o prazo passar
-      setPending({ runId: null, until: Date.now() + UNCERTAIN_MS });
-      setRefusal("Não foi possível confirmar o pedido. Aguarde a atualização antes de pedir de novo.");
+    } catch {   // o pedido pode ter chegado: não se sabe; a trava (com a chave) fica
+      setRefusal("Não foi possível confirmar o pedido. Use Confirmar pedido: ele repete o mesmo pedido sem criar outro.");
     } finally { setBusy(false); }
   };
+  const start = () => { if (!target || locked) return; void send(crypto.randomUUID(), target); };
 
   const blockedReason = !caps.offered ? (caps.reason ?? "operation_not_homologated") : null;
   const done = last && (last.status === "completed");
@@ -145,7 +143,7 @@ export function PingTestSection({ cpeId }: { cpeId: string }) {
               {caps.targets.map((t) => <option key={t.id} value={t.id} disabled={!t.ready}>{t.label} · {t.target_kind === "CORE" ? "Core" : "Internet"}{t.ready ? "" : " (indisponível)"}</option>)}
             </select>
           </div>
-          <button type="button" data-testid="ping-start" onClick={() => void start()} disabled={locked || !target}
+          <button type="button" data-testid="ping-start" onClick={start} disabled={locked || !target}
             className="min-h-touch w-fit rounded-btn bg-accent px-4 text-sm font-medium text-[color:var(--on-accent)] disabled:opacity-50">Pedir teste de ping</button>
           <p className="text-xs text-muted">Pedido por quem tem permissão e aprovado por outra pessoa em Operações. Limite de {caps.per_hour} testes por hora neste aparelho.</p>
         </div>
@@ -154,10 +152,13 @@ export function PingTestSection({ cpeId }: { cpeId: string }) {
       {refreshFailed && <p role="status" className="text-xs text-warn" data-testid="ping-refresh-failed">Não foi possível atualizar agora. O que aparece pode estar desatualizado; tentando de novo.</p>}
       {pending && !active && (
         <div role="status" className="grid gap-2 rounded-card border border-line p-3 text-sm" data-testid="ping-pending">
-          <p>{pending.runId && Date.now() > pending.until
-            ? "O pedido foi aceito, mas a leitura ainda não mostra a execução. Não peça de novo: use Atualizar. Se continuar assim, chame quem administra o Edge."
-            : "Pedido enviado. Aguardando a confirmação da leitura; o botão fica travado até lá."}</p>
-          <button type="button" onClick={() => void fetchAll()} data-testid="ping-pending-refresh" className="min-h-touch w-fit rounded-btn border border-line px-3">Atualizar agora</button>
+          <p>{pending.runId
+            ? "Pedido enviado. Aguardando a leitura mostrar a execução; o botão fica travado até lá."
+            : "Pedido enviado, mas a confirmação não chegou. O botão fica travado: use Confirmar pedido para repetir O MESMO pedido (a API não cria um segundo teste)."}</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void fetchAll()} data-testid="ping-pending-refresh" className="min-h-touch w-fit rounded-btn border border-line px-3">Atualizar agora</button>
+            {!pending.runId && <button type="button" onClick={() => void send(pending.key, pending.target)} disabled={busy} data-testid="ping-pending-confirm" className="min-h-touch w-fit rounded-btn border border-line px-3 text-accent">Confirmar pedido</button>}
+          </div>
         </div>
       )}
       {active && <div role="status" className="rounded-card border border-line p-3 text-sm" data-testid="ping-active">{runs.filter((r) => PING_ACTIVE.has(r.status)).map((r) => <p key={r.id}>{PING_STATUS_TEXT[r.status]}</p>)}</div>}
