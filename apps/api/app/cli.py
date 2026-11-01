@@ -185,8 +185,17 @@ def main(argv: list[str] | None = None) -> None:
             target = _os.path.join(root, _os.path.basename(a.evidence_ref))
             if _os.path.islink(target) or _os.path.realpath(target) != target or _os.path.dirname(target) != root:
                 sys.exit("the referenced evidence must be a regular file directly under the evidence root")
+            import stat as _st
             try:
-                raw_bytes = open(target, "rb").read()
+                fd = _os.open(target, _os.O_RDONLY | _os.O_NOFOLLOW | _os.O_NONBLOCK)   # never blocks on a FIFO, never follows a symlink
+                try:
+                    if not _st.S_ISREG(_os.fstat(fd).st_mode):
+                        sys.exit("the referenced evidence must be a regular file directly under the evidence root")
+                    raw_bytes = _os.read(fd, (256 << 10) + 1)
+                finally:
+                    _os.close(fd)
+                if len(raw_bytes) > 256 << 10:
+                    sys.exit("the evidence file is larger than 256 KiB")
                 body = raw_bytes.decode("utf-8")
             except (OSError, UnicodeDecodeError) as exc:
                 sys.exit(f"cannot read the evidence file: {exc}")
@@ -201,7 +210,7 @@ def main(argv: list[str] | None = None) -> None:
                             continue
                 return False
             labels = r"(?i)(senha|password|secret|token|credencial|api[_-]?key|chave)\s*[:=]"
-            if len(body.strip()) < 200 or _re.search(labels, body) or _has_address(body):
+            if len(body.strip()) < 200 or _re.search(labels, body) or _re.search(r"\b\d{1,3}(\.\d{1,3}){3}\b", body) or _has_address(body):
                 sys.exit("the evidence file is empty or carries an address or credential")
             by = a.by.strip()[:120]
             if not by:
