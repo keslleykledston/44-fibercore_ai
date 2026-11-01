@@ -48,7 +48,9 @@ def check_report(target: str, data) -> dict | None:
     if not isinstance(data, dict) or not set(data) <= _ALLOWED or {"target", "state"} - set(data) or data["target"] != target:
         return None
     st = data["state"]
-    if not isinstance(st, str) or speed.STATE_RE.fullmatch(st) is None:
+    # the Edge sends a report only for a FINISHED diagnostic: Completed, or an Error_ state the device itself reported (a result, like the speed test's). Any
+    # other state is not a finished test: the report is refused, the job fails and the target is locked.
+    if not isinstance(st, str) or speed.STATE_RE.fullmatch(st) is None or not (st == "Completed" or st.startswith("Error_")):
         return None
     for k in _INT_FIELDS:
         v = data.get(k)
@@ -61,10 +63,10 @@ def check_report(target: str, data) -> dict | None:
 
 
 def compute(c: dict) -> Computed:
-    """A device that did not complete, or whose counts and times do not add up, yields NO figure. With every probe lost the test COMPLETED with 100 % loss and
+    """A device that reported an error, or whose counts and times do not add up, yields NO figure. With every probe lost the test COMPLETED with 100 % loss and
     no times: that is a result, not an error."""
     if c["state"] != "Completed":
-        return Computed("error", None, None, None, None, None, None, "device_error" if c["state"].startswith("Error_") else "not_completed")
+        return Computed("error", None, None, None, None, None, None, "device_error")
     s, f = c.get("success"), c.get("failure")
     if s is None or f is None:
         return Computed("inconclusive", None, None, None, None, None, None, "no_counts")

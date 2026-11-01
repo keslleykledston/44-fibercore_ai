@@ -77,10 +77,15 @@ def test_counts_and_times_that_do_not_add_up_give_no_figure_at_all(kw, reason):
     assert (c.success, c.failure, c.loss_pct, c.avg_ms, c.min_ms, c.max_ms) == (None,) * 6     # never 0, never a guess
 
 
-@pytest.mark.parametrize("state,reason", [("Error_CannotResolveHostName", "device_error"), ("Error_Other", "device_error"), ("Requested", "not_completed"), ("None", "not_completed")])
-def test_a_device_that_did_not_complete_yields_an_error_and_no_figure(state, reason):
+@pytest.mark.parametrize("state", ["Error_CannotResolveHostName", "Error_Other"])
+def test_a_device_that_reported_an_error_yields_an_error_and_no_figure(state):
     c = comp(state=state)
-    assert (c.outcome, c.reason, c.success, c.avg_ms, c.loss_pct) == ("error", reason, None, None, None)
+    assert (c.outcome, c.reason, c.success, c.avg_ms, c.loss_pct) == ("error", "device_error", None, None, None)
+
+
+@pytest.mark.parametrize("state", ["Requested", "None", "Canceled", "error_x", "Completedx"])
+def test_a_state_that_is_not_a_finished_diagnostic_is_not_a_report(state):
+    assert probe.check_report(TG, report(state=state)) is None
 
 
 def test_every_computed_result_fits_the_table_it_is_stored_in():
@@ -88,7 +93,7 @@ def test_every_computed_result_fits_the_table_it_is_stored_in():
     for s in (None, 0, 1, 4, 5, 6):
         for f in (None, 0, 1, 4, 5):
             for avg, lo, hi in ((None, None, None), (0, 0, 0), (12, 10, 15), (10, 10, 10), (15, 10, 12), (None, 3, 4)):
-                for st in ("Completed", "Error_X", "Requested"):
+                for st in ("Completed", "Error_X"):
                     c = probe.compute(probe.check_report(TG, report(state=st, success=s, failure=f, avg_ms=avg, min_ms=lo, max_ms=hi)))
                     assert (c.success is None) == (c.loss_pct is None) == (c.failure is None), c
                     assert c.success is None or c.outcome == "completed", c
@@ -391,7 +396,7 @@ def test_the_most_extreme_accepted_report_is_acknowledged_and_stored_without_a_f
     assert got["status"] == "inconclusive" and got["reason"] == "counts_mismatch" and got["loss_pct"] is None
 
 
-@pytest.mark.parametrize("data", [None, {}, {**report(), "extra": 1}, {**report(), "target": "other-node"}, {**report(), "state": "Done; rm -rf"}, {**report(), "success": True}])
+@pytest.mark.parametrize("data", [None, {}, {**report(), "extra": 1}, {**report(), "target": "other-node"}, {**report(), "state": "Done; rm -rf"}, {**report(), "state": "Requested"}, {**report(), "success": True}])
 def test_a_success_without_the_exact_report_of_this_job_is_a_failure_and_locks_the_target(client, seed, inv, migrated, data):
     cpe, h, run, _ = _dispatched(client, seed, inv, migrated)
     body = {"state": "succeeded", "postcheck_ok": True, **({"data": data} if data is not None else {})}
