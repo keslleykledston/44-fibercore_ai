@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1950a-97c2-7671-a2d2-f1bb587d01aa).
+[codex] Turn started (01a1950a-97f9-7613-ab58-7528c12eb868).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e a regra que determina o ramo `owner_physical_evidence`, p...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- 'apps/web/src/app/rede/onu/...
+[codex] Command failed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- 'apps/web/src/app/rede/onu/... (exit 2)
+[codex] Running command: /bin/bash -lc "sed -n '185,245p' apps/api/app/cli.py; rg -n \"confidence|owner_physical_evide...
+[codex] Command completed: /bin/bash -lc "sed -n '185,245p' apps/api/app/cli.py; rg -n \"confidence|owner_physical_evide... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: o texto ainda atribui ao documento ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: o texto ainda atribui ao documento uma ligação específica que a regra não verifica.
+
+Findings:
+- [medium] A mensagem afirma que a evidência liga este roteador a esta ONU (apps/web/src/app/rede/onu/[id]/page.tsx:150)
+  O ramo é selecionado pela regra gravada pelo CLI, mas o CLI só exige um arquivo H1 com tamanho mínimo e sem certos dados sensíveis; não verifica que seu conteúdo documente a ligação entre os IDs escolhidos. Assim, “evidência física ligando este roteador a esta ONU” pode afirmar mais do que foi validado e induzir quem revisa a confiar numa correspondência não demonstrada pelo fluxo.
+  Recommendation: Descreva o fato verificável: um responsável registrou uma sugestão sob a regra de evidência física, sujeita à revisão humana. Só afirme que o documento liga os dois dispositivos se o conteúdo ou um processo confiável validar essa relação.

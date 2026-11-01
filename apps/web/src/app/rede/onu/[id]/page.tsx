@@ -146,7 +146,11 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
               <ul className="space-y-3 text-sm">
                 {o.cpe.suggestions.map((s) => (
                   <li key={s.id}>
-                    <p>Há um roteador com o <strong>mesmo serial</strong> desta ONU. Igualdade de serial é um indício, não uma prova (confiança {Math.round(s.confidence * 100)}%).</p>
+                    {s.rule === "owner_physical_evidence" ? (
+                      <p data-testid="cpe-suggest-physical">Sugestão registrada pela regra <strong>evidência física</strong>; aguarda revisão.</p>
+                    ) : (
+                      <p>Há um roteador com o <strong>mesmo serial</strong> desta ONU. Igualdade de serial é um indício, não uma prova (confiança {Math.round(s.confidence * 100)}%).</p>
+                    )}
                     {s.ambiguous && <p className="mt-1 text-warn">Ambíguo: este serial existe em mais de uma OLT. Resolva o inventário antes de confirmar.</p>}
                     {o.cpe?.can_review ? (
                       <div className="mt-2 flex flex-wrap gap-2">
