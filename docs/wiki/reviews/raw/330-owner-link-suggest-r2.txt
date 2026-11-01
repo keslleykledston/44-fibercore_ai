@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19475-b708-7943-a82d-97405b152a09).
+[codex] Turn started (01a19475-b742-7640-b533-fb4c8a5618fe).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de validação da evidência e detecçã...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/cli.py apps/ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/cli.py apps/ap... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/cli.py | sed -n '165,225p'; rg -n \"onu_cpe_links|suggeste...
+[codex] Command failed: /bin/bash -lc "nl -ba apps/api/app/cli.py | sed -n '165,225p'; rg -n \"onu_cpe_links|suggeste... (exit 2)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não deve ser aprovado ainda: checar apenas o nome do ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não deve ser aprovado ainda: checar apenas o nome do arquivo deixa a referência de evidência desacoplada do conteúdo validado, e o filtro de IPv6 aceita formatos comuns compactados.
+
+Findings:
+- [high] O mesmo nome não garante que o arquivo validado seja o H1 referenciado (apps/api/app/cli.py:184-188)
+  A comparação verifica apenas `basename`. Assim, um arquivo arbitrário em outro diretório com o mesmo nome pode passar pela validação, enquanto `evidence_ref` aponta para um H1 diferente ou inexistente. O SHA-256 gravado descreve o arquivo lido, mas não comprova o conteúdo do caminho referenciado; isso pode deixar a revisão humana com uma trilha de evidência enganosa. Resolva e valide o próprio caminho referenciado sob a raiz autorizada, ou compare o conteúdo/hash do caminho referenciado com o arquivo lido.
+  Recommendation: Vincule a leitura ao caminho resolvido de `evidence_ref` dentro da raiz permitida e rejeite caminhos que escapem dela; grave o hash desse arquivo.
+- [medium] O filtro de IPv6 não reconhece endereços compactados (apps/api/app/cli.py:191-193)
+  A expressão exige entre três e oito grupos hexadecimais completos separados por `:`. Ela não cobre formas válidas com `::`, como `2001:db8::1` ou `::1`, que podem aparecer no H1 e passar pela checagem. O comando então grava a evidência como válida apesar de conter um endereço. Use um parser de IP para reconhecer IPv4/IPv6, incluindo formas compactadas, ou restrinja a evidência a um formato que não permita endereços.
+  Recommendation: Substitua o padrão IPv6 parcial por validação com parser que reconheça endereços IPv4 e IPv6 válidos em todas as formas usuais.
+
+Next steps:
+- Validar o arquivo efetivamente apontado por `evidence_ref` e cobrir caminhos com mesmo nome em diretórios diferentes.
+- Adicionar casos de IPv6 comprimido à checagem da evidência.

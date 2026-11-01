@@ -59,8 +59,7 @@ def main(argv: list[str] | None = None) -> None:
     bt.add_argument("tenant_id"); bt.add_argument("cpe_id"); bt.add_argument("edge_id"); bt.add_argument("--note")
     ls = sub.add_parser("onu-cpe-link-suggest", help="ADR-0030 item 2(a): record a SUGGESTED ONU<->CPE link backed by an H1 evidence file; never confirms (a person reviews it)")
     ls.add_argument("tenant_id"); ls.add_argument("onu_id"); ls.add_argument("cpe_id")
-    ls.add_argument("--evidence-ref", required=True, help="repo path of the H1 evidence, docs/wiki/bench/H1-*.md")
-    ls.add_argument("--evidence-file", required=True, help="the same file as readable here (checked: non-empty, no address or credential)")
+    ls.add_argument("--evidence-ref", required=True, help="repo path of the H1 evidence, docs/wiki/bench/H1-*.md (read from the evidence root, FIBERCORE_EVIDENCE_ROOT, default /bench)")
     ls.add_argument("--by", required=True, help="who records it (the owner)")
     br = sub.add_parser("bench-target-remove", help="ADR-0030: remove a bench target (refused while it has open authorizations or jobs)")
     br.add_argument("tenant_id"); br.add_argument("cpe_id")
@@ -181,16 +180,28 @@ def main(argv: list[str] | None = None) -> None:
             import re as _re
             if not _re.fullmatch(r"docs/wiki/bench/H1-[A-Za-z0-9._-]{3,100}\.md", a.evidence_ref):
                 sys.exit("evidence_ref must be a docs/wiki/bench/H1-*.md path")
-            if _os.path.basename(a.evidence_file) != _os.path.basename(a.evidence_ref):
-                sys.exit("the evidence file must be the referenced H1 (same file name)")
+            # the file read IS the referenced one: <evidence root>/<its name>, resolved, inside the root and not a symlink
+            root = _os.path.realpath(_os.environ.get("FIBERCORE_EVIDENCE_ROOT", "/bench"))
+            target = _os.path.join(root, _os.path.basename(a.evidence_ref))
+            if _os.path.islink(target) or _os.path.realpath(target) != target or _os.path.dirname(target) != root:
+                sys.exit("the referenced evidence must be a regular file directly under the evidence root")
             try:
-                raw_bytes = open(a.evidence_file, "rb").read()
+                raw_bytes = open(target, "rb").read()
                 body = raw_bytes.decode("utf-8")
             except (OSError, UnicodeDecodeError) as exc:
                 sys.exit(f"cannot read the evidence file: {exc}")
-            sensitive = (r"(?i)(senha|password|secret|token|credencial|api[_-]?key|chave)\s*[:=]|\b\d{1,3}(\.\d{1,3}){3}\b"
-                         r"|\b(?:[0-9A-Fa-f]{1,4}:){3,7}[0-9A-Fa-f]{1,4}\b")
-            if len(body.strip()) < 200 or _re.search(sensitive, body):
+            import ipaddress as _ip
+            def _has_address(text_: str) -> bool:
+                for tok in _re.findall(r"[0-9A-Fa-f:.]{3,}", text_):
+                    if ":" in tok or "." in tok:
+                        try:
+                            _ip.ip_address(tok.rstrip(".:"))
+                            return True
+                        except ValueError:
+                            continue
+                return False
+            labels = r"(?i)(senha|password|secret|token|credencial|api[_-]?key|chave)\s*[:=]"
+            if len(body.strip()) < 200 or _re.search(labels, body) or _has_address(body):
                 sys.exit("the evidence file is empty or carries an address or credential")
             by = a.by.strip()[:120]
             if not by:
