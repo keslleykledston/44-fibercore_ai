@@ -1,0 +1,30 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1958a-b3a6-7442-a760-0b2e45ada88f).
+[codex] Turn started (01a1958a-b3e1-7dd3-aa62-02a414d6090c).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir o fluxo de desativação, revogação de sessões, t...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/cli.py apps/ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/cli.py apps/ap... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "service_accounts|tokens_valid_after|refresh_tokens|account.deactivated|...
+[codex] Command completed: /bin/bash -lc 'rg -n "service_accounts|tokens_valid_after|refresh_tokens|account.deactivated|... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"CREATE TABLE.*service_accounts|service_accounts|events_outbox|service ...
+[codex] Command completed: /bin/bash -lc "rg -n \"CREATE TABLE.*service_accounts|service_accounts|events_outbox|service ... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "account.deactivated|user.deactivated|service_account.*deactiv|event_typ...
+[codex] Command completed: /bin/bash -lc 'rg -n "account.deactivated|user.deactivated|service_account.*deactiv|event_typ... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,90p' apps/api/app/workers/relay.py; sed -n '1,70p' docs/addenda/v2.2...
+[codex] Command completed: /bin/bash -lc "sed -n '1,90p' apps/api/app/workers/relay.py; sed -n '1,70p' docs/addenda/v2.2... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não shippar ainda: os eventos novos de desativação nã...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não shippar ainda: os eventos novos de desativação não atendem ao contrato documentado para eventos publicados.
+
+Findings:
+- [medium] Eventos de desativação publicados sem campos obrigatórios do envelope (apps/api/app/cli.py:537-538)
+  A desativação grava `account.deactivated` no outbox, mas o relay publica apenas `id`, `tenant_id`, `type`, `schema_version`, `aggregate`, `occurred_at` e `payload`. O contrato documentado exige `source` e `quality` nos novos eventos. Consumidores que validam o envelope podem rejeitar ou descartar esses eventos, deixando a desativação sem a auditoria/notificação esperada. Esta conclusão decorre do contrato e do envelope montado pelo relay.
+  Recommendation: Defina os campos obrigatórios para `account.deactivated` e faça o relay incluí-los no envelope; acrescente validação do evento publicado contra o schema v2.2.
+
+Next steps:
+- Atualizar o envelope/schema do evento e cobrir a publicação de desativação com validação contratual.
