@@ -186,6 +186,8 @@ def sync_from_reads(olt_id: UUID, p: Principal = Depends(require("profiles:impor
     observed = datetime.fromisoformat(got["asked_at"])
     if now - observed > SYNC_MAX_AGE:
         raise HTTPException(409, "read_too_old: ask the OLT again")
+    # INVARIANT: the only writer of source = 'edge_read' is this function (the import route refuses that source: 422), and it writes the question's time (asked_at,
+    # taken from the Cloud's own job clock) into observed_at, so the two timestamps compared here come from one clock and mean the same thing.
     newest = conn.execute(text("SELECT max(observed_at) FROM olt_profile_snapshots WHERE olt_id = :o AND native_type = 'dba-profile' AND source = 'edge_read'"), {"o": olt_id}).scalar()
     if newest is not None and observed < newest:
         raise HTTPException(409, "older_than_applied: a newer read of this OLT's profiles was already applied")

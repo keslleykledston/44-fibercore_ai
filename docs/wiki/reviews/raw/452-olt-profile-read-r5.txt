@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19cbe-5f55-7850-bddd-8c3f33171550).
+[codex] Turn started (01a19cbe-5f90-7e73-8d2e-fd0ff78700e8).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir especialmente as garantias de serialização por ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- agents/edge/internal/olt/qu...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- agents/edge/internal/olt/qu... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'releaseValidatedFor|func \\(.*RunQuery|isR015|ProfileNames|ScrubProfile...
+[codex] Command completed: /bin/bash -lc "rg -n 'releaseValidatedFor|func \\(.*RunQuery|isR015|ProfileNames|ScrubProfile... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/query.go | sed -n '80,110p;210,275p'; nl -ba a...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/query.go | sed -n '80,110p;210,275p'; nl -ba a... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: `older_than_applied` compara `asked...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: `older_than_applied` compara `asked_at` com `observed_at` dos snapshots, misturando relógios e permitindo sync fora de ordem ou recusando leituras válidas.
+
+Findings:
+- [high] A comparação de ordenação usa timestamps de relógios diferentes (apps/api/app/api/profile_studio.py:189-191)
+  O cache recebe `asked_at` de `row.created_at` (criado na nuvem), mas snapshots gravam esse valor em `observed_at`; o sync compara então `got.asked_at` com `max(observed_at)`. A lógica funciona para snapshots deste caminho quando os timestamps conservam o mesmo valor, mas fica vulnerável quando um snapshot `edge_read` é atualizado por outro fluxo que use `observed_at` como hora de leitura/recebimento ou quando o dado vem de relógios divergentes. Nesse caso, uma leitura antiga pode passar (ou uma válida ser recusada), e a aplicação de perfis ausentes pode marcar perfis como desconhecidos incorretamente. Compare sempre `asked_at` com um campo que represente a pergunta anterior, persistido explicitamente; não use `observed_at` sem garantir que tem a mesma semântica em todos os escritores.
+  Recommendation: Persistir `asked_at` como campo próprio nas snapshots sincronizadas e usar esse campo para a checagem `older_than_applied`, com desempate determinístico para leituras simultâneas.

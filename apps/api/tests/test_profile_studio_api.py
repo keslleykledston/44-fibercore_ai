@@ -386,3 +386,12 @@ def test_sync_refuses_an_old_read_a_missing_permission_and_the_flag_off(client, 
         c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
         assert c.execute(text("SELECT observed_at > now() - interval '1 minute' AND asked_at < now() - interval '24 hours' FROM olt_query_latest WHERE olt_id = :i"), {"i": olt}).scalar() is True
     assert client.post(f"/v1/olts/{olt}/profiles/sync", headers=h).status_code == 409
+
+
+def test_nothing_but_the_sync_can_write_an_edge_read_snapshot(client, seed, inv, migrated):
+    """The ordering guard of the sync relies on it (Codex r5): the import route refuses `edge_read`, so every edge_read row carries the sync's own asked_at clock."""
+    _on(migrated, seed["A"])
+    h = hdr(client, "alice", seed, "A")
+    olt = _olt(client, inv, h, "OLT-PS-SYNC3")
+    r = _import(client, h, olt, source="edge_read")
+    assert r.status_code == 422
