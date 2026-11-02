@@ -44,5 +44,5 @@ A tela tem três colunas lado a lado (árvore, lista e detalhes). A tabela mostr
 
 - Build/commit: be94359 (LAB, ramo principal após o PR 106)
 - Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844
-- Origem: capturas REAIS do ambiente de laboratório com usuário de leitura (papel NOC N1), só a ONU de bancada (a lista foi filtrada pelo serial; a matriz e a árvore mostram apenas contagens); nenhuma ONU de cliente aparece
-- Dados: ONU de bancada (Huawei EG8145V5); horários relativos mascarados na lista
+- Origem: capturas REAIS da aplicação integrada (pilha efêmera de teste, API e banco reais, regeneradas em 2026-11-02), com usuário administrador do seed; nenhuma ONU de cliente nem do laboratório aparece
+- Dados: SINTÉTICOS (seed `scripts/seed_demo.py`: OLT-DEMO-xx e ONUs DEMOxxxx, equipamentos fictícios); horários relativos mascarados
