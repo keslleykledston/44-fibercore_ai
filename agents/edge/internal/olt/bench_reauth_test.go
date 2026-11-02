@@ -26,6 +26,7 @@ type fakeAuthOLT struct {
 	onAdd                         func()
 	onAddSP                       func()
 	onUndo                        func()
+	offlineReads                  int
 }
 
 func newAuth() *fakeAuthOLT {
@@ -33,7 +34,12 @@ func newAuth() *fakeAuthOLT {
 }
 
 func (f *fakeAuthOLT) info() string {
-	return fmt.Sprintf("  -----------------------------\n  F/S/P                   : 0/0/14\n  ONT-ID                  : 10\n  Control flag            : active\n  Run state               : online\n  Config state            : normal\n  Match state             : match\n  SN                      : 48575443E2247AA5\n  Description             : %s\n  Last up time            : %s\n  Line profile ID         : %d\n  Service profile ID      : %d\n", f.desc, f.lastUp, f.line, f.srv)
+	run := "online"
+	if f.offlineReads > 0 {
+		f.offlineReads--
+		run = "offline"
+	}
+	return fmt.Sprintf("  -----------------------------\n  F/S/P                   : 0/0/14\n  ONT-ID                  : 10\n  Control flag            : active\n  Run state               : %s\n  Config state            : normal\n  Match state             : match\n  SN                      : 48575443E2247AA5\n  Description             : %s\n  Last up time            : %s\n  Line profile ID         : %d\n  Service profile ID      : %d\n", run, f.desc, f.lastUp, f.line, f.srv)
 }
 
 func (f *fakeAuthOLT) Run(ctx context.Context, cmd string) (string, error) {
@@ -304,5 +310,24 @@ func TestReauthorizeRestoresEvenWhenTheJobContextIsCancelledAfterTheFirstChange(
 	}
 	if !f.ontPresent || !f.spPresent || f.line != 179 {
 		t.Fatalf("the ONU and its service port must be back after a cancellation: ont=%v sp=%v", f.ontPresent, f.spPresent)
+	}
+}
+
+func TestReauthorizeRestoreWaitsForAPresentONUThatIsStillInitializing(t *testing.T) {
+	// ont delete is refused and, after the first change, the ONU reads offline for a few reads before it is fully back: the restore waits, it does not give up (Codex r7)
+	f := newAuth()
+	f.refuse["ont delete"] = true
+	armed := false
+	f.onInfo = func() {
+		if !armed && len(f.mutating()) > 0 {
+			armed, f.offlineReads = true, 3
+		}
+	}
+	out, err := runAuth(f, spec14, nil, far())
+	if err == nil || out.Done || !out.Sent || !strings.Contains(out.Detail, "baseline was restored") {
+		t.Fatalf("a present ONU that comes back must end as restored: out=%+v err=%v", out, err)
+	}
+	if !f.ontPresent || !f.spPresent {
+		t.Fatalf("state ont=%v sp=%v", f.ontPresent, f.spPresent)
 	}
 }

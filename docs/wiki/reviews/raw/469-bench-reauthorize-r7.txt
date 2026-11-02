@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19d3d-0625-76b0-baf4-3b3fbfb6410f).
+[codex] Turn started (01a19d3d-0660-7a72-9322-7449e34d8c9a).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main`, concentrando a revisão no prazo do contexto de restaura...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- agents/edge/internal/olt/be...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- agents/edge/internal/olt/be... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/bench_reauth.go | sed -n '150,440p'; nl -ba ag...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/bench_reauth.go | sed -n '150,440p'; nl -ba ag... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'func .*Open|type Session|30 \\* time.Second|WithTimeout' agents/edge/in...
+[codex] Command completed: /bin/bash -lc "rg -n 'func .*Open|type Session|30 \\* time.Second|WithTimeout' agents/edge/in... (exit 0)
+[codex] Running command: /bin/bash -lc "cat agents/edge/internal/olt/ssh.go; sed -n '1,80p' agents/edge/internal/olt/d...
+[codex] Command completed: /bin/bash -lc "cat agents/edge/internal/olt/ssh.go; sed -n '1,80p' agents/edge/internal/olt/d... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: a janela própria cobre o orçamento nominal,...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: a janela própria cobre o orçamento nominal, mas a restauração desiste se a ONU já reapareceu e ainda está inicializando; pode deixá-la offline sem esperar o retorno.
+
+Findings:
+- [high] Restauração aborta quando a ONU existe, mas ainda está offline (agents/edge/internal/olt/bench_reauth.go:299-302)
+  Após uma falha com mutação enviada, `restore` consulta a ONU e considera `ok` verdadeiro assim que identidade, posição e ONT-ID podem ser lidos. Em seguida, exige `matches` imediatamente; isso também exige estado online e perfis/descrição iguais. Se `ont add` já criou a ONU, mas ela ainda está inicializando, essa leitura pode falhar e a restauração retorna `ErrReauthBaseline` sem usar o `waitFor` disponível para aguardar o retorno. Na falha real, a bancada pode ficar com a ONU offline apesar do prazo adicional. Aguarde até `wait` pela ONU atingir o baseline quando ela estiver presente, e só então prossiga para conferir ou restaurar a service-port.
+  Recommendation: Troque a verificação imediata por uma espera limitada que releia identidade, estado e perfis até `matches` ser verdadeiro; preserve erro explícito se a ONU não convergir antes do limite.
+
+Next steps:
+- Corrigir a convergência da restauração para uma ONU presente, mas ainda inicializando; depois revisar novamente o diff.

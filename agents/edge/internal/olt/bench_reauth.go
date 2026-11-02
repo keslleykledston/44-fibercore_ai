@@ -297,7 +297,8 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 			return err
 		}
 		if ok { // the ONU is there (for instance `ont delete` was refused or its outcome is unknown): it must be the BASELINE ONU, not just any ONU at this position
-			if i, p, e := readONU(); e != nil || !matches(i, p) {
+			// present but maybe still initializing (offline for a while after an add): wait, bounded, until the WHOLE baseline reads back
+			if !waitFor(func() bool { i, p, e := readONU(); return e == nil && matches(i, p) }, wait) {
 				return ErrReauthBaseline
 			}
 		}
