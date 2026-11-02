@@ -1,0 +1,35 @@
+# Exemplo SINTÉTICO; nunca homologado para OLT real.
+api_version: fibercore/v2.5
+kind: ServiceIntent
+metadata:
+  id: intent-internet-bridge-500m-example
+  display_name: Internet Bridge - Plano 500M (exemplo)
+  revision: 1
+  status: draft
+  lab_certified: false
+scope:
+  technology: gpon
+  compatible_onu_models: [] # vazio: sem certificação, bloquear write
+  olt_targets: [] # destinos escolhidos no wizard, nunca todos por padrão
+service:
+  kind: internet
+  delivery: bridge
+  subscriber_auth: pppoe # PPPoE no BNG, não na ONU neste modelo
+  handoff:
+    ethernet_ports: [1]
+    tagging: untagged
+  vlans:
+    customer_vlan: 200
+    service_vlan: null
+  qos:
+    shaping_owner: bng
+    upstream_max_kbps: 100000
+    downstream_max_kbps: 500000
+  advanced:
+    dba_mode: vendor_resolved # sem inventar DBA exato
+    multicast: false
+    voice: false
+constraints:
+  require_known_device_capability: true
+  require_lab_certified_driver_write: true
+  require_preview_and_approval: true

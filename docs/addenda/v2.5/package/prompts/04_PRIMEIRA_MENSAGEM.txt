@@ -1,0 +1,5 @@
+FIBERCORE AI — BUILD PACK v2.5 COMPLETO (A+B+C)
+
+Este é o pacote único de OLT Provisioning & Profile Studio, incluindo ONU Discovery/Authorization, Service Profile Studio assistido e o novo Modo Especialista N3 para importar/editar/comparar templates e profiles existentes.
+
+Leia README_START_HERE.md e execute prompts/01_CLAUDE_CODE_MASTER.md. Faça GAP no repositório e concilie backlog/ADRs sem reiniciar a sprint; preserve HubSoft-first e v2.4. Primeiro implemente leitura, importação, clone, comparação e dry-run; escrita só com homologação de laboratório e aprovação explícita. Nunca envie comandos CLI arbitrários à OLT. Codex supervisiona, Lovable faz UX. Cada tela implementada terá how-to e screenshots reais na Central de Ajuda. Informe caminhos, testes e resultados reais.

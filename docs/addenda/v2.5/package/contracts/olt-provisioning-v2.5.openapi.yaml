@@ -1,0 +1,125 @@
+openapi: 3.1.0
+info:
+  title: FiberCore OLT Provisioning — additive API
+  version: 2.5.0
+  description: Intentional draft API; requires alignment with existing /api/v1 proxy and JWT/RLS/Approval contracts.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    DiscoveryObservation:
+      type: object
+      required: [id, olt_id, pon_locator, serial_number, observed_at, quality]
+      properties:
+        id: {type: string}
+        olt_id: {type: string}
+        pon_locator: {type: string}
+        serial_number: {type: string}
+        model: {type: [string, 'null']}
+        observed_at: {type: string, format: date-time}
+        quality: {type: string, enum: [fresh, stale, unknown]}
+        authorization: {type: string, enum: [unregistered, registered, conflict, unknown]}
+    Preview:
+      type: object
+      required: [id, state, target_olt_id, requires_approval, plan_hash]
+      properties:
+        id: {type: string}
+        state: {type: string, enum: [preview_only, blocked, approval_required]}
+        target_olt_id: {type: string}
+        requires_approval: {type: boolean}
+        plan_hash: {type: string}
+        planned_steps:
+          type: array
+          items: {type: string}
+        warnings:
+          type: array
+          items: {type: string}
+    Job:
+      type: object
+      required: [id, status]
+      properties:
+        id: {type: string}
+        status: {type: string, enum: [pending_approval, queued, preparing, applying, verifying, succeeded, partial, failed, unknown]}
+        postcheck_evidence: {type: [string, 'null']}
+paths:
+  /olts/{olt_id}/onus/unregistered:
+    get:
+      operationId: listUnregisteredOnus
+      summary: List ONU discovery observations (read-only)
+      parameters:
+        - {name: olt_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Observed unregistered ONUs
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/DiscoveryObservation'}}
+  /olts/{olt_id}/profiles:
+    get:
+      operationId: listOltProfiles
+      summary: Read real profiles and local bindings
+      parameters:
+        - {name: olt_id, in: path, required: true, schema: {type: string}}
+      responses: {'200': {description: Profile inventory and provenance}}
+  /service-templates:
+    get:
+      operationId: listServiceTemplates
+      summary: List canonical service template versions
+      responses: {'200': {description: Service template catalog}}
+    post:
+      operationId: createServiceTemplateDraft
+      summary: Create immutable/versioned template draft
+      responses: {'201': {description: Draft created}}
+  /service-templates/{template_id}/preview:
+    post:
+      operationId: previewServiceTemplateDeployment
+      summary: Preview per-OLT changes; zero writes
+      parameters:
+        - {name: template_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Dry-run plan
+          content: {application/json: {schema: {$ref: '#/components/schemas/Preview'}}}
+  /provisioning/onus/{observation_id}/preview:
+    post:
+      operationId: previewOnuAuthorization
+      summary: Preview and validate activation without device writes
+      parameters:
+        - {name: observation_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Dry-run activation plan
+          content: {application/json: {schema: {$ref: '#/components/schemas/Preview'}}}
+  /provisioning/plans/{plan_id}/request:
+    post:
+      operationId: requestProvisioningApproval
+      summary: Request approval against immutable preview
+      parameters:
+        - {name: plan_id, in: path, required: true, schema: {type: string}}
+      responses: {'202': {description: Routed into existing approvals}}
+  /provisioning/plans/{plan_id}/execute:
+    post:
+      operationId: executeApprovedPlan
+      summary: Dispatch previously approved, lab-certified plan (no direct browser execution)
+      parameters:
+        - {name: plan_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '202':
+          description: Accepted into job queue, not device success
+          content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}
+  /provisioning/jobs/{job_id}:
+    get:
+      operationId: getProvisioningJob
+      summary: Read job state and independent verification
+      parameters:
+        - {name: job_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Job status
+          content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}

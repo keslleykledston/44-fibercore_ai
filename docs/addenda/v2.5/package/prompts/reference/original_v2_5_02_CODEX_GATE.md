@@ -1,0 +1,3 @@
+# CODEX — revisão obrigatória v2.5
+
+Revisar: aderência ao repo real e reutilização v2.1–v2.4; separação OLT vs ACS/USP; idempotência e lock por OLT/PON/SN; RBAC/RLS; segredos; impossibilidade de comandos raw; schema compatível por firmware/card; PON/ONU duplicada ou migrating; teste de stale snapshot e TOCTOU; profile ID drift/conflito; não alteração de perfil compartilhado; maker-checker e aprovação de batch; saga `PARTIAL/UNKNOWN` sem retry cego; readback real vs ACK; failure isolation; uptime dos módulos; documentação/playwright/screenshots. Bloquear release se qualquer write de produção estiver liberado sem homologação e evidência. Registrar PASS/FAIL por item com evidência/caminho, não inventar execução.

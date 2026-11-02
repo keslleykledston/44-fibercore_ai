@@ -1,0 +1,189 @@
+openapi: 3.1.0
+info:
+  title: FiberCore Expert Profile Editor (additive API)
+  version: 2.5.1
+  description: Design contract. Requires reconciliation with existing FastAPI routes, JWT/RLS and v2.5 provisioning jobs.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    OltId:
+      name: olt_id
+      in: path
+      required: true
+      schema: {type: string}
+    NativeKey:
+      name: native_key
+      in: path
+      required: true
+      schema: {type: string}
+    DraftId:
+      name: draft_id
+      in: path
+      required: true
+      schema: {type: string}
+  schemas:
+    ProfileSnapshot:
+      type: object
+      required: [id, olt_id, native_key, observed_at, freshness, fingerprint, reference_count, normalized, completeness]
+      properties:
+        id: {type: string}
+        olt_id: {type: string}
+        native_key: {type: string}
+        observed_at: {type: string, format: date-time}
+        freshness: {type: string, enum: [fresh, stale, unknown]}
+        completeness: {type: string, enum: [complete, partial, unknown]}
+        fingerprint: {type: string}
+        reference_count: {type: [integer, 'null'], minimum: 0}
+        normalized: {type: object, additionalProperties: true}
+        unknown_fields: {type: array, items: {type: string}}
+    ImportRequest:
+      type: object
+      required: [source_olt_id, native_key]
+      additionalProperties: false
+      properties:
+        source_olt_id: {type: string}
+        native_key: {type: string}
+        source_snapshot_id: {type: [string, 'null']}
+    Draft:
+      type: object
+      required: [id, revision, status, source_fingerprint, desired]
+      properties:
+        id: {type: string}
+        revision: {type: integer, minimum: 1}
+        status: {type: string, enum: [draft, published, deprecated]}
+        source_fingerprint: {type: string}
+        desired: {type: object}
+    DiffItem:
+      type: object
+      required: [field, category, source_quality]
+      properties:
+        field: {type: string}
+        category: {type: string, enum: [equal, change, add, remove, not_observable, unsupported, conflict]}
+        before: {}
+        after: {}
+        source_quality: {type: string, enum: [known, partial, unknown]}
+        impact: {type: string}
+    Comparison:
+      type: object
+      required: [items, status, source_hash, desired_hash]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/DiffItem'}}
+        status: {type: string, enum: [equivalent, different, unknown, blocked]}
+        source_hash: {type: string}
+        desired_hash: {type: string}
+    PreviewTarget:
+      type: object
+      required: [olt_id, strategy, allowed, reasons, references_known]
+      properties:
+        olt_id: {type: string}
+        strategy: {type: string, enum: [reuse_exact, adopt_reference, clone_new_revision, plan_migration, blocked]}
+        allowed: {type: boolean}
+        reasons: {type: array, items: {type: string}}
+        references_known: {type: boolean}
+        impact_count: {type: [integer, 'null']}
+        plan_hash: {type: string}
+paths:
+  /olts/{olt_id}/profiles/{native_key}/snapshot:
+    get:
+      operationId: readNativeProfileSnapshot
+      summary: Read profile snapshot (read-only; sanitized)
+      parameters: [{$ref: '#/components/parameters/OltId'}, {$ref: '#/components/parameters/NativeKey'}]
+      responses:
+        '200':
+          description: Immutable observation
+          content: {application/json: {schema: {$ref: '#/components/schemas/ProfileSnapshot'}}}
+  /profile-studio/expert/imports:
+    post:
+      operationId: importProfileReference
+      summary: Import OLT snapshot as immutable reference (does not write OLT)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ImportRequest'}}}
+      responses: {'201': {description: Imported immutable snapshot}, '403': {description: Not authorized}}
+  /profile-studio/expert/drafts:
+    post:
+      operationId: cloneExpertDraft
+      summary: Clone from immutable reference or template version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_kind, source_id, reason]
+              additionalProperties: false
+              properties:
+                source_kind: {type: string, enum: [olt_snapshot, catalog_revision]}
+                source_id: {type: string}
+                reason: {type: string, minLength: 5}
+      responses:
+        '201':
+          description: New draft, ETag returned in response header
+          headers: {ETag: {schema: {type: string}}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Draft'}}}
+  /profile-studio/expert/drafts/{draft_id}:
+    get:
+      operationId: getExpertDraft
+      parameters: [{$ref: '#/components/parameters/DraftId'}]
+      responses: {'200': {description: Current draft}}
+    patch:
+      operationId: updateExpertDraft
+      summary: Typed field patch with If-Match optimistic locking; never CLI
+      parameters:
+        - $ref: '#/components/parameters/DraftId'
+        - name: If-Match
+          in: header
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [desired, reason]
+              additionalProperties: false
+              properties:
+                desired: {type: object, description: Validated against expert-profile-draft schema and vendor-specific schemas}
+                reason: {type: string, minLength: 5}
+      responses: {'200': {description: Updated draft}, '409': {description: Version conflict}, '422': {description: Unsupported field}}
+  /profile-studio/expert/drafts/{draft_id}/compare:
+    post:
+      operationId: compareExpertDraft
+      summary: Semantic comparison against OLT snapshot or catalog revision (no writes)
+      parameters: [{$ref: '#/components/parameters/DraftId'}]
+      responses:
+        '200':
+          description: Semantic difference
+          content: {application/json: {schema: {$ref: '#/components/schemas/Comparison'}}}
+  /profile-studio/expert/drafts/{draft_id}/preview:
+    post:
+      operationId: previewExpertByOlt
+      summary: Per-OLT reuse, binding, clone, migration preview (zero writes)
+      parameters: [{$ref: '#/components/parameters/DraftId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [olt_ids]
+              properties:
+                olt_ids: {type: array, minItems: 1, uniqueItems: true, items: {type: string}}
+      responses:
+        '200':
+          description: Per-target preview
+          content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/PreviewTarget'}}}}
+  /profile-studio/expert/drafts/{draft_id}/publish-request:
+    post:
+      operationId: requestPublishExpertProfile
+      summary: Submit immutable draft revision to the existing publication/approval workflow; no OLT writes
+      parameters: [{$ref: '#/components/parameters/DraftId'}]
+      responses: {'202': {description: Publication review requested, not device execution}}

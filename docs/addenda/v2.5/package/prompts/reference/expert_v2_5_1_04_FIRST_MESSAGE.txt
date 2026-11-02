@@ -1,0 +1,5 @@
+FIBERCORE AI — ADENDO v2.5.1 PROFILE EXPERT EDITOR
+
+Disponibilizei a pasta `FiberCore_AI_Adendo_v2_5_1_Profile_Expert_Editor` no workspace. Leia `README_START_HERE.md` e execute `prompts/01_CLAUDE_CODE_EXPERT.md`.
+
+Adicione ao Profile Studio v2.5 um modo avançado N3 para importar profiles já existentes nas OLTs, comparar com templates FiberCore, editar parâmetros homologados em formulários estruturados, clonar versões e simular aplicação por OLT. Preserve todos os módulos, sprints, HubSoft-first e segurança. Não implemente execução de CLI livre nem alteração in-place de profiles compartilhados. Primeiro realize GAP/ADR/backlog, depois read-only + diff + mock + testes e ajuda. Submeta Codex e Lovable.
