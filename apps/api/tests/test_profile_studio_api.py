@@ -44,6 +44,13 @@ def _certify(migrated, tenant, firmware=FW):
                        "VALUES (:t,:v,:m,:f,'olt','olt_profile_read','supported','observed',now(),'synthetic test evidence')"), {"t": tenant, "v": VENDOR, "m": MODEL, "f": firmware})
 
 
+def _trust(migrated, *snapshot_ids):
+    """Stand-in for the supervised Edge reader (not delivered yet): the ONLY way a snapshot becomes authoritative is a read by the certified reader, never an import."""
+    with migrated.begin() as c:
+        for i in snapshot_ids:
+            c.execute(text("UPDATE olt_profile_snapshots SET source = 'edge_read' WHERE id = :i"), {"i": i})
+
+
 def _olt(client, inv, h, name, key="a1", **kw):
     r = client.post("/v1/edge/olt-snapshots", headers=agent(client, inv, key), json=snap(inv, key, name=name, **kw))
     assert r.status_code == 202, r.text
@@ -196,7 +203,10 @@ def test_compare_is_semantic_and_never_calls_an_unproven_profile_equivalent(clie
     assert set(c["diff"].values()) == {"UNSUPPORTED"}                                         # every typed field is beyond what a non-certified driver may claim
     _certify(migrated, seed["A"])
     c = cmp_(s["id"])
-    assert c["blockers"] == [] and c["equivalent"] is True and set(c["diff"].values()) == {"EQUAL"}
+    assert c["blockers"] == ["snapshot_not_authoritative"] and c["equivalent"] is False and set(c["diff"].values()) == {"EQUAL"}   # a manual import proves nothing
+    _trust(migrated, s["id"])
+    c = cmp_(s["id"])
+    assert c["blockers"] == [] and c["equivalent"] is True and set(c["diff"].values()) == {"EQUAL"} and client.get(f"/v1/profile-snapshots/{s['id']}", headers=h).json()["authoritative"]
     partial = _import(client, h, olt, key="gpon-line-profile/9", completeness="partial", unknown_fields=["multicast"],
                       settings={k: v for k, v in PROFILE.items() if k != "multicast"}).json()
     c2 = cmp_(partial["id"])
@@ -217,6 +227,7 @@ def test_dry_run_is_per_olt_independent_reproducible_and_writes_nothing(client, 
     a, b = _olt(client, inv, h, "OLT-PS-A"), _olt(client, inv, h, "OLT-PS-B")
     c = _olt(client, inv, h, "OLT-PS-C", firmware="R019")                                  # another firmware: out of the draft's scope
     src = _import(client, h, a).json()
+    _trust(migrated, src["id"])
     assert _import(client, h, b, key="local-77", settings={**PROFILE, "customer_vlan": 999}).status_code == 201   # B has only a DIFFERENT profile
     d = _draft(client, h, src["id"], target_olt_ids=[a, b, c]).json()
     with migrated.begin() as cn:
@@ -265,12 +276,37 @@ def test_a_stale_or_changed_source_never_reuses(client, seed, inv, migrated):
     h = hdr(client, "alice", seed, "A")
     a = _olt(client, inv, h, "OLT-PS-S")
     first = _import(client, h, a).json()
+    _trust(migrated, first["id"])
     d = _draft(client, h, first["id"], target_olt_ids=[a]).json()
     # the OLT's profile CHANGED after the draft was cloned from it (same native key, newer snapshot with another content)
-    assert _import(client, h, a, settings={**PROFILE, "customer_vlan": 400}).status_code == 201
+    newer = _import(client, h, a, settings={**PROFILE, "customer_vlan": 400})
+    assert newer.status_code == 201
+    _trust(migrated, newer.json()["id"])
     plan = client.post(f"/v1/profile-drafts/{d['id']}/dry-run", headers=h, json={"requested": "reuse_exact"}).json()["plans"][0]
-    assert plan["strategy"] == "blocked" and plan["reason"] in ("source_changed", "not_equivalent")
+    assert plan["strategy"] == "blocked" and plan["reason"] == "source_changed"
     auto = client.post(f"/v1/profile-drafts/{d['id']}/dry-run", headers=h, json={}).json()["plans"][0]
     assert auto["strategy"] in ("clone_new_revision", "blocked") and auto["strategy"] != "reuse_exact"
     mig = client.post(f"/v1/profile-drafts/{d['id']}/dry-run", headers=h, json={"requested": "plan_migration"}).json()["plans"][0]
     assert mig["strategy"] in ("plan_migration", "blocked")                                  # never executed: this API has no execution at all
+
+
+def test_a_manual_import_is_never_a_basis_to_reuse_and_an_old_certification_stops_counting(client, seed, inv, migrated):
+    _on(migrated, seed["A"])
+    _certify(migrated, seed["A"])
+    h = hdr(client, "alice", seed, "A")
+    a = _olt(client, inv, h, "OLT-PS-M")
+    src = _import(client, h, a).json()                                                      # a perfectly equal, fresh, complete MANUAL import
+    d = _draft(client, h, src["id"], target_olt_ids=[a]).json()
+    path = f"/v1/profile-drafts/{d['id']}/dry-run"
+    reuse = client.post(path, headers=h, json={"requested": "reuse_exact"}).json()["plans"][0]
+    assert reuse["strategy"] == "blocked" and reuse["reason"] == "snapshot_not_authoritative"
+    for req in ("adopt_reference", "plan_migration"):
+        assert client.post(path, headers=h, json={"requested": req}).json()["plans"][0]["reason"] == "snapshot_not_authoritative"
+    assert client.post(path, headers=h, json={}).json()["plans"][0]["strategy"] == "clone_new_revision"   # a clone is still possible: it writes nothing and needs no proof
+    _trust(migrated, src["id"])
+    assert client.post(path, headers=h, json={"requested": "reuse_exact"}).json()["plans"][0]["strategy"] == "reuse_exact"
+    with migrated.begin() as c:                                                             # the certification was verified 91 days ago: it must be verified again
+        c.execute(text("UPDATE device_capabilities SET verified_at = now() - interval '91 days' WHERE operation = 'olt_profile_read'"))
+    assert client.get(f"/v1/olts/{a}/profiles", headers=h).json()["driver_read_certified"] is False
+    old = client.post(path, headers=h, json={"requested": "reuse_exact"}).json()["plans"][0]
+    assert old["strategy"] == "blocked" and old["reason"] in ("invalid_draft", "read_not_certified")

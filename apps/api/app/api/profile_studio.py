@@ -24,6 +24,7 @@ from app.core import profile_studio as ps
 
 router = APIRouter()
 
+CERTIFICATION_VALID_FOR = timedelta(days=90)   # a driver-read certification older than this is not enough: it must be verified again
 PROFILE_FRESH_FOR = timedelta(hours=6)    # a profile snapshot older than this is `stale` (profiles change rarely; the window is long on purpose, the rule is still fail closed)
 MAX_FUTURE_SKEW = timedelta(minutes=5)
 MAX_TARGETS = 32
@@ -58,7 +59,7 @@ def _snapshot_view(r, now: datetime, include_evidence: bool = False) -> dict:
         "id": str(r.id), "olt_id": str(r.olt_id), "native_type": r.native_type, "native_key": r.native_key, "technology": r.technology, "vendor": r.vendor,
         "model": r.model, "firmware": r.firmware, "pon_card": r.pon_card, "observed_at": r.observed_at.isoformat(), "freshness": _freshness(r.observed_at, r.freshness, now),
         "completeness": r.completeness, "reference_count": r.reference_count, "fingerprint": r.fingerprint, "settings": r.settings,
-        "unknown_fields": list(r.unknown_fields), "source": r.source, "created_at": r.created_at.isoformat(),
+        "unknown_fields": list(r.unknown_fields), "source": r.source, "authoritative": r.source == "edge_read", "created_at": r.created_at.isoformat(),
     }
     if include_evidence:
         out["evidence"] = r.evidence   # already sanitised and HTML-escaped at import; shown as TEXT only
@@ -92,10 +93,11 @@ def _read_certified(conn: Connection, tenant_id: UUID, olt) -> bool:
     if not (olt.vendor and olt.model and olt.firmware):
         return False
     row = conn.execute(
-        text("SELECT status, certification FROM device_capabilities WHERE tenant_id = :t AND lower(vendor) = lower(:v) AND lower(model) = lower(:m) AND firmware = :f "
+        text("SELECT status, certification, verified_at FROM device_capabilities WHERE tenant_id = :t AND lower(vendor) = lower(:v) AND lower(model) = lower(:m) AND firmware = :f "
              "AND protocol = :p AND operation = :o"),
         {"t": tenant_id, "v": olt.vendor.strip(), "m": olt.model.strip(), "f": olt.firmware.strip(), "p": ps.PROFILE_READ[1], "o": ps.PROFILE_READ[0]}).first()
-    return bool(row and row.status == "supported" and row.certification in ("observed", "certified"))
+    return bool(row and row.status == "supported" and row.certification in ("observed", "certified") and row.verified_at is not None
+                and datetime.now(UTC) - row.verified_at <= CERTIFICATION_VALID_FOR)
 
 
 # ---- import -------------------------------------------------------------------------------------------------------------------------------
@@ -312,7 +314,7 @@ def _observation(conn: Connection, r, now: datetime) -> ps.Observation:
     return ps.Observation(
         tenant_id=str(r.tenant_id), olt_id=str(r.olt_id), native_key=r.native_key, vendor=r.vendor, model=r.model, firmware=r.firmware, pon_card=r.pon_card,
         freshness=_freshness(r.observed_at, r.freshness, now), completeness=r.completeness, fingerprint=r.fingerprint, reference_count=r.reference_count,
-        settings=r.settings, unknown_fields=frozenset(r.unknown_fields))
+        settings=r.settings, unknown_fields=frozenset(r.unknown_fields), authoritative=r.source == "edge_read")
 
 
 class CompareIn(BaseModel):
@@ -341,6 +343,8 @@ def compare(draft_id: UUID, body: CompareIn, p: Principal = Depends(require("pro
     blockers = []
     if not certified:
         blockers.append("read_not_certified")
+    if not obs.authoritative:
+        blockers.append("snapshot_not_authoritative")
     if obs.freshness != "fresh":
         blockers.append("stale_or_unknown_snapshot")
     if obs.completeness != "complete":
@@ -385,7 +389,7 @@ def _targets_for(conn: Connection, p: Principal, d, olt_ids: list[UUID], now: da
         for c in cands:
             ob = _observation(conn, c, now)
             diff = ps.semantic_diff(ob, d.desired, supported=supported)
-            if set(diff.values()) == {ps.EQUAL} and ob.freshness == "fresh" and ob.completeness == "complete":
+            if set(diff.values()) == {ps.EQUAL} and ob.freshness == "fresh" and ob.completeness == "complete" and ob.authoritative:
                 best = c
                 break
             distance = sum(1 for v in diff.values() if v != ps.EQUAL)
