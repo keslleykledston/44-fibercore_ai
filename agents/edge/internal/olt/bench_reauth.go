@@ -346,7 +346,9 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 		res.Sent, res.Detail = sent, detail
 		if sent {
 			// the job's context may be the very thing that failed (timeout, shutdown): the way back runs on its OWN bounded context, never on a cancelled one
-			rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), wait+2*time.Minute)
+			// budget: the wait for the ONU to come back, plus up to ~14 sequential CLI commands (mode changes, reads, add, service port, final comparison) at the session's 30 s
+			// per-command ceiling (~7 min), plus a margin; the maneuver's own ceiling (main.go) is shorter than this on purpose: an unfinished restore is worth waiting for
+			rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), wait+10*time.Minute)
 			defer cancel()
 			rc = rctx
 			if rerr := restore(); rerr != nil {
