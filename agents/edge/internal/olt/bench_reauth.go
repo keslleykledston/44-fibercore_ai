@@ -285,7 +285,10 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 			}
 			i, perr := ParseONTInfo(o)
 			if perr == nil {
-				return i.SN == onu.GPONSerial && i.FSP == onu.fsp() && i.OntID == onu.OntID, nil
+				if i.SN == onu.GPONSerial && i.FSP == onu.fsp() && i.OntID == onu.OntID {
+					return true, nil
+				}
+				return false, fmt.Errorf("%w: the answer by serial names another ONU or position", ErrReauthBaseline) // readable but inconsistent: never read as "absent"
 			}
 			// the ONU could not be read: that is NOT proof it is gone (a transient error looks the same). Absence is only ever concluded from POSITIVE evidence: the serial is
 			// waiting in the autofind list. Anything else is an unknown state: no `ont add` is sent, the restore stops and the operator is told.

@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19d3e-fb2a-7790-a747-dcef47332a18).
+[codex] Turn started (01a19d3e-fb64-7872-8a74-c8b288951821).
+[codex] Assistant message captured: Vou revisar o diff completo contra `main`, com foco no fluxo de restore/autofind e nos casos ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- agents/edge/internal/olt/be...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- agents/edge/internal/olt/be... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=25 main...HEAD -- agents/edge/internal/olt/be...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=25 main...HEAD -- agents/edge/internal/olt/be... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/bench_reauth.go | sed -n '235,330p'; rg -n \"f...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/bench_reauth.go | sed -n '235,330p'; rg -n \"f... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar: uma resposta legível de `display ont inf...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar: uma resposta legível de `display ont info by-sn` com identidade divergente ainda é tratada como ONU ausente e pode disparar `ont add` sem evidência no autofind.
+
+Findings:
+- [high] Identidade divergente contorna a exigência de autofind antes do `ont add` (agents/edge/internal/olt/bench_reauth.go:286-288)
+  `present()` retorna `false, nil` quando `ParseONTInfo` funciona, mas o serial, posição ou ONT ID diverge. O chamador interpreta qualquer `false` sem erro como ausência e envia `ont add` nas linhas 311–315, sem consultar autofind. Se a resposta por serial vier legível porém inconsistente — por exemplo, resposta cruzada ou estado inesperado da OLT — o restore pode tentar criar a ONU apesar de não ter confirmado sua ausência. Trate identidade divergente como estado desconhecido/erro; reserve `false, nil` apenas para o caso em que o autofind confirma o serial.
+  Recommendation: Separar presença correta, identidade divergente e resposta ilegível. Para identidade divergente, abortar restore com erro manual; permitir `ont add` apenas após confirmação explícita do serial no autofind.

@@ -27,6 +27,7 @@ type fakeAuthOLT struct {
 	onAddSP                       func()
 	onUndo                        func()
 	offlineReads                  int
+	otherSN                       bool
 }
 
 func newAuth() *fakeAuthOLT {
@@ -39,7 +40,11 @@ func (f *fakeAuthOLT) info() string {
 		f.offlineReads--
 		run = "offline"
 	}
-	return fmt.Sprintf("  -----------------------------\n  F/S/P                   : 0/0/14\n  ONT-ID                  : 10\n  Control flag            : active\n  Run state               : %s\n  Config state            : normal\n  Match state             : match\n  SN                      : 48575443E2247AA5\n  Description             : %s\n  Last up time            : %s\n  Line profile ID         : %d\n  Service profile ID      : %d\n", run, f.desc, f.lastUp, f.line, f.srv)
+	sn := "48575443E2247AA5"
+	if f.otherSN {
+		sn = "48575443BBBBBBBB"
+	}
+	return fmt.Sprintf("  -----------------------------\n  F/S/P                   : 0/0/14\n  ONT-ID                  : 10\n  Control flag            : active\n  Run state               : %s\n  Config state            : normal\n  Match state             : match\n  SN                      : %s\n  Description             : %s\n  Last up time            : %s\n  Line profile ID         : %d\n  Service profile ID      : %d\n", run, sn, f.desc, f.lastUp, f.line, f.srv)
 }
 
 func (f *fakeAuthOLT) Run(ctx context.Context, cmd string) (string, error) {
@@ -57,7 +62,7 @@ func (f *fakeAuthOLT) Run(ctx context.Context, cmd string) (string, error) {
 		if f.onInfo != nil {
 			f.onInfo()
 		}
-		if !f.ontPresent {
+		if !f.ontPresent && !f.otherSN {
 			return "  Failure: The ONT does not exist\n", nil
 		}
 		return f.info(), nil
@@ -333,5 +338,23 @@ func TestReauthorizeRestoreWaitsForAPresentONUThatIsStillInitializing(t *testing
 	}
 	if !f.ontPresent || !f.spPresent {
 		t.Fatalf("state ont=%v sp=%v", f.ontPresent, f.spPresent)
+	}
+}
+
+func TestReauthorizeRestoreNeverAddsWhenTheAnswerBySerialNamesAnotherONU(t *testing.T) {
+	// a readable but inconsistent answer (another serial at the position) is an unknown state, not an absent ONU (Codex r9): no ont add
+	f := newAuth()
+	f.addFailsOnce = true
+	f.onInfo = func() {
+		if len(f.mutating()) > 0 {
+			f.otherSN = true
+		}
+	}
+	out, err := runAuth(f, spec14, nil, far())
+	if err == nil || !out.Sent || out.Done || !strings.Contains(err.Error(), "restore it by hand") {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+	if f.addCount > 1 {
+		t.Fatalf("the restore must not send another ont add: %d", f.addCount)
 	}
 }
