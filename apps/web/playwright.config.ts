@@ -16,7 +16,7 @@ export default defineConfig({
   },
   // Capturas primeiro (estado do seed intacto), depois os testes funcionais que mutam dados.
   projects: [
-    { name: "puros", testMatch: /(optics|optics-contrast|optics-colormix|quality-source)\.spec\.ts/, use: { browserName: "chromium" } },   // funções puras: sem navegador nem API
+    { name: "puros", testMatch: /(optics|optics-contrast|optics-colormix|quality-source|olt-panel-pure)\.spec\.ts/, use: { browserName: "chromium" } },   // funções puras: sem navegador nem API
     { name: "capturas", testMatch: /help-(screenshots|speed|quality)\.spec\.ts/, use: { browserName: "chromium" } },
     { name: "funcional", testMatch: /app\.spec\.ts/, dependencies: ["capturas"], use: { browserName: "chromium" } },
     // Por último: reconhecer o incidente demo muda o estado que os testes acima assumem (não reconhecido).
@@ -31,6 +31,7 @@ export default defineConfig({
     { name: "pendentes", testMatch: /pendentes\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
     // Recuo com a flag `onu_discovery` DESLIGADA: PENDENTES_FLAG_OFF=1 npx playwright test --project=recuo-pendentes
     { name: "recuo-pendentes", testMatch: /pendentes-flag\.spec\.ts/, use: { browserName: "chromium" } },
+    { name: "painel", testMatch: /olt-painel\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
     { name: "aparelho", testMatch: /ont-sidebar\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
     { name: "consultas", testMatch: /olt-queries\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
   ],

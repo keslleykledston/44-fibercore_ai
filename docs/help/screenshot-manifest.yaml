@@ -169,6 +169,14 @@ articles:
   - assets/rede/perfis-olt/rascunho/mobile.png
   e2e_test: help-screenshots.spec.ts › rede/perfis-olt; fluxo em perfis.spec.ts (perfis)
   last_verified: '2026-11-02'
+- slug: rede/painel-da-olt
+  ui_route: /rede
+  status: published
+  images:
+  - assets/rede/painel-da-olt/desktop.png
+  - assets/rede/painel-da-olt/mobile.png
+  e2e_test: help-screenshots.spec.ts › rede/painel-da-olt; fluxo em olt-painel.spec.ts (painel)
+  last_verified: '2026-11-02'
 - slug: rede/onus-pendentes
   ui_route: /rede/pendentes
   status: published

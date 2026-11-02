@@ -187,3 +187,17 @@ def test_a_value_of_a_previous_ownership_generation_is_not_served_after_a_transf
         c.execute(text("UPDATE olts SET owner_epoch = owner_epoch + 1 WHERE id = :o"), {"o": olt})      # the OLT changed owner
     assert client.get(f"/v1/olts/{olt}/queries/olt.version/latest", headers=h).json()["detail"] == "no_cached_value"
     assert _ask(client, h, olt, "olt.version").json()["outcome"] == "submitted"      # asked again, to the new owner
+
+
+def test_a_demo_board_inventory_can_be_stored_as_mock_and_the_screens_can_tell(client, seed, inv, olt, on, migrated):
+    """Migration 0043: `mock` is a legal source (written only by the owner CLI for OLT-DEMO*); the API reports it so a screen can label it a demonstration."""
+    from app.core.db import get_engine, scoped_connection
+    h = hdr(client, "alice", seed, "A")
+    with scoped_connection(get_engine(), tenant_id=seed["A"]) as c:
+        epoch = c.execute(text("SELECT owner_epoch FROM olts WHERE id = :i"), {"i": olt}).scalar()
+        assert olt_cache.store_latest(c, seed["A"], UUID(str(olt)), "olt.board", "", BOARD, epoch, datetime.now(UTC), source="mock")
+    got = client.get(f"/v1/olts/{olt}/queries/olt.board/latest", headers=h).json()
+    assert got["source"] == "mock" and got["data"] == BOARD
+    with pytest.raises(Exception):  # noqa: B017, PT011 - a source outside the list is still refused by the database
+        with scoped_connection(get_engine(), tenant_id=seed["A"]) as c:
+            olt_cache.store_latest(c, seed["A"], UUID(str(olt)), "olt.board", "", BOARD, epoch, datetime.now(UTC), source="invented")

@@ -83,6 +83,8 @@ def main(argv: list[str] | None = None) -> None:
     fs.add_argument("tenant_id"); fs.add_argument("feature"); fs.add_argument("state", choices=["on", "off", "default"])
     oc = sub.add_parser("ont-config-mock", help="ADR-0034: write a SYNTHETIC configuration profile for a CPE (source 'mock', labelled synthetic; lab/demo only; owner-only)")
     oc.add_argument("tenant_id"); oc.add_argument("cpe_id"); oc.add_argument("profile", help="dualband | multi_ssid | no_wifi | inactive_5g | clear")
+    ob = sub.add_parser("olt-board-mock", help="SYNTHETIC board inventory (`olt.board`, source 'mock') for a DEMO OLT so the front-panel screen can be shown without equipment (demo/e2e only: refuses any OLT whose name does not start with OLT-DEMO; owner-only)")
+    ob.add_argument("tenant_id"); ob.add_argument("olt_name"); ob.add_argument("--slots", default="0:H805GPFD,1:H805GPFD", help="service boards as slot:MODEL,... (the control and power boards are added)")
     se = sub.add_parser("speed-endpoint-set", help="ADR-0038: create/update a LOGICAL speed-test endpoint (id, label, CORE|INTERNET, region, enabled). No URL: the Edge holds the address (owner-only)")
     se.add_argument("tenant_id"); se.add_argument("endpoint_id"); se.add_argument("label")
     se.add_argument("kind", choices=["CORE", "INTERNET"]); se.add_argument("region"); se.add_argument("state", choices=["on", "off"])
@@ -462,6 +464,30 @@ def main(argv: list[str] | None = None) -> None:
                            "VALUES (:t,'olt',:o,'olt.transfer_finished','1',CAST(:p AS jsonb))"),
                       {"t": a.tenant_id, "o": a.olt_id, "p": json.dumps({"owner_epoch": ep})})
             print(f"transfer finished: owner_epoch {ep}")
+        elif a.cmd == "olt-board-mock":
+            import re as _re
+            from datetime import UTC, datetime
+
+            from app.core import olt_cache, olt_query
+            if not a.olt_name.startswith("OLT-DEMO"):
+                sys.exit("refused: the board mock is for DEMO OLTs only (name starting with OLT-DEMO); a real OLT's inventory comes from the Edge's read")
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            row = c.execute(text("SELECT id, owner_epoch FROM olts WHERE tenant_id = :t AND name = :n"), {"t": a.tenant_id, "n": a.olt_name}).first()
+            if row is None:
+                sys.exit("olt not found for this tenant")
+            boards, taken = [], set()
+            for part in [x for x in a.slots.split(",") if x]:
+                m = _re.fullmatch(r"([0-5]):([A-Z0-9]{3,20})", part)
+                if not m:
+                    sys.exit("--slots must look like 0:H805GPFD,1:H805GPFD")
+                boards.append({"slot": int(m.group(1)), "name": m.group(2), "status": "Normal"})
+                taken.add(int(m.group(1)))
+            boards += [{"slot": 2, "name": "H801MCUD1", "status": "Active_normal"}, {"slot": 4, "name": "H801MPWE", "status": "Normal"}, {"slot": 5, "name": "H801MPWE", "status": "Normal"}]
+            data = {"boards": sorted(boards, key=lambda b: b["slot"]), "empty_slots": [s for s in (0, 1) if s not in taken] + [3]}
+            if not olt_query.check_result("olt.board", data):
+                sys.exit("the synthetic board inventory does not fit the typed shape")
+            olt_cache.store_latest(c, a.tenant_id, row.id, "olt.board", "", data, row.owner_epoch, datetime.now(UTC), source="mock")
+            print(f"synthetic board inventory stored for {a.olt_name}: slots {sorted(taken)}")
         elif a.cmd == "ont-config-mock":
             from app.core import ont_config_mock
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})

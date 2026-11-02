@@ -85,6 +85,18 @@ def main() -> None:
             "driver_level": "identified", "pons": [{"pon_path": "0/2/0", "status": "up", "complete": True}],
             "onus": [{"serial": serial, "pon_path": "0/2/0", "status": "online", "rx_dbm": -18.75}]})
         assert r.status_code == 202, r.text
+    # Painel frontal da MA5608T (pacote SVG v1.0): uma OLT de DEMONSTRAÇÃO com cartões nos slots 0 e 1. Antes todas online; depois algumas fora. `complete` falso: amostra
+    # parcial, que não abre nem fecha incidente (o incidente do demo é o da PON 0/1/1 da OLT-DEMO-01).
+    def pon_onus(prefix: str, pon: str, up: int, down: int):
+        return onus(f"{prefix}U", up, "online", pon, -21.0) + onus(f"{prefix}D", down, "offline", pon, None)
+    panel_now = pon_onus("DPA", "0/0/0", 12, 0) + pon_onus("DPB", "0/0/1", 9, 3) + pon_onus("DPC", "0/0/2", 0, 4) + pon_onus("DPD", "0/1/0", 6, 0)
+    for when, payload in ((datetime.now(UTC) - timedelta(minutes=10), [{**o, "status": "online", "rx_dbm": -22.0} for o in panel_now]), (datetime.now(UTC), panel_now)):
+        r = c.post("/v1/edge/olt-snapshots", headers=h, json={
+            "edge_id": edge, "observed_at": when.isoformat(), "name": "OLT-DEMO-PAINEL", "vendor": "huawei", "model": "MA5608T", "firmware": "MA5600V800R015C00",
+            "driver_level": "identified", "pons": [{"pon_path": p, "status": "up", "complete": False} for p in sorted({o["pon_path"] for o in panel_now})], "onus": payload})
+        assert r.status_code == 202, r.text
+    cli("feature-set", tenant, "olt_query", "on")   # a tela lê o inventário de placas do cache (somente leitura)
+    cli("olt-board-mock", tenant, "OLT-DEMO-PAINEL")   # inventário SINTÉTICO (fonte 'mock'): dois cartões H805GPFD nos slots 0 e 1
     cli("feature-set", tenant, "onu_quick_inspector", "on")
     cli("feature-set", tenant, "onu_discovery", "on")   # v2.5: fila de ONUs aguardando autorização (somente leitura)
     cli("feature-set", tenant, "profile_studio", "on")   # ADR-0040: Profile Studio (somente leitura/rascunho/simulação)
