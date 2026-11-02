@@ -139,7 +139,13 @@ def r_d003_v1(i: dict) -> RuleResult:
     if i["heartbeat_age_seconds"] is None:
         return done("unknown", "this Edge never sent a heartbeat: nothing is known about its collection")
     if not i["silent"]:
-        return done("observed", "the Edge is reporting: its ONU data is as current as its last collection")
+        # a heartbeat proves the Edge process is alive, NOT that its OLT readings are current: say only what the counts show
+        if int(i["onus_total"]) == 0:
+            return done("observed", "the Edge is reporting (recent heartbeat); no ONU is known for its OLTs, so nothing is said about their data")
+        if int(i["onus_not_fresh"]) > 0:
+            return done("observed", f"the Edge is reporting (recent heartbeat), but {int(i['onus_not_fresh'])} of {int(i['onus_total'])} "
+                                    "ONU readings are old: read them as old data, not as outages")
+        return done("observed", "the Edge is reporting (recent heartbeat) and every known ONU reading is recent")
     f = {"status": "inferred", "hypothesis": "collection from this Edge stopped: its ONU data is old and is not evidence of ONU outages",
          "suspected_cause": "edge_unreachable", "evidence": evidence, "requires_human_confirmation": True,
          "next_read_action": "check the Edge host and its link to the cloud; do not treat the ONUs of its OLTs as offline from here"}

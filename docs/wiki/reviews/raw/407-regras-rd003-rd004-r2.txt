@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19a98-90ce-7483-9e3b-f85e95cd1491).
+[codex] Turn started (01a19a98-944b-7a91-ab0e-f893af97b4e1).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir o caminho do dado do ACS até o banco e as regra...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/app/api/inventory....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/app/api/inventory.... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"def _check_observed|last_inform_at|GRANT.*cpes|cpes.*GRANT|ALTER TABLE...
+[codex] Command completed: /bin/bash -lc "rg -n \"def _check_observed|last_inform_at|GRANT.*cpes|cpes.*GRANT|ALTER TABLE... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"LastInform|lastInform|_lastInform\" agents/edge/internal/nbi agents/ed...
+[codex] Command completed: /bin/bash -lc "rg -n \"LastInform|lastInform|_lastInform\" agents/edge/internal/nbi agents/ed... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: R-D003 pode marcar como observado d...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: R-D003 pode marcar como observado dado de ONU sem evidência de coleta recente; seu veredito usa o heartbeat do Edge e ignora a contagem de ONUs desatualizadas que já registra.
+
+Findings:
+- [medium] R-D003 trata heartbeat recente como prova de dados de ONU atuais (apps/api/app/core/diagnostics.py:138-139)
+  Quando o Edge enviou heartbeat dentro de `EDGE_OFFLINE_AFTER`, a regra retorna `observed` e afirma que os dados de ONU estão tão atuais quanto a última coleta, mas não verifica `onus_not_fresh` (nem se houve ONUs/OLTs). Um Edge pode continuar enviando heartbeat enquanto a última leitura das OLTs está velha ou indisponível; nesse caso, o resultado afirma atualidade sem evidência. O endpoint já inclui a contagem de ONUs desatualizadas nas entradas, mas a regra não a usa. Considere retornar `unknown` para atualidade quando não houver ONUs ou quando os dados estiverem velhos, e limitar o resultado observado ao fato de que o Edge está reportando.
+  Recommendation: Separar o estado do heartbeat da atualidade dos dados coletados: só afirmar atualidade se as entradas mostrarem coleta recente; sem ONUs ou com ONUs desatualizadas, devolver `unknown` sobre os dados de ONU.

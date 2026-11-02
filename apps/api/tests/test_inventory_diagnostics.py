@@ -461,6 +461,10 @@ def test_r_d003_only_a_silent_edge_is_a_hypothesis_and_never_a_claim_about_onus(
     assert silent.finding["status"] == "inferred" and silent.finding["requires_human_confirmation"] is True
     assert "not evidence of ONU outages" in silent.finding["hypothesis"]
     assert ev().finding["status"] == "observed" and not ev().matched                       # reporting Edge: nothing to flag
+    assert "every known ONU reading is recent" in ev().finding["reason"]
+    # a heartbeat proves the Edge is alive, not that its OLT readings are current: never claim currency without recent readings
+    assert "old data, not as outages" in ev(onus_not_fresh=3).finding["reason"] and "3 of 10" in ev(onus_not_fresh=3).finding["reason"]
+    assert "current" not in ev(onus_not_fresh=3).finding["reason"] and "nothing is said" in ev(onus_total=0, olts=0).finding["reason"]
     assert ev(heartbeat_age_seconds=None).finding["status"] == "unknown"                   # never sent a heartbeat
     assert ev(heartbeat_age_seconds=900, silent=True, revoked=True).finding["status"] == "unknown"   # revoked: not expected to report
     assert set(silent.finding["evidence"]) == {"heartbeat_age_seconds", "silent", "olts", "onus_total", "onus_not_fresh"}
