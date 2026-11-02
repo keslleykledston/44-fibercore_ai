@@ -172,7 +172,7 @@ func TestParseProfileListsFromTheCaptureLayout(t *testing.T) {
 		var got struct {
 			Profiles []profileRow `json:"profiles"`
 		}
-		if err := json.Unmarshal(raw, &got); err != nil || len(got.Profiles) < 3 || got.Profiles[0].ID != 0 || got.Profiles[1].BindingTimes < 1 {
+		if err := json.Unmarshal(raw, &got); err != nil || len(got.Profiles) < 3 || got.Profiles[0].ID != 0 || got.Profiles[1].BindingTimes < 1 || got.Profiles[0].Name == nil {
 			t.Fatalf("%s: %v %+v", id, err, got)
 		}
 	}
@@ -237,5 +237,51 @@ func TestParseDBAAndTrafficFromTheCaptureLayout(t *testing.T) {
 		if _, err := ParseResult("olt.profile.traffic", out); err == nil {
 			t.Errorf("%s must be refused", name)
 		}
+	}
+}
+
+func TestProfileNamesStayOnTheEdgeUnlessTheOwnerOptsIn(t *testing.T) {
+	b, _ := os.ReadFile(r015Dir + "display_ont_lineprofile_gpon_all.txt")
+	typed, err := ParseResult("olt.profile.line", string(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := func(raw json.RawMessage) (out []*string) {
+		var v struct {
+			Profiles []profileRow `json:"profiles"`
+		}
+		_ = json.Unmarshal(raw, &v)
+		for _, p := range v.Profiles {
+			out = append(out, p.Name)
+		}
+		return
+	}
+	def, err := ScrubProfileNames("olt.profile.line", typed, false)
+	if err != nil || strings.Contains(string(def), "LINHA") {
+		t.Fatalf("default must carry no name: %s %v", def, err)
+	}
+	for _, n := range names(def) {
+		if n != nil {
+			t.Fatal("name must be null by default")
+		}
+	}
+	kept, _ := ScrubProfileNames("olt.profile.line", typed, true)
+	if n := names(kept); n[1] == nil || *n[1] != "LINHA-SINTETICA-A" {
+		t.Fatalf("opt-in keeps the label: %s", kept)
+	}
+	// even opted in, a label with a long run of digits (phone, document, serial) is dropped
+	withNumber := strings.Replace(string(b), "LINHA-SINTETICA-B", "CLIENTE-11999998888", 1)
+	typed2, err := ParseResult("olt.profile.line", withNumber)
+	if err != nil {
+		t.Fatal(err)
+	}
+	k2, _ := ScrubProfileNames("olt.profile.line", typed2, true)
+	if strings.Contains(string(k2), "11999998888") {
+		t.Fatal("a name with 8+ digits must be dropped")
+	}
+	// queries without names pass through untouched
+	same, _ := ScrubProfileNames("olt.profile.dba", json.RawMessage(`{"profiles":[]}`), false)
+	if string(same) != `{"profiles":[]}` {
+		t.Fatal("other queries are not touched")
 	}
 }

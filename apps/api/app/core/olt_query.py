@@ -167,7 +167,7 @@ def check_result(query_id: str, data) -> bool:
             return False
         for x in rows:
             if not (isinstance(x, dict) and set(x) == {"id", "name", "binding_times"} and _is_int(x["id"]) and 0 <= x["id"] <= 99999
-                    and isinstance(x["name"], str) and _PROFILE_NAME.match(x["name"]) and _is_int(x["binding_times"]) and 0 <= x["binding_times"] <= 999999):
+                    and (x["name"] is None or (isinstance(x["name"], str) and _PROFILE_NAME.match(x["name"]))) and _is_int(x["binding_times"]) and 0 <= x["binding_times"] <= 999999):
                 return False
         return len({x["id"] for x in rows}) == len(rows)
     if query_id == "olt.profile.dba":

@@ -275,7 +275,7 @@ func main() {
 				}
 			}
 			oltLease = &jobs.LeaseHolder{Schema: "olt-lease/1", MaxSkew: 45 * time.Second, Pub: pub, EdgeID: cfg.EdgeID, TenantID: cfg.TenantID}
-			oltCol.Queries = &collector.Queries{Store: qs, Run: olt.HuaweiR015{}.RunQueryInConfig, Lease: oltLease}
+			oltCol.Queries = &collector.Queries{Store: qs, Run: olt.HuaweiR015{}.RunQueryInConfig, Lease: oltLease, ProfileNames: cfg.OLTProfileNamesToCloud}
 			items, enabled := map[string][]collector.CaptureItem{}, map[string]bool{}
 			for _, o := range cfg.OLTs {
 				for _, cp := range o.Capture {

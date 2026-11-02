@@ -272,9 +272,9 @@ var (
 )
 
 type profileRow struct {
-	ID           int    `json:"id"`
-	Name         string `json:"name"`
-	BindingTimes int    `json:"binding_times"`
+	ID           int     `json:"id"`
+	Name         *string `json:"name"` // null unless the Edge's owner opted in (ScrubProfileNames): a label is the operator's free text
+	BindingTimes int     `json:"binding_times"`
 }
 
 // parseProfileList: the OLT's own list of ONT line or service profiles (ID, name, how many ONTs use it). It carries no ONT, serial or subscriber text; the name is
@@ -309,7 +309,8 @@ func parseProfileList(out string) (json.RawMessage, error) {
 				return nil, ErrBadOutput
 			}
 			seen[id] = true
-			rows = append(rows, profileRow{ID: id, Name: m[2], BindingTimes: n})
+			name := m[2]
+			rows = append(rows, profileRow{ID: id, Name: &name, BindingTimes: n})
 		}
 	}
 	if !header || total != len(rows) {
@@ -444,4 +445,27 @@ func parseTrafficTables(out string) (json.RawMessage, error) {
 		return nil, ErrBadOutput
 	}
 	return json.Marshal(map[string]any{"tables": rows})
+}
+
+var reLongDigits = regexp.MustCompile(`\d{8,}`)
+
+// ScrubProfileNames is applied to a typed result BEFORE it is stored for the Cloud. A profile name is text the operator chose: nothing in its alphabet stops it from
+// carrying a customer's name, address or a serial, so by default the Cloud gets the profile's number and its rates only (name: null). The Edge's owner can opt in
+// (olt_profile_names_to_cloud); even then a name with a run of 8+ digits (phone, document, serial) is dropped. Other queries pass through untouched.
+func ScrubProfileNames(queryID string, typed json.RawMessage, keepNames bool) (json.RawMessage, error) {
+	if queryID != "olt.profile.line" && queryID != "olt.profile.srv" {
+		return typed, nil
+	}
+	var v struct {
+		Profiles []profileRow `json:"profiles"`
+	}
+	if err := json.Unmarshal(typed, &v); err != nil {
+		return nil, ErrBadOutput
+	}
+	for i := range v.Profiles {
+		if !keepNames || v.Profiles[i].Name == nil || reLongDigits.MatchString(*v.Profiles[i].Name) {
+			v.Profiles[i].Name = nil
+		}
+	}
+	return json.Marshal(map[string]any{"profiles": v.Profiles})
 }

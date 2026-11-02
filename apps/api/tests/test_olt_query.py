@@ -474,6 +474,7 @@ def test_profile_list_result_shape_is_closed():
     ok = {"profiles": [{"id": 0, "name": "LINHA-A", "binding_times": 3}, {"id": 14, "name": "x.y_z-1", "binding_times": 0}]}
     for q in ("olt.profile.line", "olt.profile.srv"):
         assert olt_query.check_result(q, ok) and olt_query.check_result(q, {"profiles": []})
+        assert olt_query.check_result(q, {"profiles": [{"id": 3, "name": None, "binding_times": 1}]})   # the Edge keeps the label by default
         assert not olt_query.check_result(q, {**ok, "raw": "x"})
         assert not olt_query.check_result(q, {"profiles": [{"id": 1, "name": "a b", "binding_times": 1}]})        # no free text
         assert not olt_query.check_result(q, {"profiles": [{"id": 1, "name": "ok", "binding_times": 1, "sn": "x"}]})
