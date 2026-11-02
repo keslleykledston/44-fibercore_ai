@@ -1,0 +1,13 @@
+display service-port port 0/0/14 ont 10
+  { <cr>|e2e<K>|gemport<K>|sort-by<K> }:
+  
+  Command:
+          display service-port port 0/0/14 ont 10 
+  Switch-Oriented Flow List
+  -----------------------------------------------------------------------------
+   INDEX VLAN VLAN     PORT F/ S/ P VPI  VCI   FLOW  FLOW       RX   TX   STATE
+         ID   ATTR     TYPE                    TYPE  PARA
+  -----------------------------------------------------------------------------
+    1234 1400 common   gpon 0/0 /14 10   1     vlan  1400       -    -    up   
+  -----------------------------------------------------------------------------
+   Total : 1  (Up/Down :    1/0)

@@ -129,8 +129,27 @@ func spOK(rows []ServicePort, b BenchONU, r ReauthSpec) bool {
 		rows[0].FlowType == "vlan" && rows[0].FlowPara == strconv.Itoa(r.VLAN) && rows[0].Up
 }
 
+// the OLT indents these fields by two spaces (observed on the real device, H5 first run): the key may be preceded by white space
 var reKV = func(k string) *regexp.Regexp {
-	return regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(k) + `\s*:\s*(.*?)\s*$`)
+	return regexp.MustCompile(`(?m)^[ \t]*` + regexp.QuoteMeta(k) + `[ \t]*:[ \t]*(.*?)[ \t]*$`)
+}
+
+// spDetailWhy names the FIRST field of `display service-port <index>` that differs from the baseline (field NAMES only: never a value from the equipment); "" = all equal.
+func spDetailWhy(out string, b BenchONU, r ReauthSpec) string {
+	get := func(k string) string {
+		if m := reKV(k).FindStringSubmatch(out); m != nil {
+			return m[1]
+		}
+		return "\x00"
+	}
+	for _, c := range []struct{ k, want string }{{"Index", strconv.Itoa(r.ServicePortIndex)}, {"VLAN ID", strconv.Itoa(r.VLAN)}, {"Port type", "gpon"}, {"F/S/P", b.fsp()}, {"ONT ID", strconv.Itoa(b.OntID)},
+		{"GEM port index", strconv.Itoa(r.Gem)}, {"Flow type", "vlan"}, {"Flow para", strconv.Itoa(r.VLAN)}, {"Inbound table name", "-"}, {"Outbound table name", "-"},
+		{"Admin status", "enable"}, {"State", "up"}, {"Tag transform", "translate"}} {
+		if get(c.k) != c.want {
+			return c.k
+		}
+	}
+	return ""
 }
 
 // spDetailOK checks `display service-port <index>`: tag transform `translate`, no traffic tables, enabled and up, on this ONU's position.
@@ -144,6 +163,23 @@ func spDetailOK(out string, b BenchONU, r ReauthSpec) bool {
 	return get("Index") == strconv.Itoa(r.ServicePortIndex) && get("VLAN ID") == strconv.Itoa(r.VLAN) && get("Port type") == "gpon" && get("F/S/P") == b.fsp() &&
 		get("ONT ID") == strconv.Itoa(b.OntID) && get("GEM port index") == strconv.Itoa(r.Gem) && get("Flow type") == "vlan" && get("Flow para") == strconv.Itoa(r.VLAN) &&
 		get("Inbound table name") == "-" && get("Outbound table name") == "-" && get("Admin status") == "enable" && get("State") == "up" && get("Tag transform") == "translate"
+}
+
+// whyONU names which part of the ONU's baseline differs (names only, never values).
+func whyONU(onu BenchONU, spec ReauthSpec, i ONTInfo, p ONTProfiles, lastUp string) string {
+	switch {
+	case !onu.identityOK(i):
+		return "identity or state"
+	case p.Line != spec.LineProfileID:
+		return "line profile"
+	case p.Srv != spec.SrvProfileID:
+		return "service profile"
+	case p.Description != spec.Description:
+		return "description"
+	case i.LastUp != lastUp:
+		return "last up time moved between reads"
+	}
+	return "unknown"
 }
 
 // RunBenchReauthorize runs the H5 cycle over an already open CLI session. Order: baseline reads (nothing changes) -> beforeSend -> undo service-port -> ont delete ->
@@ -236,16 +272,25 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 		return ManeuverOutcome{}, ErrBenchOLTIdentity
 	}
 	rows, err := readSP()
-	if err != nil || !spOK(rows, onu, spec) {
-		return ManeuverOutcome{}, ErrReauthBaseline
+	if err != nil {
+		return ManeuverOutcome{}, fmt.Errorf("%w: service-port list unreadable (%v)", ErrReauthBaseline, err)
+	}
+	if !spOK(rows, onu, spec) {
+		return ManeuverOutcome{}, fmt.Errorf("%w: service-port list (rows=%d)", ErrReauthBaseline, len(rows))
 	}
 	det, err := step(c.DetailSP)
-	if err != nil || !spDetailOK(det, onu, spec) {
-		return ManeuverOutcome{}, ErrReauthBaseline
+	if err != nil {
+		return ManeuverOutcome{}, fmt.Errorf("%w: service-port detail unreadable (%v)", ErrReauthBaseline, err)
+	}
+	if w := spDetailWhy(det, onu, spec); w != "" {
+		return ManeuverOutcome{}, fmt.Errorf("%w: service-port detail field %q", ErrReauthBaseline, w)
 	}
 	info, prof, err := readONU()
-	if err != nil || !matches(info, prof) || info.LastUp != before.LastUp {
-		return ManeuverOutcome{}, ErrReauthBaseline
+	if err != nil {
+		return ManeuverOutcome{}, fmt.Errorf("%w: ONU details unreadable (%v)", ErrReauthBaseline, err)
+	}
+	if !matches(info, prof) || info.LastUp != before.LastUp {
+		return ManeuverOutcome{}, fmt.Errorf("%w: ONU %s", ErrReauthBaseline, whyONU(onu, spec, info, prof, before.LastUp))
 	}
 	if !now().Before(notAfter) {
 		return ManeuverOutcome{}, fmt.Errorf("%w: envelope or authorization window over", ErrBenchOLTBefore)
