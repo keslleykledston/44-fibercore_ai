@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — Frota de OLTs: teste de conexão (ADR-0041, PR2 parte B, 2026-11-02)
+- Catálogo (**Edge e nuvem juntos**; catálogo `42142904…`): nova consulta `olt.connection` = a MESMA leitura `display version` já validada, com id próprio, resultado tipado idêntico ao de `olt.version` e TTL de 15 min. O teste NÃO abre canal novo: é um job `olt_query` pelo motor existente (gates, fila, arrendamento do Edge, cache-first).
+- Orçamento aprovado pelo responsável (1 teste por OLT a cada 15 min e 4 por hora), contado nos DOIS lados: nuvem (`olt_connection_tests`, migração **0046**, só SELECT/INSERT para o app, `POST /v1/fleet/olts/{id}/connection-test` → 429 `test_budget` com `Retry-After`, sob trava por OLT) e Edge (`oltquery.Store`: classe própria persistida; um teste fora do orçamento espera sem bloquear o resto da fila nem outras OLTs; arquivo ilegível = orçamento gasto; arquivos antigos sem o histórico continuam carregando). Identidade guardada recente responde sem consultar a OLT e não gasta orçamento.
+- API: `GET /v1/fleet/olts/{id}/connection-tests` (últimos pedidos com o estado do job, identidade mais recente, orçamento). A identidade lida é comparada com a que a coleta já tinha (`matches_collected`: confere / diverge / sem coleta); o fabricante é o do cadastro (a leitura não o informa).
+- Web: cartão **Teste de conexão** no detalhe da OLT (botão desligado pelo orçamento, "Aguardando o Edge", identidade e divergência), ajuda e capturas reais.
+- Provas: Edge `go vet` + `go test ./...` limpos (4 testes novos do orçamento); API 1025 passed (7 novos: flag/papéis, job pelo motor existente, 429 sem criar job, 1/15 min e 4/h, cache sem gastar, divergência, mock/antigo/malformado nunca viram resposta, rollout/tenant); e2e `frota` + dependências 80 passed.
+- Ainda NÃO provado em campo: o teste real contra a OLT do laboratório (depende de API e Edge trocados juntos e da janela de coleta).
+
+
 ## Unreleased — Frota de OLTs: cadastro e POP (ADR-0041, PR2 parte A, 2026-11-02)
 - Banco (migração **0045**, aditiva e reversível): `pops` (RLS forçada, nome único sem diferenciar caixa) e, em `olts`, `pop_id`, `label`, `registered_by/at`; a credencial continua sendo `olts.credential_secret_ref`, agora com CHECK de FORMA (um NOME em minúsculas; endereço IPv4 e hexadecimal longo que parece chave são recusados pelo banco). O papel da aplicação só grava as colunas novas de cadastro; dono e troca de Edge seguem só do dono (ADR-0029).
 - API (flag **`fleet_manager`**, desligada por padrão; permissões `fleet:read`, `fleet:manage`, `fleet:test`): `GET/POST/PATCH /v1/pops`, `GET/POST /v1/fleet/olts`, `GET/PATCH /v1/fleet/olts/{id}`. Cadastra a OLT ANTES da primeira leitura (o Edge a adota pelo nome e preenche modelo/firmware/nível; POP, rótulo e credencial ficam); sem exclusão; sem escrita na OLT; a credencial é só um nome e nenhuma resposta, erro ou auditoria a repete (o 422 de TODA a API deixou de ecoar o valor recusado).

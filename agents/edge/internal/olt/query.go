@@ -52,6 +52,8 @@ type Query struct {
 var queryCatalog = []Query{
 	// global
 	{"olt.version", "Software, patch e uptime", ScopeGlobal, "display version", true, "3"},
+	// ADR-0041 (PR2 parte B): o teste de conexão do cadastro. É a MESMA leitura de `olt.version` (já validada), com id próprio para ter a SUA classe de orçamento no Edge (1 a cada 15 min, 4 por hora, por OLT)
+	{"olt.connection", "Teste de conexão (identidade da OLT)", ScopeGlobal, "display version", true, "3"},
 	{"olt.time", "Hora e fuso da OLT", ScopeGlobal, "display time", true, "2"},
 	{"olt.board", "Placas e estado", ScopeGlobal, "display board 0", true, "3"},
 	{"olt.alarm.active", "Alarmes ativos", ScopeGlobal, "display alarm active all", false, "2"},

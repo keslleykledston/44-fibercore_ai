@@ -8,6 +8,7 @@ Legenda: **V** = já executado na OLT real e coberto por fixture (aceito por pad
 |---|---|---|---|---|
 | `olt.version` | `display version` | global | V | 3 |
 | `olt.board` | `display board 0` | global | V | 3 |
+| `olt.connection` | `display version` | global | V (mesma leitura de `olt.version`, com classe de orçamento própria: 1 por 15 min e 4 por hora por OLT; ADR-0041) | 3 |
 | `olt.time` | `display time` | global | V | 2 |
 | `olt.alarm.active` | `display alarm active all` | global | N | 2 |
 | `olt.alarm.history` | `display alarm history all list` | global | N | 2 |

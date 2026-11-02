@@ -50,7 +50,7 @@ def _ask(client, h, olt, qid="olt.version", params=None, key=None):
 def test_the_cloud_catalog_is_the_edge_catalog():
     src = GO_CATALOG.read_text()
     rows = re.findall(r'\{"([a-z.]+)", "[^"]*", Scope(Global|Slot|PON|ONU), "[^"]*", (true|false), "\d+"\}', src)
-    assert len(rows) == len(olt_query.CATALOG) == 29
+    assert len(rows) == len(olt_query.CATALOG) == 30   # +1: olt.connection (ADR-0041 PR2)
     for (qid, scope, validated), q in zip(rows, olt_query.CATALOG, strict=True):
         assert (qid, scope.lower(), validated == "true") == (q.id, q.scope, q.validated)
     gate = {"MaxSlot": "slot", "MaxPort": "port", "MaxONT": "ont"}
@@ -241,9 +241,9 @@ def test_the_vectors_the_edge_pins_are_the_ones_the_cloud_computes():
 
     from app.api.jobs import _intent_hash
     oid = UUID("8f14e45f-ceea-467a-9a36-4a1b5c3d2e10")
-    assert olt_query.catalog_version() == "dadb833645db13245a918b809d973a9e83823cafdf13a9a5f2a3c0afe1301db8"
+    assert olt_query.catalog_version() == "42142904052337b1e0b14c80ddefc352a9104749ff9771ae92eca714e07f7bf9"
     params = olt_query.build_intent(oid, {"query_id": "pon.ont.info", "slot": 1, "port": 0})
-    assert _intent_hash("olt_query", "olt", oid, params) == "74e7987b1aff3f310c99436c896911832c04e3cc04b5d06194599e8989605a8b"
+    assert _intent_hash("olt_query", "olt", oid, params) == "e2f9b39b5f25832d9b13853d666f07a3385a5bcaf4e15107607a8e7246b228ed"
 
 
 def _report(client, inv, jid, **body):

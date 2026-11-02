@@ -67,3 +67,23 @@ test("frota: parâmetros repetidos na URL e página inexistente não derrubam a 
   expect((await page.goto("/rede/frota/00000000-0000-0000-0000-000000000000"))?.status()).toBe(404);
   expect((await page.goto("/rede/frota/nao-e-uuid"))?.status()).toBe(404);
 });
+
+test("frota: teste de conexão pede a leitura ao Edge, mostra 'aguardando' e bloqueia o segundo pelo orçamento de 15 minutos", async ({ page }) => {
+  await login(page);
+  await page.goto("/rede/frota");
+  // uma OLT do demo (cadastrada pelo Edge de demonstração); o teste só PEDE a leitura: nada é enviado daqui
+  const first = page.getByTestId("frota-olt").first();
+  await first.getByRole("link").first().click();
+  const box = page.getByTestId("frota-teste");
+  await expect(box).toContainText("somente leitura");
+  await expect(box).toContainText("1 teste a cada 15 minutos e 4 por hora");
+  await expect(page.getByTestId("frota-sem-identidade")).toBeVisible();
+  await page.getByTestId("frota-testar").click();
+  await expect(page.getByTestId("frota-flash")).toContainText("Teste pedido ao Edge");
+  await expect(page.getByTestId("frota-testes")).toContainText("Aguardando o Edge");
+  await expect(page.getByTestId("frota-orcamento")).toContainText("1 de 4 na última hora");
+  await expect(page.getByTestId("frota-orcamento")).toContainText("Próximo teste em cerca de");
+  await expect(page.getByTestId("frota-testar")).toBeDisabled();                        // o orçamento de 15 minutos desliga o botão
+  const res2 = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+  expect(res2.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
+});

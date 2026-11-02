@@ -10,7 +10,7 @@ import (
 const testOLT = "8f14e45f-ceea-467a-9a36-4a1b5c3d2e10"
 
 // pinned against the Cloud's own computation (apps/api/app/core/olt_query.py catalog_version(); tests/test_olt_query.py checks the other side)
-const pinnedCatalogVersion = "dadb833645db13245a918b809d973a9e83823cafdf13a9a5f2a3c0afe1301db8"
+const pinnedCatalogVersion = "42142904052337b1e0b14c80ddefc352a9104749ff9771ae92eca714e07f7bf9"
 
 func intent(t *testing.T, js string) (Intent, error) {
 	t.Helper()

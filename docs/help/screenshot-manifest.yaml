@@ -191,6 +191,8 @@ articles:
   images:
   - assets/rede/frota-de-olts/desktop.png
   - assets/rede/frota-de-olts/mobile.png
+  - assets/rede/frota-de-olts/teste/desktop.png
+  - assets/rede/frota-de-olts/teste/mobile.png
   e2e_test: help-screenshots.spec.ts › rede/frota-de-olts; fluxo em frota.spec.ts (frota)
   last_verified: '2026-11-02'
 - slug: rede/onus-pendentes
