@@ -257,7 +257,7 @@ def list_incidents(
     if order == "priority":
         incidents.sort(key=_priority_key)
         incidents = incidents[:limit]
-    alerts = [{"kind": "edge_silent", "edge": e.name, "last_heartbeat_at": e.last_heartbeat_at.isoformat(),
+    alerts = [{"kind": "edge_silent", "edge": e.name, "edge_id": str(e.id), "last_heartbeat_at": e.last_heartbeat_at.isoformat(),
                "note": "no data from this edge; ONU/OLT states behind it are last-known, not offline"}
               for e in silent[:ALERTS_SHOWN]]
     summary = _summary(conn, can_customers, [e.id for e in silent])

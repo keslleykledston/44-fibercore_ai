@@ -294,7 +294,7 @@ paths:
       operationId: listIncidents
       description: >-
         Incidentes de queda em massa por PON (>=5 ONUs observadas no snapshot e >=80% fora; resolve <50%, com histerese) e alertas
-        computados. Silêncio de Edge não abre nem fecha incidentes: marca `edge_silent` e lista o alerta; estados são "último conhecido".
+        computados. Silêncio de Edge não abre nem fecha incidentes: marca `edge_silent` e lista o alerta (com `edge_id`, para rodar a R-D003 sobre o coletor); estados são "último conhecido".
         Cada incidente traz `impact` {customers_affected, source: associations_approved, hidden, members_known}: clientes DISTINTOS ligados às ONUs
         do incidente por associações APROVADAS (sem `customers:read` = `hidden`, nunca 0; incidente sem membros = desconhecido, nunca 0).
         `summary` (sobre TODOS os abertos): open, unacknowledged, silent_edges, open_suppressed e customers_affected (não inclui incidentes
