@@ -328,8 +328,8 @@ def test_one_mutation_at_a_time_per_target_and_reads_never_wait(client, seed, in
             assert client.post(f"/v1/edge/jobs/{jid}/result", headers=a, json={"state": state, **({"postcheck_ok": True} if state == "succeeded" else {})}).status_code == 204
 
 
-def test_a_write_stuck_in_flight_stops_holding_the_target_after_its_window(client, seed, inv, targets, monkeypatch, migrated):
-    """A lost Edge report (job stuck in ACCEPTED) must not hold the target for ever: after LIVE_FOR without moving, it no longer excludes."""
+def test_a_write_the_edge_went_quiet_about_is_reconciled_to_unknown_before_its_target_is_released(client, seed, inv, targets, monkeypatch, migrated):
+    """A lost Edge report (job stuck in ACCEPTED) must not hold the target for ever, and must not just be ignored: after STALE_AFTER it becomes UNKNOWN."""
     monkeypatch.setattr(jobs_mod, "HOMOLOGATED_WRITES", frozenset({"reboot_cpe"}))
     monkeypatch.setattr(jobs_mod.bench, "BENCH_OPS", {k: v for k, v in jobs_mod.bench.BENCH_OPS.items() if k != "reboot_cpe"})
     h = hdr(client, "alice", seed, "A")
@@ -346,10 +346,13 @@ def test_a_write_stuck_in_flight_stops_holding_the_target_after_its_window(clien
     assert client.get("/v1/edge/jobs/next", headers=a).json()["job_id"] == stuck
     assert client.post(f"/v1/edge/jobs/{stuck}/result", headers=a, json={"state": "accepted"}).status_code == 204     # ...and then the Edge goes quiet
     assert client.get("/v1/edge/jobs/next", headers=a).status_code == 204                                             # held while it is recent
+    assert client.get(f"/v1/jobs/{stuck}", headers=h).json()["status"] == "ACCEPTED"
     with migrated.begin() as c:
         c.execute(text("UPDATE jobs SET updated_at = now() - interval '31 minutes' WHERE id = :i"), {"i": stuck})
     got = client.get("/v1/edge/jobs/next", headers=a)
-    assert got.status_code == 200 and got.json()["job_id"] == waiting                                                 # the stale one no longer holds it
+    assert got.status_code == 200 and got.json()["job_id"] == waiting                                                 # released, but only after reconciling
+    assert client.get(f"/v1/jobs/{stuck}", headers=h).json()["status"] == "UNKNOWN"                                   # the outcome is NOT known: never "succeeded"
+    assert client.post(f"/v1/edge/jobs/{stuck}/result", headers=a, json={"state": "succeeded", "postcheck_ok": True}).status_code == 409   # a late report is refused
     for state in ("accepted", "succeeded"):                                                                           # leave nothing in flight for the next test
         assert client.post(f"/v1/edge/jobs/{waiting}/result", headers=a, json={"state": state, **({"postcheck_ok": True} if state == "succeeded" else {})}).status_code == 204
 
