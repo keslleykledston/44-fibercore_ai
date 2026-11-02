@@ -68,3 +68,10 @@ export function parseJson(raw: string, kind: "object" | "array"): unknown | unde
   } catch { /* texto inválido */ }
   return undefined;
 }
+
+export type Revision = {
+  id: string; draft_id: string; draft_row_version: number; name: string; revision_no: number; profile_kind: string; technology: string; vendor: string; model: string;
+  firmware: string; pon_card: string; desired: Record<string, unknown>; content_hash: string; changelog: string; prepared_by: string; approved_by: string; created_at: string;
+  writes_to_olt: number;
+};
+export type RevisionList = { items: Revision[] };

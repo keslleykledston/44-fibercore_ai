@@ -315,8 +315,8 @@ def create_draft(body: DraftIn, response: Response, p: Principal = Depends(requi
         raise HTTPException(422, {"issues": _issues(issues)})
     _check_targets(conn, body.target_olt_ids)
     r = conn.execute(
-        text("INSERT INTO profile_drafts (tenant_id, name, owner_id, source_snapshot_id, technology, vendor, model, firmware, pon_card, profile_kind, target_olt_ids, desired, reason) "
-             "VALUES (:t,:n,:u,:s,:tech,:v,:m,:f,:c,:k,:ids,CAST(:d AS jsonb),:r) RETURNING *"),
+        text("INSERT INTO profile_drafts (tenant_id, name, owner_id, last_editor_id, source_snapshot_id, technology, vendor, model, firmware, pon_card, profile_kind, target_olt_ids, desired, reason) "
+             "VALUES (:t,:n,:u,:u,:s,:tech,:v,:m,:f,:c,:k,:ids,CAST(:d AS jsonb),:r) RETURNING *"),
         {"t": p.tenant_id, "n": body.name, "u": p.id, "s": body.source_snapshot_id, "tech": scope["technology"], "v": scope["vendor"], "m": scope["model"], "f": scope["firmware"],
          "c": scope["pon_card"], "k": body.profile_kind, "ids": list(body.target_olt_ids), "d": json.dumps(ps.normalize(desired)), "r": body.reason}).one()
     audit(conn, p, "profile.draft.created", "profile_draft", str(r.id), {"source_snapshot_id": str(body.source_snapshot_id) if body.source_snapshot_id else None})
@@ -383,8 +383,8 @@ def patch_draft(draft_id: UUID, body: DraftPatch, response: Response, if_match: 
     r = conn.execute(
         text("UPDATE profile_drafts SET name = COALESCE(:n, name), reason = COALESCE(:r, reason), desired = COALESCE(CAST(:d AS jsonb), desired), "
              "vendor_extensions = COALESCE(CAST(:x AS jsonb), vendor_extensions), target_olt_ids = COALESCE(CAST(:ids AS uuid[]), target_olt_ids), "
-             "strategy = COALESCE(:s, strategy), row_version = row_version + 1, updated_at = now() WHERE id = :i AND row_version = :v RETURNING *"),
-        {"n": body.name, "r": body.reason, "d": sets.get("desired"), "x": sets.get("vendor_extensions"),
+             "strategy = COALESCE(:s, strategy), row_version = row_version + 1, updated_at = now(), last_editor_id = :u WHERE id = :i AND row_version = :v RETURNING *"),
+        {"u": p.id, "n": body.name, "r": body.reason, "d": sets.get("desired"), "x": sets.get("vendor_extensions"),
          "ids": list(body.target_olt_ids) if body.target_olt_ids is not None else None, "s": body.strategy, "i": draft_id, "v": want}).first()
     if r is None:
         raise HTTPException(412, "the draft changed since you read it; reload it")
@@ -568,3 +568,71 @@ def get_dry_run(run_id: UUID, p: Principal = Depends(require("profiles:read")), 
     return {"run_id": str(r.id), "draft_id": str(r.draft_id), "draft_row_version": r.draft_row_version, "created_at": r.created_at.isoformat(), "expires_at": r.expires_at.isoformat(),
             "expired": r.expires_at <= datetime.now(UTC), "writes": 0, "plans": r.plans, "issues": r.issues, "executable": False,
             "reproducible": sorted(_replay(r), key=key) == sorted(r.plans, key=key)}
+
+
+# ---- publish an immutable revision (FC251-08) ----------------------------------------------------------------------------------------------
+class PublishIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    changelog: str = Field(min_length=3, max_length=2000)
+
+
+def _revision_view(r) -> dict:
+    return {"id": str(r.id), "draft_id": str(r.draft_id), "draft_row_version": r.draft_row_version, "name": r.name, "revision_no": r.revision_no, "profile_kind": r.profile_kind,
+            "technology": r.technology, "vendor": r.vendor, "model": r.model, "firmware": r.firmware, "pon_card": r.pon_card, "desired": r.desired, "content_hash": r.content_hash,
+            "changelog": r.changelog, "prepared_by": str(r.prepared_by), "approved_by": str(r.approved_by), "created_at": r.created_at.isoformat(),
+            "writes_to_olt": 0}   # publishing never reaches equipment
+
+
+@router.post("/v1/profile-drafts/{draft_id}/publish", status_code=201)
+def publish_revision(draft_id: UUID, body: PublishIn, response: Response, if_match: str | None = Header(default=None), p: Principal = Depends(require("profiles:publish")),
+                     conn: Connection = TENANT_CONN) -> dict:
+    """Freeze the draft, at the exact version the approver read (`If-Match`), as the next numbered revision of its name. Maker-checker: the approver is neither the draft's owner
+    nor its last editor. The draft must be valid and must have been SIMULATED at this very version (so its impact was seen). A revision is never edited; republishing the same
+    version returns the same revision. Nothing is sent to any OLT."""
+    import hashlib
+    _flag(conn, p)
+    want = _parse_if_match(if_match)
+    d = _draft(conn, draft_id, lock=True)
+    if d.row_version != want:
+        raise HTTPException(412, "the draft changed since you read it; reload it")
+    prepared = d.last_editor_id or d.owner_id
+    if p.id in (d.owner_id, prepared):
+        raise HTTPException(403, "maker_checker: the approver must be someone other than the owner and the last editor of the draft")
+    existing = conn.execute(text("SELECT * FROM profile_revisions WHERE draft_id = :d AND draft_row_version = :v"), {"d": draft_id, "v": want}).first()
+    if existing is not None:
+        response.status_code = 200
+        return {**_revision_view(existing), "already_published": True}
+    issues = ps.validate_settings(d.desired, supported=ALL_FIELDS) + ps.validate_extensions(d.vendor_extensions or {}, {})
+    if issues:
+        raise HTTPException(422, {"issues": _issues(issues)})
+    if conn.execute(text("SELECT 1 FROM profile_dry_runs WHERE draft_id = :d AND draft_row_version = :v LIMIT 1"), {"d": draft_id, "v": want}).first() is None:
+        raise HTTPException(409, "not_simulated: run the dry run on this exact version of the draft before publishing")
+    name_key = d.name.strip().lower()
+    conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"profile-rev:{p.tenant_id}:{name_key}"})
+    no = conn.execute(text("SELECT COALESCE(max(revision_no), 0) + 1 FROM profile_revisions WHERE name_key = :k"), {"k": name_key}).scalar()
+    desired = ps.normalize(d.desired)
+    h = hashlib.sha256(ps.canonical_json({"kind": d.profile_kind, "tech": d.technology, "vendor": d.vendor, "model": d.model, "fw": d.firmware, "card": d.pon_card,
+                                           "desired": desired}).encode()).hexdigest()
+    r = conn.execute(
+        text("INSERT INTO profile_revisions (tenant_id, draft_id, draft_row_version, name_key, revision_no, name, profile_kind, technology, vendor, model, firmware, pon_card, desired, "
+             "content_hash, changelog, prepared_by, approved_by) VALUES (:t,:d,:v,:k,:n,:nm,:pk,:tech,:ven,:mod,:fw,:card,CAST(:de AS jsonb),:h,:cl,:pb,:ab) RETURNING *"),
+        {"t": p.tenant_id, "d": draft_id, "v": want, "k": name_key, "n": no, "nm": d.name, "pk": d.profile_kind, "tech": d.technology, "ven": d.vendor, "mod": d.model, "fw": d.firmware,
+         "card": d.pon_card, "de": json.dumps(desired), "h": h, "cl": body.changelog.strip(), "pb": prepared, "ab": p.id}).one()
+    audit(conn, p, "profile.revision.published", "profile_revision", str(r.id), {"draft_id": str(draft_id), "revision_no": no, "content_hash": h[:16], "writes_to_olt": 0})
+    return _revision_view(r)
+
+
+@router.get("/v1/profile-revisions")
+def list_revisions(p: Principal = Depends(require("profiles:read")), conn: Connection = TENANT_CONN) -> dict:
+    _flag(conn, p)
+    rows = conn.execute(text("SELECT * FROM profile_revisions ORDER BY created_at DESC, id LIMIT 200")).all()
+    return {"items": [_revision_view(r) for r in rows]}
+
+
+@router.get("/v1/profile-revisions/{revision_id}")
+def get_revision(revision_id: UUID, p: Principal = Depends(require("profiles:read")), conn: Connection = TENANT_CONN) -> dict:
+    _flag(conn, p)
+    r = conn.execute(text("SELECT * FROM profile_revisions WHERE id = :i"), {"i": revision_id}).first()
+    if r is None:
+        raise HTTPException(404, "revision not found")
+    return _revision_view(r)

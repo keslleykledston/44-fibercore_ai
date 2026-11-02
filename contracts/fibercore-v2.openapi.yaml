@@ -873,6 +873,39 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {description: Inexistente ou de outro provedor}
         '409': {description: 'Sem leitura, leitura antiga demais ou identidade da OLT incompleta'}
+  /profile-drafts/{draftId}/publish:
+    post:
+      tags: [ProfileStudio]
+      operationId: publishProfileRevision
+      summary: 'Congela o rascunho, na versão exata lida por quem aprova (If-Match), como a próxima revisão IMUTÁVEL numerada do nome. Maker-checker: o aprovador não é o dono nem o último editor; o rascunho precisa ter sido simulado nessa versão. Não envia nada à OLT. profiles:publish (isp_admin, MFA recente)'
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: draftId, in: path, required: true, schema: {type: string, format: uuid}}, {name: If-Match, in: header, required: true, schema: {type: string}}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [changelog], properties: {changelog: {type: string, minLength: 3, maxLength: 2000}}}}}}
+      responses:
+        '201': {description: 'Revisão criada (revision_no, content_hash, writes_to_olt = 0)'}
+        '200': {description: 'Esta versão do rascunho já tinha sido publicada: devolve a mesma revisão (already_published)'}
+        '403': {description: 'Sem permissão, flag desligada ou maker-checker violado'}
+        '409': {description: 'not_simulated: rode o dry-run nesta versão'}
+        '412': {description: 'O rascunho mudou desde a leitura'}
+        '428': {description: 'If-Match obrigatório'}
+  /profile-revisions:
+    get:
+      tags: [ProfileStudio]
+      operationId: listProfileRevisions
+      summary: 'Revisões publicadas (imutáveis), da mais nova para a mais antiga. profiles:read'
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      responses:
+        '200': {description: OK}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /profile-revisions/{revisionId}:
+    get:
+      tags: [ProfileStudio]
+      operationId: getProfileRevision
+      summary: 'Uma revisão publicada, com o conteúdo congelado e o changelog. profiles:read'
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: revisionId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: OK}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Inexistente ou de outro provedor}
   /profile-snapshots/{snapshotId}:
     get:
       tags: [ProfileStudio]

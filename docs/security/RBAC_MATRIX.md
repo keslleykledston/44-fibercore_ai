@@ -35,6 +35,7 @@
 | `profiles:read` | R0 | não | sim | Ver os profiles de serviço da OLT (snapshots importados), comparar com um rascunho (somente leitura) |
 | `profiles:import` | R1 | não | sim | Importar um profile existente da OLT como referência imutável (somente leitura: não escreve na OLT) |
 | `profiles:edit` | R2 | não | sim | Criar e editar rascunhos de profile (clone) e simular a aplicação (dry-run); nada é enviado à OLT |
+| `profiles:publish` | R3 | sim | sim | Publicar uma revisão IMUTÁVEL de um rascunho de profile (aprovador distinto de quem preparou; nada é enviado à OLT) |
 | `discovery:read` | R0 | não | sim | Ver a fila de ONUs aguardando autorização (somente leitura; nada é autorizado) |
 | `discovery:import` | R1 | não | sim | Registrar avistamentos de ONUs não autorizadas (fixture/importação manual; não escreve na OLT) |
 | `members:read` | R1 | não | não | Ver os membros do provedor e o estado do MFA de cada um |
@@ -79,6 +80,7 @@
 | `profiles:read` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `profiles:import` | ✔ | ✔ |  |  |  |  |  |  |  |
 | `profiles:edit` | ✔ | ✔ |  |  |  |  |  |  |  |
+| `profiles:publish` | ✔ |  |  |  |  |  |  |  |  |
 | `discovery:read` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `discovery:import` | ✔ | ✔ |  |  |  |  |  |  |  |
 | `members:read` | ✔ |  |  |  |  |  |  |  | ✔ |
@@ -212,7 +214,10 @@
 | PATCH | `/v1/profile-drafts/{draft_id}` | `profiles:edit` |
 | POST | `/v1/profile-drafts/{draft_id}/compare` | `profiles:read` |
 | POST | `/v1/profile-drafts/{draft_id}/dry-run` | `profiles:edit` |
+| POST | `/v1/profile-drafts/{draft_id}/publish` | `profiles:publish` |
 | GET | `/v1/profile-dry-runs/{run_id}` | `profiles:read` |
+| GET | `/v1/profile-revisions` | `profiles:read` |
+| GET | `/v1/profile-revisions/{revision_id}` | `profiles:read` |
 | GET | `/v1/profile-snapshots/{snapshot_id}` | `profiles:read` |
 | GET | `/v1/roles` | `roles:read` |
 | GET | `/v1/speed/health` | `inventory:read` |
