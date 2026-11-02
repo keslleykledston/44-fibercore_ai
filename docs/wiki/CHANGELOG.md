@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — inventário de perfis da OLT, sync edge_read e revisões imutáveis (2026-11-02)
+- Captura supervisionada na OLT real (ADR-0032 lote 3, só leitura, autorizada pelo responsável): `olt.profile.line/srv/dba/traffic` capturadas, parsers estritos conferidos contra a saída real (41/34 perfis, DBA, 14 tabelas de tráfego; a saída crua foi apagada no Edge e na cópia local) e fixtures sintéticas com o mesmo layout. Rodam só em `MA5600V800R015C00` exato. Nome de perfil (texto livre do operador) vai nulo à nuvem salvo opt-in do dono do Edge (`olt_profile_names_to_cloud`).
+- `POST /v1/olts/{id}/profiles/sync`: a última leitura DBA vira snapshots `edge_read` PARCIAIS (só o que a leitura afirma); idempotente, serializado por OLT, idade pela hora da pergunta, perfil ausente vira snapshot `unknown`. Codex approve r6.
+- FC251-08: publicar revisão imutável de um rascunho (migração 0042, `profiles:publish`, maker-checker, simulação obrigatória, tela e e2e). Codex approve r2. Nada é enviado à OLT.
+- Envelope do relay com `source`/`quality` (aditivo; schema próprio `contracts/event-envelope.schema.json`; não afirma conformidade com o v2.2). Codex approve r2.
+
 ## Unreleased — fila de ONUs aguardando autorização (v2.5, FC25-01/02/03, 2026-11-02)
 - API (flag **`onu_discovery`**, desligada por padrão; permissões `discovery:read` (administrador, engenheiro, NOC N2) e `discovery:import` (administrador, engenheiro)): migração **0041** `onu_discovery_observations` (RLS forçada; o app só faz SELECT/INSERT e UPDATE de `last_seen_at`/`seen_count`/`vendor_hint`; sem DELETE; a origem faz parte da chave, então importação manual ou fixture **nunca renova** o que o Edge leu da OLT). `POST /v1/olts/{id}/onus/unregistered/import` (idempotente; `edge_read` reservado ao Edge), `GET /v1/olts/{id}/onus/unregistered` e `GET /v1/discovery/onus`. Condições: `new`, `waiting`, `stale` (dado antigo, nunca "offline") e `conflict` (serial já registrado ou visto em outra OLT/PON). Associação ERP sempre `unavailable` e autorização `not_available`. Nenhum job, evento ou incidente é criado.
 - Web: `/rede/pendentes` (filtros, origem, motivos, registro à mão) e atalho **ONUs pendentes** na Rede; some com a flag desligada (404). Seed sintético, e2e `pendentes.spec.ts` + recuo, capturas reais e how-to `rede/onus-pendentes`. Suíte da API: 993 passam.

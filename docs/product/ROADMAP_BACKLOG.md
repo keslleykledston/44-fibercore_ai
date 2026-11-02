@@ -165,7 +165,7 @@ Pacote em `docs/addenda/v2.5/package/`; GAP com os caminhos reais em `docs/adden
 | FC25-04/05 | P0 | [ ] service intent versionado e wizard assistido | depende do núcleo |
 | FC25-07 / FC251-06 | P0 | [ ] dry-run `reuse/adopt/clone/blocked` por OLT, com impacto | cobrirá a lacuna (b) do FC22-014 para provisionamento (planejado) |
 | FC251-07 / UI | P0 | [~] **feito (flag `profile_studio`):** Assistido (formulário) + Especialista (JSON tipado), importar, rascunho, comparar, dry-run, capturas reais e how-to `rede/perfis-olt`; falta o editor YAML e a leitura real da OLT | Lovable só para UX |
-| FC251-08 | P1 | [ ] publicar revisão imutável com changelog e maker-checker | sem enviar à OLT |
+| FC251-08 | P1 | [x] 2026-11-02: revisão imutável numerada com changelog e maker-checker (aprovador nunca editou o rascunho; simulação obrigatória na versão; `profiles:publish`; migração 0042); Codex approve r2 | sem enviar à OLT |
 | FC25-08/09/10, FC251-09 | P1 | [ ] escrita em LAB (autorizar ONU, criar/clonar profile) | **condicionado:** homologação por vendor/firmware/placa/operação, emenda do ADR-0030, aprovação, `plan_hash`+TTL, leitura de volta independente |
 | FC25-11/12/13, FC251-10/11 | P1 | [ ] lote com canário, migração de ONUs (job separado), drift | depende de P1 |
 | FC25-14, FC251-12/13 | P2 | [ ] outros fabricantes; IA N3 que só sugere | individual por release |
