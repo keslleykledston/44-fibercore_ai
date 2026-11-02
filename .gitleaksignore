@@ -5,3 +5,6 @@ c0002b3ddc5be6bb1ab6ca58d46d069381b3cb26:scripts/perf-onu-events.sh:generic-api-
 71410434f5f061c3f3e04c9f7a00931fcaaaddbe:apps/api/tests/test_erp_hubsoft.py:generic-api-key:263
 71410434f5f061c3f3e04c9f7a00931fcaaaddbe:apps/api/tests/test_erp_hubsoft.py:generic-api-key:264
 71410434f5f061c3f3e04c9f7a00931fcaaaddbe:apps/api/tests/test_erp_hubsoft.py:generic-api-key:424
+# valores FALSOS dos testes da Frota de OLTs (apps/api/tests/test_fleet.py): um NOME de credencial de exemplo e uma cadeia hexadecimal sintética usada como valor RECUSADO pelo teste de forma; sem relação com qualquer credencial real
+a37635033a63dbb51349bd6ab22ddca63c56155d:apps/api/tests/test_fleet.py:generic-api-key:49
+a37635033a63dbb51349bd6ab22ddca63c56155d:apps/api/tests/test_fleet.py:generic-api-key:93
