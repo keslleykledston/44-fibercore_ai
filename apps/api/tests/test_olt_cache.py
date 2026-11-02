@@ -230,3 +230,19 @@ def test_the_board_mock_is_only_for_the_demo_tenant_and_never_overwrites_a_real_
     assert client.get(f"/v1/olts/{olt}/queries/olt.board/latest", headers=h).json()["source"] == "mock"
     with migrated.begin() as c:
         c.execute(text("UPDATE tenants SET name = 'Tenant A' WHERE id = :t"), {"t": seed["A"]})
+
+
+def test_a_read_from_the_equipment_always_beats_a_mock_and_a_mock_never_beats_a_read(migrated, seed, inv, olt, on):
+    """Codex r2 (painel SVG): a real result whose question is OLDER than a mock written meanwhile still wins; the other way round never happens."""
+    from datetime import timedelta
+
+    from app.core.db import get_engine, scoped_connection
+    with scoped_connection(get_engine(), tenant_id=seed["A"]) as c:
+        epoch = c.execute(text("SELECT owner_epoch FROM olts WHERE id = :i"), {"i": olt}).scalar()
+        o = UUID(str(olt))
+        now = datetime.now(UTC)
+        assert olt_cache.store_latest(c, seed["A"], o, "olt.board", "", BOARD, epoch, now, source="mock")
+        assert olt_cache.store_latest(c, seed["A"], o, "olt.board", "", BOARD, epoch, now - timedelta(minutes=5), source="job")   # older question, real: wins over the mock
+        assert olt_cache.latest(c, o, "olt.board", "")["source"] == "job"
+        assert not olt_cache.store_latest(c, seed["A"], o, "olt.board", "", BOARD, epoch, now + timedelta(minutes=5), source="mock")   # a mock never replaces a real read
+        assert olt_cache.latest(c, o, "olt.board", "")["source"] == "job"

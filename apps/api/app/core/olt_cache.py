@@ -37,7 +37,8 @@ def store_latest(conn: Connection, tenant_id: UUID, olt_id: UUID, query_id: str,
              "VALUES (:t, :o, :q, :k, CAST(:d AS jsonb), now(), :a, :e, :s) "
              "ON CONFLICT (tenant_id, olt_id, query_id, params_key) DO UPDATE SET data = EXCLUDED.data, observed_at = EXCLUDED.observed_at, asked_at = EXCLUDED.asked_at, received_at = now(), "
              "owner_epoch = EXCLUDED.owner_epoch, source = EXCLUDED.source, version = olt_query_latest.version + 1 "
-             "WHERE (EXCLUDED.owner_epoch, EXCLUDED.asked_at) >= (olt_query_latest.owner_epoch, olt_query_latest.asked_at) RETURNING version"),
+             "WHERE (EXCLUDED.source <> 'mock' AND olt_query_latest.source = 'mock') "   # a read from the equipment ALWAYS replaces a demonstration value, whatever the timestamps
+             "OR (EXCLUDED.source <> 'mock' OR olt_query_latest.source = 'mock') AND (EXCLUDED.owner_epoch, EXCLUDED.asked_at) >= (olt_query_latest.owner_epoch, olt_query_latest.asked_at) RETURNING version"),   # and a mock never replaces a real one
         {"t": tenant_id, "o": olt_id, "q": query_id, "k": key, "d": json.dumps(data), "a": asked_at, "e": owner_epoch, "s": source}).first()
     return r is not None
 
