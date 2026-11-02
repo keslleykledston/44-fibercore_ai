@@ -1,0 +1,30 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19a2d-6b20-7700-96e3-5b590f0a481f).
+[codex] Turn started (01a19a2d-6b5c-7271-af97-aad68867da76).
+[codex] Assistant message captured: Vou comparar o branch com `main` e seguir as referências aos cartões, gates e testes nos flux...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/app/rede/onu/'...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/app/rede/onu/'... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=5 main...HEAD -- apps/web/src/app/rede/onu/'[...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=5 main...HEAD -- apps/web/src/app/rede/onu/'[... (exit 0)
+[codex] Assistant message captured: A remoção visual está limitada ao componente da 360°. Estou checando agora se o Diagnóstico r...
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/app/rede/onu/'[id]'/diagnostico/page.tsx | sed -n '1,180p'...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/app/rede/onu/'[id]'/diagnostico/page.tsx | sed -n '1,180p'... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: os fluxos foram removidos da 360°, ma...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: os fluxos foram removidos da 360°, mas a documentação do changelog descreve incorretamente a localização restante dos cartões e a afirmação de que nada mudou nas flags/gates não é coberta pelo teste de regressão.
+
+Findings:
+- [medium] Changelog contradiz o fluxo documentado (docs/wiki/CHANGELOG.md:4)
+  O changelog afirma que Velocidade e Qualidade ficam “só na página de Diagnóstico” e nas abas do painel da Rede. Na prática, `OnuQuickInspector` usa os nomes de abas banda/qualidade do painel, enquanto a tela de Diagnóstico também contém esses recursos. Essa redação torna a documentação ambígua sobre onde os cartões/abas permanecem após a mudança; o artigo de ajuda e os ADRs descrevem corretamente ambos os locais.
+  Recommendation: Reescrever para dizer que os recursos continuam nas abas do painel da Rede e também na página de Diagnóstico, sem cartões na ONU 360°.
+- [medium] Testes não verificam o gate de flag na nova página de Diagnóstico (apps/web/e2e/speed.spec.ts:187-201)
+  Os testes novos provam ausência na 360° e presença no Diagnóstico com a flag ligada. Os testes com flag desligada verificam ausência na 360° e na aba do painel, mas não visitam a página de Diagnóstico. Como `diagnostico/page.tsx` consulta `speed_diagnostics` e `quality_diagnostics` independentemente, a regressão em que um conteúdo continuasse acessível ali com a flag desligada passaria despercebida; a mudança removeu os gates da 360° e depende desses gates para manter a configuração intacta.
+  Recommendation: Estender os testes SPEED_FLAG_OFF e QUALITY_FLAG_OFF para abrir o Diagnóstico e confirmar que o conteúdo fica indisponível e que o BFF continua recusando acesso.
+
+Next steps:
+- Corrigir a redação do changelog e acrescentar as verificações de gate no Diagnóstico aos testes de flag desligada.

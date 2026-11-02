@@ -17,7 +17,7 @@ ui_route: "/rede"
 
 ## Passo a passo
 
-1. Acesse **Rede**, clique no serial da ONU (o painel abre ao lado da lista) e abra a aba **Teste de banda**. A aba só existe quando há roteador vinculado e confirmado à ONU. Na **Visão 360°** o mesmo conteúdo aparece no cartão **Teste de banda**.
+1. Acesse **Rede**, clique no serial da ONU (o painel abre ao lado da lista) e abra a aba **Teste de banda**. A aba só existe quando há roteador vinculado e confirmado à ONU. Na **Visão 360°** use o botão **Diagnóstico**: o teste de banda fica só na página de Diagnóstico, não há cartão dele na 360°.
 2. Se aparecer **Teste indisponível neste aparelho**, leia o motivo abaixo da frase: ele diz o que falta (homologação do modelo e firmware, evidência de que o aparelho não segue redirecionamento, permissão do seu papel, vínculo ONU↔roteador). Nenhum botão de iniciar é mostrado nesse caso.
 3. Se o teste está liberado, escolha o **Destino** (**Core** ou **Internet**; o que não tem nó pronto fica desabilitado) e o **Tamanho do arquivo** (10, 50 ou 200 MB). Clique em **Testar download** ou **Testar upload**. Só existe um teste por vez por aparelho, um por PON e dois por provedor.
 4. O pedido fica **Aguardando aprovação de outra pessoa (Operações)**. Depois da aprovação o Edge executa, e a tela passa a **Em teste** e então ao resultado. A tela se atualiza sozinha enquanto há teste em andamento.

@@ -17,7 +17,7 @@ ui_route: "/rede"
 
 ## Passo a passo
 
-1. Acesse **Rede**, clique no serial da ONU (o painel abre ao lado da lista) e abra a aba **Qualidade**. Na **Visão 360°** o mesmo conteúdo aparece no cartão **Qualidade do serviço**.
+1. Acesse **Rede**, clique no serial da ONU (o painel abre ao lado da lista) e abra a aba **Qualidade**. Na **Visão 360°** use o botão **Diagnóstico**: a qualidade fica só na página de Diagnóstico, não há cartão dela na 360°.
 2. Clique em **Verificar agora**. A tela mostra a leitura mais recente, com o horário em que foi feita.
 3. Leia o **estado geral** (um de três): **Atenção: há indício a verificar**, **Nenhuma anomalia observada nos dados atuais** ou **Dados insuficientes para avaliar**. Esta tela nunca diz "tudo OK": no melhor caso, diz que nada anormal foi observado nos dados que existem.
 4. Veja os quatro indicadores: **WAN**, **Óptica**, **Wi‑Fi** e **Equipamento**. Cada um diz *Sem anomalia observada*, *Atenção*, *Leitura antiga* ou *Sem leitura*.

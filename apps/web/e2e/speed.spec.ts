@@ -118,17 +118,19 @@ test("teste de banda (cenário): sem destino pronto não há botão, e a falha d
 });
 
 
-test("ONU 360°: o cartão Teste de banda existe com roteador vinculado e a flag ligada, e mostra o mesmo estado real", async ({ page, request }) => {
+test("ONU 360°: não tem o cartão Teste de banda; o teste fica só no Diagnóstico, que a 360° liga", async ({ page, request }) => {
   await confirmDemoA2(request);
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
   await page.goto("/rede");
   await row(page, "DEMOA0002").click();
   await page.getByTestId("onu-360-link").click();
-  const card = page.getByTestId("onu360-speed");
-  await expect(card).toContainText("Teste de banda");
-  await expect(card.getByTestId("speed-blocked")).toContainText("Teste indisponível neste aparelho");
-  await expect(card.getByTestId("speed-start-download")).toHaveCount(0);
+  await expect(page.getByTestId("onu360-ready")).toBeVisible();
+  await expect(page.getByTestId("onu360-speed")).toHaveCount(0);
+  await expect(page.getByTestId("speed-blocked")).toHaveCount(0);
+  await page.getByTestId("onu360-diag-link").click();
+  await page.getByTestId("diag-tab-velocidade").click();
+  await expect(page.getByTestId("speed-blocked")).toContainText("Teste indisponível neste aparelho");
 });
 
 test("teste de banda (cenário): uma leitura lenta e antiga nunca sobrescreve o estado mais recente", async ({ page, request }) => {
@@ -183,7 +185,7 @@ test("teste de banda (cenário): pedido aceito continua em curso se a leitura se
 });
 
 // Prova do recuo (só roda com a flag desligada no provedor: SPEED_FLAG_OFF=1): a aba, o cartão e a rota do BFF não existem para a tela; o resto do painel segue igual.
-test("flag speed_diagnostics desligada: sem aba, sem cartão na ONU 360° e o BFF responde que está desligado", async ({ page, request }) => {
+test("flag speed_diagnostics desligada: sem aba, sem teste na ONU 360° e o BFF responde que está desligado", async ({ page, request }) => {
   test.skip(!process.env.SPEED_FLAG_OFF, "rodar com SPEED_FLAG_OFF=1 e a flag desligada no provedor");
   await confirmDemoA2(request);
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -195,6 +197,11 @@ test("flag speed_diagnostics desligada: sem aba, sem cartão na ONU 360° e o BF
   await page.getByTestId("onu-360-link").click();
   await expect(page.getByTestId("onu360-ready")).toBeVisible();
   await expect(page.getByTestId("onu360-speed")).toHaveCount(0);
+  await page.getByTestId("onu360-diag-link").click();                                                                   // o Diagnóstico também respeita a flag: sem teste, só o aviso
+  await page.getByTestId("diag-tab-velocidade").click();
+  await expect(page.getByTestId("diag-unavailable")).toBeVisible();
+  await expect(page.getByTestId("speed-blocked")).toHaveCount(0);
+  await expect(page.getByTestId("speed-start-download")).toHaveCount(0);
   const r = await page.request.get(`/bff/cpes/${CPE}/speed`);
   expect([403, 404]).toContain(r.status());
 });

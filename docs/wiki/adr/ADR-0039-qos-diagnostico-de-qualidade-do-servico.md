@@ -17,7 +17,7 @@ O adendo pede "Diagnóstico de Qualidade do Serviço" sobre o SD-001: leituras (
 6. **Leituras novas, lista fechada espelhada**: `eth_link_status` e `eth_link_speed_mbps` no `cpe_state` (Edge `params.go`, API, CHECK do banco e teste cruzado). Erros de Ethernet (delta), CPU/memória, Wi-Fi retries/associados e traceroute ficam para um lote 2, cada um com a sua homologação. Endereços IP, MAC, SSID: nunca.
 7. **Hipóteses determinísticas e transparentes** em função pura (`LAN_LINK_100M`, `OPTICAL_ATTENTION` por perfil, `EXTERNAL_PATH_POTENTIAL`/`ACCESS_PATH_POTENTIAL` só com SD-001 válido, `DNS_POTENTIAL`, `PACKET_LOSS`; `WIFI_POTENTIAL` só com dado homologado). Sem score, sem "qualidade OK", sem SLA. Sem evidência: "dados insuficientes".
 8. **Governança**: flags independentes `quality_diagnostics`, `quality_active_tests`, `quality_full` (todas OFF); permissões `diagnostics:quality_read`, `diagnostics:quality_run`, `diagnostics:quality_run_full` (o completo exige também `diagnostics:speed_run`); auditoria `quality.requested|blocked`. Desligar QoS não afeta SD-001, ONU 360 nem provisionamento.
-9. **UX**: aba "Qualidade" no sidebar existente e cartão no ONU 360; 4 indicadores e "Ver detalhes por camada"; sem página nova. Copiloto fora deste lote (`smart_diagnostics_copilot` segue bloqueada).
+9. **UX**: aba "Qualidade" no sidebar existente e na página de Diagnóstico (a ONU 360 não tem cartão: liga ao Diagnóstico); 4 indicadores e "Ver detalhes por camada"; sem página nova. Copiloto fora deste lote (`smart_diagnostics_copilot` segue bloqueada).
 
 ## Fora de escopo
 iperf/TR-471, TR-369/USP, auto-remediação, edição de Wi-Fi, reboot, varredura em lote, score, análise preditiva, comparação com plano contratado sem fonte integrada, traceroute neste lote.

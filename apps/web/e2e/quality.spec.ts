@@ -111,7 +111,22 @@ test("qualidade: o pedido envia só a chave de idempotência (nenhum endereço, 
   expect(Object.keys(posted ?? {})).toEqual(["key"]);
 });
 
-test("flag quality_diagnostics desligada: sem aba, sem cartão na ONU 360° e o BFF responde que está desligado", async ({ page, request }) => {
+test("ONU 360°: não tem o cartão Qualidade do serviço; a qualidade fica só no Diagnóstico, que a 360° liga", async ({ page, request }) => {
+  await confirmDemoA2(request);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.goto("/rede");
+  await row(page, "DEMOA0002").click();
+  await page.getByTestId("onu-360-link").click();
+  await expect(page.getByTestId("onu360-ready")).toBeVisible();
+  await expect(page.getByTestId("onu360-quality")).toHaveCount(0);
+  await expect(page.getByTestId("quality-run")).toHaveCount(0);
+  await page.getByTestId("onu360-diag-link").click();
+  await page.getByTestId("diag-tab-qualidade").click();
+  await expect(page.getByTestId("quality-run")).toBeVisible();
+});
+
+test("flag quality_diagnostics desligada: sem aba, sem qualidade na ONU 360° e o BFF responde que está desligado", async ({ page, request }) => {
   test.skip(!process.env.QUALITY_FLAG_OFF, "rodar com QUALITY_FLAG_OFF=1 e a flag desligada no provedor");
   await confirmDemoA2(request);
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -123,6 +138,10 @@ test("flag quality_diagnostics desligada: sem aba, sem cartão na ONU 360° e o 
   await page.getByTestId("onu-360-link").click();
   await expect(page.getByTestId("onu360-ready")).toBeVisible();
   await expect(page.getByTestId("onu360-quality")).toHaveCount(0);
+  await page.getByTestId("onu360-diag-link").click();                                                                   // o Diagnóstico também respeita a flag: sem leitura, só o aviso
+  await page.getByTestId("diag-tab-qualidade").click();
+  await expect(page.getByTestId("diag-unavailable")).toBeVisible();
+  await expect(page.getByTestId("quality-run")).toHaveCount(0);
   const r = await page.request.get(`/bff/cpes/00000000-0000-4000-8000-000000000001/quality`);
   expect([403, 404]).toContain(r.status());
 });
