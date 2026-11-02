@@ -39,6 +39,8 @@ def upgrade() -> None:
         );
         CREATE INDEX onu_discovery_by_olt ON onu_discovery_observations (tenant_id, olt_id, last_seen_at DESC);
         CREATE INDEX onu_discovery_by_serial ON onu_discovery_observations (tenant_id, serial);
+        -- the queue asks "is this serial already a registered ONU?" with upper(serial): the lookup must be indexable
+        CREATE INDEX onus_tenant_upper_serial ON onus (tenant_id, upper(serial));
         ALTER TABLE onu_discovery_observations ENABLE ROW LEVEL SECURITY;
         ALTER TABLE onu_discovery_observations FORCE ROW LEVEL SECURITY;
         CREATE POLICY tenant_isolation ON onu_discovery_observations USING (tenant_id = {cur_t}) WITH CHECK (tenant_id = {cur_t});
@@ -49,4 +51,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP TABLE IF EXISTS onu_discovery_observations;")
+    op.execute("DROP TABLE IF EXISTS onu_discovery_observations; DROP INDEX IF EXISTS onus_tenant_upper_serial;")

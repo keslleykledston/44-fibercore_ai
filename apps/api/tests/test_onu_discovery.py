@@ -158,3 +158,18 @@ def test_the_filter_is_applied_before_paging_so_a_page_never_hides_a_match(clien
     past = client.get(f"/v1/discovery/onus?limit=2&offset={first['total'] + 10}", headers=h).json()
     assert past["items"] == [] and past["total"] == first["total"] and past["truncated"] is False
     assert client.get("/v1/discovery/onus?limit=0", headers=h).status_code == 422 and client.get("/v1/discovery/onus?limit=501", headers=h).status_code == 422
+
+
+def test_the_registered_serial_lookup_uses_an_index_at_volume(client, seed, inv, migrated):
+    h = hdr(client, "alice", seed, "A")
+    olt = _olt(client, inv, h, "OLT-DS-VOL")
+    try:
+        with migrated.begin() as c:
+            c.execute(text("INSERT INTO onus (tenant_id, olt_id, serial, status) SELECT :t, :o, 'VOLTEST' || lpad(g::text, 8, '0'), 'online' FROM generate_series(1, 20000) g"),
+                      {"t": seed["A"], "o": olt})
+            c.execute(text("ANALYZE onus"))
+            plan = "\n".join(r[0] for r in c.execute(text("EXPLAIN SELECT 1 FROM onus r WHERE r.tenant_id = :t AND upper(r.serial) = 'VOLTEST00000042'"), {"t": seed["A"]}))
+        assert "onus_tenant_upper_serial" in plan and "Seq Scan" not in plan, plan
+    finally:
+        with migrated.begin() as c:
+            c.execute(text("DELETE FROM onus WHERE serial LIKE 'VOLTEST%'"))

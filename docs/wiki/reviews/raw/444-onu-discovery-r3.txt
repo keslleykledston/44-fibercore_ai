@@ -1,0 +1,33 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19b1f-15a4-7c23-bbd0-8ee359dffdf4).
+[codex] Turn started (01a19b1f-17dc-7ca3-8f14-f1c4b8fb7c11).
+[codex] Assistant message captured: Vou comparar a branch com `main`, focando na consulta SQL nova e conferindo o histórico relev...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/onu_discov...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/onu_discov... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Running command: /bin/bash -lc 'rg -n "CREATE POLICY|POLICY|onu_discovery_observations|CREATE TABLE onus|CREAT...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Command completed: /bin/bash -lc 'rg -n "CREATE POLICY|POLICY|onu_discovery_observations|CREATE TABLE onus|CREAT... (exit 0)
+[codex] Running command: /bin/bash -lc 'git show 8eebd55 -- && git show d1c9e57 -- apps/api/app/api/onu_discovery.py d...
+[codex] Command completed: /bin/bash -lc 'git show 8eebd55 -- && git show d1c9e57 -- apps/api/app/api/onu_discovery.py d... (exit 0)
+[codex] Running command: /bin/bash -lc 'cat docs/wiki/reviews/raw/442-onu-discovery-r1.txt docs/wiki/reviews/raw/443-o...
+[codex] Command completed: /bin/bash -lc 'cat docs/wiki/reviews/raw/442-onu-discovery-r1.txt docs/wiki/reviews/raw/443-o... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/onu_discovery.py | sed -n '88,116p'; nl -ba apps/api/a...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/onu_discovery.py | sed -n '88,116p'; nl -ba apps/api/a... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: o CASE está coerente com as priori...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: o CASE está coerente com as prioridades descritas e a consulta corrige os cortes anteriores, mas a verificação de ONU registrada pode tornar a fila global muito cara conforme o inventário cresce.
+
+Findings:
+- [medium] A checagem de registro pode degradar para varreduras repetidas (apps/api/app/api/onu_discovery.py:96)
+  `upper(r.serial) = d.serial` envolve a coluna indexada em uma função, então o índice existente em `(tenant_id, serial)` não corresponde diretamente à condição. Para cada registro distinto da fila, o `EXISTS` pode exigir uma varredura do inventário de ONUs do tenant; na consulta global, esse custo pode crescer aproximadamente com a fila multiplicada pelo inventário. Em tenants grandes, isso pode elevar muito a latência e carga de banco no endpoint de listagem. O RLS mantém a consulta no tenant atual, mas não limita esse custo dentro dele.
+  Recommendation: Torne a comparação indexável, por exemplo normalizando `serial` no inventário e comparando diretamente, ou crie um índice de expressão compatível com `upper(serial)` junto ao escopo de tenant; confirme o plano com `EXPLAIN (ANALYZE, BUFFERS)` em volume representativo.
+
+Next steps:
+- Adicionar ou ajustar o índice para a checagem de serial registrado e verificar o plano da consulta global em volume representativo.
+finished
