@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — regras R-D003 e R-D004 do motor de diagnóstico (2026-11-02)
+- API: `R-D003 v1` (Edge sem sinal: o coletor parou, então os dados de ONU dele são velhos e não provam queda; escopo `edge_id`) e `R-D004 v1` (ONU online na OLT e CPE sem Inform recente: aponta a sessão com o ACS, nunca "assinante sem internet"; escopo `cpe_id` ou `onu_id` com vínculo confirmado). Funções puras, sem relógio: o veredito de silêncio e de frescor é gravado nas entradas, então a repetição é reproduzível. Sem dado, ONU sem vínculo confirmado, leitura velha ou ONU que não está online: nada é afirmado. Só leitura: não abre incidente nem publica evento. Nenhuma migração. O campo `cpes.observed_at` (o `_lastInform` do ACS) alimenta o R-D004.
+- `POST /v1/diagnostics/runs` aceita `edge_id`; as entradas guardadas da R-D002 ganham `inform_age_seconds` e `inform_fresh` (ignorados por ela). Testes: 916 passed (7 novos: regras puras, propriedade, execução pela API, escopos, isolamento por tenant).
+
 ## Unreleased — rotação do cwmp.auth concluída nas ONTs de bancada (2026-11-02)
 - Ops: fases 2 e 3 da rotação do `cwmp.auth` do ACS. O par novo foi configurado na Huawei EG8145V5 e na ZTE F670L pelo responsável; `cwmp.auth` ficou só com o par novo; o par antigo exato passou a dar 401 e as duas ONTs seguem informando (0 falhas). Nada no código. Lição registrada em `docs/operations/GENIEACS_CWMP_AUTH_ROTATION.md`: gravação direta no Mongo só vale depois do snapshot de até 300 s do GenieACS.
 

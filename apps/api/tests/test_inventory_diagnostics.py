@@ -174,7 +174,7 @@ def test_rules_listing_rbac_and_isolation(client, seed, inv, migrated):
     _on(migrated, seed["A"])
     ha, hd, hb = hdr(client, "alice", seed, "A"), hdr(client, "dave", seed, "A"), hdr(client, "bob", seed, "B")
     rules = client.get("/v1/diagnostics/rules", headers=ha).json()
-    assert [(x["id"], x["version"], x["read_only"]) for x in rules] == [("R-D001", 1, True), ("R-D002", 1, True)]
+    assert [(x["id"], x["version"], x["read_only"]) for x in rules] == [("R-D001", 1, True), ("R-D002", 1, True), ("R-D003", 1, True), ("R-D004", 1, True)]
     assert client.get("/v1/diagnostics/rules", headers=hd).status_code == 200                       # noc_n1 reads
     assert client.post("/v1/diagnostics/runs", headers=hd, json={"rule_id": "R-D001"}).status_code == 403   # but does not run
     assert client.post("/v1/diagnostics/runs", headers=agent(client, inv, "a1"), json={"rule_id": "R-D001"}).status_code == 403
@@ -394,7 +394,7 @@ def test_r_d002_run_reads_the_stored_state_is_read_only_and_reproducible(client,
     assert after == before  # a run opens no incident, writes no state and publishes no event
     assert "DGC-0001" not in json.dumps(stored) and set(stored[0]) == {
         "subject_id", "links", "connections", "newest_age_seconds", "oldest_age_seconds", "onu_link", "onu_status",
-        "onu_fresh"}  # no serial, no free text
+        "onu_fresh", "inform_age_seconds", "inform_fresh"}  # no serial, no free text
     assert client.get(f"/v1/diagnostics/runs/{d['run_id']}", headers=h).json()["reproducible"] is True
     # the same CPE reached through its confirmed ONU
     r2 = client.post("/v1/diagnostics/runs", headers=h, json={"rule_id": "R-D002", "onu_id": onu})
@@ -438,3 +438,111 @@ def test_r_d002_a_recent_reading_of_one_connection_does_not_refresh_an_old_one(c
     assert f["status"] == "unknown" and f["hypothesis"] is None and "rule out that it is established" in f["reason"]
     assert sorted((c["state"], c["fresh"]) for c in f["evidence"]["connections"]) == [("Disconnected", False), ("Disconnected", True)]
     assert f["evidence"]["oldest_age_seconds"] >= 7200 and f["evidence"]["newest_age_seconds"] < 300
+
+
+# ---- R-D003 / R-D004 (pure) ----------------------------------------------------------------------------------------------------------
+def _edge_row(**kw):
+    base = {"subject_id": "e1", "heartbeat_age_seconds": 30, "silent": False, "revoked": False, "olts": 1, "onus_total": 10, "onus_not_fresh": 0}
+    base.update(kw)
+    return base
+
+
+def _inform_row(**kw):
+    base = {"subject_id": "c1", "onu_link": "confirmed", "onu_status": "online", "onu_fresh": True, "inform_age_seconds": 7200, "inform_fresh": False}
+    base.update(kw)
+    return base
+
+
+def test_r_d003_only_a_silent_edge_is_a_hypothesis_and_never_a_claim_about_onus():
+    rule = diagnostics.RULES[("R-D003", 1)]
+    ev = lambda **kw: rule.evaluate(_edge_row(**kw))  # noqa: E731
+    silent = ev(heartbeat_age_seconds=900, silent=True, onus_not_fresh=10)
+    assert silent.matched and silent.suspected_cause == "edge_unreachable"
+    assert silent.finding["status"] == "inferred" and silent.finding["requires_human_confirmation"] is True
+    assert "not evidence of ONU outages" in silent.finding["hypothesis"]
+    assert ev().finding["status"] == "observed" and not ev().matched                       # reporting Edge: nothing to flag
+    assert ev(heartbeat_age_seconds=None).finding["status"] == "unknown"                   # never sent a heartbeat
+    assert ev(heartbeat_age_seconds=900, silent=True, revoked=True).finding["status"] == "unknown"   # revoked: not expected to report
+    assert set(silent.finding["evidence"]) == {"heartbeat_age_seconds", "silent", "olts", "onus_total", "onus_not_fresh"}
+
+
+def test_r_d004_claims_only_for_an_online_fresh_confirmed_onu_with_an_old_inform():
+    rule = diagnostics.RULES[("R-D004", 1)]
+    ev = lambda **kw: rule.evaluate(_inform_row(**kw))  # noqa: E731
+    r = ev()
+    assert r.matched and r.suspected_cause == "acs_session_stale" and r.finding["status"] == "inferred"
+    assert r.finding["requires_human_confirmation"] is True and "does not mean the subscriber has no internet" in r.finding["next_read_action"]
+    assert ev(inform_age_seconds=60, inform_fresh=True).finding["status"] == "observed"
+    assert ev(onu_link="none").finding["status"] == "unknown"                              # nothing to compare with
+    assert ev(onu_fresh=False).finding["status"] == "unknown"                              # old OLT reading
+    assert ev(onu_status="los").finding["status"] == "observed" and not ev(onu_status="los").matched   # not online: rule does not apply
+    assert ev(inform_age_seconds=None, inform_fresh=False).finding["status"] == "unknown"  # no Inform time known
+    rnd = random.Random(11)  # noqa: S311  property: a claim needs a confirmed, fresh, online ONU and a known, old Inform
+    for _ in range(500):
+        row = _inform_row(onu_link=rnd.choice(["none", "confirmed"]), onu_status=rnd.choice([None, "online", "los", "offline"]),
+                          onu_fresh=rnd.random() < 0.6, inform_age_seconds=rnd.choice([None, 10, 7200]), inform_fresh=rnd.random() < 0.5)
+        res = rule.evaluate(row)
+        assert res.finding == rule.evaluate(dict(row)).finding
+        if res.finding["status"] == "inferred":
+            assert row["onu_link"] == "confirmed" and row["onu_fresh"] and row["onu_status"] == "online"
+            assert row["inform_age_seconds"] is not None and not row["inform_fresh"]
+
+
+def test_r_d003_and_r_d004_are_registered_pure_and_replay():
+    for rid, row in (("R-D003", _edge_row(silent=True, heartbeat_age_seconds=900)), ("R-D004", _inform_row())):
+        rule = diagnostics.RULES[(rid, 1)]
+        a, b = diagnostics.run(rule, [row]), diagnostics.run(rule, [dict(row)])
+        assert a == b and json.loads(json.dumps(a)) == a and a[0]["finding_id"] == f"{rid}/v1/{row['subject_id']}"
+    src = Path(diagnostics.__file__).read_text()
+    for fn in ("r_d003_v1", "r_d004_v1"):  # no clock, no I/O in the rule bodies
+        body = src[src.index(f"def {fn}"):]
+        body = body[:body.index("\n\n\n") if "\n\n\n" in body else len(body)]
+        assert not {"datetime", "time.", "random", "open(", "requests"} & {w for w in ("datetime", "time.", "random", "open(", "requests") if w in body}
+
+
+# ---- R-D003 / R-D004 through the API ------------------------------------------------------------------------------------------------
+def test_r_d004_run_flags_an_online_onu_whose_cpe_stopped_informing(client, seed, inv, migrated):
+    _on(migrated, seed["A"])
+    h = hdr(client, "alice", seed, "A")
+    cpe, onu = _cpe_with_state(client, inv, migrated, seed, "DGC-0007", "dgc-7", [], onu_status="online")
+    fresh = client.post("/v1/diagnostics/runs", headers=h, json={"rule_id": "R-D004", "cpe_id": cpe}).json()["findings"][0]
+    assert fresh["status"] == "observed" and fresh["evidence"]["inform_fresh"] is True          # the snapshot just informed
+    with migrated.begin() as c:
+        c.execute(text("UPDATE cpes SET observed_at = now() - interval '3 hours' WHERE canonical_serial = 'DGC-0007'"))
+        before = c.execute(text("SELECT (SELECT count(*) FROM incidents), (SELECT count(*) FROM events_outbox)")).one()
+    r = client.post("/v1/diagnostics/runs", headers=h, json={"rule_id": "R-D004", "onu_id": onu})
+    assert r.status_code == 201, r.text
+    d = r.json()
+    f = d["findings"][0]
+    assert f["status"] == "inferred" and f["suspected_cause"] == "acs_session_stale" and f["evidence"]["inform_age_seconds"] >= 10000
+    with migrated.begin() as c:
+        after = c.execute(text("SELECT (SELECT count(*) FROM incidents), (SELECT count(*) FROM events_outbox)")).one()
+        stored = c.execute(text("SELECT inputs FROM diagnostic_runs WHERE id = :i"), {"i": d["run_id"]}).scalar_one()
+    assert after == before and "DGC-0007" not in json.dumps(stored)                              # read-only, no serial stored
+    assert client.get(f"/v1/diagnostics/runs/{d['run_id']}", headers=h).json()["reproducible"] is True
+
+
+def test_r_d003_run_reads_the_edge_state_is_scoped_and_tenant_isolated(client, seed, inv, migrated):
+    _on(migrated, seed["A"])
+    _on(migrated, seed["B"])
+    h = hdr(client, "alice", seed, "A")
+    edge = str(inv["a1"]["edge"])
+    _push(client, inv, "a1", NAME + "E", [{"serial": "DGC-E-01", "pon_path": "0/1/0", "status": "online", "rx_dbm": -20.0}], _now(-30))
+    post = lambda body, hh=h: client.post("/v1/diagnostics/runs", headers=hh, json=body)  # noqa: E731
+    with migrated.begin() as c:
+        c.execute(text("UPDATE edges SET last_heartbeat_at = now() - interval '1 second' WHERE id = :e"), {"e": edge})
+    ok = post({"rule_id": "R-D003", "edge_id": edge}).json()["findings"][0]
+    assert ok["status"] == "observed" and ok["evidence"]["silent"] is False
+    with migrated.begin() as c:
+        c.execute(text("UPDATE edges SET last_heartbeat_at = now() - interval '15 minutes' WHERE id = :e"), {"e": edge})
+    r = post({"rule_id": "R-D003", "edge_id": edge})
+    assert r.status_code == 201, r.text
+    f = r.json()["findings"][0]
+    assert f["status"] == "inferred" and f["suspected_cause"] == "edge_unreachable" and f["evidence"]["silent"] is True
+    assert f["evidence"]["olts"] >= 1 and f["evidence"]["onus_total"] >= 1
+    assert client.get(f"/v1/diagnostics/runs/{r.json()['run_id']}", headers=h).json()["reproducible"] is True
+    assert post({"rule_id": "R-D003"}).status_code == 422                                          # needs an edge
+    assert post({"rule_id": "R-D003", "edge_id": edge, "olt_id": edge}).status_code == 422          # exclusive scopes
+    assert post({"rule_id": "R-D001", "edge_id": edge}).status_code == 422                         # a PON rule does not take an edge
+    assert post({"rule_id": "R-D003", "edge_id": "00000000-0000-0000-0000-000000000000"}).status_code == 404
+    assert post({"rule_id": "R-D003", "edge_id": edge}, hdr(client, "bob", seed, "B")).status_code == 404   # another tenant's Edge
