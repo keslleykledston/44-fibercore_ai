@@ -1,6 +1,26 @@
 # Implementation status (evidência, não promessa)
 
-Atualizado: 2026-10-27 | Branch: `final/15-handoff` | Estado: **Sprint 0 concluída (PR 1–4 mergeados); Sprint 1 em andamento (PR 5)**
+Atualizado: 2026-11-02 | Branch: `main` | Estado: **LAB** (`LIMITED_INTERNAL_PRODUCTION_CANDIDATE` NÃO declarado; nenhum estado de produção foi concedido). As tabelas por sprint abaixo são o **histórico** de 2026-10-27 a 2026-10-29 e ficam como registro; a seção seguinte é o estado atual. A lista de pendências ordenada está em `docs/product/ROADMAP_BACKLOG.md` (seção de 2026-11-02).
+
+## Estado atual (2026-11-02)
+
+| Área | Estado | Prova |
+|---|---|---|
+| API, RLS, auth, MFA TOTP, refresh rotativo, lockout/throttle | Feito | pytest 917 passed (Postgres 17 e NATS reais descartáveis); migração Alembic head **0039** |
+| Edge Go (NBI somente leitura, OLT identified, jobs assinados, bench, ping, speed) | Feito para a LAB | `go test -race ./...` verde; o Edge em execução na LAB é anterior ao `last_inform_at` (precisa de reimplantação, que depende de ordem do responsável) |
+| Inventário, ERP CSV/HubSoft (HS-01/02), associações, incidentes, NOC com ack | Feito | pytest + e2e funcional |
+| Web (Next.js 15, BFF HttpOnly, Central de Ajuda, 23 artigos) | Feito; web da LAB em `7903ccc` | e2e: 21 puros + 32 funcionais + 55 do inspetor (2 pulados por flag) + 30 capturas; axe claro/escuro; contraste WCAG medido |
+| Motor de diagnóstico | R-D001, R-D002, R-D003, R-D004 (puras, versionadas, reproduzíveis) | `tests/test_inventory_diagnostics.py` (27); R-D004 depende do Edge novo |
+| Speed (TR-143), Qualidade (QoS-001), Ping (TR-143 IPPing) | Feitos atrás de flags; ONU 360° não tem cartões deles (Diagnóstico e abas do painel) | e2e de UI de cada um; o do ping achou e corrigiu um bug real do BFF |
+| Escrita em rede | **BLOQUEADA** (`HOMOLOGATED_WRITES` vazio); só o caminho de bancada (ADR-0030), alvo fechado | testes de bloqueio; evidências em `docs/wiki/bench/` |
+| Bancada | ZTE F670L: `reboot_cpe`, `set_wifi_ssid`, download, upload e `ping_test` em `observed` (aceites do responsável). Huawei EG8145V5: ping NÃO aceito (80 % de perda sem causa) | `docs/wiki/bench/H-*.md` |
+| Segurança operacional | `cwmp.auth` rotacionado (só o par novo; o antigo dá 401); credenciais de homologação desativadas | `docs/operations/GENIEACS_CWMP_AUTH_ROTATION.md` |
+| Publicação | LAB atrás de nginx com CSP, HSTS e `limit_req` versionados; gate formal de produção NÃO concedido | `infra/deploy/nginx`, `PRODUCTION_CHECKLIST.md` |
+| Revisão | Codex adversarial por branch (log com as rodadas e os brutos) | `docs/wiki/reviews/CODEX_REVIEW_LOG.md`, `raw/` |
+
+Não verificado neste ambiente: CI remoto (GitHub Actions), TLS/ACME no domínio público, restauração de backup recente, qualquer medição em ONT de produção.
+
+## Histórico (2026-10-27 a 2026-10-29)
 
 | Item Sprint 0 | Status | Prova | Pendência |
 |---|---|---|---|
@@ -14,7 +34,7 @@ Atualizado: 2026-10-27 | Branch: `final/15-handoff` | Estado: **Sprint 0 conclu�
 | H. Wiki/ADRs/contexto | Feito (ADR 0001–0010 Proposed) | `docs/wiki/adr/` | aprovação Codex |
 | I. Este arquivo | Feito | — | atualizar a cada PR |
 
-Hardware real, GenieACS real, USP controller: **NOT_CONNECTED / NOT_TESTED**. Codex gate: ver `docs/wiki/reviews/PR-01-review-request.md` (**não executado**).
+(Em 2026-10-27:) hardware real, GenieACS real, USP controller: **NOT_CONNECTED / NOT_TESTED**; hoje o GenieACS real e duas ONTs de bancada estão conectados (ver a seção acima), USP segue sem controlador. Codex gate: ver `docs/wiki/reviews/PR-01-review-request.md` (**não executado**).
 
 Edge-fleet: registro via CLI, `POST /v1/edge/heartbeat` (bearer edge_agent, interino), `GET /v1/edges` com status calculado (stale => offline).
 
