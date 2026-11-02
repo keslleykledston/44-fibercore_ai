@@ -1,0 +1,20 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19b03-8671-7472-8169-86c896e730df).
+[codex] Turn started (01a19b03-86a9-7982-8901-482cf2d94ffb).
+[codex] Assistant message captured: Vou conferir o diff contra `main`, dando prioridade ao limite de futuro em `verified_at` e à ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/profile_s...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/profile_s... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/profile_st...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/profile_st... (exit 0)
+[codex] Running command: /bin/bash -lc 'git show --stat --oneline HEAD && git show --format=fuller --no-ext-diff --uni...
+[codex] Command completed: /bin/bash -lc 'git show --stat --oneline HEAD && git show --format=fuller --no-ext-diff --uni... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"A checagem rejeita `verified_at` mais de cinco minutos no fut...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+A checagem rejeita `verified_at` mais de cinco minutos no futuro e limita certificações antigas a 90 dias. Os testes cobrem uma data 30 dias futura e tolerância de dois minutos; não encontrei risco material que justifique bloquear o envio.
+
+No material findings.
