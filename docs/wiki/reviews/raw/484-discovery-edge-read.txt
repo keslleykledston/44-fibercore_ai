@@ -1,0 +1,31 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19df6-ea53-74e1-ae5a-920230f7900d).
+[codex] Turn started (01a19df6-ed56-7840-b3c9-27b94ecb81b1).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de autorização, persistência e UI a...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/onu_discov...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/onu_discov... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/web/src/app/bff/descob...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/web/src/app/bff/descob... (exit 0)
+[codex] Assistant message captured: O endpoint usa `asked_at` como carimbo e serializa as chamadas, mas estou conferindo agora se...
+[codex] Running command: /bin/bash -lc "rg -n \"def latest|def store_latest|olt.autofind|def check_result|autofind\" a...
+[codex] Command completed: /bin/bash -lc "rg -n \"def latest|def store_latest|olt.autofind|def check_result|autofind\" a... (exit 0)
+[codex] Running command: /bin/bash -lc "cat apps/api/app/core/olt_cache.py; sed -n '130,225p' apps/api/app/core/olt_qu...
+[codex] Command completed: /bin/bash -lc "cat apps/api/app/core/olt_cache.py; sed -n '130,225p' apps/api/app/core/olt_qu... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/onu_discovery.py | sed -n '90,127p'; nl -ba apps/web/s...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/onu_discovery.py | sed -n '90,127p'; nl -ba apps/web/s... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a checagem de frescor aceita times...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a checagem de frescor aceita timestamps futuros e leituras vazias recentes são apresentadas como fila vazia sem evidência de que a coleta ocorreu.
+
+Findings:
+- [high] Leituras futuras passam pela validação de frescor (apps/api/app/api/onu_discovery.py:103-106)
+  `asked_at` vem da cache e só é recusado quando `now - asked` excede uma hora. Um timestamp futuro, inclusive muito futuro, produz diferença negativa e passa; `age_seconds` também é truncado para zero. Se um resultado de job puder gravar `asked_at` futuro, o sync o transforma em `edge_read` autoritativo e pode manter avistamentos artificialmente novos por mais tempo que a janela prevista. Rejeite `asked_at > now + skew` antes de gravar e calcule frescor a partir de um timestamp validado.
+  Recommendation: Adicionar limite explícito de desvio futuro para `asked_at` e retornar 409 para leituras fora da janela temporal permitida.
+- [medium] Fila vazia não informa se houve leitura recente (apps/web/src/app/rede/pendentes/page.tsx:54)
+  A UI mostra “Nenhuma ONU aguardando” sempre que a fila não tem itens; ela não verifica se existe uma leitura `olt.autofind` recente. Uma coleta vazia válida e a ausência de coleta (ou uma leitura antiga sem observações) ficam indistinguíveis, podendo levar o operador a concluir que não há pendências sem evidência atual. O endpoint de sync só resolve isso quando alguém o aciona; a página não exibe esse estado por padrão.
+  Recommendation: Expor o estado e a idade da última leitura junto à fila, e diferenciar explicitamente “coleta recente sem entradas” de “sem leitura recente”.

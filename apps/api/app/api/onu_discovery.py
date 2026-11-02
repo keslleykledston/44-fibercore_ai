@@ -82,6 +82,52 @@ def import_observations(olt_id: UUID, body: ImportIn, p: Principal = Depends(req
     return {"olt_id": str(olt_id), "source": body.source, "created": created, "updated": updated}
 
 
+SYNC_MAX_AGE = od.FRESH_FOR   # the autofind list is the OLT's CURRENT state: a read older than the freshness window is not turned into sightings, ask the OLT again
+
+
+@router.post("/v1/olts/{olt_id}/onus/unregistered/sync")
+def sync_from_read(olt_id: UUID, p: Principal = Depends(require("discovery:import")), conn: Connection = TENANT_CONN) -> dict:
+    """Turn the Edge's last typed read of the OLT's autofind list (`olt.autofind`, already checked against its closed shape by the job that brought it) into `edge_read`
+    sightings: the only authoritative source. Idempotent per read: the sighting is stamped with the QUESTION's time (`asked_at`, the Cloud's own job clock), and a read that is
+    not newer than what a sighting already says changes nothing. A serial that an earlier read listed and this one does not is NOT touched (that is not proof it was
+    authorised or removed): it simply ages into `stale`. Nothing is asked of the equipment here and nothing is authorised."""
+    from app.core import olt_cache, olt_query
+    _flag(conn, p)
+    _olt(conn, olt_id)
+    conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"discovery-sync:{olt_id}"})   # one sync at a time per OLT
+    got = olt_cache.latest(conn, olt_id, "olt.autofind", "")
+    if got is None:
+        raise HTTPException(409, "no_read: ask the OLT for its autofind list first (query olt.autofind)")
+    if got.get("source") != "job":
+        raise HTTPException(409, "read_not_from_the_equipment")
+    now = datetime.now(UTC)
+    asked = datetime.fromisoformat(got["asked_at"])
+    if asked > now + MAX_FUTURE_SKEW:   # the question's time comes from the Cloud's own clock: a future one is a defect, never a "fresh" read
+        raise HTTPException(409, "read_in_the_future")
+    if now - asked > SYNC_MAX_AGE:
+        raise HTTPException(409, "read_too_old: ask the OLT again")
+    if not olt_query.check_result("olt.autofind", got["data"]):   # the cache is trusted only as far as its shape: checked again at the point of use
+        raise HTTPException(409, "read_not_usable")
+    created = updated = unchanged = 0
+    for e in got["data"]["entries"]:
+        r = conn.execute(
+            text("INSERT INTO onu_discovery_observations (tenant_id, olt_id, pon_path, serial, vendor_hint, source, first_seen_at, last_seen_at, created_by) "
+                 "VALUES (:t,:o,:pon,:s,:v,'edge_read',:at,:at,:by) "
+                 "ON CONFLICT (tenant_id, olt_id, pon_path, serial, source) DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at, seen_count = onu_discovery_observations.seen_count + 1, "
+                 "vendor_hint = COALESCE(EXCLUDED.vendor_hint, onu_discovery_observations.vendor_hint) WHERE onu_discovery_observations.last_seen_at < EXCLUDED.last_seen_at "
+                 "RETURNING (xmax = 0) AS inserted"),
+            {"t": p.tenant_id, "o": olt_id, "pon": e["pon_path"], "s": e["serial"], "v": e["vendor"], "at": asked, "by": p.id}).first()
+        if r is None:
+            unchanged += 1
+        elif r.inserted:
+            created += 1
+        else:
+            updated += 1
+    audit(conn, p, "discovery.observations.synced", "olt", str(olt_id), {"source": "edge_read", "created": created, "updated": updated, "unchanged": unchanged})
+    return {"olt_id": str(olt_id), "source": "edge_read", "created": created, "updated": updated, "unchanged": unchanged, "entries": len(got["data"]["entries"]),
+            "asked_at": asked.isoformat(), "age_seconds": int((now - asked).total_seconds())}
+
+
 # The condition is decided IN SQL (one place), per row, with indexed EXISTS lookups: the filter, the total and the page are all computed by the database, so a page can
 # never hide a match and no request materialises the tenant's whole history. `conflict` wins (an uncertain identity blocks everything else), then `stale`, `new`, `waiting`.
 _QUEUE_SQL = """

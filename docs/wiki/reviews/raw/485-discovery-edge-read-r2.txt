@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19dfb-c393-7632-a828-ee0ed9d18b8d).
+[codex] Turn started (01a19dfb-c645-7dd1-b0f8-06df577ef234).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir o fluxo de sincronização e a leitura de estado vaz...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/onu_discov...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/onu_discov... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- apps/web/src/app/bff/descob...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- apps/web/src/app/bff/descob... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,125p' apps/api/app/api/olt_queries.py; sed -n '1,100p' apps/api/app/...
+[codex] Command completed: /bin/bash -lc "sed -n '1,125p' apps/api/app/api/olt_queries.py; sed -n '1,100p' apps/api/app/... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/app/rede/pendentes/page.tsx | sed -n '37,75p'; nl -ba apps...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/app/rede/pendentes/page.tsx | sed -n '37,75p'; nl -ba apps... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não embarcaria ainda: a tela pode afirmar que a OLT n...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não embarcaria ainda: a tela pode afirmar que a OLT não detectou ONUs quando a fila está apenas vazia por causa do filtro selecionado.
+
+Findings:
+- [medium] Estado vazio ignora o filtro ativo e a quantidade da leitura (apps/web/src/app/rede/pendentes/page.tsx:63)
+  Quando há uma condição selecionada, `items` pode estar vazio porque nenhuma linha corresponde ao filtro, embora a leitura recente tenha listado ONUs. Ainda assim, `readFresh` sozinho faz a mensagem afirmar que a leitura não listou nenhuma ONU. Isso contradiz a linha de leitura, que pode mostrar uma contagem positiva, e pode levar a uma conclusão operacional errada. Só faça essa afirmação quando a condição for “Todas” e `nEntries === 0`; nos demais casos, descreva que não há resultados para o filtro.
+  Recommendation: Derive a mensagem de vazio também de `cond` e `nEntries`; diferencie fila vazia, filtro sem correspondências e leitura recente sem entradas.
+- [low] Timestamp futuro é tratado como leitura recente pela interface (apps/web/src/app/rede/pendentes/page.tsx:39-40)
+  `Math.max(0, ...)` transforma qualquer `asked_at` futuro em idade zero, e `readFresh` então classifica a leitura como recente. A sincronização da API, porém, rejeita timestamps mais de cinco minutos no futuro com `read_in_the_future`. Nessa divergência, a tela pode dizer que a leitura listou zero ONUs enquanto a ação de sincronizar recusa a mesma leitura. O impacto depende de um timestamp inválido no cache, mas a própria API já reconhece esse estado como inválido.
+  Recommendation: Não aplique clamp a timestamps futuros; classifique como leitura indisponível/inválida, usando o mesmo limite de tolerância da API.

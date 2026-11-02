@@ -173,3 +173,82 @@ def test_the_registered_serial_lookup_uses_an_index_at_volume(client, seed, inv,
     finally:
         with migrated.begin() as c:
             c.execute(text("DELETE FROM onus WHERE serial LIKE 'VOLTEST%'"))
+
+
+def _store_autofind(seed, olt, entries, asked, source="job", raw=None):
+    from uuid import UUID
+
+    from app.core import olt_cache
+    from app.core.db import get_engine, scoped_connection
+    with scoped_connection(get_engine(), tenant_id=seed["A"]) as c:
+        epoch = c.execute(text("SELECT owner_epoch FROM olts WHERE id = :i"), {"i": olt}).scalar()
+        olt_cache.store_latest(c, seed["A"], UUID(str(olt)), "olt.autofind", "", raw if raw is not None else {"entries": entries}, epoch, asked, source=source)
+
+
+def _entry(serial="48575443AABB0001", pon="0/1/3", vendor="HWTC"):
+    return {"pon_path": pon, "serial": serial, "vendor": vendor, "equipment": "EG8145V5", "found_at": "2026-01-15T10:20:30-04:00"}
+
+
+def test_sync_turns_the_edge_read_into_authoritative_sightings_once_per_read(client, seed, inv, migrated):
+    _on(migrated, seed["A"])
+    h, hn1 = hdr(client, "alice", seed, "A"), hdr(client, "dave", seed, "A")
+    olt = _olt(client, inv, h, "OLT-DS-SY")
+    url = f"/v1/olts/{olt}/onus/unregistered/sync"
+    assert client.post(url, headers=hn1).status_code == 403                                   # noc_n1 holds no discovery:import
+    assert client.post(url, headers=h).status_code == 409 and "no_read" in client.post(url, headers=h).json()["detail"]
+    t1 = datetime.now(UTC) - timedelta(minutes=5)
+    _store_autofind(seed, olt, [_entry(), _entry("48575443AABB0002", "0/1/4")], t1)
+    r = client.post(url, headers=h)
+    assert r.status_code == 200 and (r.json()["created"], r.json()["updated"], r.json()["unchanged"], r.json()["entries"]) == (2, 0, 0, 2), r.text
+    row = _row(client, h, olt, "48575443AABB0001")
+    assert row["source"] == "edge_read" and row["authoritative"] is True and row["condition"] == "new" and row["vendor_hint"] == "HWTC" and row["seen_count"] == 1
+    assert row["authorization"] == "not_available" and row["customer"] is None                # nothing is authorised from here
+    again = client.post(url, headers=h).json()                                               # the same read again: nothing moves
+    assert (again["created"], again["updated"], again["unchanged"]) == (0, 0, 2)
+    assert _row(client, h, olt, "48575443AABB0001")["seen_count"] == 1
+    t2 = datetime.now(UTC) - timedelta(minutes=1)                                            # a newer read: one serial still there, one new, one gone
+    _store_autofind(seed, olt, [_entry(), _entry("48575443AABB0003", "0/1/5")], t2)
+    n = client.post(url, headers=h).json()
+    assert (n["created"], n["updated"], n["unchanged"]) == (1, 1, 0)
+    assert _row(client, h, olt, "48575443AABB0001")["seen_count"] == 2
+    gone = _row(client, h, olt, "48575443AABB0002")                                          # not listed any more: untouched, not "authorised", not deleted
+    assert gone["seen_count"] == 1 and gone["last_seen_at"][:16] == t1.isoformat()[:16]
+    ev = client.get("/v1/discovery/onus", headers=h)
+    assert ev.status_code == 200
+
+
+def test_sync_refuses_a_missing_old_mock_or_malformed_read(client, seed, inv, migrated):
+    _on(migrated, seed["A"])
+    h = hdr(client, "alice", seed, "A")
+    olt = _olt(client, inv, h, "OLT-DS-SX")
+    url = f"/v1/olts/{olt}/onus/unregistered/sync"
+    _store_autofind(seed, olt, [_entry()], datetime.now(UTC) - timedelta(hours=2))
+    r = client.post(url, headers=h)
+    assert r.status_code == 409 and "read_too_old" in r.json()["detail"]
+    _store_autofind(seed, olt, [_entry()], datetime.now(UTC), source="mock")
+    assert client.post(url, headers=h).status_code in (409,)                                  # a demonstration is never the OLT's word
+    _store_autofind(seed, olt, [], datetime.now(UTC), raw={"entries": [{**_entry(), "password": "0x00"}]})
+    r = client.post(url, headers=h)
+    assert r.status_code == 409 and r.json()["detail"] == "read_not_usable"
+    with migrated.begin() as c:
+        assert c.execute(text("SELECT count(*) FROM onu_discovery_observations WHERE source = 'edge_read'")).scalar() == 0   # nothing was stored by any refusal
+
+
+def test_sync_with_an_empty_list_stores_nothing_and_says_so(client, seed, inv, migrated):
+    _on(migrated, seed["A"])
+    h = hdr(client, "alice", seed, "A")
+    olt = _olt(client, inv, h, "OLT-DS-SE")
+    _store_autofind(seed, olt, [], datetime.now(UTC))
+    r = client.post(f"/v1/olts/{olt}/onus/unregistered/sync", headers=h)
+    assert r.status_code == 200 and (r.json()["created"], r.json()["entries"]) == (0, 0)
+
+
+def test_sync_refuses_a_read_stamped_in_the_future(client, seed, inv, migrated):
+    _on(migrated, seed["A"])
+    h = hdr(client, "alice", seed, "A")
+    olt = _olt(client, inv, h, "OLT-DS-SF")
+    _store_autofind(seed, olt, [_entry()], datetime.now(UTC) + timedelta(hours=3))        # the question's time comes from the Cloud's clock: a future one is never "fresh"
+    r = client.post(f"/v1/olts/{olt}/onus/unregistered/sync", headers=h)
+    assert r.status_code == 409 and r.json()["detail"] == "read_in_the_future"
+    with migrated.begin() as c:
+        assert c.execute(text("SELECT count(*) FROM onu_discovery_observations WHERE source = 'edge_read'")).scalar() == 0

@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19dfe-575b-7071-8282-9d2042eef84c).
+[codex] Turn started (01a19dfe-59be-76f1-84fe-e4724a911e69).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir o caminho do cálculo de idade até a decisão da pág...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/onu_discov...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/onu_discov... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/olt_cache.py | sed -n '44,67p'; nl -ba apps/web/src/a...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/olt_cache.py | sed -n '44,67p'; nl -ba apps/web/src/a... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: a página pode declarar recente uma le...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: a página pode declarar recente uma leitura que o sync rejeita no limite de 1 hora.
+
+Findings:
+- [medium] Idade inteira afrouxa os limites de frescor e futuro (apps/api/app/core/olt_cache.py:56-57)
+  `latest()` converte `asked_age` em inteiro, truncando frações. Assim, uma leitura com mais de 3600 s pode chegar à página como `3600` e ser exibida como recente; do mesmo modo, um carimbo mais de 300 s no futuro pode chegar como `-300` e não ser sinalizado. O sync compara o `asked_at` com os limites usando timestamps sem essa truncagem, então a indicação da fila pode divergir da decisão de sincronização, inclusive sugerindo que uma fila vazia reflete o estado atual quando o sync recusaria a leitura. Retorne a idade com precisão fracionária ou exponha a decisão de frescor calculada no servidor usando os mesmos limites exatos do sync.
+  Recommendation: Preserve a precisão de `asked_age_seconds` na resposta ou retorne flags de frescor/futuro calculadas com os mesmos limites exatos usados por `sync_from_read`; mantenha a página alinhada a essas decisões.

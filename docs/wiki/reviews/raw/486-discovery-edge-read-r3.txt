@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19dfc-5193-7153-831d-0d16cada6906).
+[codex] Turn started (01a19dfc-51cf-7dd0-8a69-972e998269f2).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e rastrear especialmente a lógica de leitura recente, `cond...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/onu_discov...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/onu_discov... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=15 main...HEAD -- apps/web/src/app/rede/pende...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=15 main...HEAD -- apps/web/src/app/rede/pende... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a UI pode declarar que a leitura e...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a UI pode declarar que a leitura está recente até quase um minuto depois do limite que a API usa para aceitá-la.
+
+Findings:
+- [medium] O arredondamento da idade amplia a janela de leitura recente (apps/web/src/app/rede/pendentes/page.tsx:39-42)
+  `ageMin` é arredondado para baixo e `readFresh` aceita `ageMin <= 60`. Assim, uma leitura com idade entre 60 e quase 61 minutos aparece como recente; se `nEntries === 0`, a fila vazia é atribuída à leitura recente. A API, porém, rejeita esse mesmo timestamp quando `now - asked > SYNC_MAX_AGE`, então sincronizar falha como leitura antiga enquanto a página afirma que a leitura recente não listou ONUs. Isso deixa os estados da UI e da API inconsistentes justamente no limite informado ao operador.
+  Recommendation: Calcule `readFresh` pela idade exata em milissegundos/segundos, usando o mesmo limite inclusivo da API; arredonde apenas o texto exibido.
