@@ -22,6 +22,7 @@ type fakeAuthOLT struct {
 	neverInAutofind               bool
 	extraSP                       bool
 	addCount                      int
+	onInfo                        func()
 }
 
 func newAuth() *fakeAuthOLT {
@@ -41,6 +42,9 @@ func (f *fakeAuthOLT) Run(_ context.Context, cmd string) (string, error) {
 	}
 	switch {
 	case strings.HasPrefix(cmd, "display ont info"):
+		if f.onInfo != nil {
+			f.onInfo()
+		}
 		if !f.ontPresent {
 			return "  Failure: The ONT does not exist\n", nil
 		}
@@ -221,5 +225,22 @@ func TestParseServicePortsIsStrict(t *testing.T) {
 	}
 	if _, err := ParseServicePorts("   1708 1400 common   gpon 0/0 /14 10   1     vlan  1400       -    -    up   \n  Total : 2  (Up/Down :    2/0)\n"); err == nil {
 		t.Fatal("a count that does not match must be refused")
+	}
+}
+
+func TestReauthorizeDoesNotClaimARestoreWhileTheONUStillHasOtherProfiles(t *testing.T) {
+	// ont delete is refused (the ONU stays), but its profiles are not the baseline ones: the restore must NOT report success (Codex r1).
+	f := newAuth()
+	f.refuse["ont delete"] = true
+	var changed bool
+	f.onInfo = func() {
+		if !changed && len(f.mutating()) > 0 {
+			changed = true
+			f.line = 5
+		}
+	}
+	out, err := runAuth(f, spec14, nil, far())
+	if err == nil || out.Done || !out.Sent || strings.Contains(out.Detail, "baseline was restored") || !strings.Contains(err.Error(), "restore it by hand") {
+		t.Fatalf("out=%+v err=%v", out, err)
 	}
 }

@@ -1,11 +1,11 @@
 """Bench operation `onu_reauthorize` (ADR-0030 H5): which roles may authorize it through the API
 
-Only the engineering roles, like the other OLT-side maneuvers. Revision ID: 0043  Revises: 0042
+Only the engineering roles, like the other OLT-side maneuvers. Revision ID: 0044  Revises: 0043
 """
 from alembic import op
 
-revision = "0043"
-down_revision = "0042"
+revision = "0044"
+down_revision = "0043"
 branch_labels = None
 depends_on = None
 
