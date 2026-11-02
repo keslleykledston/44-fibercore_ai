@@ -21,6 +21,7 @@ type fakeAuthOLT struct {
 	refuse                        map[string]bool // command prefix -> "% Parameter error"
 	addFailsOnce                  bool
 	neverInAutofind               bool
+	autofindDelay                 int // autofind reads that still show nothing after the delete
 	extraSP                       bool
 	addCount                      int
 	onInfo                        func()
@@ -88,6 +89,10 @@ func (f *fakeAuthOLT) Run(ctx context.Context, cmd string) (string, error) {
 	case strings.HasPrefix(cmd, "ont delete"):
 		f.ontPresent, f.inAuto = false, !f.neverInAutofind
 	case cmd == "display ont autofind all":
+		if f.inAuto && f.autofindDelay > 0 {
+			f.autofindDelay--
+			return "  Failure: The automatically found ONTs do not exist\n", nil
+		}
 		if f.inAuto {
 			return "  Number              : 1\n  Ont SN              : 48575443E2247AA5 (HWTC-E2247AA5)\n", nil
 		}
@@ -378,5 +383,18 @@ func TestReauthorizeParsersReadTheRealDeviceLayout(t *testing.T) {
 	bad := strings.Replace(string(det), "Tag transform       : translate", "Tag transform       : transparent", 1)
 	if spDetailOK(bad, onu14, sp) || spDetailWhy(bad, onu14, sp) != "Tag transform" {
 		t.Fatal("another tag transform must be refused and named")
+	}
+}
+
+func TestReauthorizeWaitsForTheSerialToShowUpInAutofind(t *testing.T) {
+	// the ONU ranges anew some seconds after the delete: the first autofind reads are empty and the cycle keeps polling instead of giving up
+	f := newAuth()
+	f.autofindDelay = 3
+	out, err := runAuth(f, spec14, nil, far())
+	if err != nil || !out.Done {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+	if f.autofindDelay != 0 {
+		t.Fatalf("the polling stopped before the serial appeared: %d", f.autofindDelay)
 	}
 }
