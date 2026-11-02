@@ -2,10 +2,14 @@ import { AppShell } from "@/components/AppShell";
 import { IncidentQueue } from "@/components/IncidentQueue";
 import { DataFreshness, EmptyState, ErrorState, Kpi, PageHeader } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
+import { rd003Lines, readRd003 } from "@/lib/edgeDiagnostic";
+import { RUN_FRESH_MINUTES } from "@/lib/troubleshoot";
 import type { IncidentList } from "@/lib/types";
 
-export default async function Noc({ searchParams }: { searchParams: Promise<{ f?: string }> }) {
-  const { f } = await searchParams;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export default async function Noc({ searchParams }: { searchParams: Promise<{ f?: string; rd003?: string; erro?: string }> }) {
+  const { f, rd003, erro } = await searchParams;
   const onlyUnack = f === "nao-reconhecidos";
   // A ordem de prioridade é do servidor (uma só fonte): abertos, não reconhecidos, queda confirmada antes de edge silencioso, maior impacto, mais ONUs fora.
   const r = await apiSafe<IncidentList>("/v1/incidents?limit=50&order=priority");
@@ -13,6 +17,10 @@ export default async function Noc({ searchParams }: { searchParams: Promise<{ f?
   const all = r.data?.incidents ?? [];
   const list = onlyUnack ? all.filter((i) => i.status === "open" && !i.acknowledged) : all;
   const s = r.data?.summary;
+  // R-D003 (coletor sem sinal): só vale a execução desta pessoa que for da regra certa, de um Edge que está na lista de alertas e recente; qualquer outra forma é ignorada
+  const runRaw = rd003 && UUID.test(rd003) ? await apiSafe<{ run_id: string; rule_id: string; scope: { edge_id?: string }; created_at: string; findings: unknown[] }>(`/v1/diagnostics/runs/${rd003}`) : null;
+  const run = runRaw?.data && runRaw.data.rule_id === "R-D003" && Date.now() - new Date(runRaw.data.created_at).getTime() <= RUN_FRESH_MINUTES * 60_000 ? runRaw.data : null;
+  const runFinding = run ? readRd003(run) : null;
   return (
     <AppShell active="/noc" user="1">
       <PageHeader title="NOC" subtitle="Quedas em massa por PON, priorizadas, com impacto e evidências" helpSlug="noc/acompanhar-incidente" />
@@ -24,10 +32,22 @@ export default async function Noc({ searchParams }: { searchParams: Promise<{ f?
           <Kpi label="Edges silenciosos" value={s.silent_edges} hint="Não contam como ONUs offline" />
         </div>
       )}
+      {erro && /^\d{3}$/.test(erro) && <p role="alert" className="mb-3 text-sm text-warn" data-testid="edge-diagnose-error">{erro === "403" ? "Seu papel não permite executar diagnósticos." : "Não foi possível executar o diagnóstico agora."}</p>}
       {(r.data?.alerts ?? []).map((a) => (
         <div key={a.edge} role="status" className="panel mb-3 border-warn p-4 text-sm" data-testid="edge-silent">
           <strong>Edge {a.edge} sem dados</strong> <DataFreshness freshness="stale" observedAt={a.last_heartbeat_at} />
           <p className="text-muted">Os estados atrás deste edge são o último conhecido; não indicam que as ONUs estão offline.</p>
+          {a.edge_id && (
+            <form action={`/bff/noc/edge/${a.edge_id}/diagnostico`} method="post" className="mt-2">
+              <button data-testid="edge-diagnose" className="min-h-touch rounded-btn border border-line px-3 text-sm text-accent hover:underline">Diagnosticar este Edge (R-D003, somente leitura)</button>
+            </form>
+          )}
+          {a.edge_id && run && run.scope.edge_id === a.edge_id && (
+            <div className="mt-2 border-t border-line pt-2" data-testid="edge-diagnosis">
+              {runFinding ? (() => { const t = rd003Lines(runFinding); return (<><strong>{t.title}</strong>{t.lines.map((l) => <p key={l} className="text-muted">{l}</p>)}<p className="text-xs text-muted">Execução de {new Date(run.created_at).toLocaleTimeString("pt-BR")}. Nada foi enviado à rede.</p></>); })()
+                : <p className="text-muted">O resultado veio em formato inesperado e foi descartado: nada é afirmado.</p>}
+            </div>
+          )}
         </div>
       ))}
       <nav aria-label="Filtro da fila" className="mb-3 flex gap-2 text-sm">

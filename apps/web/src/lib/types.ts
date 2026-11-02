@@ -3,7 +3,7 @@ export type Onu = { id: string; olt_id: string; serial: string; pon_path: string
 export type Impact = { customers_affected: number | null; source: string; hidden: boolean; members_known: boolean };
 export type Incident = { id: string; kind: string; status: string; suspected_cause: string; evidence: { pon_path?: string; onus_observed?: number; onus_down?: number; los?: number; dying_gasp?: number; ratio?: number; chronic_offline?: number }; olt: string; opened_at: string; resolved_at: string | null; acknowledged: boolean; edge_silent: boolean; impact: Impact };
 export type NocSummary = { open: number; unacknowledged: number; silent_edges: number; open_suppressed: number; customers_affected: number | null; customers_source: string; customers_hidden: boolean };
-export type IncidentList = { truncated: boolean; incidents: Incident[]; alerts: { kind: string; edge: string; last_heartbeat_at: string; note: string }[]; summary: NocSummary };
+export type IncidentList = { truncated: boolean; incidents: Incident[]; alerts: { kind: string; edge: string; edge_id?: string; last_heartbeat_at: string; note: string }[]; summary: NocSummary };
 export type IncidentDetail = Incident & { members_total: number; members_truncated: boolean; members: { id: string; serial: string; status: string; observed_at: string | null }[] };
 export type Edge = { id: string; name: string; status: string; last_heartbeat_at: string | null; version: string | null };
 export type Mod = { id: string; version: string; status: string; reason: string | null; capabilities: string[]; checked_at: string };
@@ -50,6 +50,11 @@ export type DiagnosticFinding = {
 export type Rd004Finding = {
   status: "observed" | "inferred" | "unknown"; hypothesis: string | null; reason?: string; suspected_cause?: string; requires_human_confirmation: boolean;
   evidence: { onu: { link: string; status: string | null; fresh: boolean }; inform_age_seconds: number | null; inform_fresh: boolean; snapshot_fresh: boolean };
+};
+/** R-D003 (coletor/Edge sem sinal): o achado que o NOC lê, com formato fechado (ver `readRd003`). */
+export type Rd003Finding = {
+  status: "observed" | "inferred" | "unknown"; hypothesis: string | null; reason?: string; suspected_cause?: string; requires_human_confirmation: boolean;
+  evidence: { heartbeat_age_seconds: number | null; silent: boolean; olts: number; onus_total: number; onus_not_fresh: number };
 };
 export type DiagnosticRun = { run_id: string; rule_id: string; rule_version: number; scope: { onu_id: string | null; pon_id: string | null }; created_at: string; findings: DiagnosticFinding[]; reproducible: boolean | null };
 

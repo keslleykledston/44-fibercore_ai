@@ -237,6 +237,7 @@ def test_every_silent_edge_classifies_its_incidents_even_when_the_alert_list_is_
     monkeypatch.setattr(noc, "ALERTS_SHOWN", 1)
     d = client.get("/v1/incidents", headers=h, params={"order": "priority", "limit": 500}).json()
     assert len(d["alerts"]) == 1                                   # the visible list is bounded...
+    assert d["alerts"][0]["edge_id"] in (str(inv["a1"]["edge"]), str(inv["a2"]["edge"]))   # the alert names the collector so the NOC can run R-D003 on it
     mine = {i["olt"]: i for i in d["incidents"] if i["olt"] in ("OLT-NCC-E1", "OLT-NCC-E2")}
     assert mine["OLT-NCC-E1"]["edge_silent"] is True and mine["OLT-NCC-E2"]["edge_silent"] is True   # ...the classification is not
     assert d["summary"]["silent_edges"] >= 2 and d["summary"]["open_suppressed"] >= 2
