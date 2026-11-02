@@ -1,0 +1,22 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19e8f-6fdb-74e0-8589-f7fbb0b87a90).
+[codex] Turn started (01a19e8f-7367-7e10-87b1-1b0a136bd794).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e rastrear o componente, a flag e o helper movido para v...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Ont...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/components/Ont... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "assets|device_assets|function DeviceThumb|export.*DeviceThumb|ont-sideb...
+[codex] Command completed: /bin/bash -lc 'rg -n "assets|device_assets|function DeviceThumb|export.*DeviceThumb|ont-sideb... (exit 0)
+[codex] Running command: /bin/bash -lc "cat apps/web/src/components/DeviceThumb.tsx && sed -n '1,90p' apps/web/src/lib...
+[codex] Command completed: /bin/bash -lc "cat apps/web/src/components/DeviceThumb.tsx && sed -n '1,90p' apps/web/src/lib... (exit 0)
+[codex] Running command: /bin/bash -lc "cat apps/web/src/lib/deviceAssets.manifest.json && sed -n '1,80p' apps/web/src...
+[codex] Command completed: /bin/bash -lc "cat apps/web/src/lib/deviceAssets.manifest.json && sed -n '1,80p' apps/web/src... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"Não encontrei risco material que justifique bloquear o PR4: a...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+Não encontrei risco material que justifique bloquear o PR4: a arte recebe apenas o modelo e fica condicionada à flag; com a flag desligada, o componente mantém o desenho neutro.
+
+No material findings.
