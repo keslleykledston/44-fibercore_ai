@@ -190,6 +190,8 @@
 | POST | `/v1/jobs/{job_id}/approve` | `jobs:approve` |
 | POST | `/v1/jobs/{job_id}/cancel` | `jobs:request` |
 | POST | `/v1/jobs/{job_id}/submit` | `jobs:request` |
+| GET | `/v1/knowledge` | `fleet:read` |
+| GET | `/v1/knowledge/{section}` | `fleet:read` |
 | GET | `/v1/members` | `members:read` |
 | GET | `/v1/members/role-history` | `audit:read` |
 | POST | `/v1/members/{user_id}/mfa/reset` | `members:mfa_reset` |

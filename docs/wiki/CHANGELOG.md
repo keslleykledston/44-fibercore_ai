@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — Base de conhecimento de OLTs (ADR-0041, PR5, 2026-11-02)
+- API: `GET /v1/knowledge` e `/v1/knowledge/{sources|commands|runbooks|intents|recipes|homologation}` (`fleet:read` + flag `fleet_manager`). Dados do pacote importados como DADO em `apps/api/app/knowledge_data`; `app/core/knowledge.py` valida na carga e recusa a base inteira (503 `knowledge_base_invalid`): consultas só `display`/`show`/`cd` sem palavra de escrita, `can_execute_on_device=false`, `verification=not_tested_in_fibercore`, fontes https, receitas `deny_apply`, matriz `blocked_by_default`, e nenhum comando de escrita mostrado como código (exemplos, receitas, runbooks, roteiro).
+- Receitas: só as etapas de leitura/verificação/pré-visualização são servidas (lista fechada de verbos); as de alteração ficam fora e a tela diz quantas foram omitidas. 3 exemplos de escrita da receita Intelbras do pacote foram removidos (PACKAGE_AUDIT).
+- Web: `/rede/conhecimento` (6 seções, filtro por fabricante, aviso "documentado não é verificado"), atalho na Frota, ajuda `rede/base-de-conhecimento` com capturas reais. Sem migração, sem Edge.
+- PR4 (mesmo dia): a sidebar da ONU/ONT mostra a arte esquemática rotulada do modelo quando `device_assets` está ligada.
+- Provas: API 1051 passed; e2e conhecimento/frota/aparelho/catalogo 12 + recuo 1; ajuda 29 artigos. Codex: 5 rodadas, approve.
+
 ## Unreleased — Frota de OLTs: teste de conexão (ADR-0041, PR2 parte B, 2026-11-02)
 - Catálogo (**Edge e nuvem juntos**; catálogo `42142904…`): nova consulta `olt.connection` = a MESMA leitura `display version` já validada, com id próprio, resultado tipado idêntico ao de `olt.version` e TTL de 15 min. O teste NÃO abre canal novo: é um job `olt_query` pelo motor existente (gates, fila, arrendamento do Edge, cache-first).
 - Orçamento aprovado pelo responsável (1 teste por OLT a cada 15 min e 4 por hora), contado nos DOIS lados: nuvem (`olt_connection_tests`, migração **0046**, só SELECT/INSERT para o app, `POST /v1/fleet/olts/{id}/connection-test` → 429 `test_budget` com `Retry-After`, sob trava por OLT) e Edge (`oltquery.Store`: classe própria persistida; um teste fora do orçamento espera sem bloquear o resto da fila nem outras OLTs; arquivo ilegível = orçamento gasto; arquivos antigos sem o histórico continuam carregando). Identidade guardada recente responde sem consultar a OLT e não gasta orçamento.

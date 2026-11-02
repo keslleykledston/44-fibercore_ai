@@ -1,0 +1,282 @@
+{
+  "generated_at": "2026-11-02",
+  "status": "research_links_not_local_copies",
+  "license_policy": "Links e metadados; não redistribuir manuais completos sem licença. Comandos são pequenos exemplos selecionados e referenciados.",
+  "sources": [
+    {
+      "id": "HU-01",
+      "vendor": "Huawei",
+      "family": "MA5600T/MA5800",
+      "title": "Huawei Access Troubleshooting: ONU offline",
+      "url": "https://info.support.huawei.com/network/ptmngsys/Web/tsrev_access/en/content/access/16_gpononu_failure_to_go_online/trouble_515101.html",
+      "authority": "official",
+      "topic": "diagnostics",
+      "relevant": "display ont info",
+      "caveat": "firmware validate"
+    },
+    {
+      "id": "HU-02",
+      "vendor": "Huawei",
+      "family": "MA5600T/MA5800",
+      "title": "Huawei Access Troubleshooting: port, laser, board",
+      "url": "https://info.support.huawei.com/network/ptmngsys/Web/tsrev_access/en/content/access/16_gpononu_failure_to_go_online/trouble_515103.html",
+      "authority": "official",
+      "topic": "diagnostics",
+      "relevant": "display port info; display port state; display ont info",
+      "caveat": "firmware validate"
+    },
+    {
+      "id": "HU-03",
+      "vendor": "Huawei",
+      "family": "MA5600T/MA5800",
+      "title": "Huawei Access: alarm handling",
+      "url": "https://info.support.huawei.com/network/ptmngsys/Web/tsrev_access/en/content/access/16_gpononu_failure_to_go_online/trouble_515102.html",
+      "authority": "official",
+      "topic": "alarm",
+      "relevant": "display alarm active; display ont alarm-state",
+      "caveat": "firmware validate"
+    },
+    {
+      "id": "HU-04",
+      "vendor": "Huawei",
+      "family": "MA5600T/MA5800",
+      "title": "Huawei Access: profile mismatch",
+      "url": "https://info.support.huawei.com/network/ptmngsys/Web/tsrev_access/en/content/access/18_gpononu_profile_match_state_is_mismatch/trouble_515301.html",
+      "authority": "official",
+      "topic": "profile_validation",
+      "relevant": "display ont info match state",
+      "caveat": "firmware validate"
+    },
+    {
+      "id": "DC-01",
+      "vendor": "Datacom",
+      "family": "DM4610",
+      "title": "DM4610 GPON com ONU Router — rev 1.4, cenário firmware 2.0.0",
+      "url": "https://datacom.com.br/uploads/product/file/f07df32a11dfab7233ea787f2e761b94.pdf",
+      "authority": "official",
+      "topic": "configuration",
+      "relevant": "show interface gpon 1/1/1 discovered-onus; profiles; commit",
+      "caveat": "document dated; not current fw"
+    },
+    {
+      "id": "DC-02",
+      "vendor": "Datacom",
+      "family": "DM4610/DM4615",
+      "title": "DmOS Guia Configuração Rápida",
+      "url": "https://stn2.pronet.net.br/FIRMWARE-OLT-DATACOM/DmOS-5.12.0-DM4610-HW2/Manual/204.0309.22%20-%20DmOS%20-%20Guia%20de%20Configura%C3%A7%C3%A3o%20R%C3%A1pida.pdf",
+      "authority": "vendor-authored-hosted-third-party",
+      "topic": "configuration",
+      "relevant": "gpon interface and profiles",
+      "caveat": "specific DmOS version"
+    },
+    {
+      "id": "DC-03",
+      "vendor": "Datacom",
+      "family": "DM4610",
+      "title": "Página oficial DM4610 4GPON — protocolos",
+      "url": "https://www.datacom.com.br/pt/produtos/gpon/dm4610-4gpon",
+      "authority": "official",
+      "topic": "management",
+      "relevant": "SSHv2 SNMP NETCONF",
+      "caveat": "variant verify"
+    },
+    {
+      "id": "ZT-01",
+      "vendor": "ZTE",
+      "family": "ZXA10 C300/C320",
+      "title": "ZTE official Access Network Documentation Map",
+      "url": "https://support.zte.com.cn/support/docmap/00000455/en/index.html",
+      "authority": "official",
+      "topic": "doc_index",
+      "relevant": "product documentation and cards at a glance",
+      "caveat": "some access requires account"
+    },
+    {
+      "id": "ZT-02",
+      "vendor": "ZTE",
+      "family": "C320/C3xx",
+      "title": "Intelbras ONU 110B provisionamento em ZTE C3xx",
+      "url": "https://backend.intelbras.com/sites/default/files/2023-03/110B%20ZTE%20C320.pdf",
+      "authority": "manufacturer-crossvendor",
+      "topic": "configuration",
+      "relevant": "show gpon onu uncfg; onu profile vlan; profile tcont",
+      "caveat": "sample specific ONU 110B"
+    },
+    {
+      "id": "ZT-03",
+      "vendor": "ZTE",
+      "family": "C300/C320",
+      "title": "ZTE C300/C320 Command Reference (mirror, proprietary)",
+      "url": "https://get.ipnetwork.com.br/files/ZTE/OLT_ZTE/C3XX/CONFIGURA%C3%87%C3%95ES/Manual_ZTE_C3xx.pdf",
+      "authority": "vendor-authored-mirror",
+      "topic": "commands",
+      "relevant": "show gpon onu baseinfo",
+      "caveat": "license/firmware confirmation required"
+    },
+    {
+      "id": "FH-01",
+      "vendor": "FiberHome",
+      "family": "AN5516-01",
+      "title": "IXC integration guide CLI and version distinctions",
+      "url": "https://wiki-erp.ixcsoft.com.br/documentacao/menu-sistema/provedor/transmissores-%28olt%29/olts-homologadas/fiberhome-sem-anm-ou-unm.html",
+      "authority": "integrator",
+      "topic": "protocol",
+      "relevant": "cd gpononu vs cd onu depending RP",
+      "caveat": "third party, exact model mandatory"
+    },
+    {
+      "id": "FH-02",
+      "vendor": "FiberHome",
+      "family": "AN5516",
+      "title": "Made4it homologation feature matrix",
+      "url": "https://wikihomolog.made4it.com.br/pt-br/made4olt/user-manual/OLTs/fiberhome/Models/AN5516.md",
+      "authority": "integrator",
+      "topic": "capability",
+      "relevant": "feature list for integration",
+      "caveat": "not command authority"
+    },
+    {
+      "id": "IB-01",
+      "vendor": "Intelbras",
+      "family": "OLT G08",
+      "title": "G08 documentação e manuais",
+      "url": "https://olts-guias-e-manuais.intelbras.com.br/G08/index.html",
+      "authority": "official",
+      "topic": "documentation",
+      "relevant": "manual, MIB, installation",
+      "caveat": "match hardware revision"
+    },
+    {
+      "id": "IB-02",
+      "vendor": "Intelbras",
+      "family": "OLT G08",
+      "title": "G08 Guia de Compatibilização CPEs",
+      "url": "https://olts-guias-e-manuais.intelbras.com.br/G08/GuiaDeCompatibilizacao.html",
+      "authority": "official",
+      "topic": "configuration",
+      "relevant": "deploy profile line; aim; tcont; gemport; mapping; flow",
+      "caveat": "G08 specific"
+    },
+    {
+      "id": "IB-03",
+      "vendor": "Intelbras",
+      "family": "OLT 8820 I",
+      "title": "Página oficial manuais, MIBs, gerador de configuração",
+      "url": "https://www.intelbras.com/pt-br/ajuda-download/faq/olt-8-portas-gpon-olt-8820-i",
+      "authority": "official",
+      "topic": "reference",
+      "relevant": "CLI/manual/SNMP MIB",
+      "caveat": "8820i not interchangeable with G08"
+    },
+    {
+      "id": "IB-04",
+      "vendor": "Intelbras",
+      "family": "OLT G16",
+      "title": "G16 downloads e gerador de configuração",
+      "url": "https://www.intelbras.com/pt-br/ajuda-download/videos/concentrador-de-interfaces-de-dados-olt-g16",
+      "authority": "official",
+      "topic": "reference",
+      "relevant": "G16 manuals and generators",
+      "caveat": "G16 specific"
+    },
+    {
+      "id": "VS-01",
+      "vendor": "V-SOL",
+      "family": "V1600G1 / V1600G2-B",
+      "title": "Portal oficial V-SOL Brasil — guias de configuração por modelo",
+      "url": "https://www.vsolbr.com.br/suporte/",
+      "authority": "official",
+      "topic": "documentation",
+      "relevant": "GUIAS V1600G1/G1-B/G2-B and others",
+      "caveat": "links are ZIP; not parsed"
+    },
+    {
+      "id": "VS-02",
+      "vendor": "V-SOL",
+      "family": "V1600G1",
+      "title": "Página V1600G1 — capacidades e protocolos",
+      "url": "https://www.vsolbr.com.br/produto/olt-gpon-v1600g1/",
+      "authority": "official",
+      "topic": "model_info",
+      "relevant": "CLI WEB SNMP SSH",
+      "caveat": "discontinued product; firmware matching"
+    },
+    {
+      "id": "UB-01",
+      "vendor": "Ubiquiti",
+      "family": "UF-OLT",
+      "title": "UF-OLT official Quick Start Guide",
+      "url": "https://dl.ubnt.com/qsg/UF-OLT/UF-OLT_EN.html",
+      "authority": "official",
+      "topic": "installation",
+      "relevant": "8 GPON, web management, console",
+      "caveat": "firmware 4.1+ differences"
+    },
+    {
+      "id": "UB-02",
+      "vendor": "Ubiquiti",
+      "family": "UF-OLT/OLT4",
+      "title": "UFiber downloads",
+      "url": "https://www.ui.com/download/ufiber",
+      "authority": "official",
+      "topic": "documentation",
+      "relevant": "hardware manuals/firmware",
+      "caveat": "no API assumption"
+    },
+    {
+      "id": "PK-01",
+      "vendor": "Parks",
+      "family": "Fiberlink 300xx/400xx",
+      "title": "Parks comandos de configuração por terminal",
+      "url": "https://suporte.parks.com.br/support/solutions/articles/8000024804--atualizado-comandos-de-configura%C3%A3o-da-olt-por-terminal",
+      "authority": "official",
+      "topic": "configuration",
+      "relevant": "show gpon onu summary; profiles; more",
+      "caveat": "2023 updated; verify line"
+    },
+    {
+      "id": "PK-02",
+      "vendor": "Parks",
+      "family": "Fiberlink 300xx/400xx",
+      "title": "Parks comandos de visualização",
+      "url": "https://suporte.parks.com.br/support/solutions/articles/8000032817-cli-comandos-de-visualizac%C3%A3o-por-terminal",
+      "authority": "official",
+      "topic": "diagnostics",
+      "relevant": "show gpon profile flow; cpu; temperature",
+      "caveat": "support varies model"
+    },
+    {
+      "id": "PK-03",
+      "vendor": "Parks",
+      "family": "Fiberlink 30024/30028/40016",
+      "title": "Parks guia instalação OLT GPON e Easy Network",
+      "url": "https://www.parks.com.br/guia-instalacao-olt-gpon-fiberlink-parks",
+      "authority": "official",
+      "topic": "installation",
+      "relevant": "OLT and Easy Network management",
+      "caveat": "model/firmware verify"
+    },
+    {
+      "id": "MX-01",
+      "vendor": "Diversos",
+      "family": "Huawei/Datacom/FiberHome/Parks/ZTE",
+      "title": "Anlix ativação TR-069 via OMCI (integrador)",
+      "url": "https://wiki.anlix.io/arquivos/ativa%C3%A7%C3%A3o_tr-069_por_olts_via_omci.pdf",
+      "authority": "integrator",
+      "topic": "tr069",
+      "relevant": "cross vendor provisioning integration",
+      "caveat": "requires independent validation"
+    },
+    {
+      "id": "IB-05",
+      "vendor": "Intelbras",
+      "family": "OLT 8820 G",
+      "title": "Página oficial Intelbras 8820 G: manuais e firmware",
+      "url": "https://www.intelbras.com/pt-br/ajuda-download/faq/8-portas-gpon-com-8-portas-gigabit-e-2-slots-10ge-olt-8820-g",
+      "authority": "official",
+      "topic": "reference",
+      "relevant": "manual de usuario e guia OLT 8820 G",
+      "caveat": "Não intercambiável com 8820 I/G08/G16"
+    }
+  ]
+}

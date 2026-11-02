@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19ea2-2f26-7d41-a4cd-d3c6f9879886).
+[codex] Turn started (01a19ea2-2f62-7eb0-a5b5-167d59842501).
+[codex] Assistant message captured: Vou comparar a branch com `main` e rastrear principalmente o limite entre conteúdo importado,...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/knowledge...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/knowledge... (exit 0)
+[codex] Running command: /bin/bash -lc 'for f in apps/api/app/knowledge_data/commands.json apps/api/app/knowledge_data...
+[codex] Command completed: /bin/bash -lc 'for f in apps/api/app/knowledge_data/commands.json apps/api/app/knowledge_data... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/knowledge_data/recipes.json | sed -n '10,125p'; nl -ba app...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/knowledge_data/recipes.json | sed -n '10,125p'; nl -ba app... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: o material exibido como referência...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: o material exibido como referência somente leitura inclui instruções explícitas para alterar e salvar configuração, e o validador aceita essas instruções sem examiná-las.
+
+Findings:
+- [high] Receitas contradizem a garantia de somente leitura (apps/api/app/knowledge_data/recipes.json:13-19)
+  A API valida apenas o status e os `source_ids` das receitas; não inspeciona `steps` ou `examples`, que são devolvidos sem alteração e renderizados na página. O conteúdo orienta criar perfis, vincular ONUs, executar `commit` e salvar pelo executor existente. Um operador pode seguir essas instruções acreditando que o fluxo foi revisado ou autorizado, embora a seção se apresente como referência não homologada e o PR prometa uma base somente leitura. Remova instruções de alteração e execução dessas receitas ou valide e rotule-as como documentação de procedimentos externos, sem sugerir que o FiberCore os executa ou aprova.
+  Recommendation: Retire os passos de criação, vínculo, commit e uso do executor da base somente leitura; faça o validador rejeitar linguagem ou exemplos de escrita e cubra esses campos nos testes.
+- [medium] Runbooks com conteúdo operacional não passam pela validação de segurança (apps/api/app/core/knowledge.py:62-70)
+  O validador só exige que exista ao menos um runbook não vazio; o Markdown é lido e publicado diretamente. Há instruções de alteração futura que mencionam `commit aprovado` e `dry-run`, além de solicitar confirmação de credenciais do cofre. Assim, conteúdo importado ou editado pode acrescentar comandos de escrita ou orientações sensíveis e ainda assim a carga será aceita, ao contrário da garantia de recusar a base inteira quando uma invariante falha.
+  Recommendation: Validar runbooks e playbook contra um esquema de conteúdo aprovado ou remover texto operacional/sensível; incluir testes que provem que conteúdo proibido causa `KnowledgeInvalid` e 503.

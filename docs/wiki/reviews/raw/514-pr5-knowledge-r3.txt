@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19ea3-b944-7b71-bb9f-d0a5d393379e).
+[codex] Turn started (01a19ea3-b97e-7463-a3cd-f79e1d8b052c).
+[codex] Assistant message captured: Vou conferir o diff real contra `main`, com foco no novo bloqueio de comandos de escrita e em...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/knowledge...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/knowledge... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/knowledge....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/knowledge.... (exit 0)
+[codex] Running command: /bin/bash -lc 'nl -ba apps/api/app/core/knowledge.py; nl -ba apps/api/app/api/knowledge.py; c...
+[codex] Command completed: /bin/bash -lc 'nl -ba apps/api/app/core/knowledge.py; nl -ba apps/api/app/api/knowledge.py; c... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: as receitas continuam exibindo ins...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: as receitas continuam exibindo instruções de escrita, apesar da proteção que só recusa comandos em trechos de código.
+
+Findings:
+- [medium] Receitas exibem procedimentos de escrita sem serem barradas pelo validador (apps/api/app/knowledge_data/recipes.json:24-28)
+  A validação de `steps` e `restrictions` examina apenas spans delimitados por crases. Assim, texto como “Create/choose...” e “Use vendor transactional commit...” passa, e a interface renderiza os passos como uma lista de procedimento. Na receita Huawei, “Save and verify through existing executor” chega a indicar salvamento pelo executor. O aviso diz que a base não recomenda esses passos, mas eles ainda podem ser interpretados como instruções operacionais; os novos testes não cobrem esse conteúdo sem crases.
+  Recommendation: Remova das receitas as instruções de criação, vínculo, commit e save, ou modele essas etapas como conteúdo explicitamente não operacional e valide que nenhuma instrução de escrita seja apresentada como procedimento.

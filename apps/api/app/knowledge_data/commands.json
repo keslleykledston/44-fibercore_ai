@@ -1,0 +1,361 @@
+{
+  "schema_version": "1.0",
+  "execution_default": "deny",
+  "warning": "Documented commands are NOT automatically authorized for execution; require exact driver firmware+fixture+operator permission",
+  "commands": [
+    {
+      "id": "huawei_ont_info",
+      "vendor": "huawei",
+      "family": "MA5608T/MA5800",
+      "syntax": "display ont info",
+      "cli_context": "gpon-context",
+      "purpose": "ONU run/config/match status",
+      "source_ids": [
+        "HU-01"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented",
+      "verification": "not_tested_in_fibercore",
+      "risk": "medium",
+      "can_execute_on_device": false,
+      "parameters": {},
+      "notes": "May expose ONU serial and private customer attributes; privilege verify"
+    },
+    {
+      "id": "huawei_port_info",
+      "vendor": "huawei",
+      "family": "MA5608T/MA5800",
+      "syntax": "display port info",
+      "cli_context": "gpon-context",
+      "purpose": "PON admin status and reach",
+      "source_ids": [
+        "HU-02"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented",
+      "verification": "not_tested_in_fibercore",
+      "risk": "low",
+      "can_execute_on_device": false,
+      "parameters": {},
+      "notes": "Requires correct GPON interface context"
+    },
+    {
+      "id": "huawei_port_state",
+      "vendor": "huawei",
+      "family": "MA5608T/MA5800",
+      "syntax": "display port state",
+      "cli_context": "gpon-context",
+      "purpose": "PON laser/optical state",
+      "source_ids": [
+        "HU-02"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented",
+      "verification": "not_tested_in_fibercore",
+      "risk": "low",
+      "can_execute_on_device": false,
+      "parameters": {},
+      "notes": "Hardware dependent"
+    },
+    {
+      "id": "huawei_alarms",
+      "vendor": "huawei",
+      "family": "MA5608T/MA5800",
+      "syntax": "display alarm active alarmparameter {frame}/{slot}/{port}",
+      "cli_context": "exec-or-config-context",
+      "purpose": "Active PON alarms",
+      "source_ids": [
+        "HU-03"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented",
+      "verification": "not_tested_in_fibercore",
+      "risk": "medium",
+      "can_execute_on_device": false,
+      "parameters": {
+        "frame": "0..n",
+        "slot": "0..n",
+        "port": "0..n"
+      },
+      "notes": "Restrict key params numeric"
+    },
+    {
+      "id": "dmos_discovered",
+      "vendor": "datacom",
+      "family": "DmOS DM4610",
+      "syntax": "show interface gpon {chassis}/{slot}/{port} discovered-onus",
+      "cli_context": "exec",
+      "purpose": "Unprovisioned ONU discovery",
+      "source_ids": [
+        "DC-01"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented",
+      "verification": "not_tested_in_fibercore",
+      "risk": "medium",
+      "can_execute_on_device": false,
+      "parameters": {
+        "chassis": "positive int",
+        "slot": "positive int",
+        "port": "positive int"
+      },
+      "notes": "Documented in example with 1/1/1"
+    },
+    {
+      "id": "dmos_onu",
+      "vendor": "datacom",
+      "family": "DmOS DM4610",
+      "syntax": "show interface gpon {chassis}/{slot}/{port} onu",
+      "cli_context": "exec",
+      "purpose": "ONU list per PON",
+      "source_ids": [
+        "DC-01",
+        "DC-02"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented",
+      "verification": "not_tested_in_fibercore",
+      "risk": "medium",
+      "can_execute_on_device": false,
+      "parameters": {},
+      "notes": ""
+    },
+    {
+      "id": "dmos_onu_detail",
+      "vendor": "datacom",
+      "family": "DmOS DM4610",
+      "syntax": "show interface gpon {chassis}/{slot}/{port} onu {onu_id}",
+      "cli_context": "exec",
+      "purpose": "ONU details",
+      "source_ids": [
+        "DC-01",
+        "DC-02"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented",
+      "verification": "not_tested_in_fibercore",
+      "risk": "medium",
+      "can_execute_on_device": false,
+      "parameters": {},
+      "notes": "Scrub SN, auth and customer labels"
+    },
+    {
+      "id": "dmos_gpon_config_view",
+      "vendor": "datacom",
+      "family": "DmOS DM4610",
+      "syntax": "show running gpon",
+      "cli_context": "exec",
+      "purpose": "GPON config inspection",
+      "source_ids": [
+        "DC-02"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented",
+      "verification": "not_tested_in_fibercore",
+      "risk": "high",
+      "can_execute_on_device": false,
+      "parameters": {},
+      "notes": "May expose secrets; manual approval only"
+    },
+    {
+      "id": "zte_card",
+      "vendor": "zte",
+      "family": "ZXA10 C300/C320",
+      "syntax": "show card",
+      "cli_context": "config-allowed-read-only",
+      "purpose": "Cards and inventory",
+      "source_ids": [
+        "ZT-01"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented_by_crossvendor",
+      "verification": "not_tested_in_fibercore",
+      "risk": "low",
+      "can_execute_on_device": false,
+      "parameters": {},
+      "notes": "Command corroborated by cross-vendor Intelbras technical guide ZTE C3xx"
+    },
+    {
+      "id": "zte_uncfg",
+      "vendor": "zte",
+      "family": "ZXA10 C300/C320",
+      "syntax": "show gpon onu uncfg",
+      "cli_context": "config-allowed-read-only",
+      "purpose": "Unconfigured ONU discovery",
+      "source_ids": [
+        "ZT-02"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented",
+      "verification": "not_tested_in_fibercore",
+      "risk": "medium",
+      "can_execute_on_device": false,
+      "parameters": {},
+      "notes": ""
+    },
+    {
+      "id": "zte_onu_baseinfo",
+      "vendor": "zte",
+      "family": "ZXA10 C300/C320",
+      "syntax": "show gpon onu baseinfo gpon-olt_{shelf}/{slot}/{port}",
+      "cli_context": "config-allowed-read-only",
+      "purpose": "Base ONU information",
+      "source_ids": [
+        "ZT-03"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented",
+      "verification": "not_tested_in_fibercore",
+      "risk": "medium",
+      "can_execute_on_device": false,
+      "parameters": {},
+      "notes": ""
+    },
+    {
+      "id": "parks_onu_summary",
+      "vendor": "parks",
+      "family": "Fiberlink 300xx/400xx",
+      "syntax": "show gpon onu summary",
+      "cli_context": "exec",
+      "purpose": "Count active/inactive ONUs",
+      "source_ids": [
+        "PK-01"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented",
+      "verification": "not_tested_in_fibercore",
+      "risk": "low",
+      "can_execute_on_device": false,
+      "parameters": {},
+      "notes": ""
+    },
+    {
+      "id": "parks_onu_detail",
+      "vendor": "parks",
+      "family": "Fiberlink 300xx/400xx",
+      "syntax": "show gpon onu {serial} summary",
+      "cli_context": "exec",
+      "purpose": "ONU signal, state, model",
+      "source_ids": [
+        "PK-01"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented",
+      "verification": "not_tested_in_fibercore",
+      "risk": "medium",
+      "can_execute_on_device": false,
+      "parameters": {
+        "serial": "allowlist [A-Za-z0-9]+"
+      },
+      "notes": "Sensitive serial; audited input only"
+    },
+    {
+      "id": "parks_flow_profiles",
+      "vendor": "parks",
+      "family": "Fiberlink 300xx/400xx",
+      "syntax": "show gpon profile flow",
+      "cli_context": "exec",
+      "purpose": "List service flow profiles",
+      "source_ids": [
+        "PK-02"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented",
+      "verification": "not_tested_in_fibercore",
+      "risk": "medium",
+      "can_execute_on_device": false,
+      "parameters": {},
+      "notes": ""
+    },
+    {
+      "id": "parks_profile_uses",
+      "vendor": "parks",
+      "family": "Fiberlink 300xx/400xx",
+      "syntax": "show gpon profile flow {profile_name} onu",
+      "cli_context": "exec",
+      "purpose": "ONUs using a flow profile",
+      "source_ids": [
+        "PK-02"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented",
+      "verification": "not_tested_in_fibercore",
+      "risk": "medium",
+      "can_execute_on_device": false,
+      "parameters": {},
+      "notes": ""
+    },
+    {
+      "id": "parks_cpu",
+      "vendor": "parks",
+      "family": "Fiberlink 300xx/400xx",
+      "syntax": "show cpu",
+      "cli_context": "exec",
+      "purpose": "CPU utilization",
+      "source_ids": [
+        "PK-02"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented",
+      "verification": "not_tested_in_fibercore",
+      "risk": "low",
+      "can_execute_on_device": false,
+      "parameters": {},
+      "notes": ""
+    },
+    {
+      "id": "parks_temp",
+      "vendor": "parks",
+      "family": "Fiberlink 300xx/400xx",
+      "syntax": "show temperature",
+      "cli_context": "exec",
+      "purpose": "Temperature (model-limited)",
+      "source_ids": [
+        "PK-02"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented",
+      "verification": "not_tested_in_fibercore",
+      "risk": "low",
+      "can_execute_on_device": false,
+      "parameters": {},
+      "notes": ""
+    },
+    {
+      "id": "fh_legacy_context",
+      "vendor": "fiberhome",
+      "family": "AN5516-01 RP0700/RP1000",
+      "syntax": "cd gpononu",
+      "cli_context": "mode-navigation",
+      "purpose": "Enter legacy GPON context",
+      "source_ids": [
+        "FH-01"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented",
+      "verification": "not_tested_in_fibercore",
+      "risk": "low",
+      "can_execute_on_device": false,
+      "parameters": {},
+      "notes": "Not query by itself; not safe to mix with newer RP"
+    },
+    {
+      "id": "fh_new_context",
+      "vendor": "fiberhome",
+      "family": "AN5516-01 later firmware",
+      "syntax": "cd onu",
+      "cli_context": "mode-navigation",
+      "purpose": "Enter newer ONU context",
+      "source_ids": [
+        "FH-01"
+      ],
+      "provenance": "published_documentation",
+      "confidence": "documented",
+      "verification": "not_tested_in_fibercore",
+      "risk": "low",
+      "can_execute_on_device": false,
+      "parameters": {},
+      "notes": "Version-specific; no universal commands inferred"
+    }
+  ]
+}
