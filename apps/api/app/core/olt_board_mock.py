@@ -1,6 +1,7 @@
 """SYNTHETIC board inventory (`olt.board`, source 'mock') for a DEMO OLT, so the front-panel screen can be shown without equipment.
 
-Two conditions, both checked in the SAME transaction as the write, and neither is a name: (1) the TENANT is the demonstration tenant the seed creates ("ISP Demo ...");
+Two conditions, both checked in the SAME transaction as the write, and neither is a name: (1) the TENANT was created as a DEMONSTRATION tenant (`tenants.demo`, set only at creation
+by `create-tenant --demo` and immutable afterwards: a trigger refuses any change);
 (2) the OLT has no board inventory that came from the equipment (source `job`/`routine`): a real read is never overwritten. A real provider's tenant is refused whatever
 its OLTs are called."""
 from __future__ import annotations
@@ -13,14 +14,12 @@ from sqlalchemy import Connection, text
 
 from app.core import olt_cache, olt_query
 
-DEMO_TENANT_PREFIX = "ISP Demo"
-
 
 def store(conn: Connection, tenant_id: UUID | str, olt_name: str, slots: str = "0:H805GPFD,1:H805GPFD") -> list[int]:
     """Write the synthetic inventory. Raises ValueError with a stable message when refused."""
     conn.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(tenant_id)})
-    t = conn.execute(text("SELECT name FROM tenants WHERE id = :t"), {"t": str(tenant_id)}).scalar()
-    if t is None or not str(t).startswith(DEMO_TENANT_PREFIX):
+    demo = conn.execute(text("SELECT demo FROM tenants WHERE id = :t"), {"t": str(tenant_id)}).scalar()
+    if demo is not True:
         raise ValueError("refused: the board mock is only for the demonstration tenant")
     row = conn.execute(text("SELECT id, owner_epoch FROM olts WHERE tenant_id = :t AND name = :n FOR UPDATE"), {"t": str(tenant_id), "n": olt_name}).first()
     if row is None:

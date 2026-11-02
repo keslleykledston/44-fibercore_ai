@@ -203,32 +203,40 @@ def test_a_demo_board_inventory_can_be_stored_as_mock_and_the_screens_can_tell(c
             olt_cache.store_latest(c, seed["A"], UUID(str(olt)), "olt.board", "", BOARD, epoch, datetime.now(UTC), source="invented")
 
 
-def test_the_board_mock_is_only_for_the_demo_tenant_and_never_overwrites_a_real_read(client, seed, inv, olt, on, migrated):
-    """Codex r1 (painel SVG): a NAME is not proof of a demo OLT. The guard is the tenant, and a read that came from the equipment is never replaced."""
+def test_the_board_mock_is_only_for_a_demo_tenant_created_as_such_and_never_overwrites_a_real_read(client, seed, inv, olt, on, migrated):
+    """Codex r1/r3 (painel SVG): neither an OLT name nor a tenant name proves a demo. The guard is `tenants.demo`, fixed at creation and immutable; a read from the equipment is never replaced."""
+    from sqlalchemy.exc import DBAPIError
+
     from app.core import olt_board_mock
     from app.core.db import get_engine, scoped_connection
     with migrated.begin() as c:
-        name = c.execute(text("SELECT name FROM olts WHERE id = :i"), {"i": olt}).scalar()
+        c.execute(text("UPDATE tenants SET name = 'ISP Demo (dados fictícios)' WHERE id = :t"), {"t": seed["A"]})   # a REAL tenant renamed to look like the demo one
         c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
-        c.execute(text("UPDATE olts SET name = :n WHERE id = :i"), {"n": "OLT-DEMO-" + name[-6:], "i": olt})   # a REAL OLT whose name starts like a demo one
-    real_name = "OLT-DEMO-" + name[-6:]
+        c.execute(text("UPDATE olts SET name = 'OLT-DEMO-X' WHERE id = :i"), {"i": olt})
     with pytest.raises(ValueError, match="demonstration tenant"), migrated.begin() as c:
-        olt_board_mock.store(c, seed["A"], real_name)                                              # tenant A is not the demo tenant: refused whatever the name says
+        olt_board_mock.store(c, seed["A"], "OLT-DEMO-X")                                          # neither name makes it a demo
+    with pytest.raises(DBAPIError), migrated.begin() as c:
+        c.execute(text("UPDATE tenants SET demo = true WHERE id = :t"), {"t": seed["A"]})          # and the flag cannot be turned on later
+    with migrated.begin() as c:   # a tenant CREATED as demo (what `create-tenant --demo` does)
+        demo_t = c.execute(text("INSERT INTO tenants(name, demo) VALUES ('Demo test', true) RETURNING id")).scalar()
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(demo_t)})
+        edge = c.execute(text("INSERT INTO edges(tenant_id,name) VALUES (:t,'edge-demo') RETURNING id"), {"t": demo_t}).scalar()
+        demo_olt = c.execute(text("INSERT INTO olts (tenant_id, edge_id, name, vendor, model, firmware) VALUES (:t, :e, 'OLT-DEMO-Y', 'huawei', 'MA5608T', 'R015') RETURNING id"), {"t": demo_t, "e": edge}).scalar()
+    with pytest.raises(DBAPIError), migrated.begin() as c:
+        c.execute(text("UPDATE tenants SET demo = false WHERE id = :t"), {"t": demo_t})            # and the flag cannot be turned off either
     with migrated.begin() as c:
-        c.execute(text("UPDATE tenants SET name = 'ISP Demo (dados fictícios)' WHERE id = :t"), {"t": seed["A"]})
-    with scoped_connection(get_engine(), tenant_id=seed["A"]) as c:   # an inventory read from the equipment exists -> never overwritten
-        epoch = c.execute(text("SELECT owner_epoch FROM olts WHERE id = :i"), {"i": olt}).scalar()
-        olt_cache.store_latest(c, seed["A"], UUID(str(olt)), "olt.board", "", BOARD, epoch, datetime.now(UTC), source="job")
+        assert olt_board_mock.store(c, demo_t, "OLT-DEMO-Y") == [0, 1]
+    with scoped_connection(get_engine(), tenant_id=demo_t) as c:   # an inventory read from the equipment exists -> never overwritten
+        epoch = c.execute(text("SELECT owner_epoch FROM olts WHERE id = :i"), {"i": demo_olt}).scalar()
+        olt_cache.store_latest(c, demo_t, UUID(str(demo_olt)), "olt.board", "", BOARD, epoch, datetime.now(UTC), source="job")
     with pytest.raises(ValueError, match="never overwritten"), migrated.begin() as c:
-        olt_board_mock.store(c, seed["A"], real_name)
-    with migrated.begin() as c:   # no real read: the demo tenant may get the mock, and the API labels it
-        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
-        c.execute(text("DELETE FROM olt_query_latest WHERE olt_id = :i"), {"i": olt})
+        olt_board_mock.store(c, demo_t, "OLT-DEMO-Y")
     with migrated.begin() as c:
-        assert olt_board_mock.store(c, seed["A"], real_name) == [0, 1]
-    h = hdr(client, "alice", seed, "A")
-    assert client.get(f"/v1/olts/{olt}/queries/olt.board/latest", headers=h).json()["source"] == "mock"
-    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(demo_t)})
+        c.execute(text("DELETE FROM olt_query_latest WHERE olt_id = :i"), {"i": demo_olt})
+        c.execute(text("DELETE FROM olts WHERE id = :i"), {"i": demo_olt})
+        c.execute(text("DELETE FROM edges WHERE tenant_id = :t"), {"t": demo_t})
+        c.execute(text("DELETE FROM tenants WHERE id = :t"), {"t": demo_t})
         c.execute(text("UPDATE tenants SET name = 'Tenant A' WHERE id = :t"), {"t": seed["A"]})
 
 

@@ -36,7 +36,7 @@ def _password(env_name: str | None) -> str:
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="fibercore-admin")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    t = sub.add_parser("create-tenant"); t.add_argument("name")
+    t = sub.add_parser("create-tenant"); t.add_argument("name"); t.add_argument("--demo", action="store_true", help="mark the tenant as a DEMONSTRATION tenant (fixed at creation, never changeable: the only kind that accepts synthetic mocks)")
     u = sub.add_parser("create-user")
     u.add_argument("email"); u.add_argument("display_name"); u.add_argument("--password-env")
     po = sub.add_parser("platform-operator", help="ADR-0031: mark/unmark an account as a platform operator (the only accounts a workspace can delegate access to)")
@@ -112,7 +112,7 @@ def main(argv: list[str] | None = None) -> None:
     eng = _engine()
     with eng.begin() as c:
         if a.cmd == "create-tenant":
-            print(c.execute(text("INSERT INTO tenants(name) VALUES (:n) RETURNING id"), {"n": a.name}).scalar())
+            print(c.execute(text("INSERT INTO tenants(name, demo) VALUES (:n, :d) RETURNING id"), {"n": a.name, "d": bool(a.demo)}).scalar())
         elif a.cmd == "create-user":
             h = hash_secret(_password(a.password_env))
             print(c.execute(

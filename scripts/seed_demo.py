@@ -30,7 +30,7 @@ def cli(*args: str, env: dict | None = None) -> str:
 
 
 def main() -> None:
-    tenant = cli("create-tenant", "ISP Demo (dados fictícios)")
+    tenant = cli("create-tenant", "ISP Demo (dados fictícios)", "--demo")
     cli("create-user", EMAIL, "Admin Demo", "--password-env", "DEMO_PW", env={"DEMO_PW": PW})
     cli("add-member", tenant, EMAIL, "isp_admin")
     cli("create-user", AGENT_EMAIL, "Agente Demo", "--password-env", "DEMO_PW", env={"DEMO_PW": PW})  # second member: target of the MFA-reset E2E
