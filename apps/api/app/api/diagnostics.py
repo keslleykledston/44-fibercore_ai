@@ -112,8 +112,9 @@ def _cpe_inputs(conn: Connection, cpe_id: UUID) -> list[dict]:
     conns = sorted(({"state": r.value, "fresh": fresh(r)} for r in st if r.metric == "wan_connection_status"),
                    key=lambda c: (c["state"], c["fresh"]))
     ages = [age(r) for r in st]
-    inform_at = conn.execute(text("SELECT last_inform_at FROM cpes WHERE id = :c"), {"c": cpe_id}).scalar_one()   # the ACS's own _lastInform, NOT the collection time
-    inform_age = None if inform_at is None else max(0, int((now - inform_at).total_seconds()))
+    cp = conn.execute(text("SELECT last_inform_at, observed_at FROM cpes WHERE id = :c"), {"c": cpe_id}).one()   # last_inform_at = the ACS's own _lastInform
+    inform_age = None if cp.last_inform_at is None else max(0, int((now - cp.last_inform_at).total_seconds()))
+    snapshot_fresh = cp.observed_at is not None and now - cp.observed_at <= EVAL_FRESH_FOR   # the collection that carried it
     onu = conn.execute(
         text("SELECT o.status, o.observed_at FROM onu_cpe_links l JOIN onus o ON o.id = l.onu_id AND o.tenant_id = l.tenant_id "
              "WHERE l.cpe_id = :c AND l.status = 'confirmed'"), {"c": cpe_id}).first()
@@ -121,7 +122,8 @@ def _cpe_inputs(conn: Connection, cpe_id: UUID) -> list[dict]:
              "newest_age_seconds": min(ages, default=None), "oldest_age_seconds": max(ages, default=None),
              "onu_link": "confirmed" if onu else "none", "onu_status": onu.status if onu else None,
              "onu_fresh": bool(onu and onu.observed_at and now - onu.observed_at <= EVAL_FRESH_FOR),
-             "inform_age_seconds": inform_age, "inform_fresh": inform_age is not None and inform_age <= STATE_FRESH_FOR.total_seconds()}]
+             "inform_age_seconds": inform_age, "inform_fresh": inform_age is not None and inform_age <= STATE_FRESH_FOR.total_seconds(),
+             "snapshot_fresh": bool(snapshot_fresh)}]
 
 
 def _edge_inputs(conn: Connection, edge_id: UUID) -> list[dict]:

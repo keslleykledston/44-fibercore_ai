@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19a99-31e8-7011-a4d5-24481968c88d).
+[codex] Turn started (01a19a99-3221-7571-9253-55da334fa2f5).
+[codex] Assistant message captured: Vou comparar a branch com `main` e seguir em especial a origem das contagens do Edge e o uso ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/collec... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=12 main...HEAD -- apps/api/app/core/diagnosti...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=12 main...HEAD -- apps/api/app/core/diagnosti... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "EDGE_OFFLINE_AFTER|EVAL_FRESH_FOR|CREATE.*onu_cpe_links|onu_cpe_links|l...
+[codex] Command completed: /bin/bash -lc 'rg -n "EDGE_OFFLINE_AFTER|EVAL_FRESH_FOR|CREATE.*onu_cpe_links|onu_cpe_links|l... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/diagnostics.py | sed -n '125,200p'; nl -ba apps/api/a...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/diagnostics.py | sed -n '125,200p'; nl -ba apps/api/a... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: R-D003 ainda equipara heartbeat si...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: R-D003 ainda equipara heartbeat silencioso a dados de ONU velhos, e R-D004 pode inferir falha usando um last_inform_at sem verificar se o snapshot do CPE está recente.
+
+Findings:
+- [high] R-D004 não valida a idade do snapshot do CPE (apps/api/app/api/diagnostics.py:115-124)
+  `inform_age_seconds` é calculado a partir do último `last_inform_at` persistido, mas R-D004 só exige frescor da ONU. Se o Edge ou a ingestão de snapshots do CPE parar enquanto a coleta da OLT continuar, um snapshot antigo pode conter um last Inform velho embora o ACS já tenha recebido Informações novas. A regra então produz `inferred` de sessão ACS obsoleta com evidência desatualizada. O `observed_at` do CPE existe, mas não entra nos inputs nem na decisão.
+  Recommendation: Inclua a idade/frescor do snapshot do CPE nos inputs persistidos e retorne `unknown` quando esse snapshot estiver fora da janela aceitável antes de avaliar `last_inform_at`.
+- [medium] R-D003 infere dados velhos só pelo heartbeat (apps/api/app/core/diagnostics.py:149-151)
+  Quando o heartbeat passa de 90 s, o ramo `silent` afirma que a coleta parou e que os dados de ONU estão velhos, sem considerar `onus_not_fresh`. Uma coleta pode ter parado há pouco enquanto todas as leituras ainda estão dentro da janela de 15 min; nesse caso, a hipótese contradiz as contagens armazenadas. Mantenha a inferência de Edge silencioso, mas descreva a atualidade das ONUs apenas conforme as contagens, sem afirmar que todas estão velhas.
+  Recommendation: No ramo silencioso, derive a afirmação sobre dados de ONU de `onus_total` e `onus_not_fresh`; preserve a hipótese de Edge sem sinal separadamente.

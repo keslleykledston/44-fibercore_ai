@@ -394,7 +394,7 @@ def test_r_d002_run_reads_the_stored_state_is_read_only_and_reproducible(client,
     assert after == before  # a run opens no incident, writes no state and publishes no event
     assert "DGC-0001" not in json.dumps(stored) and set(stored[0]) == {
         "subject_id", "links", "connections", "newest_age_seconds", "oldest_age_seconds", "onu_link", "onu_status",
-        "onu_fresh", "inform_age_seconds", "inform_fresh"}  # no serial, no free text
+        "onu_fresh", "inform_age_seconds", "inform_fresh", "snapshot_fresh"}  # no serial, no free text
     assert client.get(f"/v1/diagnostics/runs/{d['run_id']}", headers=h).json()["reproducible"] is True
     # the same CPE reached through its confirmed ONU
     r2 = client.post("/v1/diagnostics/runs", headers=h, json={"rule_id": "R-D002", "onu_id": onu})
@@ -448,7 +448,8 @@ def _edge_row(**kw):
 
 
 def _inform_row(**kw):
-    base = {"subject_id": "c1", "onu_link": "confirmed", "onu_status": "online", "onu_fresh": True, "inform_age_seconds": 7200, "inform_fresh": False}
+    base = {"subject_id": "c1", "onu_link": "confirmed", "onu_status": "online", "onu_fresh": True, "inform_age_seconds": 7200, "inform_fresh": False,
+            "snapshot_fresh": True}
     base.update(kw)
     return base
 
@@ -459,7 +460,10 @@ def test_r_d003_only_a_silent_edge_is_a_hypothesis_and_never_a_claim_about_onus(
     silent = ev(heartbeat_age_seconds=900, silent=True, onus_not_fresh=10)
     assert silent.matched and silent.suspected_cause == "edge_unreachable"
     assert silent.finding["status"] == "inferred" and silent.finding["requires_human_confirmation"] is True
-    assert "not evidence of ONU outages" in silent.finding["hypothesis"]
+    assert "may only be old data" in silent.finding["hypothesis"] and silent.finding["context"] == "all 10 known ONU readings are old"
+    assert rule.evaluate(_edge_row(heartbeat_age_seconds=900, silent=True, onus_not_fresh=0)).finding["context"].startswith("the 10 known ONU readings are still recent")
+    assert "3 of 10" in rule.evaluate(_edge_row(heartbeat_age_seconds=900, silent=True, onus_not_fresh=3)).finding["context"]
+    assert rule.evaluate(_edge_row(heartbeat_age_seconds=900, silent=True, onus_total=0, olts=0)).finding["context"] == "no ONU is known for its OLTs"
     assert ev().finding["status"] == "observed" and not ev().matched                       # reporting Edge: nothing to flag
     assert "every known ONU reading is recent" in ev().finding["reason"]
     # a heartbeat proves the Edge is alive, not that its OLT readings are current: never claim currency without recent readings
@@ -481,15 +485,18 @@ def test_r_d004_claims_only_for_an_online_fresh_confirmed_onu_with_an_old_inform
     assert ev(onu_fresh=False).finding["status"] == "unknown"                              # old OLT reading
     assert ev(onu_status="los").finding["status"] == "observed" and not ev(onu_status="los").matched   # not online: rule does not apply
     assert ev(inform_age_seconds=None, inform_fresh=False).finding["status"] == "unknown"  # no Inform time known
+    old_snap = ev(snapshot_fresh=False).finding                                            # an old snapshot may hold an old Inform: no claim
+    assert old_snap["status"] == "unknown" and "itself old" in old_snap["reason"] and not ev(snapshot_fresh=False).matched
     rnd = random.Random(11)  # noqa: S311  property: a claim needs a confirmed, fresh, online ONU and a known, old Inform
     for _ in range(500):
         row = _inform_row(onu_link=rnd.choice(["none", "confirmed"]), onu_status=rnd.choice([None, "online", "los", "offline"]),
-                          onu_fresh=rnd.random() < 0.6, inform_age_seconds=rnd.choice([None, 10, 7200]), inform_fresh=rnd.random() < 0.5)
+                          onu_fresh=rnd.random() < 0.6, inform_age_seconds=rnd.choice([None, 10, 7200]), inform_fresh=rnd.random() < 0.5,
+                          snapshot_fresh=rnd.random() < 0.7)
         res = rule.evaluate(row)
         assert res.finding == rule.evaluate(dict(row)).finding
         if res.finding["status"] == "inferred":
             assert row["onu_link"] == "confirmed" and row["onu_fresh"] and row["onu_status"] == "online"
-            assert row["inform_age_seconds"] is not None and not row["inform_fresh"]
+            assert row["inform_age_seconds"] is not None and not row["inform_fresh"] and row["snapshot_fresh"]
 
 
 def test_r_d003_and_r_d004_are_registered_pure_and_replay():
@@ -532,6 +539,10 @@ def test_r_d004_run_flags_an_online_onu_whose_cpe_stopped_informing(client, seed
         stored = c.execute(text("SELECT inputs FROM diagnostic_runs WHERE id = :i"), {"i": d["run_id"]}).scalar_one()
     assert after == before and "DGC-0007" not in json.dumps(stored)                              # read-only, no serial stored
     assert client.get(f"/v1/diagnostics/runs/{d['run_id']}", headers=h).json()["reproducible"] is True
+    with migrated.begin() as c:   # the collection that carried the Inform time is itself old: no claim
+        c.execute(text("UPDATE cpes SET observed_at = now() - interval '3 hours' WHERE canonical_serial = 'DGC-0007'"))
+    old = run({"rule_id": "R-D004", "cpe_id": cpe}).json()["findings"][0]
+    assert old["status"] == "unknown" and "itself old" in old["reason"] and old["evidence"]["snapshot_fresh"] is False
 
 
 def test_cpe_snapshot_keeps_the_acs_last_inform_apart_from_the_collection_time_and_only_moves_it_forward(client, seed, inv, migrated):
