@@ -1,19 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type APIRequestContext } from "@playwright/test";
-import { API_URL, EMAIL, login, PASSWORD } from "./helpers";
+import { expect, test } from "@playwright/test";
+import { login, onuWithConfirmedCpe } from "./helpers";
 
-/** Confirma (idempotente) o vínculo ONU↔CPE de DEMOA0002 e devolve o id da ONU. A configuração do aparelho é o perfil SINTÉTICO do seed (rotulado como tal). */
-async function onuWithConfirmedCpe(request: APIRequest) {
-  const tok = (await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json()).access_token as string;
-  const h = { Authorization: `Bearer ${tok}` };
-  expect((await request.post(`${API_URL}/v1/onu-cpe-links/suggest`, { headers: h })).status()).toBe(201);
-  const links = (await (await request.get(`${API_URL}/v1/onu-cpe-links?status=suggested&limit=200`, { headers: h })).json()) as { id: string; onu: { id: string; serial: string } }[];
-  const mine = links.find((l) => l.onu.serial === "DEMOA0002");
-  if (mine) expect((await request.post(`${API_URL}/v1/onu-cpe-links/${mine.id}/confirm`, { headers: h })).status()).toBe(200);
-  const onus = (await (await request.get(`${API_URL}/v1/onus?serial=DEMOA0002`, { headers: h })).json()) as { id: string; serial: string }[];
-  return onus.find((o) => o.serial === "DEMOA0002")!.id;
-}
-type APIRequest = APIRequestContext;
 
 test("configuração do aparelho: sidebar não modal, somente leitura, com instâncias reais, óptica e dados sintéticos rotulados", async ({ page, request }) => {
   const onu = await onuWithConfirmedCpe(request);
@@ -22,7 +10,13 @@ test("configuração do aparelho: sidebar não modal, somente leitura, com inst�
   await page.getByTestId("ont-sidebar-open").click();
   const bar = page.getByTestId("ont-sidebar");
   await expect(bar).toBeVisible();
-  await expect(page.getByTestId("ont-thumbnail")).toBeVisible();
+  // ADR-0041 PR4 (flag device_assets ligada no seed): arte esquemática do MODELO, rotulada; o estado fica no texto, nunca na imagem
+  const model = page.getByTestId("ont-sidebar-model-thumb").getByTestId("device-thumb");
+  await expect(model).toBeVisible();
+  expect(["SCHEMATIC", "UNKNOWN"]).toContain(await model.getAttribute("data-fidelity"));
+  await expect(model).toContainText(/Ilustração esquemática|Sem arte catalogada/);
+  await expect(model.getByTestId("ont-sidebar-state")).toHaveCount(0);
+  await expect(page.getByTestId("ont-thumbnail")).toHaveCount(0);
   await expect(page.getByTestId("ont-synthetic")).toContainText("sintéticos");
   await expect(page.getByTestId("ont-sidebar-state")).toContainText("Leitura recente");
   await expect(bar).toContainText("Somente leitura");
