@@ -160,11 +160,11 @@ Pacote em `docs/addenda/v2.5/package/`; GAP com os caminhos reais em `docs/adden
 | FC25-00 / FC251-00 | P0 | [x] GAP, ADR-0040 e backlog (2026-11-02) | este PR |
 | FC251-04/05/06 (núcleo) | P0 | [x] núcleo puro em `apps/api/app/core/profile_studio.py` (2026-11-02): modelo canônico tipado, validação por allowlist/capacidade, diff semântico, resolução por alvo, `plan_hash`, dry-run por OLT, sanitização de texto importado. Sem banco, rota ou flag ainda | 47 testes; falta ligar à migração/API/UI |
 | FC25-06 / FC251-01/02/03 | P0 | [~] **feito em 2026-11-02:** migração 0040, snapshot imutável, importação (fixture/manual), clone para rascunho com `If-Match`, comparação e dry-run por OLT (API, flag `profile_studio` off). **Falta:** leitura REAL do Edge (consultas de profile no catálogo + parser; só após captura supervisionada e ordem do responsável) | API em `apps/api/app/api/profile_studio.py`; 10 testes |
-| FC25-07 / FC251-06 (API) | P0 | [~] dry-run por OLT na API (feito); falta a tela e a prova com OLT real | ver acima |
+| FC25-07 / FC251-06 (API + tela) | P0 | [x] dry-run por OLT na API e na tela (2026-11-02, `/rede/perfis`; e2e real `perfis.spec.ts`); falta a prova com OLT real (leitura certificada) | ver acima |
 | FC25-01/02/03 | P0 | [ ] descoberta de ONU pendente (driver mock + fixtures), fila, associação HubSoft somente leitura | `olt.autofind` e `pon.ont.autofind` já no catálogo (`validated=false`) |
 | FC25-04/05 | P0 | [ ] service intent versionado e wizard assistido | depende do núcleo |
 | FC25-07 / FC251-06 | P0 | [ ] dry-run `reuse/adopt/clone/blocked` por OLT, com impacto | cobrirá a lacuna (b) do FC22-014 para provisionamento (planejado) |
-| FC251-07 / UI | P0 | [ ] Assistido + Modo Especialista (Formulário e YAML/JSON), capturas reais, how-to | Lovable só para UX |
+| FC251-07 / UI | P0 | [~] **feito (flag `profile_studio`):** Assistido (formulário) + Especialista (JSON tipado), importar, rascunho, comparar, dry-run, capturas reais e how-to `rede/perfis-olt`; falta o editor YAML e a leitura real da OLT | Lovable só para UX |
 | FC251-08 | P1 | [ ] publicar revisão imutável com changelog e maker-checker | sem enviar à OLT |
 | FC25-08/09/10, FC251-09 | P1 | [ ] escrita em LAB (autorizar ONU, criar/clonar profile) | **condicionado:** homologação por vendor/firmware/placa/operação, emenda do ADR-0030, aprovação, `plan_hash`+TTL, leitura de volta independente |
 | FC25-11/12/13, FC251-10/11 | P1 | [ ] lote com canário, migração de ONUs (job separado), drift | depende de P1 |

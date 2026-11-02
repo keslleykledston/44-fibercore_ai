@@ -159,3 +159,13 @@ articles:
   e2e_test: help-screenshots.spec.ts › operacoes/acompanhar-operacoes; app.spec.ts
     › operações
   last_verified: '2026-10-28'
+- slug: rede/perfis-olt
+  ui_route: /rede/perfis
+  status: published
+  images:
+  - assets/rede/perfis-olt/desktop.png
+  - assets/rede/perfis-olt/mobile.png
+  - assets/rede/perfis-olt/rascunho/desktop.png
+  - assets/rede/perfis-olt/rascunho/mobile.png
+  e2e_test: help-screenshots.spec.ts › rede/perfis-olt; fluxo em perfis.spec.ts (perfis)
+  last_verified: '2026-11-02'
