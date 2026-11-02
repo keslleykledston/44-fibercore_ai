@@ -6,11 +6,11 @@ Atualizado: 2026-11-02 | Branch: `main` | Estado: **LAB** (`LIMITED_INTERNAL_PRO
 
 | Área | Estado | Prova |
 |---|---|---|
-| API, RLS, auth, MFA TOTP, refresh rotativo, lockout/throttle | Feito | pytest 917 passed (Postgres 17 e NATS reais descartáveis); migração Alembic head **0039** |
-| Edge Go (NBI somente leitura, OLT identified, jobs assinados, bench, ping, speed) | Feito para a LAB | `go test -race ./...` verde; o Edge em execução na LAB é anterior ao `last_inform_at` (precisa de reimplantação, que depende de ordem do responsável) |
+| API, RLS, auth, MFA TOTP, refresh rotativo, lockout/throttle | Feito | pytest 917 passed (Postgres 17 e NATS reais descartáveis); migração Alembic head **0039** (aplicada na LAB em 2026-11-02; backup lógico antes) |
+| Edge Go (NBI somente leitura, OLT identified, jobs assinados, bench, ping, speed) | Feito para a LAB | `go test -race ./...` verde; API e Edge da LAB reimplantados em 2026-11-02 (`fdf4da8`; Edge `0.1.0-lab-fdf4da8`, config inalterada); os 9 CPEs já têm `last_inform_at` |
 | Inventário, ERP CSV/HubSoft (HS-01/02), associações, incidentes, NOC com ack | Feito | pytest + e2e funcional |
-| Web (Next.js 15, BFF HttpOnly, Central de Ajuda, 23 artigos) | Feito; web da LAB em `7903ccc` | e2e: 21 puros + 32 funcionais + 55 do inspetor (2 pulados por flag) + 30 capturas; axe claro/escuro; contraste WCAG medido |
-| Motor de diagnóstico | R-D001, R-D002, R-D003, R-D004 (puras, versionadas, reproduzíveis) | `tests/test_inventory_diagnostics.py` (27); R-D004 depende do Edge novo |
+| Web (Next.js 15, BFF HttpOnly, Central de Ajuda, 23 artigos) | Feito; web da LAB em `fdf4da8` | e2e: 21 puros + 32 funcionais + 55 do inspetor (2 pulados por flag) + 30 capturas; axe claro/escuro; contraste WCAG medido |
+| Motor de diagnóstico | R-D001, R-D002, R-D003, R-D004 (puras, versionadas, reproduzíveis) | `tests/test_inventory_diagnostics.py` (27); R-D004 conferida na LAB com dado real (2 ONTs de bancada online com Inform recente: "observado"); a hipótese de sessão ACS parada ainda não ocorreu na LAB |
 | Speed (TR-143), Qualidade (QoS-001), Ping (TR-143 IPPing) | Feitos atrás de flags; ONU 360° não tem cartões deles (Diagnóstico e abas do painel) | e2e de UI de cada um; o do ping achou e corrigiu um bug real do BFF |
 | Escrita em rede | **BLOQUEADA** (`HOMOLOGATED_WRITES` vazio); só o caminho de bancada (ADR-0030), alvo fechado | testes de bloqueio; evidências em `docs/wiki/bench/` |
 | Bancada | ZTE F670L: `reboot_cpe`, `set_wifi_ssid`, download, upload e `ping_test` em `observed` (aceites do responsável). Huawei EG8145V5: ping NÃO aceito (80 % de perda sem causa) | `docs/wiki/bench/H-*.md` |

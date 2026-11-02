@@ -258,3 +258,6 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 - E2E 100 % verde (17 + 32 + 48). Contraste da régua medido e corrigido (`--ok` claro, `BAND_TINT`); guarda em `e2e/optics-contrast.spec.ts`. Capturas da ajuda NÃO regeneradas.
 - `scripts/e2e.sh` continua com as portas da LAB (18420/18490): rodar com `FIBERCORE_API_PORT=18421 WEB_PORT=28490`. O `--no-screenshots` não inclui o projeto `inspetor`.
 
+
+## Atualização 2026-11-02 (noite): API e Edge da LAB com a R-D004
+- `main` enviada até `fdf4da8` (web, API e Edge da LAB nesse commit; migração 0039 aplicada; backup lógico em `build/backups`). R-D003/R-D004 no ar; R-D004 conferida com dado real. Rotação do `cwmp.auth` concluída. Pendências: ver `docs/product/ROADMAP_BACKLOG.md` (seção de 2026-11-02).
