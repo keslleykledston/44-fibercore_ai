@@ -60,6 +60,7 @@ const screens: { slug: string; route: string; ready: string; prepare?: (r: APIRe
     steps: async (page: Page) => { await page.getByTestId("onu-open").click(); await page.getByTestId("onu-360-link").click(); } },
   { slug: "rede/perfis-olt", route: "/rede/perfis", ready: "perfis-inventario" },
   { slug: "rede/perfis-olt/rascunho", route: "/rede/perfis", ready: "perfis-resultado", dynamicRoute: perfisRoute },
+  { slug: "rede/onus-pendentes", route: "/rede/pendentes", ready: "pend-fila" },
   { slug: "assinantes/visao-360", route: "/assinantes", ready: "sub360-ready", dynamicRoute: sub360Route },
   { slug: "assinantes/diagnostico-guiado", route: "/assinantes", ready: "diag-ready", dynamicRoute: diagRoute },
   { slug: "noc/acompanhar-incidente", route: "/noc", ready: "incident-queue", prepare: approveCinco,

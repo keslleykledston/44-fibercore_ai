@@ -83,6 +83,7 @@ def main() -> None:
             "onus": [{"serial": serial, "pon_path": "0/2/0", "status": "online", "rx_dbm": -18.75}]})
         assert r.status_code == 202, r.text
     cli("feature-set", tenant, "onu_quick_inspector", "on")
+    cli("feature-set", tenant, "onu_discovery", "on")   # v2.5: fila de ONUs aguardando autorização (somente leitura)
     cli("feature-set", tenant, "profile_studio", "on")   # ADR-0040: Profile Studio (somente leitura/rascunho/simulação)
     # Certificação SINTÉTICA da leitura de perfis só para o tenant de demonstração (a OLT de laboratório real NÃO é certificada por aqui).
     cli("capability-set", tenant, "huawei", "MA5800-X7", "R018", "olt", "olt_profile_read", "supported", "observed",
@@ -117,6 +118,10 @@ def main() -> None:
             "native_type": "line", "native_key": key, "technology": "gpon", "pon_card": "GPBD-DEMO", "observed_at": datetime.now(UTC).isoformat(), "completeness": "complete",
             "reference_count": 3, "settings": settings, "source": "manual_import"})
         assert r.status_code == 201, r.text
+    sightings = [("0/1/3", "DEMOPEND0001", "huawei", timedelta(minutes=5)), ("0/1/3", "DEMOPEND0002", None, timedelta(hours=3)), ("0/1/4", "DEMOA0000", None, timedelta(minutes=2))]
+    r = u.post(f"/v1/olts/{olt_id}/onus/unregistered/import", headers=uh, json={"source": "fixture", "items": [   # avistamentos SINTÉTICOS: nova, dado antigo e um serial já registrado (conflito)
+        {"pon_path": pon, "serial": ser, "observed_at": (datetime.now(UTC) - ago).isoformat(), **({"vendor_hint": v} if v else {})} for pon, ser, v, ago in sightings]})
+    assert r.status_code == 201, r.text
     cpe_id = u.get("/v1/cpes", headers=uh).json()[0]["id"]
     cfg_cpe = next(x["id"] for x in u.get("/v1/cpes", headers=uh).json() if x["canonical_serial"] == "DEMOA0002")
     cli("ont-config-mock", tenant, cfg_cpe, "dualband")  # configuração SINTÉTICA (rotulada como tal) do aparelho DEMOA0002

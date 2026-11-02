@@ -28,6 +28,9 @@ export default defineConfig({
     { name: "perfis", testMatch: /perfis\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
     // Recuo com a flag `profile_studio` DESLIGADA: PERFIS_FLAG_OFF=1 npx playwright test --project=recuo-perfis
     { name: "recuo-perfis", testMatch: /perfis-flag\.spec\.ts/, use: { browserName: "chromium" } },
+    { name: "pendentes", testMatch: /pendentes\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
+    // Recuo com a flag `onu_discovery` DESLIGADA: PENDENTES_FLAG_OFF=1 npx playwright test --project=recuo-pendentes
+    { name: "recuo-pendentes", testMatch: /pendentes-flag\.spec\.ts/, use: { browserName: "chromium" } },
     { name: "aparelho", testMatch: /ont-sidebar\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
     { name: "consultas", testMatch: /olt-queries\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
   ],

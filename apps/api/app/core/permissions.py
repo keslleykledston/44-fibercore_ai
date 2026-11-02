@@ -52,6 +52,8 @@ CATALOG: dict[str, Permission] = dict([
     _p("profiles:read", "Ver os profiles de serviço da OLT (snapshots importados), comparar com um rascunho (somente leitura)", "R0", scopable=True),
     _p("profiles:import", "Importar um profile existente da OLT como referência imutável (somente leitura: não escreve na OLT)", "R1", scopable=True),
     _p("profiles:edit", "Criar e editar rascunhos de profile (clone) e simular a aplicação (dry-run); nada é enviado à OLT", "R2", scopable=True),
+    _p("discovery:read", "Ver a fila de ONUs aguardando autorização (somente leitura; nada é autorizado)", "R0", scopable=True),
+    _p("discovery:import", "Registrar avistamentos de ONUs não autorizadas (fixture/importação manual; não escreve na OLT)", "R1", scopable=True),
     _p("members:read", "Ver os membros do provedor e o estado do MFA de cada um", "R1"),
     _p("members:manage", "Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite)", "R3", mfa_recent=True),
     _p("platform:delegate", "Conceder e revogar o acesso temporário (até 8 h, com motivo) do suporte da plataforma a este provedor", "R3", mfa_recent=True),
