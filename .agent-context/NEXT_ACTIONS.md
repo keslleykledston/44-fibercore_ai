@@ -239,7 +239,7 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 - Em `main` local ficaram ainda SEM push os commits depois de `74719f0` (correção do Edge, merge e docs).
 - **Upload da ZTE:** `speed_test_upload` promovido a `observed` com o aceite do responsável (2026-11-01).
 - **Push:** `main` enviada até `74719f0` (scan de segredos exit 0; nenhum IP real no histórico), sem tags.
-- **Rotação do `cwmp.auth`:** fase 1 aplicada (antigo OU novo aceitos; par novo em arquivo 0600 local fora do repo). Faltam fase 2 (alguém configura o par novo nas ONTs de bancada) e fase 3 (remover o antigo). Ver `docs/operations/GENIEACS_CWMP_AUTH_ROTATION.md`.
+- **Rotação do `cwmp.auth`: CONCLUÍDA em 2026-11-02** (fases 2 e 3; só o par novo é aceito, antigo → 401, ONTs de bancada informando). Resta o responsável guardar o par novo no cofre e então apagar o arquivo local e os backups 0600 no host do ACS. Ver `docs/operations/GENIEACS_CWMP_AUTH_ROTATION.md`.
 - Próximos passos: Lovable aguarda aprovação de plano (projeto 13aaf09e…, mensagem umsg_01m6atbzzrfmr8489m2f1kqn7b); entender os 80 % da Huawei (comparar o ping de outra origem pela mesma WAN, precisa de alguém na bancada) e repetir o ping da ZTE; portar o protocolo de trava do ping para `SpeedTestSection` (KNOWN_ISSUES); registrar `dns_test` como unsupported/observed (evidência da leitura de NSLookup).
 
 ## Atualização 2026-11-01 (noite): push, aceite do ping, trava do speed, Lovable
@@ -248,7 +248,7 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 - **Trava do teste de banda:** portada do ping (ver CHANGELOG). Codex approve na r4; e2e do speed 18 passed.
 - **E2E:** o seed estava quebrado na `main` (`set_wifi_ssid` sem `ssid`); corrigido. Cinco falhas de e2e já existiam (axe light/dark, refresh rotativo, onu-quick, setas entre abas): ver `docs/KNOWN_ISSUES.md`. A stack `fibercore-dev` foi recriada e derrubada (`down -v`) com o OK do responsável; `scripts/e2e.sh` usa a porta 18420 (a da LAB) e `WEB_PORT` 18490: rodar com `FIBERCORE_API_PORT=18421 WEB_PORT=28490` ao lado da LAB.
 - **Lovable:** plano aprovado e aplicado no projeto 13aaf09e… (commit `c4e39d8`, 7,3 créditos). Falta REVISAR o código antes de qualquer uso (contraste WCAG não medido); nada importado.
-- **Pendências:** rotação do `cwmp.auth` fases 2 e 3; causa dos 80 % da Huawei; repetir o ping da ZTE em outros dias; aplicar a trava com `?run=` também em eventuais novas seções; `dns_test` unsupported/observed; as 5 falhas de e2e antigas.
+- **Pendências:** causa dos 80 % da Huawei; repetir o ping da ZTE em outros dias; aplicar a trava com `?run=` também em eventuais novas seções; `dns_test` unsupported/observed; as 5 falhas de e2e antigas.
 
 ## Atualização 2026-11-01 (UX do Diagnóstico do Lovable)
 - Aceita a proposta do Lovable; implementados os itens 1 a 4 (régua compacta na lista, valor sobre o marcador, fonte e idade na Qualidade, frase de cautela). Item 5 (selo "Parcial") não feito: a tela já explicava o motivo. Rótulo "Confirmado/Hipótese" NÃO adotado (a plataforma não julga o sinal). Codex approve na r7. Mesclado em `main` localmente; NÃO enviado ao remoto e NÃO implantado na LAB.

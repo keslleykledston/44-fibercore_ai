@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased — rotação do cwmp.auth concluída nas ONTs de bancada (2026-11-02)
+- Ops: fases 2 e 3 da rotação do `cwmp.auth` do ACS. O par novo foi configurado na Huawei EG8145V5 e na ZTE F670L pelo responsável; `cwmp.auth` ficou só com o par novo; o par antigo exato passou a dar 401 e as duas ONTs seguem informando (0 falhas). Nada no código. Lição registrada em `docs/operations/GENIEACS_CWMP_AUTH_ROTATION.md`: gravação direta no Mongo só vale depois do snapshot de até 300 s do GenieACS.
+
 ## Unreleased — ONU 360° sem os cartões de teste de banda e de qualidade (2026-11-01)
 - Web: a ONU 360° deixa de ter os cartões **Teste de banda** e **Qualidade do serviço**. Os dois continuam nas abas do painel da Rede e também na página de Diagnóstico (abas Velocidade e Qualidade), que a 360° já liga pelo botão **Diagnóstico**; só não há mais cartão na 360°. Nada mudou nos componentes, nas flags nem no BFF.
 - Testes: os dois testes que esperavam o cartão passam a provar que ele não existe na 360° e que o conteúdo está no Diagnóstico; os testes de flag desligada (`SPEED_FLAG_OFF`, `QUALITY_FLAG_OFF`) agora também abrem o Diagnóstico e provam que ele mostra só o aviso de indisponível. Docs (ajuda de banda e de qualidade, ADR-0038 e ADR-0039) ajustadas.
