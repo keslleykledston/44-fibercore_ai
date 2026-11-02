@@ -112,9 +112,10 @@ def _cpe_inputs(conn: Connection, cpe_id: UUID) -> list[dict]:
     conns = sorted(({"state": r.value, "fresh": fresh(r)} for r in st if r.metric == "wan_connection_status"),
                    key=lambda c: (c["state"], c["fresh"]))
     ages = [age(r) for r in st]
-    cp = conn.execute(text("SELECT last_inform_at, observed_at FROM cpes WHERE id = :c"), {"c": cpe_id}).one()   # last_inform_at = the ACS's own _lastInform
+    cp = conn.execute(text("SELECT last_inform_at, last_inform_observed_at FROM cpes WHERE id = :c"), {"c": cpe_id}).one()   # last_inform_at = the ACS's own _lastInform
     inform_age = None if cp.last_inform_at is None else max(0, int((now - cp.last_inform_at).total_seconds()))
-    snapshot_fresh = cp.observed_at is not None and now - cp.observed_at <= EVAL_FRESH_FOR   # the collection that carried it
+    # when the Edge last REPORTED an Inform time: a snapshot that omitted it never renews this (an old Inform cannot borrow a newer snapshot's freshness)
+    snapshot_fresh = cp.last_inform_observed_at is not None and now - cp.last_inform_observed_at <= EVAL_FRESH_FOR
     onu = conn.execute(
         text("SELECT o.status, o.observed_at FROM onu_cpe_links l JOIN onus o ON o.id = l.onu_id AND o.tenant_id = l.tenant_id "
              "WHERE l.cpe_id = :c AND l.status = 'confirmed'"), {"c": cpe_id}).first()
