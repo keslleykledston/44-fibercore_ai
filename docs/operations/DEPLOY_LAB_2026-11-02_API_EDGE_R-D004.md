@@ -4,11 +4,11 @@ Evidência operacional redigida (nenhum IP, serial, credencial ou conteúdo de b
 
 ## Antes
 - Web da LAB já em `fdf4da8` (deploy anterior da mesma sessão); API/relay/consumer em versão anterior; banco no head **0038**; Edge do host do ACS `0.1.0-lab-90d6b9d`, 1 processo.
-- Backup lógico `pg_dump -Fc` feito por `scripts/backup.sh` (`COMPOSE_PROJECT=fibercore-prod`), arquivo `fibercore-20261102T053308Z.dump` (459132 bytes, 0600, **sem cifra**, fora do git em `build/backups`), sha256 do dump: `006e2748c0d02c1e81c234a246e94d2db3edb534c3b033c2af83c31c61ac5345`.
+- Backup lógico (`pg_dump -Fc` por `scripts/backup.sh`) criado e verificado como não vazio às 05:33Z, guardado fora do git, com permissão restrita e **sem cifra**. Nome, caminho, tamanho e hash ficam só no host da LAB (registro restrito), não neste documento.
 
 ## Passo 1: API e migração
 - Comando: `docker compose -p fibercore-prod --env-file .env.prod -f infra/compose/compose.yaml up -d --build migrate api-core outbox-relay event-consumer`.
-- `migrate` saiu com sucesso; `alembic_version` = **0039**; colunas `cpes.last_inform_at` e `cpes.last_inform_observed_at` existem (aditivas, nulas; reversão: `alembic downgrade 0038` ou `DROP COLUMN`).
+- `migrate` saiu com sucesso; `alembic_version` = **0039**; colunas `cpes.last_inform_at` e `cpes.last_inform_observed_at` existem (aditivas, nulas). **Reversão: o downgrade (`alembic downgrade 0038`) APAGA as duas colunas e todos os Inform já coletados nelas; a R-D004 volta a responder "desconhecido". Antes de reverter, exporte `last_inform_at` e `last_inform_observed_at` se quiser reter os valores.** Reverter só o Edge não exige tocar no banco.
 - `api-core`, `outbox-relay` e `event-consumer` `Up (healthy)`; `/livez` 200; `postgres`, `nats`, `proxy` e `web` não foram tocados.
 - Dentro do contêiner da API: `diagnostics.RULES` = R-D001, R-D002, R-D003, R-D004 (versão 1).
 
