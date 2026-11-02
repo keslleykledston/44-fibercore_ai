@@ -1,0 +1,20 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19e8a-fd46-7250-97d2-e53ec837705f).
+[codex] Turn started (01a19e8b-0021-7de1-911f-99feb37a54fa).
+[codex] Assistant message captured: Vou rastrear o schema do envelope e os campos efetivamente produzidos nesses testes para ver ...
+[codex] Running command: /bin/bash -lc "sed -n '300,370p' apps/api/tests/test_ping.py && sed -n '350,420p' apps/api/te...
+[codex] Command completed: /bin/bash -lc "sed -n '300,370p' apps/api/tests/test_ping.py && sed -n '350,420p' apps/api/te... (exit 0)
+[codex] Running command: /bin/bash -lc 'cat contracts/job-envelope.schema.json; rg -n "PARAMS =|def .*envelope|signatu...
+[codex] Command failed: /bin/bash -lc 'cat contracts/job-envelope.schema.json; rg -n "PARAMS =|def .*envelope|signatu... (exit 2)
+[codex] Running command: /bin/bash -lc "sed -n '1,25p' apps/api/tests/test_speed.py; sed -n '1,25p' apps/api/tests/tes...
+[codex] Command completed: /bin/bash -lc "sed -n '1,25p' apps/api/tests/test_speed.py; sed -n '1,25p' apps/api/tests/tes... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"Não encontrei risco material introduzido: os campos funcionai...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+Não encontrei risco material introduzido: os campos funcionais continuam cobertos, e a assinatura excluída é dado aleatório, não um campo de endereço.
+
+No material findings.
