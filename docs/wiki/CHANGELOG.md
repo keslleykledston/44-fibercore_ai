@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased — H5 `onu_reauthorize` executada na bancada e `olt.autofind` validado (2026-11-02)
+- Bancada (ADR-0030, H5): ciclo completo `undo service-port` → `ont delete` → autofind → `ont add` → `service-port` na ONU de bancada Huawei, **passou na 4ª tentativa** (job `97046bd6`, pós-check do Edge igual ao baseline). As 3 primeiras acharam defeitos reais (campos recuados, autofind lido uma só vez, eco quebrado em 80 colunas); duas deixaram a ONU sem service-port, reposta à mão. Evidência em `docs/wiki/bench/H5-onu_reauthorize-ma5608t-2026-11-02.md`; emenda no ADR-0030. Capacidade segue `identified` (falta o aceite do responsável).
+- Edge: `joinWrappedEcho` (eco de comando longo quebrado em 80 colunas, só na primeira linha e só em coluna de quebra), autofind em polling limitado, `command timeout` informa o fim da tela. Codex approve (r2, r1 e r4 nas três frentes).
+- `olt.autofind` **validado** (lista vazia e uma entrada reais): parser tipado fechado no Edge, forma tipada e `ROLLOUT` na nuvem, fixture sintético no layout real; `Password`/`Loid`/`Checkcode` nunca lidos. Layout de várias entradas NÃO observado (falha fechada pelo rodapé). Ainda sem ingest `edge_read` no `onu_discovery`.
+
 ## Unreleased — inventário de perfis da OLT, sync edge_read e revisões imutáveis (2026-11-02)
 - Captura supervisionada na OLT real (ADR-0032 lote 3, só leitura, autorizada pelo responsável): `olt.profile.line/srv/dba/traffic` capturadas, parsers estritos conferidos contra a saída real (41/34 perfis, DBA, 14 tabelas de tráfego; a saída crua foi apagada no Edge e na cópia local) e fixtures sintéticas com o mesmo layout. Rodam só em `MA5600V800R015C00` exato. Nome de perfil (texto livre do operador) vai nulo à nuvem salvo opt-in do dono do Edge (`olt_profile_names_to_cloud`).
 - `POST /v1/olts/{id}/profiles/sync`: a última leitura DBA vira snapshots `edge_read` PARCIAIS (só o que a leitura afirma); idempotente, serializado por OLT, idade pela hora da pergunta, perfil ausente vira snapshot `unknown`. Codex approve r6.

@@ -89,3 +89,8 @@ Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetido
 - PR 110 (Edge Go: `internal/speed`, `internal/nbi/speed.go`, ramo no `bench.Runner`, envelope, seção `speed`, saúde dos nós; nuvem: `SPEED_EDGE_SUPPORT=True`, migração 0035 com destino→Edge dono, `POST /v1/edge/speed-health`, contrato do envelope) e PR 111 (aba/cartão `SpeedTestSection`, BFF, ajuda com capturas reais e de cenário rotuladas, guia de homologação, recuo provado) em `main` (d6b6d08, cca8ed6). Testes: API 732 PASS, Go todos os pacotes PASS, e2e do speed 12 passed + 1 do recuo.
 - Aprendizados: uma correção de leitura periódica fora de ordem virou 6 rodadas de Codex só de segurança de tráfego na tela; guardas de UI (contador de requisição, marcador de pedido em curso por aparelho em sessionStorage, 5xx = ambíguo) têm teste e2e. `python3 -` sem entrada trava o shell: nunca deixar no comando.
 - Pilha efêmera de UI parada. Nenhum Edge/LAB reimplantado.
+
+## 2026-11-02 (noite) — H5 na bancada, autofind real
+- H5 `onu_reauthorize`: 4 execuções reais (falha segura sem comando; 2 falhas parciais com ONU reposta à mão; sucesso). Defeitos achados: campos recuados no parser, autofind lido uma só vez, eco quebrado em 80 colunas (`␠ESC[1D`). Codex: r1/r4 approve nas três correções; um achado high (normalização global do eco) refeito para primeira linha + coluna de quebra.
+- `olt.autofind` validado; bruto destruído (`shred`) no Edge e local. Pins de hash do catálogo em 3 lugares.
+- Aprendizado de processo: o teste com dispositivo falso só pega o que o falso reproduz; todo formato real novo (eco, indentação, tempo de reaparecer) vira fixture/comportamento do falso. Achado do Codex pode ser sobre diff antigo: verificar contra o código atual antes de aceitar.
