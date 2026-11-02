@@ -1,9 +1,9 @@
 """Immutable profile revisions (v2.5, FC251-08): a reviewed draft becomes a numbered, frozen revision with a changelog
 
 `profile_revisions` keeps what was PUBLISHED: a copy of the draft's typed settings at one `row_version`, the content hash, the changelog and who prepared and who approved it
-(maker-checker: the approver is neither the draft's owner nor its last editor). The application role can only SELECT and INSERT (no UPDATE, no DELETE): a revision is
-never edited, a change is a new draft and a new revision. Publishing sends NOTHING to any OLT. `profile_drafts.last_editor_id` records who made the latest change so the
-checker rule can be enforced. Revision ID: 0042  Revises: 0041
+(maker-checker: the approver is NOT among the people who ever created or edited the draft). The application role can only SELECT and INSERT (no UPDATE, no DELETE): a revision is
+never edited, a change is a new draft and a new revision. Publishing sends NOTHING to any OLT. `profile_drafts.editor_ids` records everyone who ever saved the draft (an edit, even a no-op one, adds the editor), so the checker rule cannot be
+bypassed by a harmless-looking save. Revision ID: 0042  Revises: 0041
 """
 from alembic import op
 
@@ -17,8 +17,9 @@ def upgrade() -> None:
     cur_t = "NULLIF(current_setting('app.tenant_id', true), '')::uuid"
     op.execute(
         f"""
-        ALTER TABLE profile_drafts ADD COLUMN last_editor_id uuid;
-        GRANT UPDATE (last_editor_id) ON profile_drafts TO fibercore_app;
+        ALTER TABLE profile_drafts ADD COLUMN editor_ids uuid[] NOT NULL DEFAULT '{{}}';
+        UPDATE profile_drafts SET editor_ids = ARRAY[owner_id];
+        GRANT UPDATE (editor_ids) ON profile_drafts TO fibercore_app;
 
         CREATE TABLE profile_revisions (
           tenant_id uuid NOT NULL REFERENCES tenants(id),
@@ -56,4 +57,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP TABLE IF EXISTS profile_revisions; ALTER TABLE profile_drafts DROP COLUMN IF EXISTS last_editor_id;")
+    op.execute("DROP TABLE IF EXISTS profile_revisions; ALTER TABLE profile_drafts DROP COLUMN IF EXISTS editor_ids;")

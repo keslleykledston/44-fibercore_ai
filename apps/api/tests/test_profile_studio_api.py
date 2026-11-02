@@ -460,7 +460,7 @@ def test_publish_is_maker_checker_simulated_numbered_immutable_and_writes_nothin
         assert tuple(c.execute(text("SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = 'profile_revisions'")).one()) == (True, True)
 
 
-def test_the_last_editor_cannot_approve_and_publishing_needs_the_permission_and_flag(client, seed, inv, migrated, _restore_carol):
+def test_no_editor_ever_can_approve_and_publishing_needs_the_permission_and_flag(client, seed, inv, migrated, _restore_carol):
     alice, carol, dave = hdr(client, "alice", seed, "A"), hdr(client, "carol", seed, "A"), hdr(client, "dave", seed, "A")
     olt = _olt(client, inv, alice, "OLT-PS-PUB2")
     _on(migrated, seed["A"])
@@ -471,9 +471,15 @@ def test_the_last_editor_cannot_approve_and_publishing_needs_the_permission_and_
     assert e.status_code == 200
     v = e.json()["row_version"]
     client.post(f"/v1/profile-drafts/{d['id']}/dry-run", headers=alice, json={})
-    assert _publish(client, carol, d["id"], v).status_code == 403                                  # carol was the last editor
+    assert _publish(client, carol, d["id"], v).status_code == 403                                  # carol edited it
+    # a later no-op save by the owner must not make carol (a real editor) look like a checker (Codex r1): every editor ever counts
+    noop = client.patch(f"/v1/profile-drafts/{d['id']}", headers={**alice, "If-Match": f'"{v}"'}, json={"reason": "ajuste feito pela carol"})
+    assert noop.status_code == 200
+    v = noop.json()["row_version"]
+    client.post(f"/v1/profile-drafts/{d['id']}/dry-run", headers=alice, json={})
+    assert _publish(client, carol, d["id"], v).status_code == 403                                  # still excluded: every editor ever counts
     assert _publish(client, dave, d["id"], v).status_code == 403                                   # noc_n1 has no profiles:publish
-    assert _publish(client, alice, d["id"], v).status_code == 403                                  # alice is the owner (maker) even though carol made the last change
+    assert _publish(client, alice, d["id"], v).status_code == 403                                  # alice is the owner (maker)
     with migrated.begin() as c:
         c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
         c.execute(text("UPDATE tenant_features SET enabled = false WHERE feature = 'profile_studio'"))

@@ -36,6 +36,10 @@ ui_route: "/rede/perfis"
 
 *Capturas reais com dados sintéticos (OLT de demonstração).*
 
+### Publicar uma revisão (opcional)
+
+Quando o rascunho está pronto e **foi simulado nesta versão**, uma pessoa com a permissão de publicar (administrador) escreve o que mudou e clica em **Publicar revisão**. A revisão fica numerada e **imutável**: para mudar, faça outro rascunho. Quem preparou ou editou por último o rascunho **não pode** aprová-lo; peça a outra pessoa. Publicar **não envia nada à OLT**.
+
 ## Resultado esperado
 
 - A simulação mostra **Escritas na OLT: 0**, **não executável** e **reproduzível** (recalcular com as mesmas entradas dá o mesmo plano).
@@ -45,6 +49,7 @@ ui_route: "/rede/perfis"
 ## Se algo não funcionar
 
 - **“Não dá para afirmar equivalência”:** leia os motivos listados (leitura não certificada, instantâneo importado à mão, defasado ou incompleto). Só leitura feita pelo Edge, completa e recente permite afirmar.
+- **“Quem preparou ou editou por último este rascunho não pode aprová-lo”:** peça a outra pessoa com permissão de publicar. **“Simule … antes de publicar”:** rode a simulação nesta versão do rascunho (qualquer edição exige simular de novo).
 - **“Outra pessoa salvou este rascunho antes”:** recarregue a página e refaça a edição.
 - **“Não salvei: algum campo não cabe no modelo tipado”:** confira faixas (VLAN 1–4094), listas e que não haja campo de comando.
 - **“A OLT ainda não tem fabricante, modelo e firmware identificados”:** aguarde a coleta identificar a OLT.

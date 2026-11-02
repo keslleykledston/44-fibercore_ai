@@ -315,8 +315,8 @@ def create_draft(body: DraftIn, response: Response, p: Principal = Depends(requi
         raise HTTPException(422, {"issues": _issues(issues)})
     _check_targets(conn, body.target_olt_ids)
     r = conn.execute(
-        text("INSERT INTO profile_drafts (tenant_id, name, owner_id, last_editor_id, source_snapshot_id, technology, vendor, model, firmware, pon_card, profile_kind, target_olt_ids, desired, reason) "
-             "VALUES (:t,:n,:u,:u,:s,:tech,:v,:m,:f,:c,:k,:ids,CAST(:d AS jsonb),:r) RETURNING *"),
+        text("INSERT INTO profile_drafts (tenant_id, name, owner_id, editor_ids, source_snapshot_id, technology, vendor, model, firmware, pon_card, profile_kind, target_olt_ids, desired, reason) "
+             "VALUES (:t,:n,:u,ARRAY[CAST(:u AS uuid)],:s,:tech,:v,:m,:f,:c,:k,:ids,CAST(:d AS jsonb),:r) RETURNING *"),
         {"t": p.tenant_id, "n": body.name, "u": p.id, "s": body.source_snapshot_id, "tech": scope["technology"], "v": scope["vendor"], "m": scope["model"], "f": scope["firmware"],
          "c": scope["pon_card"], "k": body.profile_kind, "ids": list(body.target_olt_ids), "d": json.dumps(ps.normalize(desired)), "r": body.reason}).one()
     audit(conn, p, "profile.draft.created", "profile_draft", str(r.id), {"source_snapshot_id": str(body.source_snapshot_id) if body.source_snapshot_id else None})
@@ -383,7 +383,7 @@ def patch_draft(draft_id: UUID, body: DraftPatch, response: Response, if_match: 
     r = conn.execute(
         text("UPDATE profile_drafts SET name = COALESCE(:n, name), reason = COALESCE(:r, reason), desired = COALESCE(CAST(:d AS jsonb), desired), "
              "vendor_extensions = COALESCE(CAST(:x AS jsonb), vendor_extensions), target_olt_ids = COALESCE(CAST(:ids AS uuid[]), target_olt_ids), "
-             "strategy = COALESCE(:s, strategy), row_version = row_version + 1, updated_at = now(), last_editor_id = :u WHERE id = :i AND row_version = :v RETURNING *"),
+             "strategy = COALESCE(:s, strategy), row_version = row_version + 1, updated_at = now(), editor_ids = (SELECT ARRAY(SELECT DISTINCT e FROM unnest(editor_ids || CAST(:u AS uuid)) AS e)) WHERE id = :i AND row_version = :v RETURNING *"),
         {"u": p.id, "n": body.name, "r": body.reason, "d": sets.get("desired"), "x": sets.get("vendor_extensions"),
          "ids": list(body.target_olt_ids) if body.target_olt_ids is not None else None, "s": body.strategy, "i": draft_id, "v": want}).first()
     if r is None:
@@ -586,8 +586,8 @@ def _revision_view(r) -> dict:
 @router.post("/v1/profile-drafts/{draft_id}/publish", status_code=201)
 def publish_revision(draft_id: UUID, body: PublishIn, response: Response, if_match: str | None = Header(default=None), p: Principal = Depends(require("profiles:publish")),
                      conn: Connection = TENANT_CONN) -> dict:
-    """Freeze the draft, at the exact version the approver read (`If-Match`), as the next numbered revision of its name. Maker-checker: the approver is neither the draft's owner
-    nor its last editor. The draft must be valid and must have been SIMULATED at this very version (so its impact was seen). A revision is never edited; republishing the same
+    """Freeze the draft, at the exact version the approver read (`If-Match`), as the next numbered revision of its name. Maker-checker: the approver never created or edited the draft
+    (every save counts, even one that changes nothing). The draft must be valid and must have been SIMULATED at this very version (so its impact was seen). A revision is never edited; republishing the same
     version returns the same revision. Nothing is sent to any OLT."""
     import hashlib
     _flag(conn, p)
@@ -595,9 +595,9 @@ def publish_revision(draft_id: UUID, body: PublishIn, response: Response, if_mat
     d = _draft(conn, draft_id, lock=True)
     if d.row_version != want:
         raise HTTPException(412, "the draft changed since you read it; reload it")
-    prepared = d.last_editor_id or d.owner_id
-    if p.id in (d.owner_id, prepared):
-        raise HTTPException(403, "maker_checker: the approver must be someone other than the owner and the last editor of the draft")
+    prepared = d.owner_id
+    if p.id == d.owner_id or p.id in (d.editor_ids or []):
+        raise HTTPException(403, "maker_checker: the approver must be someone who never created or edited this draft")
     existing = conn.execute(text("SELECT * FROM profile_revisions WHERE draft_id = :d AND draft_row_version = :v"), {"d": draft_id, "v": want}).first()
     if existing is not None:
         response.status_code = 200
