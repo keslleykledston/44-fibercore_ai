@@ -259,3 +259,14 @@ func TestReauthorizeRestoreChecksTheDescriptionToo(t *testing.T) {
 		t.Fatalf("out=%+v err=%v", out, err)
 	}
 }
+
+func TestReauthorizeRestoreByAddingAlsoChecksTheDescription(t *testing.T) {
+	// the first add fails; the restore's own add brings the ONU back with ANOTHER description: not reported as restored (Codex r3)
+	f := newAuth()
+	f.addFailsOnce = true
+	f.onAdd = func() { f.desc = "OUTRA" }
+	out, err := runAuth(f, spec14, nil, far())
+	if err == nil || out.Done || strings.Contains(out.Detail, "baseline was restored") || !strings.Contains(err.Error(), "restore it by hand") {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+}

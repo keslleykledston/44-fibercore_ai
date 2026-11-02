@@ -309,7 +309,7 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 			}
 			if !waitFor(func() bool {
 				i, p, e := readONU()
-				return e == nil && onu.identityOK(i) && p.Line == spec.LineProfileID && p.Srv == spec.SrvProfileID
+				return e == nil && matches(i, p)
 			}, wait) {
 				return ErrBenchOLTNoReturn
 			}
@@ -328,6 +328,9 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 			}
 		}
 		if !spOK(rows, onu, spec) {
+			return ErrReauthBaseline
+		}
+		if i, p, e := readONU(); e != nil || !matches(i, p) { // the restore reports success only when the WHOLE ONU equals the baseline
 			return ErrReauthBaseline
 		}
 		return nil
@@ -384,7 +387,7 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 	}
 	if !waitFor(func() bool {
 		i, p, e := readONU()
-		return e == nil && onu.identityOK(i) && p.Line == spec.LineProfileID && p.Srv == spec.SrvProfileID && p.Description == spec.Description
+		return e == nil && matches(i, p)
 	}, wait) {
 		return fail(true, "the ONU was added but not seen online with the baseline profiles", ErrBenchOLTNoReturn)
 	}
