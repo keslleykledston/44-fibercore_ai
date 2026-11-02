@@ -105,7 +105,7 @@ Fonte: `docs/addenda/v2.2/` (pacote intacto). Análise: `docs/addenda/v2.2/GAP_A
 | FC22-011 | P1 | [ ] **bloqueado por dados** (ADR-0022) | S3 | 002, 003 |
 | FC22-012 | P1 | [ ] **bloqueado** (telemetria Wi-Fi/WAN não coletada; NBI aberto) | S3 | 002, ADR-0022 |
 | FC22-013 | P1 | [ ] falta | S3 | 011/012 |
-| FC22-014 | P1 | [ ] parcial: motor de jobs; falta catálogo/dry-run com diff. **Absorvido pelo v2.5 (ADR-0040): FC25-07 e FC251-06/08 entregam o dry-run com diff semântico e o preview sobre o mesmo motor; não construir em separado** | S4 | 002 |
+| FC22-014 | P1 | [ ] parcial: motor de jobs; falta catálogo/dry-run com diff. **Dividido (ADR-0040): a lacuna do dry-run com diff é coberta, para provisionamento, por FC25-07 e FC251-06/08 sobre o mesmo motor; o catálogo versionado de definições de workflow para as demais operações CONTINUA ABERTO aqui** | S4 | 002 |
 | FC22-015 | P1 | [~] idempotência/CAS; **lock por dispositivo no despacho feito em 2026-11-02** (uma escrita por vez por alvo; a segunda espera `APPROVED`, nunca é descartada; leituras não esperam nem seguram; falha fechada, o relógio nunca libera o alvo; escrita de bancada parada vira `UNKNOWN` e trava até `bench-unlock`; sweeper periódico é limite conhecido); falta o lock comum com USP (ADR-0015, sem segundo protocolo) | S4 | USP |
 | FC22-016 | P1 | [ ] parcial: módulos/versões; falta changelog/canary | S4 | — |
 | FC22-017 | P1 | [x] prática vigente (gate por PR de tela) | contínuo | — |
@@ -154,7 +154,7 @@ Ver `docs/product/BACKLOG_IDEIAS_FRONTEND_2026-10-31.md` (análise de uma aplica
 
 
 ## v2.5 — OLT Provisioning & Profile Studio + Modo Especialista (FC25-*, FC251-*), conciliado em 2026-11-02 (ADR-0040)
-Pacote em `docs/addenda/v2.5/package/`; GAP com os caminhos reais em `docs/addenda/v2.5/GAP_ANALYSIS.md`. **Prioridade: à frente do FC22-014** (que ele absorve). Fase P0 só leitura e com fixtures; nada escreve na OLT; flags `olt_provisioning.*` desligadas; `HOMOLOGATED_WRITES` segue vazio. Não desloca HubSoft-first nem o ONT Manager v2.4.
+Pacote em `docs/addenda/v2.5/package/`; GAP com os caminhos reais em `docs/addenda/v2.5/GAP_ANALYSIS.md`. **Prioridade: à frente do FC22-014** (cobre a parte de dry-run/diff dele para provisionamento; o catálogo genérico de workflows segue aberto). Fase P0 só leitura e com fixtures; nada escreve na OLT; flags `olt_provisioning.*` desligadas; `HOMOLOGATED_WRITES` segue vazio. Não desloca HubSoft-first nem o ONT Manager v2.4.
 | ID | Pri | Estado | Observação |
 |---|---|---|---|
 | FC25-00 / FC251-00 | P0 | [x] GAP, ADR-0040 e backlog (2026-11-02) | este PR |
@@ -162,7 +162,7 @@ Pacote em `docs/addenda/v2.5/package/`; GAP com os caminhos reais em `docs/adden
 | FC25-06 / FC251-01/02/03 | P0 | [ ] inventário e snapshot imutável de profiles, normalização com proveniência, importação e clone para rascunho | migração + API, flag off; consultas reais só após captura supervisionada |
 | FC25-01/02/03 | P0 | [ ] descoberta de ONU pendente (driver mock + fixtures), fila, associação HubSoft somente leitura | `olt.autofind` e `pon.ont.autofind` já no catálogo (`validated=false`) |
 | FC25-04/05 | P0 | [ ] service intent versionado e wizard assistido | depende do núcleo |
-| FC25-07 / FC251-06 | P0 | [ ] dry-run `reuse/adopt/clone/blocked` por OLT, com impacto | absorve FC22-014 |
+| FC25-07 / FC251-06 | P0 | [ ] dry-run `reuse/adopt/clone/blocked` por OLT, com impacto | cobre a lacuna (b) do FC22-014 para provisionamento |
 | FC251-07 / UI | P0 | [ ] Assistido + Modo Especialista (Formulário e YAML/JSON), capturas reais, how-to | Lovable só para UX |
 | FC251-08 | P1 | [ ] publicar revisão imutável com changelog e maker-checker | sem enviar à OLT |
 | FC25-08/09/10, FC251-09 | P1 | [ ] escrita em LAB (autorizar ONU, criar/clonar profile) | **condicionado:** homologação por vendor/firmware/placa/operação, emenda do ADR-0030, aprovação, `plan_hash`+TTL, leitura de volta independente |
