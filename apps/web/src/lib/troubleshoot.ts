@@ -1,4 +1,4 @@
-import type { CustomerContext, CustomerOnu, DiagnosticFinding, Provenance } from "./types";
+import type { CustomerContext, CustomerOnu, DiagnosticFinding, Provenance, Rd004Finding } from "./types";
 
 /** Rótulo de confiança de um passo: `confirmado` = fato medido e recente; `hipotese` = derivado de fatos, exige confirmação humana; `indisponivel` = dado velho/ausente, nada é afirmado. */
 export type Trust = "confirmado" | "hipotese" | "indisponivel";
@@ -16,11 +16,38 @@ const trustOf = (p: Provenance | null): Trust => (p && p.quality === "fresh" ? "
 const why = (p: Provenance | null) => (!p ? "sem coleta" : p.quality === "stale" ? "dado defasado" : p.quality === "conflict" ? "fontes divergentes" : p.quality === "unknown" ? "sem coleta" : "");
 
 export type RunState = { finding: DiagnosticFinding | null; denied: boolean; failed: boolean; ranAt: string | null; discarded: "old" | "other_pon" | null };
+export type RunState4 = { finding: Rd004Finding | null; denied: boolean; failed: boolean; ranAt: string | null; discarded: "old" | "other_onu" | null };
+const CODE = /^[a-z_]{1,40}$/;
+/** Lê o achado da R-D004 em formato fechado: qualquer outra forma (regra errada, campo fora do tipo) é recusada inteira e a tela afirma nada. */
+export function readRd004(run: { rule_id: string; findings: unknown[] } | null): Rd004Finding | null {
+  if (!run || run.rule_id !== "R-D004" || !Array.isArray(run.findings) || run.findings.length !== 1) return null;
+  const f = run.findings[0] as Partial<Rd004Finding> | null;
+  const e = f?.evidence as Partial<Rd004Finding["evidence"]> | undefined;
+  if (!f || !e || !e.onu) return null;
+  const okAge = e.inform_age_seconds === null || (typeof e.inform_age_seconds === "number" && Number.isInteger(e.inform_age_seconds) && e.inform_age_seconds >= 0);
+  if (!["observed", "inferred", "unknown"].includes(String(f.status)) || typeof e.inform_fresh !== "boolean" || typeof e.snapshot_fresh !== "boolean" || !okAge
+    || typeof e.onu.link !== "string" || typeof e.onu.fresh !== "boolean" || !(e.onu.status === null || (typeof e.onu.status === "string" && CODE.test(e.onu.status)))
+    || typeof f.requires_human_confirmation !== "boolean") return null;
+  return { status: f.status as Rd004Finding["status"], hypothesis: typeof f.hypothesis === "string" ? f.hypothesis : null, reason: typeof f.reason === "string" ? f.reason : undefined,
+    suspected_cause: typeof f.suspected_cause === "string" && CODE.test(f.suspected_cause) ? f.suspected_cause : undefined, requires_human_confirmation: f.requires_human_confirmation,
+    evidence: { onu: { link: e.onu.link, status: e.onu.status ?? null, fresh: e.onu.fresh }, inform_age_seconds: e.inform_age_seconds ?? null, inform_fresh: e.inform_fresh, snapshot_fresh: e.snapshot_fresh } };
+}
+const RD004_REASON: [string, string][] = [
+  ["the CPE informed the ACS recently", "O roteador informou ao ACS recentemente."],
+  ["the linked ONU is not online", "A ONU não está online na OLT: esta regra só vale para ONU online."],
+  ["no confirmed ONU link", "Sem vínculo ONU↔roteador confirmado: a OLT e o ACS não podem ser comparados."],
+  ["the ONU reading is too old", "A leitura da ONU está velha demais para comparar com o ACS."],
+  ["no Inform time is known", "O ACS ainda não informou quando o roteador falou com ele pela última vez."],
+  ["the CPE snapshot that carried the Inform time is itself old", "A coleta que trouxe a hora do último Inform está velha: o ACS pode já ter um Inform mais novo."],
+];
+const rd004Reason = (r?: string) => RD004_REASON.find(([k]) => r?.startsWith(k))?.[1] ?? "dado indisponível";
+const informAge = (s: number | null) => (s === null ? "—" : s < 3600 ? `${Math.floor(s / 60)} min` : `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`);
+
 /** Uma execução é um registro histórico: só vale como conclusão se for da PON atual da ONU e recente (mesma janela de frescor da regra). */
 export const RUN_FRESH_MINUTES = 15;
 
-/** Os 5 passos do diagnóstico guiado, só com o que a API já devolveu. Sem score, sem valor inventado. */
-export function buildSteps(ctx: CustomerContext, onu: CustomerOnu | undefined, run: RunState, customerId: string, canRunHint: boolean): Step[] {
+/** Os 6 passos do diagnóstico guiado, só com o que a API já devolveu. Sem score, sem valor inventado. */
+export function buildSteps(ctx: CustomerContext, onu: CustomerOnu | undefined, run: RunState, run4: RunState4, customerId: string, canRunHint: boolean): Step[] {
   const c = ctx.customer;
   const s1: Step = { id: 1, title: "Cliente e contrato", trust: trustOf(c.provenance), provenance: c.provenance,
     summary: trustOf(c.provenance) === "confirmado" ? `Contrato ${contract[c.contract_status] ?? contract.unknown}. Cadastro e contrato vêm do ERP e não comprovam conexão.` : `Cadastro com ${why(c.provenance)}: não use a situação do contrato como atual.`,
@@ -28,7 +55,7 @@ export function buildSteps(ctx: CustomerContext, onu: CustomerOnu | undefined, r
     action: { kind: "link", label: "Ver o cadastro na Visão 360", href: `/assinantes/${customerId}?aba=cliente` } };
   if (!onu) {
     const none = (id: number, title: string): Step => ({ id, title, trust: "indisponivel", provenance: null, summary: "Nenhuma ONU aprovada para este cliente: nada a verificar.", facts: [], action: id === 2 ? { kind: "link", label: "Aprovar o vínculo em Assinantes", href: "/assinantes" } : null });
-    return [s1, none(2, "ONU aprovada"), none(3, "Estado e óptica da ONU"), none(4, "Padrão coletivo na PON"), none(5, "Roteador (CPE)")];
+    return [s1, none(2, "ONU aprovada"), none(3, "Estado e óptica da ONU"), none(4, "Padrão coletivo na PON"), none(5, "Roteador (CPE)"), none(6, "Sessão do roteador com o ACS")];
   }
   const s2: Step = { id: 2, title: "ONU aprovada", trust: "confirmado", provenance: null, summary: "Há uma ONU aprovada por uma pessoa para este cliente.",
     facts: [["Serial", onu.serial], ["OLT · PON", `${onu.olt}${onu.pon_path ? ` · ${onu.pon_path}` : ""}`]], action: { kind: "link", label: "Abrir a ONU 360", href: `/rede/onu/${onu.id}` } };
@@ -52,12 +79,24 @@ export function buildSteps(ctx: CustomerContext, onu: CustomerOnu | undefined, r
       : k.link === "suggested" ? "Há um roteador sugerido pelo serial igual: indício, não prova." : k.link === "unavailable" ? "O vínculo ONU↔CPE está desligado para este provedor." : "Nenhum roteador vinculado a esta ONU.",
     facts: k.device ? [["Equipamento", `${k.device.vendor ?? "—"} ${k.device.model ?? ""}`.trim()], ["Gerência", k.device.protocols.join(", ").toUpperCase() || "—"]] : [],
     action: { kind: "link", label: k.link === "suggested" ? "Revisar o vínculo na ONU 360" : "Abrir a ONU 360", href: `/rede/onu/${onu.id}` } };
-  return [s1, s2, s3, s4, s5];
+  const g = run4.finding;
+  const linked = k.link === "confirmed";
+  const s6: Step = { id: 6, title: "Sessão do roteador com o ACS (R-D004)", provenance: null,
+    trust: !linked || !g ? "indisponivel" : g.status === "inferred" ? "hipotese" : g.status === "observed" ? "confirmado" : "indisponivel",
+    summary: !linked ? "Sem roteador confirmado para esta ONU: a sessão com o ACS não pode ser comparada com a OLT."
+      : run4.denied ? "Seu papel não permite executar o diagnóstico." : run4.failed ? "Não foi possível executar a leitura agora; nada é afirmado."
+      : !g ? (run4.discarded === "old" ? "A última execução é antiga e foi descartada: ela não representa o estado de agora. Execute de novo." : run4.discarded === "other_onu" ? "Essa execução é de outra ONU e foi ignorada." : "Ainda não executado. A leitura compara a ONU na OLT com o último contato do roteador com o ACS; nada é alterado.")
+      : g.status === "inferred" ? "Hipótese: a ONU está online na OLT, mas o roteador não informou ao ACS recentemente. Aponta a sessão com o ACS (NAT, alcance, inform periódico), não prova que o cliente esteja sem internet. Confirme no ACS."
+      : g.status === "observed" ? rd004Reason(g.reason) : `Sem conclusão: ${rd004Reason(g.reason)}`,
+    facts: g ? [...(run4.ranAt ? [["Executado em", run4.ranAt] as [string, string]] : []), ["Estado da ONU na OLT", g.evidence.onu.status ?? "—"], ["Último Inform do roteador no ACS", g.evidence.inform_age_seconds === null ? "não informado" : `há ${informAge(g.evidence.inform_age_seconds)}`]] : [],
+    action: !linked ? { kind: "link", label: "Abrir a ONU 360", href: `/rede/onu/${onu.id}` } : run4.denied || !canRunHint ? null : { kind: "run", label: g ? "Reexecutar a leitura" : "Executar leitura (somente leitura)" } };
+  return [s1, s2, s3, s4, s5, s6];
 }
 
 export function conclusion(steps: Step[]): { trust: Trust; text: string } {
   const s4 = steps[3];
   if (s4.trust === "hipotese") return { trust: "hipotese", text: s4.summary };
+  if (steps[5]?.trust === "hipotese") return { trust: "hipotese", text: steps[5].summary };
   if (s4.trust === "confirmado") return { trust: "confirmado", text: "Sem padrão coletivo na PON. Com os dados disponíveis a causa pode ser local ao cliente, mas isso não foi determinado." };
   return { trust: "indisponivel", text: "Sem conclusão: falta dado recente ou o diagnóstico ainda não foi executado." };
 }

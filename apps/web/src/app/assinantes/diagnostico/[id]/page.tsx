@@ -5,7 +5,7 @@ import { SourceChip } from "@/components/SourceChip";
 import { EmptyState, ErrorState, PageHeader } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
 import { diagnosticsOn } from "@/lib/features";
-import { buildSteps, conclusion, RUN_FRESH_MINUTES, TRUST_LABEL, ticketSummary, type Trust } from "@/lib/troubleshoot";
+import { buildSteps, conclusion, readRd004, RUN_FRESH_MINUTES, TRUST_LABEL, ticketSummary, type Trust } from "@/lib/troubleshoot";
 import type { CustomerContext, DiagnosticRun } from "@/lib/types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -16,7 +16,7 @@ function Badge({ t }: { t: Trust }) {
   return <span data-testid={`trust-${t}`} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${TONE[t]}`}><span aria-hidden>{l.icon}</span>{l.label}</span>;
 }
 
-export default async function GuidedTroubleshooting({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ onu?: string; run?: string; passo?: string; erro?: string }> }) {
+export default async function GuidedTroubleshooting({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ onu?: string; run?: string; run4?: string; passo?: string; erro?: string }> }) {
   const { id } = await params;
   const q = await searchParams;
   if (!UUID.test(id) || !(await diagnosticsOn())) notFound();  // desligado = a tela não existe para este provedor
@@ -35,11 +35,23 @@ export default async function GuidedTroubleshooting({ params, searchParams }: { 
   const discarded = !mine ? null : !samePon ? "other_pon" : ageMin > RUN_FRESH_MINUTES ? "old" : null;
   const valid = mine && !discarded ? mine : null;
   const denied = q.erro === "403";
-  const steps = buildSteps(ctx, onu, { finding: valid?.findings[0] ?? null, denied, failed: !!q.erro && !denied, discarded,
-    ranAt: valid ? `${new Date(valid.created_at).toISOString().replace("T", " ").slice(0, 16)} UTC (há ${Math.max(0, Math.round(ageMin))} min)` : null }, id, true);
+  // R-D004 (sessão do roteador com o ACS): outra execução, outro parâmetro (`run4`); só vale para ESTA ONU e se recente, e o achado é lido em formato fechado
+  const run4 = onu && q.run4 && UUID.test(q.run4) ? await apiSafe<DiagnosticRun>(`/v1/diagnostics/runs/${q.run4}`) : null;
+  const mine4 = run4?.data && run4.data.scope.onu_id === onu?.id && run4.data.rule_id === "R-D004" ? run4.data : null;
+  const age4 = mine4 ? (Date.now() - Date.parse(mine4.created_at)) / 60000 : 0;
+  const old4 = !!mine4 && age4 > RUN_FRESH_MINUTES;
+  const f4 = mine4 && !old4 ? readRd004(mine4) : null;
+  const wrong4 = !!q.run4 && !mine4 ? "other_onu" as const : old4 ? "old" as const : null;
+  const at = (iso: string, m: number) => `${new Date(iso).toISOString().replace("T", " ").slice(0, 16)} UTC (há ${Math.max(0, Math.round(m))} min)`;
+  const steps = buildSteps(ctx, onu, { finding: valid?.findings[0] ?? null, denied, failed: !!q.erro && !denied && q.passo !== "6", discarded,
+    ranAt: valid ? at(valid.created_at, ageMin) : null },
+  { finding: f4, denied, failed: !!q.erro && !denied && q.passo === "6", discarded: wrong4, ranAt: f4 && mine4 ? at(mine4.created_at, age4) : null }, id, true);
   const concl = conclusion(steps);
   const cur = steps.find((s) => String(s.id) === q.passo) ?? steps[valid ? 3 : 0];
-  const base = `/assinantes/diagnostico/${id}?${onu ? `onu=${onu.id}&` : ""}${valid ? `run=${valid.run_id}&` : ""}`;
+  const base = `/assinantes/diagnostico/${id}?${onu ? `onu=${onu.id}&` : ""}${valid ? `run=${valid.run_id}&` : ""}${f4 && mine4 ? `run4=${mine4.run_id}&` : ""}`;
+  // o formulário de executar leva a regra do passo e a execução da OUTRA regra para a tela voltar com as duas
+  const other = cur.id === 6 ? valid?.run_id : f4 && mine4 ? mine4.run_id : undefined;
+  const runAction = onu ? `/bff/diagnostics/run/${id}/${onu.id}?rule=${cur.id === 6 ? "R-D004" : "R-D001"}${other ? `&keep=${other}` : ""}` : "";
   return shell(
     <>
       <PageHeader title={`Diagnóstico guiado · ${ctx.customer.display_name}`} subtitle="Passo a passo, somente leitura, com a confiança de cada passo" helpSlug="assinantes/diagnostico-guiado">
@@ -73,7 +85,7 @@ export default async function GuidedTroubleshooting({ params, searchParams }: { 
             {cur.provenance && <div className="mt-2 text-right"><SourceChip p={cur.provenance} /></div>}
             {cur.action?.kind === "link" && <Link href={cur.action.href ?? "#"} data-testid="step-action" className="mt-4 inline-flex min-h-touch items-center text-sm text-accent underline underline-offset-2">{cur.action.label}</Link>}
             {cur.action?.kind === "run" && onu && (
-              <form action={`/bff/diagnostics/run/${id}/${onu.id}`} method="post" className="mt-4">
+              <form action={runAction} method="post" className="mt-4">
                 <button data-testid="step-action" className="min-h-touch rounded-btn bg-accent px-4 text-sm font-medium text-[color:var(--on-accent)]">{cur.action.label}</button>
               </form>
             )}

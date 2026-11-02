@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased — R-D004 no diagnóstico guiado (2026-11-02)
+- Web: o diagnóstico guiado ganha o **passo 6, Sessão do roteador com o ACS (R-D004)**. Só compara OLT e ACS com roteador **confirmado**; ONU online e roteador sem Inform recente é **Hipótese** (nunca "sem internet"; entra na Conclusão quando o passo 4 não é hipótese); sem roteador confirmado, execução velha (> 15 min), de outra ONU ou fora do formato esperado: **Indisponível**, nada é afirmado. O achado é lido em formato fechado (`readRd004`). As execuções dos passos 4 e 6 ficam juntas (`run` e `run4`); a rota do BFF aceita só `rule=R-D001|R-D004` e `keep=<uuid>`. O seed passa a dar ao CPE DEMOA0001 um Inform de 3 h atrás e ao DEMOA0002 um de 2 min atrás. E2E funcional: 33 passed (novo teste do passo 6). A R-D003 (Edge sem sinal) não entrou: a ONU do cliente não carrega o Edge, e a leitura é por Edge, não por assinante.
+
 ## Unreleased — API e Edge da LAB reimplantados com a R-D004 (2026-11-02)
 - Ops (ordem do responsável): backup lógico da LAB (detalhes só no host) e depois API/relay/consumer em `fdf4da8` com a migração 0039 (head 0039; `last_inform_at` e `last_inform_observed_at` nulos até o Edge enviar). Edge do host do ACS trocado para `0.1.0-lab-fdf4da8` depois do fim de uma coleta da OLT (guard de ritmo), config inalterada, cópia anterior do binário no host. Evidência redigida em `docs/operations/DEPLOY_LAB_2026-11-02_API_EDGE_R-D004.md`. Conferido: 9 de 9 CPEs com `last_inform_at` reportado nos últimos 10 min; R-D004 sobre as 2 ONTs de bancada confirmadas = "observado: o CPE informou recentemente" (avaliação só leitura, sem serial impresso).
 

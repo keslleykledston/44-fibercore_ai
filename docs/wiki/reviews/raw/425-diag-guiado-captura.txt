@@ -1,0 +1,32 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19ace-381e-7403-a7ac-a9304eea1bdc).
+[codex] Turn started (01a19ace-3857-7a52-9982-05f2f7162e3f).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e rastrear especificamente a captura de seis passos, os dad...
+[codex] Running command: /bin/bash -lc 'git status --short && git diff --stat main...HEAD && git diff --find-renames -...
+[codex] Command completed: /bin/bash -lc 'git status --short && git diff --stat main...HEAD && git diff --find-renames -... (exit 0)
+[codex] Running command: /bin/bash -lc 'git log --oneline --decorate -5 && git show --stat --oneline HEAD && git show ...
+[codex] Command completed: /bin/bash -lc 'git log --oneline --decorate -5 && git show --stat --oneline HEAD && git show ... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --unified=30 main...HEAD -- apps/web/src/lib/troubleshoot.ts apps/web...
+[codex] Command completed: /bin/bash -lc "git diff --unified=30 main...HEAD -- apps/web/src/lib/troubleshoot.ts apps/web... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/help/how-to/assinantes/diagnostico-guiado.md | sed -n '35,60p'; nl...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/help/how-to/assinantes/diagnostico-guiado.md | sed -n '35,60p'; nl... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: a captura não demonstra o fluxo R-D00...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: a captura não demonstra o fluxo R-D004 descrito no artigo, e a seção de permissões ainda documenta apenas o passo 4, deixando incorreta a orientação para executar o passo 6.
+
+Findings:
+- [medium] A documentação de permissões não cobre a execução do passo 6 (docs/help/how-to/assinantes/diagnostico-guiado.md:42)
+  O artigo agora orienta executar R-D004 no passo 6, mas a seção de permissões diz que, sem `diagnostics:run`, apenas o passo 4 fica Indisponível. A tela aplica a mesma permissão de execução ao passo 6; quem consultar a ajuda pode concluir que ainda pode executar a leitura ACS, embora o backend a negue. Atualize a orientação para ambos os passos.
+  Recommendation: Indicar que os passos 4 e 6 ficam sem execução sem `diagnostics:run`, e esclarecer que o passo 6 também exige vínculo ONU↔CPE confirmado.
+- [low] A captura não evidencia o cenário R-D004 descrito (docs/help/how-to/assinantes/diagnostico-guiado.md:23-29)
+  A imagem mostra o passo 4 selecionado com hipótese R-D001 e o passo 6 como Indisponível. O artigo descreve a execução de R-D004 e a hipótese baseada em Inform antigo, mas não há captura do estado demonstrado; a evidência visual não permite conferir essa parte do fluxo. A proveniência aponta para `e697a98`, o commit da implementação, então a divergência parece ser do estado capturado, não do identificador do build.
+  Recommendation: Adicionar uma captura do passo 6 executado com os dados sintéticos de roteador confirmado e Inform antigo, ou ajustar o artigo para deixar explícito que as imagens mostram apenas a tela inicial sem vínculo confirmado.
+
+Next steps:
+- Corrigir a orientação de permissões e vínculo no artigo.
+- Regenerar ou contextualizar a captura para que a evidência visual corresponda ao cenário R-D004 descrito.

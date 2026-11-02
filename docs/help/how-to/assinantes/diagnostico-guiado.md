@@ -19,9 +19,12 @@ ui_route: "/assinantes/diagnostico/[id]"
 
 1. Abra a **Visão 360** do cliente (**Assinantes › Ver 360**) e clique em **Diagnóstico guiado**.
 2. Leia a **Conclusão** no topo. Ao abrir, ela costuma dizer "Sem conclusão": o diagnóstico ainda não foi executado.
-3. Percorra os 5 passos na coluna da esquerda: **Cliente e contrato**, **ONU aprovada**, **Estado e óptica da ONU**, **Padrão coletivo na PON (R-D001)** e **Roteador (CPE)**. O painel da direita mostra o resumo, os fatos e a fonte/idade de cada dado.
+3. Percorra os 6 passos na coluna da esquerda: **Cliente e contrato**, **ONU aprovada**, **Estado e óptica da ONU**, **Padrão coletivo na PON (R-D001)**, **Roteador (CPE)** e **Sessão do roteador com o ACS (R-D004)**. O painel da direita mostra o resumo, os fatos e a fonte/idade de cada dado.
 4. No passo 4, clique em **Executar diagnóstico (somente leitura)**. A leitura usa o que já foi coletado e **não altera nada na rede**; o resultado fica registrado e pode ser reproduzido.
-5. Para abrir um chamado, use **Gerar resumo para ticket** e copie o texto.
+5. No passo 6, quando a ONU tem roteador **confirmado**, clique em **Executar leitura** para comparar a ONU na OLT com o último contato do roteador com o ACS. Se a ONU está **online** e o roteador **não informou ao ACS recentemente**, o resultado é uma **Hipótese** sobre a sessão com o ACS (NAT, alcance, inform periódico): ela **não prova que o cliente esteja sem internet** e exige conferência no ACS. Sem roteador confirmado, o passo fica **Indisponível**. As duas leituras (passos 4 e 6) ficam juntas na tela.
+6. Para abrir um chamado, use **Gerar resumo para ticket** e copie o texto.
+
+As imagens abaixo mostram um cliente cuja ONU está numa PON em queda coletiva (passo 4 com **Hipótese**) e **sem roteador confirmado** (passo 6 **Indisponível**). O passo 6 executado, com a hipótese sobre a sessão com o ACS, é coberto por teste automatizado (`app.spec.ts`) e ainda não tem captura própria.
 
 ![Tela em desktop 1440×900 — Diagnóstico guiado](../../assets/assinantes/diagnostico-guiado/desktop.png)
 
@@ -38,7 +41,7 @@ Cada passo traz um rótulo (texto + símbolo): **Confirmado** (fato medido e rec
 
 ## Permissões necessárias
 
-`customers:read`; `diagnostics:run` para executar (sem ela os passos 1–3 e 5 aparecem e o passo 4 fica Indisponível).
+`customers:read`; `diagnostics:run` para executar (sem ela os passos 1–3 e 5 aparecem e os passos 4 e 6 ficam Indisponíveis, sem botão de executar). O passo 6 também exige um vínculo ONU↔roteador **confirmado** por uma pessoa; sem ele a leitura nem é oferecida.
 
 ## Se algo não funcionar
 
@@ -49,7 +52,7 @@ Cada passo traz um rótulo (texto + símbolo): **Confirmado** (fato medido e rec
 
 ## Evidências de documentação
 
-- Build/commit: d2e519b (ramo principal; capturas regeneradas em 2026-11-02 na pilha efêmera de teste)
+- Build/commit: e697a98 (ramo feat/diagnostico-guiado-rd003-rd004; capturas regeneradas em 2026-11-02 na pilha efêmera de teste)
 - Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844
 - Caso de teste E2E: help-screenshots.spec.ts › assinantes/diagnostico-guiado; app.spec.ts › Diagnóstico guiado
 - Dados: fictícios (seed `scripts/seed_demo.py`); sem informações reais de clientes
