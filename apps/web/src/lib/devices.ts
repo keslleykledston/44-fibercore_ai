@@ -74,7 +74,7 @@ export const ACTION_ERROR: Record<string, string> = {
 
 export const BENCH_OP_LABEL: Record<string, string> = {
   reboot_cpe: "Reiniciar o equipamento (CPE)", set_wifi_ssid: "Trocar o nome do Wi-Fi (CPE)",
-  onu_reset: "Reiniciar a ONU na OLT", onu_deactivate: "Ciclo desativar/reativar a ONU na OLT",
+  onu_reset: "Reiniciar a ONU na OLT", onu_deactivate: "Ciclo desativar/reativar a ONU na OLT", onu_reauthorize: "Remover e autorizar de novo a ONU na OLT (mesmo perfil)",
 };
 export const BENCH_ERROR: Record<string, string> = {
   role_cannot_authorize: "Seu papel não pode autorizar esta manobra.",

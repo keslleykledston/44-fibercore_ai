@@ -1120,7 +1120,7 @@ paths:
               required: [cpe_id, operation]
               properties:
                 cpe_id: {type: string, format: uuid}
-                operation: {type: string, enum: [reboot_cpe, set_wifi_ssid, onu_reset, onu_deactivate]}
+                operation: {type: string, enum: [reboot_cpe, set_wifi_ssid, onu_reset, onu_deactivate, onu_reauthorize]}
                 params: {type: object, description: "set_wifi_ssid: {ssid: BANCADA-...}; as demais, vazio"}
                 minutes: {type: integer, minimum: 5, maximum: 120, default: 30}
       responses:

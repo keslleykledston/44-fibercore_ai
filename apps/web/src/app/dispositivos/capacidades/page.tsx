@@ -4,7 +4,7 @@ import { EmptyState, ErrorState, PageHeader } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
 import type { Capability, Cpe, Olt } from "@/lib/types";
 
-const OP: Record<string, string> = { collect: "Coleta de inventário", refresh: "Atualizar leitura", reboot_cpe: "Reiniciar CPE", set_wifi_ssid: "Alterar nome do Wi-Fi", provision_onu: "Provisionar ONU", onu_reset: "Reiniciar ONU na OLT", onu_deactivate: "Desativar ONU na OLT" };
+const OP: Record<string, string> = { collect: "Coleta de inventário", refresh: "Atualizar leitura", reboot_cpe: "Reiniciar CPE", set_wifi_ssid: "Alterar nome do Wi-Fi", provision_onu: "Provisionar ONU", onu_reset: "Reiniciar ONU na OLT", onu_deactivate: "Desativar ONU na OLT", onu_reauthorize: "Autorizar de novo a ONU na OLT" };
 const CERT: Record<string, string> = { identified: "Identificado", observed: "Observado", certified: "Certificado" };
 const MAX_PROFILES = 40;
 const CPE_LIMIT = 1000, OLT_LIMIT = 200; // limites das listas da API: bateu no limite, a matriz pode não cobrir todos os perfis
