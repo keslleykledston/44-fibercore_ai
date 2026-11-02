@@ -260,4 +260,4 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 
 
 ## Atualização 2026-11-02 (noite): API e Edge da LAB com a R-D004
-- `main` enviada até `fdf4da8` (web, API e Edge da LAB nesse commit; migração 0039 aplicada; backup lógico em `build/backups`). R-D003/R-D004 no ar; R-D004 conferida com dado real. Rotação do `cwmp.auth` concluída. Pendências: ver `docs/product/ROADMAP_BACKLOG.md` (seção de 2026-11-02).
+- `main` enviada até `fdf4da8` (web, API e Edge da LAB nesse commit; migração 0039 aplicada; backup lógico feito antes, detalhes só no host). R-D003/R-D004 no ar; R-D004 conferida com dado real. Rotação do `cwmp.auth` concluída. Pendências: ver `docs/product/ROADMAP_BACKLOG.md` (seção de 2026-11-02).
