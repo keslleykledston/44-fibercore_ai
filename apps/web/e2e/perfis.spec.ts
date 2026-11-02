@@ -14,6 +14,11 @@ test("perfis: do instantâneo ao dry-run, sem escrita e sem violações de acess
   await expect(linhas).toHaveCount(2);
   await expect(linhas.first()).toContainText("não vale como leitura da OLT");   // importação manual nunca é autoritativa
 
+  // sem leitura do Edge guardada (demo), "Atualizar a partir da última leitura" diz isso e não inventa nada
+  await page.getByTestId("perfis-sincronizar").click();
+  await expect(page.getByTestId("perfis-flash")).toContainText("Ainda não há leitura dos perfis DBA");
+  await expect(page.getByTestId("perfis-linha")).toHaveCount(2);
+
   // importa mais um perfil à mão
   await page.getByTestId("perfis-importar").locator("summary").click();
   await page.getByLabel("Nome/ID na OLT").fill("DEMO-LINHA-E2E");

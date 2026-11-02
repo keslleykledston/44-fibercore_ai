@@ -9,20 +9,24 @@ import type { Olt } from "@/lib/types";
 
 const FLASH: Record<string, string> = {
   importado: "Perfil importado como instantâneo (imutável).", invalido: "Dados inválidos: confira os campos e o JSON.", permissao: "Seu papel não permite esta ação.",
-  identidade: "A OLT ainda não tem fabricante, modelo e firmware identificados.", falha: "Não foi possível concluir. Tente novamente.",
+  identidade: "A OLT ainda não tem fabricante, modelo e firmware identificados.",
+  semleitura: "Ainda não há leitura dos perfis DBA desta OLT. Peça a consulta “Perfis DBA” em Rede → Consultas da OLT e tente de novo.",
+  leituraantiga: "A última leitura dos perfis DBA tem mais de 24 h. Peça a consulta de novo antes de atualizar.",
+  maisnova: "Uma leitura mais nova desta OLT já foi aplicada; esta ficou para trás e não foi usada.", falha: "Não foi possível concluir. Tente novamente.",
 };
 const field = "min-h-touch rounded-btn border border-line bg-bg px-3";
 
-export default async function Perfis({ searchParams }: { searchParams: Promise<{ olt?: string; ok?: string; erro?: string }> }) {
+export default async function Perfis({ searchParams }: { searchParams: Promise<{ olt?: string; ok?: string; erro?: string; n?: string; u?: string; a?: string }> }) {
   if (!(await featuresOn("profile_studio"))) notFound();   // recurso desligado: a tela não existe (ADR-0040)
-  const { olt: oltParam, ok, erro } = await searchParams;
+  const { olt: oltParam, ok, erro, n, u, a } = await searchParams;
   const olts = await apiSafe<Olt[]>("/v1/olts?limit=200");
   if (olts.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver o inventário." /></AppShell>;
   const list = olts.data ?? [];
   const sel = list.find((o) => o.id === oltParam && UUID.test(o.id)) ?? list[0];
   const [profiles, drafts] = await Promise.all([sel ? apiSafe<ProfileList>(`/v1/olts/${sel.id}/profiles`) : null, apiSafe<{ items: Draft[] }>("/v1/profile-drafts")]);
   if (profiles?.status === 403 || drafts.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver os perfis da OLT." /></AppShell>;
-  const msg = ok ? FLASH[ok] : erro ? FLASH[erro] : null;
+  const num = (v?: string) => (v && /^[0-9]{1,3}$/.test(v) ? Number(v) : 0);
+  const msg = ok === "sincronizado" ? `Perfis DBA atualizados a partir da última leitura: ${num(n)} novo(s), ${num(u)} sem mudança, ${num(a)} ausente(s) da leitura.` : ok ? FLASH[ok] : erro ? FLASH[erro] : null;
   return (
     <AppShell active="/rede" user="1">
       <PageHeader title="Perfis da OLT" subtitle="Inventário, rascunhos e simulação. Nada aqui altera a OLT." helpSlug="rede/perfis-olt">
@@ -41,6 +45,11 @@ export default async function Perfis({ searchParams }: { searchParams: Promise<{
               <p data-testid="perfis-cert" className={`mb-3 text-sm ${profiles.data.driver_read_certified ? "text-ok" : "text-warn"}`}>
                 {profiles.data.driver_read_certified ? "▲ Leitura de perfis certificada para este modelo e firmware." : "○ Leitura de perfis ainda NÃO certificada para este modelo e firmware: as comparações ficam como “sem leitura certificada”."}
               </p>
+              <form method="post" action="/bff/perfis/sincronizar" className="mb-3 flex flex-wrap items-center gap-3">
+                <input type="hidden" name="olt" value={sel.id} />
+                <button type="submit" data-testid="perfis-sincronizar" className="min-h-touch rounded-btn border border-line px-4 text-sm hover:bg-bg">Atualizar a partir da última leitura (perfis DBA)</button>
+                <span className="text-xs text-muted">Usa a leitura que o Edge já fez; não pergunta nada à OLT. Fica parcial: só o que a leitura afirma.</span>
+              </form>
               {profiles.data.items.length === 0 ? <EmptyState title="Nenhum perfil importado para esta OLT" hint="Use “Importar perfil” abaixo. A leitura direta da OLT só entra após captura supervisionada." /> : (
                 <div className="overflow-x-auto"><table className="w-full text-sm">
                   <caption className="sr-only">Perfis observados na OLT</caption>
