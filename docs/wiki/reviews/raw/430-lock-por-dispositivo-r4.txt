@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19adf-43c2-70f1-8b94-8af7288a3dcb).
+[codex] Turn started (01a19adf-43fb-72c0-a4d5-6937ad5f0e0d).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e rastrear especialmente a expiração, a marcação `UNKNOW...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/jobs.py ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/jobs.py ap... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/app/api/jobs.py &&...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/app/api/jobs.py &&... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '335,405p;450,550p'; nl -ba apps/api/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '335,405p;450,550p'; nl -ba apps/api/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a reconciliação da escrita de banc...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a reconciliação da escrita de bancada só acontece quando o Edge chama `/next`; se ele parar de chamar após aceitar o job, o job nunca vira `UNKNOWN` e o alvo nunca recebe o lock que exige `bench-unlock`.
+
+Findings:
+- [high] A reconciliação depende de uma chamada futura do Edge (apps/api/app/api/jobs.py:351-357)
+  O `UPDATE` para `UNKNOWN` roda somente dentro de `/v1/edge/jobs/next`. Se o Edge ficar offline ou parar de fazer polling depois de aceitar uma escrita, não haverá sweep: o job permanecerá em `ACCEPTED`, e `bench.lock_target` nunca será chamado. O bloqueio por job em andamento impede outra escrita, mas o fluxo explícito de reconciliação por pessoa (`bench-unlock`) não é iniciado e o estado visível não cumpre a regra descrita. Execute essa reconciliação em um processo independente do polling do Edge, ou garanta outro mecanismo confiável que a acione.
+  Recommendation: Mover o sweep de jobs de bancada parados para um worker periódico ou outro caminho de servidor que execute mesmo quando o Edge está offline; manter a transição atômica para `UNKNOWN` e o lock do alvo na mesma transação.
