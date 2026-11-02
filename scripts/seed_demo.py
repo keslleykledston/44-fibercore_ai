@@ -83,6 +83,10 @@ def main() -> None:
             "onus": [{"serial": serial, "pon_path": "0/2/0", "status": "online", "rx_dbm": -18.75}]})
         assert r.status_code == 202, r.text
     cli("feature-set", tenant, "onu_quick_inspector", "on")
+    cli("feature-set", tenant, "profile_studio", "on")   # ADR-0040: Profile Studio (somente leitura/rascunho/simulação)
+    # Certificação SINTÉTICA da leitura de perfis só para o tenant de demonstração (a OLT de laboratório real NÃO é certificada por aqui).
+    cli("capability-set", tenant, "huawei", "MA5800-X7", "R018", "olt", "olt_profile_read", "supported", "observed",
+        "--evidence", "seed-demo-sintetico", "--verified-at", datetime.now(UTC).isoformat())
     cli("feature-set", tenant, "speed_diagnostics", "on")   # só a tela: o teste continua bloqueado (o aparelho demo não é de bancada)
     cli("feature-set", tenant, "quality_diagnostics", "on")   # leitura passiva (ADR-0039): só lê o cache e a OLT sintéticos
     cli("feature-set", tenant, "quality_active_tests", "on")   # só a TELA do ping (ADR-0039): o aparelho demo não é de bancada, então o teste segue indisponível
@@ -107,6 +111,12 @@ def main() -> None:
     r = u.post("/v1/erp/import-csv?source=csv-demo", headers={**uh, "content-type": "text/csv"}, content=csv_body.encode())
     assert r.status_code == 200, r.text
     olt_id = next(o["id"] for o in u.get("/v1/olts", headers=uh).json() if o["name"] == "OLT-DEMO-01")
+    for key, settings in (("DEMO-LINHA-1G", {"dba_type": "type4", "maximum_kbps": 1_000_000, "customer_vlan": 100, "tagging": "tagged", "shaping_owner": "olt", "description": "Linha 1G (sintética)"}),
+                          ("DEMO-LINHA-500M", {"dba_type": "type4", "maximum_kbps": 500_000, "customer_vlan": 100, "tagging": "tagged", "shaping_owner": "olt"})):
+        r = u.post(f"/v1/olts/{olt_id}/profiles/import", headers=uh, json={   # perfis SINTÉTICOS (importação manual: nunca conta como leitura autoritativa)
+            "native_type": "line", "native_key": key, "technology": "gpon", "pon_card": "GPBD-DEMO", "observed_at": datetime.now(UTC).isoformat(), "completeness": "complete",
+            "reference_count": 3, "settings": settings, "source": "manual_import"})
+        assert r.status_code == 201, r.text
     cpe_id = u.get("/v1/cpes", headers=uh).json()[0]["id"]
     cfg_cpe = next(x["id"] for x in u.get("/v1/cpes", headers=uh).json() if x["canonical_serial"] == "DEMOA0002")
     cli("ont-config-mock", tenant, cfg_cpe, "dualband")  # configuração SINTÉTICA (rotulada como tal) do aparelho DEMOA0002

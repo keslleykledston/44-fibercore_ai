@@ -42,12 +42,24 @@ const approveCinco = async (request: APIRequest) => {
   const a = assoc.find((x) => x.customer_name === "Cliente Demo Cinco");
   if (a) expect((await request.post(`${API_URL}/v1/associations/${a.id}/approve`, { headers: h })).status()).toBe(200);
 };
+/** Rascunho SINTÉTICO do Profile Studio já comparado e simulado (via API, sem OLT): devolve a rota com a comparação e o resultado da simulação. */
+const perfisRoute = async (request: APIRequestContext) => {
+  const tok = (await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json()).access_token as string;
+  const h = { Authorization: `Bearer ${tok}` };
+  const olt = ((await (await request.get(`${API_URL}/v1/olts?limit=200`, { headers: h })).json()) as { id: string; name: string }[]).find((o) => o.name === "OLT-DEMO-01")!;
+  const snap = ((await (await request.get(`${API_URL}/v1/olts/${olt.id}/profiles`, { headers: h })).json()) as { items: { id: string; native_key: string }[] }).items.find((i) => i.native_key === "DEMO-LINHA-500M")!;
+  const d = (await (await request.post(`${API_URL}/v1/profile-drafts`, { headers: h, data: { name: "Linha 500M com mais banda (exemplo)", reason: "exemplo da ajuda", source_snapshot_id: snap.id, target_olt_ids: [olt.id], desired: { dba_type: "type4", maximum_kbps: 750000, customer_vlan: 100, tagging: "tagged", shaping_owner: "olt" } } })).json()) as { id: string };
+  const run = (await (await request.post(`${API_URL}/v1/profile-drafts/${d.id}/dry-run`, { headers: h, data: {} })).json()) as { run_id: string };
+  return `/rede/perfis/${d.id}?comparar=${snap.id}&run=${run.run_id}`;
+};
 type APIRequest = APIRequestContext;
 const screens: { slug: string; route: string; ready: string; prepare?: (r: APIRequest) => Promise<void>; dynamicRoute?: (r: APIRequest) => Promise<string>; steps?: (page: Page) => Promise<void> }[] = [
   { slug: "visao-geral/visao-geral", route: "/", ready: "kpis" },
   { slug: "rede/consultar-onu", route: "/rede", ready: "onu-inventory-ready" },
   { slug: "rede/onu-360", route: "/rede?serial=DEMOA0001", ready: "onu360-ready", prepare: suggestLinks,
     steps: async (page: Page) => { await page.getByTestId("onu-open").click(); await page.getByTestId("onu-360-link").click(); } },
+  { slug: "rede/perfis-olt", route: "/rede/perfis", ready: "perfis-inventario" },
+  { slug: "rede/perfis-olt/rascunho", route: "/rede/perfis", ready: "perfis-resultado", dynamicRoute: perfisRoute },
   { slug: "assinantes/visao-360", route: "/assinantes", ready: "sub360-ready", dynamicRoute: sub360Route },
   { slug: "assinantes/diagnostico-guiado", route: "/assinantes", ready: "diag-ready", dynamicRoute: diagRoute },
   { slug: "noc/acompanhar-incidente", route: "/noc", ready: "incident-queue", prepare: approveCinco,

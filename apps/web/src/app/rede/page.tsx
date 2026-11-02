@@ -21,6 +21,7 @@ export default async function Rede({ searchParams }: { searchParams: Promise<{ s
   const quick = await featuresOn("onu_quick_inspector");
   const serialQ = serial && /^[A-Za-z0-9._-]{1,64}$/.test(serial) ? `&serial=${encodeURIComponent(serial.toUpperCase())}` : "";
   const ontConfig = quick ? await featuresOn("ont_config") : false;
+  const profiles = quick ? await featuresOn("profile_studio") : false;   // ADR-0040: desligada, o atalho para os perfis não existe
   const speed = quick ? await featuresOn("speed_diagnostics") : false;   // ADR-0038: desligada, a aba "Teste de banda" não existe
   const quality = quick ? await featuresOn("quality_diagnostics") : false;   // ADR-0039: desligada, a aba "Qualidade" não existe
 
@@ -91,6 +92,7 @@ export default async function Rede({ searchParams }: { searchParams: Promise<{ s
   return (
     <AppShell active="/rede" user="1">
       <PageHeader title={title} subtitle={bySerial ? `Busca “${serial}” em todas as OLTs` : "OLTs, PONs e ONUs com frescor e fonte do dado"} helpSlug="rede/consultar-onu">
+        {profiles && <Link href={olt ? `/rede/perfis?olt=${olt.id}` : "/rede/perfis"} data-testid="rede-perfis-link" className="inline-flex min-h-touch items-center rounded-btn border border-line px-3 text-sm hover:bg-bg">Perfis da OLT</Link>}
         {olt && !bySerial && (
           <div className="flex flex-wrap items-center gap-3">
             <StatusPill value={olt.support_level} /><DataFreshness freshness={olt.freshness} observedAt={olt.observed_at} />
