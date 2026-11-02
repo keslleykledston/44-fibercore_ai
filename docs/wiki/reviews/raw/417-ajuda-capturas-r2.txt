@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19ab3-5a0c-7a93-89f9-31c6b5c65d11).
+[codex] Turn started (01a19ab3-5a45-73e1-8c98-c2d65463c57b).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e cruzar cada artigo tocado com seus metadados de proven...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=40 main...HEAD -- docs/help/how-to docs/wiki/...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=40 main...HEAD -- docs/help/how-to docs/wiki/... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=12 main...HEAD -- docs/help/how-to/rede/consu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=12 main...HEAD -- docs/help/how-to/rede/consu... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg --files docs/help/how-to/rede | sort; rg -n "consultar-config|configuração|...
+[codex] Command completed: /bin/bash -lc 'rg --files docs/help/how-to/rede | sort; rg -n "consultar-config|configuração|... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"Como ver a configuração do aparelho|last_verified:|Origem:|Dados:\" do...
+[codex] Command completed: /bin/bash -lc "rg -n \"Como ver a configuração do aparelho|last_verified:|Origem:|Dados:\" do... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: as duas páginas ONU atualizadas ainda...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: as duas páginas ONU atualizadas ainda atribuem as capturas a um build antigo da LAB, embora declarem que foram regeneradas depois em outra pilha; a proveniência fica ambígua para auditoria.
+
+Findings:
+- [medium] Identificação do build não acompanha a regeneração (docs/help/how-to/rede/consultar-onu.md:45-48)
+  As evidências dizem que as capturas foram regeneradas em 2026-11-02 na aplicação integrada, mas mantêm `Build/commit: be94359 (LAB, ramo principal após o PR 106)`. O changelog registra mudanças posteriores que aparecem nas telas, incluindo a régua compacta da Rede e a remoção de cartões da ONU 360°. Assim, `be94359` não identifica claramente o build que gerou as imagens, dificultando reproduzir a captura e verificar qual código foi publicado. Essa conclusão é uma inferência a partir do changelog e das datas declaradas.
+  Recommendation: Registrar o commit ou identificador do build realmente usado na pilha efêmera; se não for possível recuperá-lo, marcar explicitamente o build como não registrado em vez de manter a referência à LAB.
+
+Next steps:
+- Aplicar a mesma correção de proveniência em `docs/help/how-to/rede/onu-360.md` (linhas 65–68).

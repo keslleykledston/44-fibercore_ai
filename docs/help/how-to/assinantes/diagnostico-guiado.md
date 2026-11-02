@@ -46,3 +46,10 @@ Cada passo traz um rótulo (texto + símbolo): **Confirmado** (fato medido e rec
 - **"Seu papel não permite executar o diagnóstico":** falta `diagnostics:run`.
 - **"Nenhuma ONU aprovada":** aprove o vínculo ONU↔cliente em **Assinantes**.
 - **Tudo "Indisponível":** a coleta está velha; aguarde a próxima coleta da OLT e reexecute.
+
+## Evidências de documentação
+
+- Build/commit: d2e519b (ramo principal; capturas regeneradas em 2026-11-02 na pilha efêmera de teste)
+- Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844
+- Caso de teste E2E: help-screenshots.spec.ts › assinantes/diagnostico-guiado; app.spec.ts › Diagnóstico guiado
+- Dados: fictícios (seed `scripts/seed_demo.py`); sem informações reais de clientes

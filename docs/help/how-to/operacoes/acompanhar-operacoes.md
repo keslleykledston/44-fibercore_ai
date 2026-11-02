@@ -42,7 +42,7 @@ Operações de escrita mostram o botão **Bloqueada: operação não homologada*
 
 ## Evidências de documentação
 
-- Build/commit: árvore de trabalho do PR web/14
+- Build/commit: d2e519b (ramo principal; capturas regeneradas em 2026-11-02 na pilha efêmera de teste)
 - Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844
 - Caso de teste E2E: help-screenshots.spec.ts › operacoes/acompanhar-operacoes; app.spec.ts › operações
 - Dados: fictícios (seed `scripts/seed_demo.py`); sem informações reais de clientes

@@ -42,3 +42,10 @@ ui_route: "/administracao/equipe"
 - **“Esta conta também pertence a outros workspaces”:** o MFA é da conta inteira; só o suporte da plataforma pode redefini-lo.
 - **“Muitas tentativas”:** aguarde 15 minutos; as tentativas erradas de senha ou código contam.
 - **Não consegue redefinir o seu próprio:** use Conta › Segurança da conta.
+
+## Evidências de documentação
+
+- Build/commit: d2e519b (ramo principal; capturas regeneradas em 2026-11-02 na pilha efêmera de teste)
+- Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844
+- Caso de teste E2E: help-screenshots.spec.ts › administracao/membros-e-mfa; app.spec.ts › Equipe
+- Dados: fictícios (seed `scripts/seed_demo.py`); sem informações reais de clientes

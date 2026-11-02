@@ -42,7 +42,7 @@ A tela tem três colunas lado a lado (árvore, lista e detalhes). A tabela mostr
 
 ## Evidências de documentação
 
-- Build/commit: be94359 (LAB, ramo principal após o PR 106)
+- Build/commit: d2e519b (ramo principal; capturas regeneradas em 2026-11-02 na pilha efêmera de teste)
 - Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844
 - Origem: capturas REAIS da aplicação integrada (pilha efêmera de teste, API e banco reais, regeneradas em 2026-11-02), com usuário administrador do seed; nenhuma ONU de cliente nem do laboratório aparece
 - Dados: SINTÉTICOS (seed `scripts/seed_demo.py`: OLT-DEMO-xx e ONUs DEMOxxxx, equipamentos fictícios); horários relativos mascarados
