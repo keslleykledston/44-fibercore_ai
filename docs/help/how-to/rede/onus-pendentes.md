@@ -25,7 +25,8 @@ ui_route: "/rede/pendentes"
    - **Dado antigo:** não foi vista na última hora. Isso **não** quer dizer que a ONU está desligada: só que o dado envelheceu.
    - **Conflito:** o serial já é uma ONU registrada neste provedor ou apareceu em outra OLT/PON. A identidade não é certa; nada deve ser feito com ela.
 4. Confira a **origem**: **Lida da OLT pelo Edge** vale como a palavra da OLT; **Registrada à mão** e **Fixture de teste** mostram “não vale como leitura da OLT” e **nunca** renovam o que a OLT informou.
-5. Para registrar um avistamento à mão, escolha a OLT, abra **Registrar avistamentos à mão** e escreva uma ONU por linha: PON, serial e, se quiser, o fabricante. Exemplo: `0/1/3 ABCD12345678 huawei`.
+5. Para trazer a **palavra da OLT**, escolha a OLT e clique em **Atualizar a partir da última leitura do Edge**. Isso usa a lista de ONUs detectadas que o Edge já leu (a consulta “ONTs detectadas e não confirmadas”, de até 1 hora): não pergunta nada à OLT e não autoriza nada. Sem leitura, o aviso pede a consulta em **Consultas da OLT**. Uma ONU que a leitura nova não lista não é apagada nem dada como autorizada: ela só envelhece para **Dado antigo**.
+6. Para registrar um avistamento à mão, escolha a OLT, abra **Registrar avistamentos à mão** e escreva uma ONU por linha: PON, serial e, se quiser, o fabricante. Exemplo: `0/1/3 ABCD12345678 huawei`.
 
 ![Fila de ONUs aguardando autorização (desktop)](../../assets/rede/onus-pendentes/desktop.png)
 
@@ -40,6 +41,6 @@ ui_route: "/rede/pendentes"
 
 ## Se algo não funcionar
 
-- **“Nenhuma ONU aguardando”:** a lista é preenchida pela leitura da OLT (depois de captura supervisionada) ou por avistamentos registrados à mão.
+- **“Nenhuma ONU na fila”:** a lista é preenchida pela leitura da OLT ou por avistamentos registrados à mão. Com uma OLT escolhida, a linha **Última leitura do Edge** diz a idade da leitura e quantas ONUs ela listou; **sem leitura recente, uma fila vazia não prova que não há ONUs aguardando**.
 - **“Linhas inválidas”:** use `PON SERIAL [fabricante]`, uma por linha, com PON como `0/1/3` e serial de 4 a 32 letras/números.
 - **Conflito inesperado:** confira o serial no inventário da Rede; se a ONU mudou de lugar, a leitura mais recente da OLT é a que vale.

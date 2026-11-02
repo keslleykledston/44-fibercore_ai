@@ -815,6 +815,18 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {description: Inexistente ou de outro provedor}
+  /olts/{oltId}/onus/unregistered/sync:
+    post:
+      tags: [Discovery]
+      operationId: syncOnuSightings
+      summary: 'Transforma a ÚLTIMA leitura do Edge da lista de ONUs detectadas (olt.autofind, já conferida contra o formato fechado) em avistamentos edge_read, a única origem autoritativa. SOMENTE leitura: nada é perguntado à OLT, autorizado nem escrito. Idempotente por leitura (carimbo = hora da PERGUNTA); uma leitura que não é mais nova que o avistamento não muda nada; serial que a leitura nova não lista não é tocado (envelhece para "dado antigo"). 409: no_read, read_too_old (mais de 1 hora), read_not_from_the_equipment, read_not_usable.'
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: oltId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: 'created, updated, unchanged, entries, asked_at, age_seconds'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Inexistente ou de outro provedor}
+        '409': {description: Sem leitura utilizável (ver o resumo)}
   /olts/{oltId}/onus/unregistered/import:
     post:
       tags: [Discovery]

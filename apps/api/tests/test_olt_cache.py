@@ -2,7 +2,7 @@
 `refresh` pergunta de novo (com cota própria); as mesmas comportas de um job valem para o cache; nada atravessa tenants nem dono anterior."""
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -242,7 +242,6 @@ def test_the_board_mock_is_only_for_a_demo_tenant_created_as_such_and_never_over
 
 def test_a_read_from_the_equipment_always_beats_a_mock_and_a_mock_never_beats_a_read(migrated, seed, inv, olt, on):
     """Codex r2 (painel SVG): a real result whose question is OLDER than a mock written meanwhile still wins; the other way round never happens."""
-    from datetime import timedelta
 
     from app.core.db import get_engine, scoped_connection
     with scoped_connection(get_engine(), tenant_id=seed["A"]) as c:
@@ -266,3 +265,14 @@ def test_a_real_read_of_an_older_ownership_generation_never_replaces_the_current
         assert not olt_cache.store_latest(c, seed["A"], o, "olt.board", "", BOARD, epoch, now, source="job")     # an old Edge's late result
         assert c.execute(text("SELECT source, owner_epoch FROM olt_query_latest WHERE olt_id = :i AND query_id = 'olt.board'"), {"i": olt}).one() == ("mock", epoch + 1)
         assert olt_cache.store_latest(c, seed["A"], o, "olt.board", "", BOARD, epoch + 1, now, source="job")      # the current generation's read replaces it
+
+
+def test_latest_reports_the_age_of_the_question_on_the_servers_clock(client, seed, inv, olt, on, migrated):
+    """`asked_age_seconds` is what a freshness rule (the discovery screen, the sync) must use: the server's clock, from the QUESTION's time; negative = stamped in the future."""
+    from app.core.db import get_engine, scoped_connection
+    with scoped_connection(get_engine(), tenant_id=seed["A"]) as c:
+        epoch = c.execute(text("SELECT owner_epoch FROM olts WHERE id = :i"), {"i": olt}).scalar()
+        assert olt_cache.store_latest(c, seed["A"], UUID(str(olt)), "olt.autofind", "", {"entries": []}, epoch, datetime.now(UTC) - timedelta(minutes=90))
+        assert 5390 <= olt_cache.latest(c, UUID(str(olt)), "olt.autofind", "")["asked_age_seconds"] <= 5420
+        assert olt_cache.store_latest(c, seed["A"], UUID(str(olt)), "olt.autofind", "", {"entries": []}, epoch, datetime.now(UTC) + timedelta(hours=1))
+        assert olt_cache.latest(c, UUID(str(olt)), "olt.autofind", "")["asked_age_seconds"] < -3500

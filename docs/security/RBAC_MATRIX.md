@@ -186,6 +186,7 @@
 | GET | `/v1/olts/{olt_id}/capabilities` | `inventory:read` |
 | GET | `/v1/olts/{olt_id}/onus/unregistered` | `discovery:read` |
 | POST | `/v1/olts/{olt_id}/onus/unregistered/import` | `discovery:import` |
+| POST | `/v1/olts/{olt_id}/onus/unregistered/sync` | `discovery:import` |
 | GET | `/v1/olts/{olt_id}/profiles` | `profiles:read` |
 | POST | `/v1/olts/{olt_id}/profiles/import` | `profiles:import` |
 | POST | `/v1/olts/{olt_id}/profiles/sync` | `profiles:import` |
