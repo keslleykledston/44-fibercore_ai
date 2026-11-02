@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19e16-febb-7900-99a6-9251e29e3c06).
+[codex] Turn started (01a19e17-011c-7050-b350-c35ffc59c719).
+[codex] Assistant message captured: Vou conferir o diff inteiro contra `main`, incluindo o script de auditoria e as mudanças da A...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- docs/addenda/v2.6/PACKAGE_A...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- docs/addenda/v2.6/PACKAGE_A... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba scripts/audit_device_package.py | sed -n '1,80p'; nl -ba docs/addenda/v...
+[codex] Command completed: /bin/bash -lc "nl -ba scripts/audit_device_package.py | sed -n '1,80p'; nl -ba docs/addenda/v... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o relatório não vincula a auditori...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o relatório não vincula a auditoria da pasta extraída ao ZIP cujo SHA-256 registra; é possível obter `OK` para conteúdo diferente do pacote identificado.
+
+Findings:
+- [high] O SHA-256 do ZIP não comprova que ele foi auditado (scripts/audit_device_package.py:17-25)
+  O script apenas calcula e imprime o hash do ZIP (linha 20); checksums, manifesto, arquivos e SVG são lidos separadamente da pasta informada. Não compara o ZIP com essa pasta nem exige que o hash corresponda ao SHA-256 registrado no relatório. Assim, a reprodução documentada pode retornar `OK` auditando uma pasta enquanto identifica um ZIP diferente, deixando sem comprovação a origem e o conteúdo que sustentam as contagens e a varredura divulgadas.
+  Recommendation: Vincule a auditoria ao artefato: valide o hash do ZIP contra o valor esperado e audite diretamente seus membros ou confirme que a pasta extraída corresponde integralmente aos membros do ZIP antes de reportar `OK`.
+
+Next steps:
+- Fazer o script falhar quando o ZIP e o conteúdo auditado não forem comprovadamente o mesmo artefato; então regenerar a saída versionada.

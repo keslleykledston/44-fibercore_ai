@@ -1,0 +1,22 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19e17-92a8-7f43-9f66-959352a6c8bf).
+[codex] Turn started (01a19e17-92e1-7093-b47f-0f5ad462c106).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e o contexto do script e do relatório, procurando falhas...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- scripts/audit_device_packag...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- scripts/audit_device_packag... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o vínculo ignora entradas duplicad...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o vínculo ignora entradas duplicadas no ZIP, então `same_as_folder: true` não garante que todos os membros foram comparados.
+
+Findings:
+- [medium] Entradas ZIP duplicadas são descartadas na comparação (scripts/audit_device_package.py:24-25)
+  `bind_to_zip` monta `members` como um dicionário indexado por nome. Um ZIP pode conter várias entradas com o mesmo nome; nesse caso, as anteriores são sobrescritas e só uma delas é comparada com a pasta. O script pode, portanto, declarar `same_as_folder: true` sem verificar cada membro, apesar de o relatório afirmar que todos foram comparados byte a byte. Isso enfraquece a prova de que a pasta auditada representa integralmente o arquivo identificado pelo hash.
+  Recommendation: Antes de criar o dicionário, rejeite nomes de membros duplicados (e falhe a auditoria); alternativamente, compare as entradas preservando sua multiplicidade e ordem.
+
+Next steps:
+- Rejeitar ZIPs com nomes de membros duplicados e regenerar o relatório se o artefato auditado contiver duplicatas.

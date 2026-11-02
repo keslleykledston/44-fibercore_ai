@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19e19-39af-7480-91fa-c8d11d12c20c).
+[codex] Turn started (01a19e19-39e9-7161-a461-09476df0ba0c).
+[codex] Assistant message captured: Vou comparar o diff com `main` e seguir especificamente o caminho de `bind_to_zip`, verifican...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- scripts/audit_device_packag...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- scripts/audit_device_packag... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba scripts/audit_device_package.py | sed -n '15,55p'; git status --short; ...
+[codex] Command completed: /bin/bash -lc "nl -ba scripts/audit_device_package.py | sed -n '15,55p'; git status --short; ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: o bind valida os nomes dos diretórios...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: o bind valida os nomes dos diretórios, mas não confirma que eles existem na pasta auditada; assim, pode declarar igualdade apesar de conteúdo estrutural ausente.
+
+Findings:
+- [medium] Diretórios vazios do ZIP não entram na comparação com a pasta (scripts/audit_device_package.py:33-35)
+  `everything` valida os nomes de todos os membros, mas `infos` remove as entradas de diretório e `members` só registra arquivos. A comparação posterior também percorre apenas arquivos. Portanto, um ZIP com uma entrada como `root/empty/` pode passar `same_as_folder=true` quando essa pasta está ausente da extração, desde que os arquivos coincidam. Isso contradiz a garantia documentada de que a pasta é exatamente o conteúdo do ZIP e pode ocultar uma extração incompleta de estrutura de diretórios. Compare também os diretórios normalizados do ZIP com os diretórios da pasta, incluindo os vazios.
+  Recommendation: Inclua as entradas de diretório na comparação com o disco, normalizando somente a barra final da entrada, e faça a igualdade exigir que diretórios e arquivos correspondam.
