@@ -254,3 +254,15 @@ def test_a_read_from_the_equipment_always_beats_a_mock_and_a_mock_never_beats_a_
         assert olt_cache.latest(c, o, "olt.board", "")["source"] == "job"
         assert not olt_cache.store_latest(c, seed["A"], o, "olt.board", "", BOARD, epoch, now + timedelta(minutes=5), source="mock")   # a mock never replaces a real read
         assert olt_cache.latest(c, o, "olt.board", "")["source"] == "job"
+
+
+def test_a_real_read_of_an_older_ownership_generation_never_replaces_the_current_mock(migrated, seed, inv, olt, on):
+    """Codex r4 (painel SVG): the precedence real-over-mock still respects the ownership generation (owner_epoch)."""
+    from app.core.db import get_engine, scoped_connection
+    with scoped_connection(get_engine(), tenant_id=seed["A"]) as c:
+        epoch = c.execute(text("SELECT owner_epoch FROM olts WHERE id = :i"), {"i": olt}).scalar()
+        o, now = UUID(str(olt)), datetime.now(UTC)
+        assert olt_cache.store_latest(c, seed["A"], o, "olt.board", "", BOARD, epoch + 1, now, source="mock")
+        assert not olt_cache.store_latest(c, seed["A"], o, "olt.board", "", BOARD, epoch, now, source="job")     # an old Edge's late result
+        assert c.execute(text("SELECT source, owner_epoch FROM olt_query_latest WHERE olt_id = :i AND query_id = 'olt.board'"), {"i": olt}).one() == ("mock", epoch + 1)
+        assert olt_cache.store_latest(c, seed["A"], o, "olt.board", "", BOARD, epoch + 1, now, source="job")      # the current generation's read replaces it
