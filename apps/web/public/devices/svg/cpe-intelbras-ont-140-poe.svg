@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="480" viewBox="0 0 720 480" role="img" aria-labelledby="title desc" data-vendor="intelbras" data-model="ONT 140 PoE" data-accuracy="schematic" data-category="onu_ont">
+ <title id="title">INTELBRAS ONT 140 PoE — ilustração esquemática onu_ont</title>
+ <desc id="desc">Arte vetorial original, esquemática e não homologada como reprodução física do equipamento. Portas e slots funcionais são determinados pelo inventário real.</desc>
+ <defs><linearGradient id="metal" x2="0" y2="1"><stop offset="0" stop-color="#4c5969"/><stop offset="1" stop-color="#202a38"/></linearGradient><linearGradient id="plastic" x2="0" y2="1"><stop offset="0" stop-color="#f9fbfe"/><stop offset="1" stop-color="#dfe5ee"/></linearGradient></defs>
+
+<g id="device-body" data-physical-accuracy="generic-by-form-factor">
+<rect x="145" y="137" width="430" height="176" rx="19" fill="#bfcbd6" stroke="#607389" stroke-width="3" />
+<rect x="154" y="149" width="413" height="154" rx="14" fill="#edf2f6" stroke="#9daebe" stroke-width="1" />
+<rect x="173" y="186" width="89" height="13" rx="6" fill="#2a9e77" stroke="none" stroke-width="1" />
+<rect x="285" y="242" width="43" height="36" rx="4" fill="#233548" stroke="#7d8fa2" stroke-width="1" />
+<rect x="345" y="242" width="43" height="36" rx="4" fill="#233548" stroke="#7d8fa2" stroke-width="1" />
+<rect x="405" y="242" width="43" height="36" rx="4" fill="#233548" stroke="#7d8fa2" stroke-width="1" />
+<rect x="465" y="242" width="43" height="36" rx="4" fill="#233548" stroke="#7d8fa2" stroke-width="1" />
+</g>
+<text x="54" y="403" font-size="26" font-family="Inter,Arial,sans-serif" fill="#1a3046" font-weight="700" >INTELBRAS  /  ONT 140 PoE</text>
+<text x="54" y="435" font-size="15" font-family="Inter,Arial,sans-serif" fill="#586e82" font-weight="500" >GPON · poe · silhueta genérica, não reprodução exata do produto</text>
+</svg>

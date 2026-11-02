@@ -1,0 +1,1212 @@
+{
+ "version": "2.0",
+ "origin": "FiberCore_OLT_Multivendor_AllInOne_v2 (docs/addenda/v2.6/PACKAGE_AUDIT.md)",
+ "assets": [
+  {
+   "asset_id": "olt-huawei-ma5608t",
+   "device_type": "olt",
+   "vendor": "huawei",
+   "model": "MA5608T",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-huawei-ma5608t.svg",
+   "png": "/devices/png/olt-huawei-ma5608t.png",
+   "port_count_nominal": 32,
+   "style": "modular-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://e.huawei.com/en/products/optical-access"
+   ]
+  },
+  {
+   "asset_id": "olt-huawei-ma5800-x2",
+   "device_type": "olt",
+   "vendor": "huawei",
+   "model": "MA5800-X2",
+   "technology": "GPON/XGS-PON",
+   "svg": "/devices/svg/olt-huawei-ma5800-x2.svg",
+   "png": "/devices/png/olt-huawei-ma5800-x2.png",
+   "port_count_nominal": null,
+   "style": "modular-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://e.huawei.com/en/products/optical-access"
+   ]
+  },
+  {
+   "asset_id": "olt-datacom-dm4610-4gpon",
+   "device_type": "olt",
+   "vendor": "datacom",
+   "model": "DM4610-4GPON",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-datacom-dm4610-4gpon.svg",
+   "png": "/devices/png/olt-datacom-dm4610-4gpon.png",
+   "port_count_nominal": 4,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://datacom.com.br/pt/produtos/linha/gpon",
+    "https://datacom.com.br/uploads/product/file/c23f705c6579467dff13c46ad6f7fe40.pdf"
+   ]
+  },
+  {
+   "asset_id": "olt-datacom-dm4611-4gpon",
+   "device_type": "olt",
+   "vendor": "datacom",
+   "model": "DM4611-4GPON",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-datacom-dm4611-4gpon.svg",
+   "png": "/devices/png/olt-datacom-dm4611-4gpon.png",
+   "port_count_nominal": 4,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://datacom.com.br/pt/produtos/linha/gpon",
+    "https://datacom.com.br/uploads/product/file/c23f705c6579467dff13c46ad6f7fe40.pdf"
+   ]
+  },
+  {
+   "asset_id": "olt-datacom-dm4616",
+   "device_type": "olt",
+   "vendor": "datacom",
+   "model": "DM4616",
+   "technology": "XGS-PON",
+   "svg": "/devices/svg/olt-datacom-dm4616.svg",
+   "png": "/devices/png/olt-datacom-dm4616.png",
+   "port_count_nominal": 4,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://datacom.com.br/pt/produtos/linha/gpon",
+    "https://datacom.com.br/uploads/product/file/c23f705c6579467dff13c46ad6f7fe40.pdf"
+   ]
+  },
+  {
+   "asset_id": "olt-zte-zxa10-c320",
+   "device_type": "olt",
+   "vendor": "zte",
+   "model": "ZXA10-C320",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-zte-zxa10-c320.svg",
+   "png": "/devices/png/olt-zte-zxa10-c320.png",
+   "port_count_nominal": null,
+   "style": "modular-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://www.zte.com.cn/global/product_index.html"
+   ]
+  },
+  {
+   "asset_id": "olt-zte-zxa10-c600",
+   "device_type": "olt",
+   "vendor": "zte",
+   "model": "ZXA10-C600",
+   "technology": "GPON/XGS-PON",
+   "svg": "/devices/svg/olt-zte-zxa10-c600.svg",
+   "png": "/devices/png/olt-zte-zxa10-c600.png",
+   "port_count_nominal": null,
+   "style": "modular-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://www.zte.com.cn/global/product_index.html"
+   ]
+  },
+  {
+   "asset_id": "olt-fiberhome-an5516",
+   "device_type": "olt",
+   "vendor": "fiberhome",
+   "model": "AN5516",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-fiberhome-an5516.svg",
+   "png": "/devices/png/olt-fiberhome-an5516.png",
+   "port_count_nominal": null,
+   "style": "modular-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://pop3.fiberhome.com/operator/product/products/11.aspx.htm"
+   ]
+  },
+  {
+   "asset_id": "olt-vsol-v1600g1",
+   "device_type": "olt",
+   "vendor": "vsol",
+   "model": "V1600G1",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-vsol-v1600g1.svg",
+   "png": "/devices/png/olt-vsol-v1600g1.png",
+   "port_count_nominal": 8,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://www.vsolcn.com/products/onu-ont",
+    "https://www.vsolcn.com/products/olt"
+   ]
+  },
+  {
+   "asset_id": "olt-vsol-v1600g2-b",
+   "device_type": "olt",
+   "vendor": "vsol",
+   "model": "V1600G2-B",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-vsol-v1600g2-b.svg",
+   "png": "/devices/png/olt-vsol-v1600g2-b.png",
+   "port_count_nominal": 16,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://www.vsolcn.com/products/onu-ont",
+    "https://www.vsolcn.com/products/olt"
+   ]
+  },
+  {
+   "asset_id": "olt-intelbras-g16",
+   "device_type": "olt",
+   "vendor": "intelbras",
+   "model": "G16",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-intelbras-g16.svg",
+   "png": "/devices/png/olt-intelbras-g16.png",
+   "port_count_nominal": 16,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://www.intelbras.com/pt-br/redes/fibra-optica/cpe",
+    "https://www.intelbras.com/pt-br/ajuda-download/download/concentrador-de-interfaces-de-dados-olt-g16"
+   ]
+  },
+  {
+   "asset_id": "olt-ubiquiti-uf-olt",
+   "device_type": "olt",
+   "vendor": "ubiquiti",
+   "model": "UF-OLT",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-ubiquiti-uf-olt.svg",
+   "png": "/devices/png/olt-ubiquiti-uf-olt.png",
+   "port_count_nominal": 8,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://techspecs.ui.com/uisp/fiber"
+   ]
+  },
+  {
+   "asset_id": "olt-parks-fiberlink-30024",
+   "device_type": "olt",
+   "vendor": "parks",
+   "model": "Fiberlink-30024",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-parks-fiberlink-30024.svg",
+   "png": "/devices/png/olt-parks-fiberlink-30024.png",
+   "port_count_nominal": null,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://www.parks.com.br/download-datasheets-produtos-parks"
+   ]
+  },
+  {
+   "asset_id": "olt-parks-fiberlink-40016",
+   "device_type": "olt",
+   "vendor": "parks",
+   "model": "Fiberlink-40016",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-parks-fiberlink-40016.svg",
+   "png": "/devices/png/olt-parks-fiberlink-40016.png",
+   "port_count_nominal": null,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://www.parks.com.br/download-datasheets-produtos-parks"
+   ]
+  },
+  {
+   "asset_id": "olt-datacom-dm4615",
+   "device_type": "olt",
+   "vendor": "datacom",
+   "model": "DM4615",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-datacom-dm4615.svg",
+   "png": "/devices/png/olt-datacom-dm4615.png",
+   "port_count_nominal": null,
+   "style": "modular-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://datacom.com.br/pt/produtos/linha/gpon",
+    "https://datacom.com.br/uploads/product/file/c23f705c6579467dff13c46ad6f7fe40.pdf"
+   ]
+  },
+  {
+   "asset_id": "olt-zte-zxa10-c300",
+   "device_type": "olt",
+   "vendor": "zte",
+   "model": "ZXA10-C300",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-zte-zxa10-c300.svg",
+   "png": "/devices/png/olt-zte-zxa10-c300.png",
+   "port_count_nominal": null,
+   "style": "modular-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://www.zte.com.cn/global/product_index.html"
+   ]
+  },
+  {
+   "asset_id": "olt-zte-zxa10-c610",
+   "device_type": "olt",
+   "vendor": "zte",
+   "model": "ZXA10-C610",
+   "technology": "GPON/XGS-PON",
+   "svg": "/devices/svg/olt-zte-zxa10-c610.svg",
+   "png": "/devices/png/olt-zte-zxa10-c610.png",
+   "port_count_nominal": null,
+   "style": "modular-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://www.zte.com.cn/global/product_index.html"
+   ]
+  },
+  {
+   "asset_id": "olt-fiberhome-an6000",
+   "device_type": "olt",
+   "vendor": "fiberhome",
+   "model": "AN6000",
+   "technology": "GPON/XGS-PON",
+   "svg": "/devices/svg/olt-fiberhome-an6000.svg",
+   "png": "/devices/png/olt-fiberhome-an6000.png",
+   "port_count_nominal": null,
+   "style": "modular-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://pop3.fiberhome.com/operator/product/products/11.aspx.htm"
+   ]
+  },
+  {
+   "asset_id": "olt-vsol-v1600g1-b",
+   "device_type": "olt",
+   "vendor": "vsol",
+   "model": "V1600G1-B",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-vsol-v1600g1-b.svg",
+   "png": "/devices/png/olt-vsol-v1600g1-b.png",
+   "port_count_nominal": 8,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://www.vsolcn.com/products/onu-ont",
+    "https://www.vsolcn.com/products/olt"
+   ]
+  },
+  {
+   "asset_id": "olt-vsol-v1600g0-b",
+   "device_type": "olt",
+   "vendor": "vsol",
+   "model": "V1600G0-B",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-vsol-v1600g0-b.svg",
+   "png": "/devices/png/olt-vsol-v1600g0-b.png",
+   "port_count_nominal": 4,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://www.vsolcn.com/products/onu-ont",
+    "https://www.vsolcn.com/products/olt"
+   ]
+  },
+  {
+   "asset_id": "olt-vsol-v1600gs-f",
+   "device_type": "olt",
+   "vendor": "vsol",
+   "model": "V1600GS-F",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-vsol-v1600gs-f.svg",
+   "png": "/devices/png/olt-vsol-v1600gs-f.png",
+   "port_count_nominal": 1,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://www.vsolcn.com/products/onu-ont",
+    "https://www.vsolcn.com/products/olt"
+   ]
+  },
+  {
+   "asset_id": "olt-vsol-v1600gt",
+   "device_type": "olt",
+   "vendor": "vsol",
+   "model": "V1600GT",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-vsol-v1600gt.svg",
+   "png": "/devices/png/olt-vsol-v1600gt.png",
+   "port_count_nominal": 2,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://www.vsolcn.com/products/onu-ont",
+    "https://www.vsolcn.com/products/olt"
+   ]
+  },
+  {
+   "asset_id": "olt-vsol-v1600d4-dp",
+   "device_type": "olt",
+   "vendor": "vsol",
+   "model": "V1600D4-DP",
+   "technology": "EPON",
+   "svg": "/devices/svg/olt-vsol-v1600d4-dp.svg",
+   "png": "/devices/png/olt-vsol-v1600d4-dp.png",
+   "port_count_nominal": 4,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://www.vsolcn.com/products/onu-ont",
+    "https://www.vsolcn.com/products/olt"
+   ]
+  },
+  {
+   "asset_id": "olt-intelbras-g08",
+   "device_type": "olt",
+   "vendor": "intelbras",
+   "model": "G08",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-intelbras-g08.svg",
+   "png": "/devices/png/olt-intelbras-g08.png",
+   "port_count_nominal": 8,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://www.intelbras.com/pt-br/redes/fibra-optica/cpe",
+    "https://www.intelbras.com/pt-br/ajuda-download/download/concentrador-de-interfaces-de-dados-olt-g16"
+   ]
+  },
+  {
+   "asset_id": "olt-intelbras-olt-8820-i",
+   "device_type": "olt",
+   "vendor": "intelbras",
+   "model": "OLT-8820-I",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-intelbras-olt-8820-i.svg",
+   "png": "/devices/png/olt-intelbras-olt-8820-i.png",
+   "port_count_nominal": 8,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://www.intelbras.com/pt-br/redes/fibra-optica/cpe",
+    "https://www.intelbras.com/pt-br/ajuda-download/download/concentrador-de-interfaces-de-dados-olt-g16"
+   ]
+  },
+  {
+   "asset_id": "olt-intelbras-olt-8820-g",
+   "device_type": "olt",
+   "vendor": "intelbras",
+   "model": "OLT-8820-G",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-intelbras-olt-8820-g.svg",
+   "png": "/devices/png/olt-intelbras-olt-8820-g.png",
+   "port_count_nominal": 8,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://www.intelbras.com/pt-br/redes/fibra-optica/cpe",
+    "https://www.intelbras.com/pt-br/ajuda-download/download/concentrador-de-interfaces-de-dados-olt-g16"
+   ]
+  },
+  {
+   "asset_id": "olt-ubiquiti-uf-olt4",
+   "device_type": "olt",
+   "vendor": "ubiquiti",
+   "model": "UF-OLT4",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-ubiquiti-uf-olt4.svg",
+   "png": "/devices/png/olt-ubiquiti-uf-olt4.png",
+   "port_count_nominal": 4,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://techspecs.ui.com/uisp/fiber"
+   ]
+  },
+  {
+   "asset_id": "olt-parks-fiberlink-30028",
+   "device_type": "olt",
+   "vendor": "parks",
+   "model": "Fiberlink-30028",
+   "technology": "GPON",
+   "svg": "/devices/svg/olt-parks-fiberlink-30028.svg",
+   "png": "/devices/png/olt-parks-fiberlink-30028.png",
+   "port_count_nominal": null,
+   "style": "rack-schematic",
+   "accuracy": "schematic_not_model_exact",
+   "physical_mapping": "unverified_from_inventory_required",
+   "status": "ART_READY_DRIVER_NOT_HOMOLOGATED",
+   "source_urls": [
+    "https://www.parks.com.br/download-datasheets-produtos-parks"
+   ]
+  },
+  {
+   "asset_id": "cpe-huawei-hg8245h",
+   "device_type": "onu_ont",
+   "vendor": "huawei",
+   "model": "HG8245H",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-huawei-hg8245h.svg",
+   "png": "/devices/png/cpe-huawei-hg8245h.png",
+   "port_count_nominal": null,
+   "style": "wifi",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://e.huawei.com/en/products/optical-access"
+   ]
+  },
+  {
+   "asset_id": "cpe-huawei-hg8145v5",
+   "device_type": "onu_ont",
+   "vendor": "huawei",
+   "model": "HG8145V5",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-huawei-hg8145v5.svg",
+   "png": "/devices/png/cpe-huawei-hg8145v5.png",
+   "port_count_nominal": null,
+   "style": "wifi",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://e.huawei.com/en/products/optical-access"
+   ]
+  },
+  {
+   "asset_id": "cpe-huawei-hg8245w5",
+   "device_type": "onu_ont",
+   "vendor": "huawei",
+   "model": "HG8245W5",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-huawei-hg8245w5.svg",
+   "png": "/devices/png/cpe-huawei-hg8245w5.png",
+   "port_count_nominal": null,
+   "style": "wifi",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://e.huawei.com/en/products/optical-access"
+   ]
+  },
+  {
+   "asset_id": "cpe-datacom-dm986-100",
+   "device_type": "onu_ont",
+   "vendor": "datacom",
+   "model": "DM986-100",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-datacom-dm986-100.svg",
+   "png": "/devices/png/cpe-datacom-dm986-100.png",
+   "port_count_nominal": null,
+   "style": "bridge",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://datacom.com.br/pt/produtos/linha/gpon",
+    "https://datacom.com.br/uploads/product/file/c23f705c6579467dff13c46ad6f7fe40.pdf"
+   ]
+  },
+  {
+   "asset_id": "cpe-datacom-dm986-110",
+   "device_type": "onu_ont",
+   "vendor": "datacom",
+   "model": "DM986-110",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-datacom-dm986-110.svg",
+   "png": "/devices/png/cpe-datacom-dm986-110.png",
+   "port_count_nominal": null,
+   "style": "voice",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://datacom.com.br/pt/produtos/linha/gpon",
+    "https://datacom.com.br/uploads/product/file/c23f705c6579467dff13c46ad6f7fe40.pdf"
+   ]
+  },
+  {
+   "asset_id": "cpe-datacom-dm986-sfp",
+   "device_type": "onu_ont",
+   "vendor": "datacom",
+   "model": "DM986-SFP",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-datacom-dm986-sfp.svg",
+   "png": "/devices/png/cpe-datacom-dm986-sfp.png",
+   "port_count_nominal": null,
+   "style": "sfp",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://datacom.com.br/pt/produtos/linha/gpon",
+    "https://datacom.com.br/uploads/product/file/c23f705c6579467dff13c46ad6f7fe40.pdf"
+   ]
+  },
+  {
+   "asset_id": "cpe-datacom-dm986-414q",
+   "device_type": "onu_ont",
+   "vendor": "datacom",
+   "model": "DM986-414Q",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-datacom-dm986-414q.svg",
+   "png": "/devices/png/cpe-datacom-dm986-414q.png",
+   "port_count_nominal": null,
+   "style": "wifi",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://datacom.com.br/pt/produtos/linha/gpon",
+    "https://datacom.com.br/uploads/product/file/c23f705c6579467dff13c46ad6f7fe40.pdf"
+   ]
+  },
+  {
+   "asset_id": "cpe-datacom-dm986-416-ax30",
+   "device_type": "onu_ont",
+   "vendor": "datacom",
+   "model": "DM986-416 AX30",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-datacom-dm986-416-ax30.svg",
+   "png": "/devices/png/cpe-datacom-dm986-416-ax30.png",
+   "port_count_nominal": null,
+   "style": "wifi6",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://datacom.com.br/pt/produtos/linha/gpon",
+    "https://datacom.com.br/uploads/product/file/c23f705c6579467dff13c46ad6f7fe40.pdf"
+   ]
+  },
+  {
+   "asset_id": "cpe-datacom-dm984-420",
+   "device_type": "onu_ont",
+   "vendor": "datacom",
+   "model": "DM984-420",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-datacom-dm984-420.svg",
+   "png": "/devices/png/cpe-datacom-dm984-420.png",
+   "port_count_nominal": null,
+   "style": "voice",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://datacom.com.br/pt/produtos/linha/gpon",
+    "https://datacom.com.br/uploads/product/file/c23f705c6579467dff13c46ad6f7fe40.pdf"
+   ]
+  },
+  {
+   "asset_id": "cpe-datacom-dm987-1010",
+   "device_type": "onu_ont",
+   "vendor": "datacom",
+   "model": "DM987-1010",
+   "technology": "XGS-PON",
+   "svg": "/devices/svg/cpe-datacom-dm987-1010.svg",
+   "png": "/devices/png/cpe-datacom-dm987-1010.png",
+   "port_count_nominal": null,
+   "style": "bridge",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://datacom.com.br/pt/produtos/linha/gpon",
+    "https://datacom.com.br/uploads/product/file/c23f705c6579467dff13c46ad6f7fe40.pdf"
+   ]
+  },
+  {
+   "asset_id": "cpe-zte-zxhn-f601",
+   "device_type": "onu_ont",
+   "vendor": "zte",
+   "model": "ZXHN F601",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-zte-zxhn-f601.svg",
+   "png": "/devices/png/cpe-zte-zxhn-f601.png",
+   "port_count_nominal": null,
+   "style": "bridge",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.zte.com.cn/global/product_index.html"
+   ]
+  },
+  {
+   "asset_id": "cpe-zte-zxhn-f620",
+   "device_type": "onu_ont",
+   "vendor": "zte",
+   "model": "ZXHN F620",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-zte-zxhn-f620.svg",
+   "png": "/devices/png/cpe-zte-zxhn-f620.png",
+   "port_count_nominal": null,
+   "style": "voice",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.zte.com.cn/global/product_index.html"
+   ]
+  },
+  {
+   "asset_id": "cpe-zte-zxhn-f660",
+   "device_type": "onu_ont",
+   "vendor": "zte",
+   "model": "ZXHN F660",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-zte-zxhn-f660.svg",
+   "png": "/devices/png/cpe-zte-zxhn-f660.png",
+   "port_count_nominal": null,
+   "style": "wifi",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.zte.com.cn/global/product_index.html"
+   ]
+  },
+  {
+   "asset_id": "cpe-zte-zxhn-f680",
+   "device_type": "onu_ont",
+   "vendor": "zte",
+   "model": "ZXHN F680",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-zte-zxhn-f680.svg",
+   "png": "/devices/png/cpe-zte-zxhn-f680.png",
+   "port_count_nominal": null,
+   "style": "wifi",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.zte.com.cn/global/product_index.html"
+   ]
+  },
+  {
+   "asset_id": "cpe-zte-zxhn-f6600p",
+   "device_type": "onu_ont",
+   "vendor": "zte",
+   "model": "ZXHN F6600P",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-zte-zxhn-f6600p.svg",
+   "png": "/devices/png/cpe-zte-zxhn-f6600p.png",
+   "port_count_nominal": null,
+   "style": "wifi6",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.zte.com.cn/global/product_index.html"
+   ]
+  },
+  {
+   "asset_id": "cpe-fiberhome-an5506-01-a",
+   "device_type": "onu_ont",
+   "vendor": "fiberhome",
+   "model": "AN5506-01-A",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-fiberhome-an5506-01-a.svg",
+   "png": "/devices/png/cpe-fiberhome-an5506-01-a.png",
+   "port_count_nominal": null,
+   "style": "bridge",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://pop3.fiberhome.com/operator/product/products/11.aspx.htm"
+   ]
+  },
+  {
+   "asset_id": "cpe-fiberhome-an5506-02-b",
+   "device_type": "onu_ont",
+   "vendor": "fiberhome",
+   "model": "AN5506-02-B",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-fiberhome-an5506-02-b.svg",
+   "png": "/devices/png/cpe-fiberhome-an5506-02-b.png",
+   "port_count_nominal": null,
+   "style": "voice",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://pop3.fiberhome.com/operator/product/products/11.aspx.htm"
+   ]
+  },
+  {
+   "asset_id": "cpe-fiberhome-an5506-04-fs",
+   "device_type": "onu_ont",
+   "vendor": "fiberhome",
+   "model": "AN5506-04-FS",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-fiberhome-an5506-04-fs.svg",
+   "png": "/devices/png/cpe-fiberhome-an5506-04-fs.png",
+   "port_count_nominal": null,
+   "style": "wifi",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://pop3.fiberhome.com/operator/product/products/11.aspx.htm"
+   ]
+  },
+  {
+   "asset_id": "cpe-fiberhome-an5506-04-fat",
+   "device_type": "onu_ont",
+   "vendor": "fiberhome",
+   "model": "AN5506-04-FAT",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-fiberhome-an5506-04-fat.svg",
+   "png": "/devices/png/cpe-fiberhome-an5506-04-fat.png",
+   "port_count_nominal": null,
+   "style": "wifi",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://pop3.fiberhome.com/operator/product/products/11.aspx.htm"
+   ]
+  },
+  {
+   "asset_id": "cpe-fiberhome-hg6245d",
+   "device_type": "onu_ont",
+   "vendor": "fiberhome",
+   "model": "HG6245D",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-fiberhome-hg6245d.svg",
+   "png": "/devices/png/cpe-fiberhome-hg6245d.png",
+   "port_count_nominal": null,
+   "style": "wifi",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://pop3.fiberhome.com/operator/product/products/11.aspx.htm"
+   ]
+  },
+  {
+   "asset_id": "cpe-intelbras-onu-110",
+   "device_type": "onu_ont",
+   "vendor": "intelbras",
+   "model": "ONU 110",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-intelbras-onu-110.svg",
+   "png": "/devices/png/cpe-intelbras-onu-110.png",
+   "port_count_nominal": null,
+   "style": "bridge",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.intelbras.com/pt-br/redes/fibra-optica/cpe",
+    "https://www.intelbras.com/pt-br/ajuda-download/download/concentrador-de-interfaces-de-dados-olt-g16"
+   ]
+  },
+  {
+   "asset_id": "cpe-intelbras-onu-r1",
+   "device_type": "onu_ont",
+   "vendor": "intelbras",
+   "model": "ONU R1",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-intelbras-onu-r1.svg",
+   "png": "/devices/png/cpe-intelbras-onu-r1.png",
+   "port_count_nominal": null,
+   "style": "bridge",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.intelbras.com/pt-br/redes/fibra-optica/cpe",
+    "https://www.intelbras.com/pt-br/ajuda-download/download/concentrador-de-interfaces-de-dados-olt-g16"
+   ]
+  },
+  {
+   "asset_id": "cpe-intelbras-ont-wifiber-1200r",
+   "device_type": "onu_ont",
+   "vendor": "intelbras",
+   "model": "ONT WiFiber 1200R",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-intelbras-ont-wifiber-1200r.svg",
+   "png": "/devices/png/cpe-intelbras-ont-wifiber-1200r.png",
+   "port_count_nominal": null,
+   "style": "wifi",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.intelbras.com/pt-br/redes/fibra-optica/cpe",
+    "https://www.intelbras.com/pt-br/ajuda-download/download/concentrador-de-interfaces-de-dados-olt-g16"
+   ]
+  },
+  {
+   "asset_id": "cpe-intelbras-wifiber-ax-1800",
+   "device_type": "onu_ont",
+   "vendor": "intelbras",
+   "model": "WiFiber AX 1800",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-intelbras-wifiber-ax-1800.svg",
+   "png": "/devices/png/cpe-intelbras-wifiber-ax-1800.png",
+   "port_count_nominal": null,
+   "style": "wifi6",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.intelbras.com/pt-br/redes/fibra-optica/cpe",
+    "https://www.intelbras.com/pt-br/ajuda-download/download/concentrador-de-interfaces-de-dados-olt-g16"
+   ]
+  },
+  {
+   "asset_id": "cpe-intelbras-wifiber-ax-1800v",
+   "device_type": "onu_ont",
+   "vendor": "intelbras",
+   "model": "WiFiber AX 1800V",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-intelbras-wifiber-ax-1800v.svg",
+   "png": "/devices/png/cpe-intelbras-wifiber-ax-1800v.png",
+   "port_count_nominal": null,
+   "style": "wifi6",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.intelbras.com/pt-br/redes/fibra-optica/cpe",
+    "https://www.intelbras.com/pt-br/ajuda-download/download/concentrador-de-interfaces-de-dados-olt-g16"
+   ]
+  },
+  {
+   "asset_id": "cpe-intelbras-ont-140-poe",
+   "device_type": "onu_ont",
+   "vendor": "intelbras",
+   "model": "ONT 140 PoE",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-intelbras-ont-140-poe.svg",
+   "png": "/devices/png/cpe-intelbras-ont-140-poe.png",
+   "port_count_nominal": null,
+   "style": "poe",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.intelbras.com/pt-br/redes/fibra-optica/cpe",
+    "https://www.intelbras.com/pt-br/ajuda-download/download/concentrador-de-interfaces-de-dados-olt-g16"
+   ]
+  },
+  {
+   "asset_id": "cpe-vsol-v2801f",
+   "device_type": "onu_ont",
+   "vendor": "vsol",
+   "model": "V2801F",
+   "technology": "XPON",
+   "svg": "/devices/svg/cpe-vsol-v2801f.svg",
+   "png": "/devices/png/cpe-vsol-v2801f.png",
+   "port_count_nominal": null,
+   "style": "sfp",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.vsolcn.com/products/onu-ont",
+    "https://www.vsolcn.com/products/olt"
+   ]
+  },
+  {
+   "asset_id": "cpe-vsol-v2804ac",
+   "device_type": "onu_ont",
+   "vendor": "vsol",
+   "model": "V2804AC",
+   "technology": "XPON",
+   "svg": "/devices/svg/cpe-vsol-v2804ac.svg",
+   "png": "/devices/png/cpe-vsol-v2804ac.png",
+   "port_count_nominal": null,
+   "style": "wifi",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.vsolcn.com/products/onu-ont",
+    "https://www.vsolcn.com/products/olt"
+   ]
+  },
+  {
+   "asset_id": "cpe-vsol-hg325dac",
+   "device_type": "onu_ont",
+   "vendor": "vsol",
+   "model": "HG325DAC",
+   "technology": "XPON",
+   "svg": "/devices/svg/cpe-vsol-hg325dac.svg",
+   "png": "/devices/png/cpe-vsol-hg325dac.png",
+   "port_count_nominal": null,
+   "style": "wifi",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.vsolcn.com/products/onu-ont",
+    "https://www.vsolcn.com/products/olt"
+   ]
+  },
+  {
+   "asset_id": "cpe-vsol-v2804ax30-t-h",
+   "device_type": "onu_ont",
+   "vendor": "vsol",
+   "model": "V2804AX30(T)-H",
+   "technology": "XPON",
+   "svg": "/devices/svg/cpe-vsol-v2804ax30-t-h.svg",
+   "png": "/devices/png/cpe-vsol-v2804ax30-t-h.png",
+   "port_count_nominal": null,
+   "style": "wifi6",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.vsolcn.com/products/onu-ont",
+    "https://www.vsolcn.com/products/olt"
+   ]
+  },
+  {
+   "asset_id": "cpe-vsol-v2901q-a",
+   "device_type": "onu_ont",
+   "vendor": "vsol",
+   "model": "V2901Q-A",
+   "technology": "XGS-PON",
+   "svg": "/devices/svg/cpe-vsol-v2901q-a.svg",
+   "png": "/devices/png/cpe-vsol-v2901q-a.png",
+   "port_count_nominal": null,
+   "style": "bridge",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.vsolcn.com/products/onu-ont",
+    "https://www.vsolcn.com/products/olt"
+   ]
+  },
+  {
+   "asset_id": "cpe-ubiquiti-uf-nano",
+   "device_type": "onu_ont",
+   "vendor": "ubiquiti",
+   "model": "UF-Nano",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-ubiquiti-uf-nano.svg",
+   "png": "/devices/png/cpe-ubiquiti-uf-nano.png",
+   "port_count_nominal": null,
+   "style": "bridge",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://techspecs.ui.com/uisp/fiber"
+   ]
+  },
+  {
+   "asset_id": "cpe-ubiquiti-uf-loco",
+   "device_type": "onu_ont",
+   "vendor": "ubiquiti",
+   "model": "UF-LOCO",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-ubiquiti-uf-loco.svg",
+   "png": "/devices/png/cpe-ubiquiti-uf-loco.png",
+   "port_count_nominal": null,
+   "style": "bridge",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://techspecs.ui.com/uisp/fiber"
+   ]
+  },
+  {
+   "asset_id": "cpe-ubiquiti-uf-wifi",
+   "device_type": "onu_ont",
+   "vendor": "ubiquiti",
+   "model": "UF-WIFI",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-ubiquiti-uf-wifi.svg",
+   "png": "/devices/png/cpe-ubiquiti-uf-wifi.png",
+   "port_count_nominal": null,
+   "style": "wifi",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://techspecs.ui.com/uisp/fiber"
+   ]
+  },
+  {
+   "asset_id": "cpe-ubiquiti-uf-wifi6",
+   "device_type": "onu_ont",
+   "vendor": "ubiquiti",
+   "model": "UF-WiFi6",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-ubiquiti-uf-wifi6.svg",
+   "png": "/devices/png/cpe-ubiquiti-uf-wifi6.png",
+   "port_count_nominal": null,
+   "style": "wifi6",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://techspecs.ui.com/uisp/fiber"
+   ]
+  },
+  {
+   "asset_id": "cpe-ubiquiti-uf-instant",
+   "device_type": "onu_ont",
+   "vendor": "ubiquiti",
+   "model": "UF-Instant",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-ubiquiti-uf-instant.svg",
+   "png": "/devices/png/cpe-ubiquiti-uf-instant.png",
+   "port_count_nominal": null,
+   "style": "sfp",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://techspecs.ui.com/uisp/fiber"
+   ]
+  },
+  {
+   "asset_id": "cpe-parks-fiberlink-101",
+   "device_type": "onu_ont",
+   "vendor": "parks",
+   "model": "Fiberlink 101",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-parks-fiberlink-101.svg",
+   "png": "/devices/png/cpe-parks-fiberlink-101.png",
+   "port_count_nominal": null,
+   "style": "bridge",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.parks.com.br/download-datasheets-produtos-parks"
+   ]
+  },
+  {
+   "asset_id": "cpe-parks-fiberlink-411",
+   "device_type": "onu_ont",
+   "vendor": "parks",
+   "model": "Fiberlink 411",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-parks-fiberlink-411.svg",
+   "png": "/devices/png/cpe-parks-fiberlink-411.png",
+   "port_count_nominal": null,
+   "style": "voice",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.parks.com.br/download-datasheets-produtos-parks"
+   ]
+  },
+  {
+   "asset_id": "cpe-parks-fiberlink-501",
+   "device_type": "onu_ont",
+   "vendor": "parks",
+   "model": "Fiberlink 501",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-parks-fiberlink-501.svg",
+   "png": "/devices/png/cpe-parks-fiberlink-501.png",
+   "port_count_nominal": null,
+   "style": "wifi",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.parks.com.br/download-datasheets-produtos-parks"
+   ]
+  },
+  {
+   "asset_id": "cpe-parks-fiberlink-511",
+   "device_type": "onu_ont",
+   "vendor": "parks",
+   "model": "Fiberlink 511",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-parks-fiberlink-511.svg",
+   "png": "/devices/png/cpe-parks-fiberlink-511.png",
+   "port_count_nominal": null,
+   "style": "wifi",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.parks.com.br/download-datasheets-produtos-parks"
+   ]
+  },
+  {
+   "asset_id": "cpe-parks-fiberlink-611",
+   "device_type": "onu_ont",
+   "vendor": "parks",
+   "model": "Fiberlink 611",
+   "technology": "GPON",
+   "svg": "/devices/svg/cpe-parks-fiberlink-611.svg",
+   "png": "/devices/png/cpe-parks-fiberlink-611.png",
+   "port_count_nominal": null,
+   "style": "wifi6",
+   "accuracy": "generic_form_factor_not_model_exact",
+   "physical_mapping": "not_applicable",
+   "status": "ART_READY_NOT_LIVE_INTEGRATED",
+   "source_urls": [
+    "https://www.parks.com.br/download-datasheets-produtos-parks"
+   ]
+  }
+ ]
+}

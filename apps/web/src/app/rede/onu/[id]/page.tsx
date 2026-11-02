@@ -8,6 +8,7 @@ import { OpticalRuler } from "@/components/OpticalRuler";
 import { apiSafe } from "@/lib/api";
 import { featuresOn } from "@/lib/features";
 import { CapabilityGate } from "@/components/CapabilityGate";
+import { DeviceThumb } from "@/components/DeviceThumb";
 import { FaceplateCard } from "@/components/Faceplate";
 import { OntSidebar } from "@/components/OntSidebar";
 import { humanHours } from "@/lib/offline";
@@ -35,6 +36,7 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
   if (!o) return <AppShell active="/rede" user="1"><ErrorState title="Falha ao carregar a ONU" hint="Tente novamente em instantes." /></AppShell>;
   const caps = await apiSafe<Capability[]>(`/v1/olts/${o.olt.id}/capabilities`);  // perfil da OLT da ONU (registro de capacidades)
   const hist = await apiSafe<OnuHistory>(`/v1/onus/${id}/history?days=30&limit=12`);
+  const assets = await featuresOn("device_assets");   // ADR-0041: miniatura esquemática do modelo (só arte; nada de estado nem porta)
   const newUx = await featuresOn("onu_quick_inspector");   // trilha e painel frontal (ADR-0037) seguem a mesma flag da Rede: desligada, a tela é a anterior
   const ontCfg = o.cpe?.link === "confirmed" && o.cpe.device ? await apiSafe<{ enabled: boolean }>("/v1/ont-config/health") : null;   // o botão só existe com o recurso ligado
   return (
@@ -55,7 +57,7 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
             <div><dt className="text-xs text-muted">Serial</dt><dd className="font-mono text-base font-semibold">{o.serial}</dd></div>
             <div><dt className="text-xs text-muted">Modelo</dt>
               <dd data-testid="onu360-identity-model">{o.cpe?.link === "confirmed" && o.cpe.device && (o.cpe.device.model || o.cpe.device.vendor)
-                ? <span className="font-semibold">{[o.cpe.device.vendor, o.cpe.device.model].filter(Boolean).join(" ")}{o.cpe.device.firmware ? <span className="block text-xs font-normal text-muted">Firmware {o.cpe.device.firmware}</span> : null}</span>
+                ? <span className="inline-flex items-start gap-2">{assets && <span data-testid="onu360-model-thumb"><DeviceThumb category="onu_ont" vendor={o.cpe.device.vendor} model={o.cpe.device.model} width={56} decorative label /></span>}<span className="font-semibold">{[o.cpe.device.vendor, o.cpe.device.model].filter(Boolean).join(" ")}{o.cpe.device.firmware ? <span className="block text-xs font-normal text-muted">Firmware {o.cpe.device.firmware}</span> : null}</span></span>
                 : <span className="text-muted">Indisponível sem vínculo confirmado com o roteador.</span>}</dd></div>
             <div><dt className="text-xs text-muted">Local</dt><dd>{o.olt.name}<span className="block text-xs text-muted">PON {o.pon?.path ?? "—"}</span></dd></div>
             <div><dt className="text-xs text-muted">Agora</dt><dd><StatusPill value={o.status} /><span className="ml-2 align-middle"><OpticalRuler rx={o.rx_dbm} freshness={o.freshness} agoText={o.observed_at ? ago_(o.observed_at) : null} size="sm" /></span>

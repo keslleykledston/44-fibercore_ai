@@ -100,6 +100,7 @@ def main() -> None:
     cli("feature-set", tenant, "onu_quick_inspector", "on")
     cli("feature-set", tenant, "onu_discovery", "on")   # v2.5: fila de ONUs aguardando autorização (somente leitura)
     cli("feature-set", tenant, "profile_studio", "on")   # ADR-0040: Profile Studio (somente leitura/rascunho/simulação)
+    cli("feature-set", tenant, "device_assets", "on")   # ADR-0041: catálogo de equipamentos (só arte esquemática)
     # Certificação SINTÉTICA da leitura de perfis só para o tenant de demonstração (a OLT de laboratório real NÃO é certificada por aqui).
     cli("capability-set", tenant, "huawei", "MA5800-X7", "R018", "olt", "olt_profile_read", "supported", "observed",
         "--evidence", "seed-demo-sintetico", "--verified-at", datetime.now(UTC).isoformat())
