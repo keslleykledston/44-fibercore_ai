@@ -30,4 +30,10 @@ O `undo service-port` e o `ont delete` concluíram. O `ont delete` está configu
 O texto de uma entrada real de `display ont autofind all` foi capturado (no host do Edge, 0600) e destruído (`shred`) depois de escrever o parser: `olt.autofind` passou a ter parser tipado e fixture sintético no layout real (lista vazia e UMA entrada). `Password`, `Loid` e `Checkcode` da ONT nunca são lidos nem enviados. O layout com várias entradas não foi observado.
 
 ## Verificação independente
-(a preencher com a leitura de 20:12 UTC)
+Leitura somente leitura da OLT feita à parte (sessão própria, depois do intervalo de 15 min e de uma coleta do Edge terminar), cerca de 22 min depois do fim da manobra, com `display ont info by-sn`, `display service-port port 0/0/14 ont 10`, `display service-port 1708` e `display ont autofind all`:
+- ONU `0/0/14`, ONT-ID 10: controle `active`, **online**, config `normal`, match `match`, autenticação por serial, perfil de linha **179**, descrição **`5`**, "última subida" posterior à manobra e duração online coerente com o fim do ciclo.
+- Service-port **1708**: VLAN 1400 `common`, gpon 0/0/14 ONT 10, GEM 1, fluxo `vlan` 1400, tabelas de entrada/saída `-`, admin `enable`, estado **`up`**, `tag-transform translate` — igual ao baseline. É a única service-port da ONU (`Total : 1`).
+- `display ont autofind all`: o serial da ONU **não** está na lista (voltou a ser uma ONU autorizada).
+- Diferença observada, que não é configuração: o campo "ONT IP 0 address/mask" da ONU, que no baseline lido às 18:16 estava `-`, agora mostra o endereço de gerência que a ONU voltou a aprender depois do reboot lógico; endereço não registrado aqui. Nenhuma configuração foi tocada.
+- O perfil de serviço não é impresso por este comando; sua igualdade com o baseline foi conferida pelo próprio Edge no pós-check (`postcheck_ok`).
+O texto cru dessa leitura ficou só na memória do processo e no arquivo temporário local, destruído (`shred`).
