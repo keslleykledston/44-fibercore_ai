@@ -486,3 +486,12 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - API: `test_onu_discovery.py` 12 passed (sync: autoritativo, idempotente por leitura, serial ausente não é tocado, recusas 409 sem gravar nada, futuro, lista vazia), `test_olt_cache.py` 19 passed (inclui `asked_age_seconds`), `test_olt_query.py` 31 passed, `test_noc*.py` 41 passed. Web: `tsc` limpo; projeto `puros` 35 passed (5 do leitor R-D003); e2e `funcional + aparelho` 73 passed, `pendentes` 72 passed, recuo `recuo-onu360` (flag desligada) 1 passed.
 - Produção (LAB), só leitura: `olt.autofind` real pelo caminho completo = lista vazia tipada; sync real 200 com 0 entradas.
 - NÃO verificado: e2e de navegador da R-D003 (sem Edge silencioso no seed da pilha efêmera); ingest com ONU realmente em autofind; layout de várias entradas.
+
+## Frota de OLTs — teste de conexão (ADR-0041 PR2 parte B, 2026-11-02)
+- Codex: 4 rodadas, approve na 4ª (`reviews/raw/504`–`507`). Achados corrigidos: histórico do Edge adulterável; retry com a mesma chave barrado pelo orçamento; rotas genéricas contornavam o orçamento (agora 409 `use_fleet_api`).
+- Automático: Edge `go vet` + `go test ./...` limpos; API 1026 passed no suite completo (1 flake de `test_ping` que passa isolado, 91 ok); `test_fleet_connection.py` 9 e `test_fleet.py` 7; e2e frota 80; validação da ajuda 28 artigos.
+- Deploy LAB (`main` = `851be52`): backup lógico antes; migração head **0046**; API/relay/consumer/web saudáveis, `/livez` 200; Edge `0.1.0-lab-851be52` (1 processo, config inalterada); flags `device_assets` e `fleet_manager` ligadas no tenant LAB.
+- Teste REAL, somente leitura, conta de serviço descartável (desativada ao fim), dentro do orçamento (1 pedido): `POST /v1/fleet/olts/{id}/connection-test` → job `olt_query` → Edge aceitou às 22:43Z e executou na janela entre coletas → `SUCCEEDED` às 23:00Z. Identidade lida: produto `MA5608T`, versão `MA5600V800R015C00`, patch `SPC100 HP1013`; igual ao modelo/firmware já coletados (`matches_collected = true`). Linha `submitted` em `olt_connection_tests`; cache `olt_query_latest` com `source = job`.
+- Observação: a espera até ~17 min é o desenho (OLT frágil: leitura de fila só entre coletas); a tela mostra "Aguardando o Edge". Não é falha.
+- Roteiro de retry/429 (mesma chave → `existing`; chave nova → 429) rodou no script, mas a saída foi perdida (token de serviço expirou durante a espera); essas duas respostas estão provadas pelos testes automáticos, não pelo LAB.
+- NÃO verificado: UI de Frota/teste na LAB por trás do MFA (cabe ao responsável).
