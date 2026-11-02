@@ -301,3 +301,7 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 ## Atualização 2026-11-02 (noite 7): PR2 parte B no ar (`main` = `851be52`)
 - Teste de conexão da OLT entregue e provado na LAB (identidade real `MA5608T`/`MA5600V800R015C00`, ver TEST_EVIDENCE). Migração 0046, Edge `0.1.0-lab-851be52`, API/web juntos. Flags `device_assets` e `fleet_manager` LIGADAS no tenant LAB. Orçamento 1/15 min e 4/h nos dois lados.
 - Próximo: PR3 (drivers só leitura; só com fixture sanitizada de equipamento real de laboratório — sem isso fica `identified`). Depende do responsável: validar a UI da Frota na LAB atrás do MFA; fixtures/equipamentos de outros fabricantes; demais itens da seção anterior.
+
+## Atualização 2026-11-02 (noite 8): PR3 avaliado — bloqueado por hardware (sem código)
+- ADR-0041 §4.0 e `OLT_CAPTURE_REQUEST.md` ("Prioridade atual") registram: sem OLT real de outro fabricante e sem PON vazia na MA5608T, o PR3 não pode avançar sem inventar fixture. Registry inalterado (tudo `identified`). Desbloqueio = responsável (acesso/captura).
+- Próximo executável sem hardware: PR4 (sidebar da ONU/ONT com miniatura por modelo; demais OLT = miniatura + tabela), PR5 (base de conhecimento), PR6 (matriz L0–L4 e observabilidade).
