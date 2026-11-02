@@ -69,9 +69,10 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
         </div>}
         <Card title="Estado" testid="onu360-state">
           <dl>
-            <Row k="Status"><StatusPill value={o.status} /></Row>
-            <Row k="Potência recebida (Rx)">{o.rx_dbm !== null ? `${o.rx_dbm} dBm` : "—"}</Row>
-            <Row k="Último dado"><DataFreshness freshness={o.freshness} observedAt={o.observed_at} /></Row>
+            {/* com a identificação no alto (newUx) o status, o Rx e a idade do dado já estão ali: aqui ficam só as linhas que o alto não tem */}
+            {!newUx && <Row k="Status"><StatusPill value={o.status} /></Row>}
+            {!newUx && <Row k="Potência recebida (Rx)">{o.rx_dbm !== null ? `${o.rx_dbm} dBm` : "—"}</Row>}
+            {!newUx && <Row k="Último dado"><DataFreshness freshness={o.freshness} observedAt={o.observed_at} /></Row>}
             <Row k="Visto online pela última vez">{when(o.last_online_at)}</Row>
             {o.down_since && <Row k="Fora do ar desde">{when(o.down_since)}</Row>}
             <Row k="Origem do dado"><SourceChip p={o.provenance.state} /></Row>
@@ -79,10 +80,10 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
         </Card>
         <Card title="Localização" testid="onu360-location">
           <dl>
-            <Row k="OLT">{o.olt.name}</Row>
+            {!newUx && <Row k="OLT">{o.olt.name}</Row>}
             <Row k="Equipamento">{o.olt.vendor} {o.olt.model ?? ""}{o.olt.firmware ? ` · ${o.olt.firmware}` : ""}</Row>
             <Row k="Nível do driver"><StatusPill value={o.olt.support_level} /></Row>
-            <Row k="PON">{o.pon?.path ?? "—"}</Row>
+            {!newUx && <Row k="PON">{o.pon?.path ?? "—"}</Row>}
             {o.pon && <Row k="ONUs na PON"><span>{o.pon.online} online de {o.pon.onus}</span> {o.provenance.pon && <SourceChip p={o.provenance.pon} />}{o.pon.freshness === "stale" && <span className="block text-xs text-warn">Último estado conhecido, não o atual.</span>}</Row>}
             <Row k="Coleta da OLT"><SourceChip p={o.provenance.olt} /></Row>
           </dl>
