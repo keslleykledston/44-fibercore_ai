@@ -117,7 +117,12 @@ test("ONU 360: painel lateral abre pelo serial, foco volta ao fechar e a página
   await expect(page).toHaveURL(/\/rede\/onu\/[0-9a-f-]{36}$/);
   await expect(page.getByRole("heading", { name: "ONU DEMOA0001" })).toBeVisible();
   await expect(page.getByTestId("onu360-state")).toContainText("Leitura da OLT pelo Edge");
-  await expect(page.getByTestId("onu360-identity")).toContainText("OLT-DEMO-01");   // a OLT e a PON estão na identificação do alto
+  // o que saiu dos cartões continua na tela, na identificação e no painel frontal do alto: OLT, PON, status, Rx e a idade do dado
+  await expect(page.getByTestId("onu360-identity")).toContainText("OLT-DEMO-01");
+  await expect(page.getByTestId("onu360-identity")).toContainText("PON 0/1/0");
+  await expect(page.getByTestId("onu360-identity")).toContainText("Online");
+  await expect(page.getByTestId("onu360-identity")).toContainText(/Atualizado|há \d+|defasado|Último estado/);
+  await expect(page.getByTestId("onu360-faceplate")).toContainText("Rx (dBm)");
   await expect(page.getByTestId("onu360-location")).toContainText("Equipamento");
   await expect(page.getByTestId("onu360-location").getByText("OLT", { exact: true })).toHaveCount(0);
   await expect(page.getByTestId("onu360-state").getByText("Status", { exact: true })).toHaveCount(0);
