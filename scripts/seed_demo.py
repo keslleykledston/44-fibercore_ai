@@ -85,6 +85,7 @@ def main() -> None:
     cli("feature-set", tenant, "onu_quick_inspector", "on")
     cli("feature-set", tenant, "speed_diagnostics", "on")   # só a tela: o teste continua bloqueado (o aparelho demo não é de bancada)
     cli("feature-set", tenant, "quality_diagnostics", "on")   # leitura passiva (ADR-0039): só lê o cache e a OLT sintéticos
+    cli("feature-set", tenant, "quality_active_tests", "on")   # só a TELA do ping (ADR-0039): o aparelho demo não é de bancada, então o teste segue indisponível
     r = c.post("/v1/edge/cpe-snapshots", headers=h, json={"edge_id": edge, "observed_at": datetime.now(UTC).isoformat(), "cpes": [
         {"canonical_serial": f"DEMOCPE{i:03d}", "vendor": "Huawei", "model": "HG8245H",
          "binding": {"protocol": "tr069", "external_id": f"DEMO-OUI-HG8245H-DEMOCPE{i:03d}", "connector_id": "genieacs-demo"}} for i in range(5)]

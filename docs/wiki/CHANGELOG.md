@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — teste de UI do ping e correção do BFF que impedia a tela de carregar (2026-11-02)
+- **Correção (bug real):** o BFF `/bff/cpes/{id}/ping` devolvia as capacidades já tratadas, e `PingTestSection` as tratava de novo esperando o formato bruto da API: a leitura voltava `null` e a aba **Ping e latência** do Diagnóstico mostrava sempre "Não foi possível carregar o teste de ping". Achado pelo primeiro e2e de UI do ping (o estado REAL). Agora o BFF valida e envia o corpo bruto da API (`caps`) e a lista (`runs`). A LAB ainda roda o web anterior: precisa de novo deploy do web.
+- Testes: `e2e/ping.spec.ts` (6): estado REAL indisponível no aparelho demo (com axe), pedido que envia só `{key, target_id}`, resultado com traço no lugar de número ausente, 502 ambíguo com **Confirmar pedido** repetindo a MESMA chave e o MESMO destino, trava que só sai quando uma leitura mostra ESSA execução (nunca pelo relógio, nunca pela execução de outra pessoa), recusa 409 sem trava. O seed do e2e passa a ligar `quality_active_tests` no provedor demo (só a tela; o aparelho demo segue sem homologação). Inspetor completo: 55 passed, 2 skipped (os de flag desligada).
+
 ## Unreleased — aba Histórico na Visão 360 do assinante (2026-11-02)
 - Web: `/assinantes/[id]` ganha a aba **Histórico** (30 dias de mudanças de estado da ONU, o mesmo componente, a mesma rota e a mesma flag `onu_quick_inspector` do painel da Rede). Só existe com ONU aprovada e a flag ligada; o Wi-Fi continua sem aba (sem fonte homologada). Nenhuma rota nova. E2E funcional: 32 passed (o teste da Visão 360 abre a aba, confere as quedas e a primeira observação, e passa pelo axe nela). Recuo provado (`ASSINANTE_HISTORICO_FLAG_OFF=1`, spec `assinante-historico-flag`): com `onu_quick_inspector` desligada a aba não existe, `?aba=historico` cai na Conexão e nenhum pedido de histórico sai; com a flag ligada o mesmo teste falha (controle negativo).
 

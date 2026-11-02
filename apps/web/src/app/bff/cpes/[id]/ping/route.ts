@@ -15,7 +15,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   if (c.data && r.data) {
     const caps = readPingCaps(c.data), runs = readPingRuns(r.data);
     const run_seen = one ? (one.status === 200 ? true : one.status === 404 ? false : null) : null;
-    return caps && runs ? reply({ caps, runs, run_seen }) : reply({ error: "failed" }, 502);
+    // validado aqui E de novo na tela: o corpo que segue é o da API (a tela lê o formato bruto), nunca o objeto já tratado (a tela o recusaria)
+    return caps && runs ? reply({ caps: c.data, runs: (r.data as { items: unknown[] }).items, run_seen }) : reply({ error: "failed" }, 502);
   }
   const bad = c.status !== 200 ? c : r;   // o status/código da leitura que FALHOU (uma delas respondeu erro; se as duas responderam 200, o corpo é que não tem o formato)
   const st = c.status === 200 && r.status === 200 ? 502 : bad.status;
