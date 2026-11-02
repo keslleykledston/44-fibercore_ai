@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19e18-cbca-7d10-ab14-c270b19c8af5).
+[codex] Turn started (01a19e18-cc05-7d63-afd6-fdabe28a1ae0).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir o fluxo atual de validação dos membros do ZIP, ...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff -- scripts/audit_device_package.py mai...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff -- scripts/audit_device_package.py mai... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff main...HEAD -- scripts/audit_device_package.py && git status --short ...
+[codex] Command completed: /bin/bash -lc 'git diff main...HEAD -- scripts/audit_device_package.py && git status --short ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviaria ainda: a validação ignora entradas de di...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviaria ainda: a validação ignora entradas de diretório do ZIP, então caminhos inseguros podem passar sem serem examinados.
+
+Findings:
+- [medium] Entradas de diretório do ZIP escapam da validação de caminhos (scripts/audit_device_package.py:30-32)
+  `bind_to_zip` remove diretórios com `i.is_dir()` antes de chamar `safe_member`. Assim, um ZIP pode conter uma entrada explícita de diretório com caminho como `../` ou `a/.. ` e ainda passar pela verificação se os arquivos regulares forem válidos. Isso contradiz a garantia de rejeitar caminhos inseguros no ZIP e pode deixar o pacote perigoso para consumidores que o extraiam. A auditoria atual não extrai o ZIP, então o risco depende desses consumidores, mas o validador não os protege contra essas entradas.
+  Recommendation: Validar `safe_member` em todas as entradas de `infolist()` antes de filtrar diretórios; aplicar a checagem de duplicatas considerando também entradas de diretório.

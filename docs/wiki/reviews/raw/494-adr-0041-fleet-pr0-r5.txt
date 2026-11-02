@@ -1,0 +1,19 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19e18-4ebb-7690-8f29-ce61f8adbfda).
+[codex] Turn started (01a19e18-4ef4-7ab0-97c7-55c910b97ea3).
+[codex] Assistant message captured: Vou comparar o diff com `main` e rastrear a validação de nomes até a auditoria do ZIP, procur...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- scripts/audit_device_packag...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- scripts/audit_device_packag... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: `safe_member()` não bloqueia aliases ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: `safe_member()` não bloqueia aliases de traversal em extrações Windows que removem espaços ou pontos finais dos segmentos. A auditoria pode aceitar esses nomes apesar de afirmar que são seguros em qualquer sistema.
+
+Findings:
+- [high] Segmentos com espaços finais podem virar `..` em extrações Windows (scripts/audit_device_package.py:15)
+  A validação rejeita o segmento literal `..`, mas aceita variantes como `".. "` ou `".. ."`. Em caminhos Windows, espaços e pontos finais podem ser removidos na normalização; se o extrator aplicar essa normalização, um membro como `root/.. /outside` pode sair da pasta raiz. Isso quebra a garantia usada para auditar o conteúdo extraído e pode sobrescrever arquivos fora dela. Rejeite segmentos após normalizá-los com as regras do sistema-alvo, ou restrinja os nomes a uma forma portátil canônica antes de aceitar o ZIP.
+  Recommendation: Adicione validação de segmentos que também rejeite componentes que se tornam vazios, `.` ou `..` após remover espaços e pontos finais; inclua casos adversariais com esses sufixos e valide a extração no Windows.

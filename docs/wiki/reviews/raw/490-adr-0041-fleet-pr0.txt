@@ -1,0 +1,38 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19e15-f6a3-7243-89f9-49ddea4f6609).
+[codex] Turn started (01a19e15-f6dd-7080-8906-24e06fe18ac9).
+[codex] Assistant message captured: Vou conferir a ADR contra o conteúdo atual do repositório e os ADRs citados, priorizando afir...
+[codex] Running command: /bin/bash -lc 'git diff main -- docs/wiki/adr/ADR-0041-fleet-manager-e-biblioteca-visual-mult...
+[codex] Command completed: /bin/bash -lc 'git diff main -- docs/wiki/adr/ADR-0041-fleet-manager-e-biblioteca-visual-mult... (exit 0)
+[codex] Running command: /bin/bash -lc 'for f in docs/wiki/adr/ADR-0029-canal-de-execucao-de-consultas-da-olt.md docs/...
+[codex] Command completed: /bin/bash -lc 'for f in docs/wiki/adr/ADR-0029-canal-de-execucao-de-consultas-da-olt.md docs/... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"secret_file|secret|olts\\[|CREATE TABLE.*olts|device_capabilities|olt....
+[codex] Command completed: /bin/bash -lc "rg -n \"secret_file|secret|olts\\[|CREATE TABLE.*olts|device_capabilities|olt.... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/alembic/versions/0005_inventory.py | head -55; nl -ba apps/api...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/alembic/versions/0005_inventory.py | head -55; nl -ba apps/api... (exit 0)
+[codex] Running command: /bin/bash -lc "rg --files | rg 'asset-manifest|external-photography|visual/|\\.svg"'$'"' | he...
+[codex] Command completed: /bin/bash -lc "rg --files | rg 'asset-manifest|external-photography|visual/|\\.svg"'$'"' | he... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: a auditoria do pacote não é reprod...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: a auditoria do pacote não é reproduzível no branch e o plano do teste de conexão omite limites obrigatórios para proteger a OLT.
+
+Findings:
+- [high] Contagens e varredura do pacote não têm evidência no branch (docs/wiki/adr/ADR-0041-fleet-manager-e-biblioteca-visual-multivendor.md:18-21)
+  A ADR afirma checksums 204/204, 69 SVG e 69 PNG, 70 entradas no manifesto e zero SVG suspeitos, mas os arquivos citados (`asset-manifest.json`, `visual/sources/external-photography.json` e os ativos do pacote) não estão presentes no repositório. Sem o pacote ou um relatório reproduzível versionado, essas afirmações não podem ser verificadas; aprová-las como auditoria pode levar a distribuir ativos ausentes ou não inspecionados.
+  Recommendation: Adicionar o pacote auditado ao repositório ou registrar sua origem imutável e um relatório reproduzível com hashes, contagens, IDs e resultados da varredura; caso contrário, remover as afirmações quantitativas.
+- [high] O teste de conexão não herda explicitamente os limites operacionais da OLT (docs/wiki/adr/ADR-0041-fleet-manager-e-biblioteca-visual-multivendor.md:11)
+  PR2 propõe executar um novo teste de conexão pelo Edge «no mesmo desenho do `olt_query`», mas não especifica cache-first, arbitragem na mesma sessão de coleta, limites por sessão/hora, cooldown, lock exclusivo ou cota de refresh. ADR-0029 e ADR-0032 tratam esses controles como necessários porque a OLT é frágil e compartilhada. Se o novo fluxo abrir sessões ou repetir tentativas sem esses limites, pode atrasar a coleta e degradar o equipamento; chamar a operação de leitura não contém esse risco.
+  Recommendation: Condicionar o PR2 a reutilizar explicitamente o canal, a fila, os arrendamentos e os limites de ADR-0029/0032, incluindo cache/cotas; documentar um orçamento próprio aprovado antes de implementar qualquer caminho de execução.
+- [medium] A decisão sobre escritas remete a um ADR ainda proposto (docs/wiki/adr/ADR-0041-fleet-manager-e-biblioteca-visual-multivendor.md:28)
+  D4 condiciona escrita a homologação e emenda do ADR-0030, mas esse ADR está marcado como `Proposed (aguarda Codex gate)`. A redação pode ser lida como se já houvesse um caminho de escrita aprovado; isso conflita com a exigência de autorização formal e deixa ambíguo qual gate está vigente. A restrição reduz o risco imediato, mas a decisão registra um pré-requisito como se fosse política estabelecida.
+  Recommendation: Dizer que nenhuma escrita fica autorizada por esta ADR e que qualquer proposta futura depende da aprovação formal do ADR-0030 e de sua emenda específica antes de habilitar operações.
+
+Next steps:
+- Tornar a auditoria do pacote verificável a partir do branch ou de uma referência imutável com relatório reproduzível.
+- Especificar os controles de sessão, cache, cota e exclusão mútua do teste de conexão antes de iniciar PR2.
+- Ajustar a referência normativa ao ADR-0030 para refletir seu status proposto.
