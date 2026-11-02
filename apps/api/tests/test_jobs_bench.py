@@ -761,3 +761,25 @@ def test_first_run_cli_uses_the_olt_profile_for_olt_operations(client, seed, inv
     cli.main(argv)                                       # the OLT's identified entry is the one it needs
     with migrated.begin() as c:
         assert c.execute(text("SELECT first_run FROM bench_authorizations WHERE operation = 'onu_reset'")).scalar() is True
+
+
+def test_a_bench_write_accepted_and_never_finished_becomes_unknown_and_locks_the_target(client, seed, inv, migrated):
+    """FC22-015: the Edge accepted a bench write and went quiet. After STALE_AFTER the job is UNKNOWN (a late report is refused) and the target stays write-locked until the
+    owner reconciles it; the clock never releases it."""
+    cpe, h, jid = _dispatched(client, seed, inv, migrated)
+    a = agent(client, inv, "a1")
+    assert client.post(f"/v1/edge/jobs/{jid}/result", headers=a, json={"state": "accepted"}).status_code == 204
+    assert client.get("/v1/edge/jobs/next", headers=a).status_code == 204                                   # recent: nothing changes
+    with migrated.begin() as c:
+        assert c.execute(text("SELECT status FROM jobs WHERE id = :j"), {"j": jid}).scalar() == "ACCEPTED"
+        assert c.execute(text("SELECT write_locked FROM bench_targets")).scalar() is False
+        c.execute(text("UPDATE jobs SET updated_at = now() - interval '31 minutes' WHERE id = :j"), {"j": jid})
+    assert client.get("/v1/edge/jobs/next", headers=a).status_code == 204                                   # the sweep runs here
+    with migrated.begin() as c:
+        assert c.execute(text("SELECT status FROM jobs WHERE id = :j"), {"j": jid}).scalar() == "UNKNOWN"
+        locked, why = c.execute(text("SELECT write_locked, lock_reason FROM bench_targets")).one()
+    assert locked is True and "never finished" in why
+    assert client.post(f"/v1/edge/jobs/{jid}/result", headers=a, json={"state": "succeeded", "postcheck_ok": True}).status_code == 409   # a late report is refused
+    nxt = _preview(client, h, cpe).json()["id"]
+    r = client.post(f"/v1/jobs/{nxt}/submit", headers=h)
+    assert r.status_code == 409 and r.json()["detail"] == "target_write_locked"                             # no new write until the owner reconciles it

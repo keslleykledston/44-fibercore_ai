@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19ad7-cb6a-7341-8121-8cc19dcdf6dc).
+[codex] Turn started (01a19ad7-cba4-7393-ad8f-c00e83c2a0db).
+[codex] Assistant message captured: Vou ler as instruções do repositório e o diff contra `main`, concentrando a revisão nos estad...
+[codex] Running command: /bin/bash -lc "pwd && rg --files -g 'AGENTS.md' -g '"'!**/.git/**'"' && git status --short &&...
+[codex] Command failed: /bin/bash -lc "pwd && rg --files -g 'AGENTS.md' -g '"'!**/.git/**'"' && git status --short &&... (exit 1)
+[codex] Running command: /bin/bash -lc "rg --files -g 'AGENTS.md' -g '"'!**/.git/**'"' || true; git status --short; gi...
+[codex] Command completed: /bin/bash -lc "rg --files -g 'AGENTS.md' -g '"'!**/.git/**'"' || true; git status --short; gi... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"def result|updated_at|LIVE_FOR|pg_advisory|CREATE TABLE jobs|jobs \\(\...
+[codex] Command completed: /bin/bash -lc "rg -n \"def result|updated_at|LIVE_FOR|pg_advisory|CREATE TABLE jobs|jobs \\(\... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '430,535p'; nl -ba apps/api/app/api/j...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '430,535p'; nl -ba apps/api/app/api/j... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: após 30 minutos, o código libera o...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: após 30 minutos, o código libera o alvo sem encerrar nem invalidar a escrita anterior, permitindo duas operações no mesmo dispositivo se a primeira ainda estiver ativa.
+
+Findings:
+- [high] A janela de 30 minutos pode liberar um alvo com uma escrita ainda ativa (apps/api/app/api/jobs.py:65-68)
+  `LIVE_FOR` só deixa de considerar o job na exclusão; não muda seu estado nem invalida o envelope já enviado. Assim, se uma escrita legítima continuar executando após 30 minutos sem transição de estado, `/next` pode despachar outra escrita para o mesmo alvo enquanto a anterior ainda age no dispositivo. O risco é inferido porque o diff não estabelece um limite máximo de execução nem um mecanismo de fencing que impeça a operação antiga de continuar. Isso quebra a garantia de uma escrita por alvo e pode causar alterações concorrentes ou inconsistentes. Antes de liberar o alvo, estabeleça um limite de execução compatível com as operações e garanta que a operação antiga não possa mais executar; caso contrário, mantenha a exclusão até reconciliação segura.
+  Recommendation: Defina e aplique uma recuperação que encerre ou reconcilie o job antigo e impeça sua execução tardia antes de permitir outro despacho no alvo; documente e valide o limite máximo de execução de cada operação.
+
+Next steps:
+- Revisar o timeout de 30 minutos contra a duração máxima e o comportamento de retry das escritas no Edge; adicionar fencing ou reconciliação antes de liberar o alvo.

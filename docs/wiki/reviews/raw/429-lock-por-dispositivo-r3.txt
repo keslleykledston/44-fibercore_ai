@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19adb-72d1-7b61-8129-545b57ece8af).
+[codex] Turn started (01a19adb-730a-7970-bf18-a5294b6dffab).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de despacho, fencing e relato tardi...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/api/a...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=80 main...HEAD -- apps/api/a... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"def result|ACCEPTED|DEVICE_PENDING|VERIFYING|updated_at|UNKNOWN|EXPIRE...
+[codex] Command completed: /bin/bash -lc "rg -n \"def result|ACCEPTED|DEVICE_PENDING|VERIFYING|updated_at|UNKNOWN|EXPIRE... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '450,555p'; nl -ba apps/api/alembic/v...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '450,555p'; nl -ba apps/api/alembic/v... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/agent/agent.go | sed -n '115,190p'; nl -ba agents/...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/agent/agent.go | sed -n '115,190p'; nl -ba agents/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar: o timeout reconcilia o estado no Cloud, ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar: o timeout reconcilia o estado no Cloud, mas não cerca uma escrita que o Edge já iniciou; após 30 minutos outra escrita pode ser despachada enquanto a primeira ainda atua no dispositivo.
+
+Findings:
+- [high] UNKNOWN libera o alvo sem cercar a execução anterior (apps/api/app/api/jobs.py:351-354)
+  O sweep muda `ACCEPTED`/`DEVICE_PENDING`/`VERIFYING` para `UNKNOWN`, removendo o job da lista de estados que bloqueiam novo despacho. A validade do envelope limita quando o Edge pode iniciá-lo, mas não encerra uma escrita já iniciada. No Edge, jobs de bancada são executados após o aceite, e várias operações aguardam resposta do dispositivo; se a execução ultrapassar 30 minutos ou ficar sem relato enquanto ainda está ativa, o próximo `/next` pode liberar e despachar outra escrita para o mesmo alvo. Isso quebra a garantia de uma escrita por alvo e pode causar efeitos concorrentes. A possibilidade de execução prolongada é uma inferência: o diff não mostra um limite rígido de duração que garanta cessação antes do sweep. Mantenha o alvo bloqueado até reconciliação que prove cessação, ou aplique fencing/limite de execução no executor que impeça a operação antiga de continuar antes de liberar o alvo.
+  Recommendation: Não use apenas a transição para `UNKNOWN` como critério para liberar o alvo. Defina e imponha um limite de execução/fencing no Edge ou exija reconciliação explícita antes de permitir novo despacho; cubra o caso de uma escrita ainda ativa após 30 minutos.
+
+Next steps:
+- Rever a política de liberação do alvo para garantir que uma escrita anterior não possa continuar atuando quando um novo job for despachado.
