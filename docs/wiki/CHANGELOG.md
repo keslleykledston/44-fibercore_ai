@@ -6,6 +6,7 @@
 - API: `GET /v1/fleet/olts/{id}/connection-tests` (últimos pedidos com o estado do job, identidade mais recente, orçamento). A identidade lida é comparada com a que a coleta já tinha (`matches_collected`: confere / diverge / sem coleta); o fabricante é o do cadastro (a leitura não o informa).
 - Web: cartão **Teste de conexão** no detalhe da OLT (botão desligado pelo orçamento, "Aguardando o Edge", identidade e divergência), ajuda e capturas reais.
 - Provas: Edge `go vet` + `go test ./...` limpos (4 testes novos do orçamento); API 1025 passed (7 novos: flag/papéis, job pelo motor existente, 429 sem criar job, 1/15 min e 4/h, cache sem gastar, divergência, mock/antigo/malformado nunca viram resposta, rollout/tenant); e2e `frota` + dependências 80 passed.
+- Endurecimento (Codex r2–r4): retry com a mesma `Idempotency-Key` devolve o job já criado antes do orçamento; `olt.connection` só é pedida pela rota da Frota (`/v1/jobs/preview` e `/v1/olts/{id}/queries/olt.connection` respondem 409 `use_fleet_api`); histórico de testes do Edge adulterado = `ErrCorrupt` (orçamento gasto). API 1026 passed.
 - Ainda NÃO provado em campo: o teste real contra a OLT do laboratório (depende de API e Edge trocados juntos e da janela de coleta).
 
 

@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19e5e-467e-7ca2-971b-5807a399c485).
+[codex] Turn started (01a19e5e-46b6-7321-a87b-4d5e81e6f0d3).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os caminhos de persistência/concorrência entre Edg...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=50 main...HEAD -- agents/edge/internal/oltque...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=50 main...HEAD -- agents/edge/internal/oltque... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=8 main...HEAD -- apps/api/app/api/fleet.py ag...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=8 main...HEAD -- apps/api/app/api/fleet.py ag... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/fleet.py | sed -n '225,285p'; rg -n \"def create_previ...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/fleet.py | sed -n '225,285p'; rg -n \"def create_previ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: o caminho de repetição com a mesma...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: o caminho de repetição com a mesma chave de idempotência pode ser recusado pelo orçamento antes de recuperar o job já criado, quebrando retries seguros.
+
+Findings:
+- [medium] Orçamento é aplicado antes de resolver a idempotência (apps/api/app/api/fleet.py:256-262)
+  Após o primeiro pedido, o registro `submitted` já eleva o orçamento. Se o cliente repetir a mesma chave — por timeout ou retry — dentro dos 15 minutos, esta rota retorna 429 antes de `jobs.create_preview` poder localizar e devolver o job existente. Isso contradiz o comentário de que a mesma chave não gasta novamente e torna a recuperação do resultado dependente de um novo GET/histórico; retries podem ser apresentados como falha mesmo com o pedido aceito. Resolva a chave/job existente antes de aplicar o limite, mantendo a trava transacional e validando que a chave corresponde ao mesmo intent.
+  Recommendation: Sob a trava por OLT, consulte/reconcilie primeiro o job pela chave de idempotência; só aplique o orçamento e crie/submeta um job quando não houver pedido correspondente.

@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19e5c-f3a8-7272-b38f-cafc4c3bdfd7).
+[codex] Turn started (01a19e5c-f611-7a12-823b-fd37f4c80bcb).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os fluxos de orçamento, idempotência, autorizaç...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=60 main...HEAD -- agents/edge/internal/oltque...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=60 main...HEAD -- agents/edge/internal/oltque... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- apps/api/app/api/fleet.py'
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- apps/api/app/api/fleet.py' (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=10 main...HEAD -- agents/edge/internal/olt/qu...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=10 main...HEAD -- agents/edge/internal/olt/qu... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '195,228p' agents/edge/internal/oltquery/store.go; sed -n '100,118p' ap...
+[codex] Command completed: /bin/bash -lc "sed -n '195,228p' agents/edge/internal/oltquery/store.go; sed -n '100,118p' ap... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a proteção de orçamento no Edge ac...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a proteção de orçamento no Edge aceita histórico de testes malformado e pode voltar a autorizar consultas após corrupção local do arquivo.
+
+Findings:
+- [high] Histórico de orçamento malformado no Edge é aceito como válido (agents/edge/internal/oltquery/store.go:150-175)
+  `load` valida `Claims`, mas não valida `Tests`. Um timestamp zero válido em JSON passa pela leitura e é descartado por `Claim` como mais antigo que uma hora; timestamps fora de ordem também fazem o teste de intervalo usar o último elemento, não o mais recente. Assim, corrupção ou edição do arquivo pode apagar efetivamente o orçamento e permitir consultas antes do intervalo ou acima do limite. Isso contraria a regra de que arquivo ilegível ou não confiável significa orçamento gasto.
+  Recommendation: Validar `Tests` ao carregar: rejeitar referências vazias, timestamps zero/futuros ou fora de ordem e qualquer formato inconsistente com `ErrCorrupt`; ao calcular o intervalo, usar o timestamp mais recente validado.
