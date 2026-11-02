@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased — status e roadmap atualizados contra o código (2026-11-02)
+- Docs: `IMPLEMENTATION_STATUS.md` ganhou a seção "Estado atual" (o resto virou histórico) e `ROADMAP_BACKLOG.md` teve as linhas desatualizadas corrigidas (W9, FC22-003/005/006/009, FC24-02, QI-02) e uma seção de 2026-11-02 que separa o que depende de bancada, de decisão, de construção e de dado que ninguém coleta. Cada correção veio de leitura do código ou dos arquivos versionados; o que não foi verificado está dito como tal.
+
 ## Unreleased — capturas da ajuda regeneradas (2026-11-02)
 - Docs: as capturas (desktop e mobile) de 10 artigos foram regeneradas do sistema funcionando (seed sintético, nenhum dado real) para refletir o verde `--ok` novo, a régua compacta na lista da Rede, a ONU 360° sem os cartões de banda e qualidade e a aba Histórico. `last_verified` desses artigos = 2026-11-02. `tests/validate_help.py`: PASS. Os artigos ainda em rascunho continuam em rascunho.
 

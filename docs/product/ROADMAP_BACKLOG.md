@@ -84,7 +84,7 @@ Inventário em 2026-10-28: backend/Edge/jobs/ERP/NOC prontos e testados; **nenhu
 - [x] W6 Tela NOC: fila de incidentes (silêncio de Edge ≠ offline) + How-to `noc/acompanhar-incidente`.
 - [x] W7 Tela Administração/Módulos + How-to `administracao/saude-modulos`.
 - [x] W8 Telas Assinantes (importar CSV, revisar vínculos) e Operações (jobs; escrita bloqueada visível) com How-to (importar CSV, revisar associações) e Jobs (preview/aprovação; escrita bloqueada visível) com How-to.
-- [ ] W9 Hardening de publicação: MFA/refresh/rate-limit, CSP, HSTS (só após TLS real), DNS/TLS/ACME reais, Codex PASS.
+- [~] W9 Hardening de publicação (conferido em 2026-11-02 no código e nos arquivos versionados): **feito** MFA TOTP com códigos de recuperação (`apps/api/app/core/mfa.py`, `/v1/auth/mfa/*`, e2e), refresh token rotativo com revogação de família (`/v1/auth/refresh`, e2e), lockout por conta e throttle por IP no app, `limit_req` por zona no nginx versionado, CSP e HSTS no nginx versionado (`infra/deploy/nginx`). **Falta/aberto:** CSP ainda com `'unsafe-inline'` (precisa de nonces no Next), HSTS sem `includeSubDomains`/preload, rate-limit por agente do Edge (`/v1/edge/*`), e a prova de TLS/ACME reais no domínio (não verificada aqui: só li a configuração). Gate de publicação formal continua pendente (`infra/deploy/PRODUCTION_CHECKLIST.md`).
 
 ## v2.2 — Adendo de benchmark ACS/FTTH (integrado em 2026-10-29)
 
@@ -94,13 +94,13 @@ Fonte: `docs/addenda/v2.2/` (pacote intacto). Análise: `docs/addenda/v2.2/GAP_A
 |---|---|---|---|---|
 | FC22-001 | P0 | [x] análise de GAP/conflitos/ADRs (PR 34) | S0 | — |
 | FC22-002 | P0 | [~] **fatia mínima implementada (PR 35)**: tabela `device_capabilities` (RLS, leitura-only p/ a app), `GET /cpes/{cpeId}/capabilities` e `/olts/{oltId}/capabilities`, CLI `capability-set` com evidência, bloco na ONU 360. **Faltam**: cobertura TR-369/Wi-Fi, gate por perfil nos jobs, Edge alimentando o registro | S0/S1 | 001 |
-| FC22-003 | P0 | [~] envelope `provenance{source,observed_at,quality}` na ONU 360 (PR 36); falta nas demais respostas/telas | S1 | 001 |
+| FC22-003 | P0 | [~] envelope `provenance{source,observed_at,quality}` em `inventory.py` e `context.py` (ONU 360, contexto do cliente); os módulos novos (speed, qualidade, ping) têm `source`/`quality` próprios. Falta nas demais respostas. **O envelope dos EVENTOS (relay) segue sem `source`/`quality`: precisa de decisão de contrato** (o schema v2.2 é plano e diferente do envelope atual, e `quality` não tem sentido para eventos como `account.deactivated`); não inventado | S1 | 001 |
 | FC22-004 | P0 | [x] PR 37: `/v1/customers/{id}/context` + vínculo ONU↔CPE por evidência com confirmação humana (flags `onu_cpe_links`/`customer_context`, desligadas por padrão); falta: regras de vínculo além de serial igual | S1 | 002, 003 |
-| FC22-005 | P0 | [x] PR 38: `/assinantes/[id]` (entrada por cliente, abas Conexão/Óptica/Roteador/Cliente/Ações só com dado, flag `subscriber_360`); falta: busca por cliente/contrato no ⌘K, Wi-Fi e Histórico (sem fonte homologada) | S1 | 004 |
-| FC22-006 | P0 | [x] PR 39: R-D001 v1 extraída (função pura; o correlator a usa sem mudar comportamento), registro versionado, `diagnostic_runs` append-only, `POST /diagnostics/runs` somente-leitura + replay (flag `diagnostic_engine`). Faltam: R-D002..004 (dependem de dados Wi-Fi/WAN/sessão ACS ainda não coletados), UI (FC22-007) | S2 | 002–004 |
+| FC22-005 | P0 | [x] PR 38: `/assinantes/[id]` (entrada por cliente, abas Conexão/Óptica/Roteador/Cliente/Ações só com dado, flag `subscriber_360`); busca por cliente no ⌘K **feita** (`CommandPalette` + `/bff/search/customers`); aba **Histórico feita em 2026-11-02** (30 dias de mudanças de estado, mesma rota/flag do painel da Rede, recuo provado); falta: busca por contrato e Wi-Fi (sem fonte homologada) | S1 | 004 |
+| FC22-006 | P0 | [x] PR 39: R-D001 v1 extraída (função pura; o correlator a usa sem mudar comportamento), registro versionado, `diagnostic_runs` append-only, `POST /diagnostics/runs` somente-leitura + replay (flag `diagnostic_engine`). R-D002 v1 (WAN informada pelo CPE) e, em 2026-11-02, **R-D003 v1** (Edge sem sinal) e **R-D004 v1** (ONU online e CPE sem Inform recente, com o `_lastInform` do próprio ACS gravado em `cpes.last_inform_at`, migração 0039). **O Edge da LAB ainda não foi reimplantado**: até lá a R-D004 responde "desconhecido". Falta mostrar R-D003/R-D004 na tela do diagnóstico guiado | S2 | 002–004 |
 | FC22-007 | P0 | [x] PR 40: `/assinantes/diagnostico/[id]` (5 passos, Confirmado/Hipótese/Indisponível, resumo para ticket; só R-D001; sem timeline) | S2 | 006 |
 | FC22-008 | P0 | [x] validado contra AC-004/009 (`docs/addenda/v2.2/AC_VALIDATION_FC22-008.md`; +1 teste); lacunas declaradas: R-D003 como regra, R-D004, impacto (FC22-009) | S2 | — |
-| FC22-009 | P0 | [x] PR 42: `/noc` com 4 KPIs, fila priorizada (ordem documentada), impacto (clientes distintos por associações aprovadas, Edge silencioso fora do impacto atual) e painel lateral; falta: ack pela UI | S2 | 008, 004 |
+| FC22-009 | P0 | [x] PR 42: `/noc` com 4 KPIs, fila priorizada (ordem documentada), impacto (clientes distintos por associações aprovadas, Edge silencioso fora do impacto atual) e painel lateral; ack **feito** (`POST /v1/incidents/{id}/ack` + `IncidentQueue`) | S2 | 008, 004 |
 | FC22-010 | P1 | [ ] falta (sem CTO/POP no modelo) | S3 | 003 |
 | FC22-011 | P1 | [ ] **bloqueado por dados** (ADR-0022) | S3 | 002, 003 |
 | FC22-012 | P1 | [ ] **bloqueado** (telemetria Wi-Fi/WAN não coletada; NBI aberto) | S3 | 002, ADR-0022 |
@@ -124,7 +124,7 @@ Fonte: `docs/addenda/v2.2/` (pacote intacto). Análise: `docs/addenda/v2.2/GAP_A
 |---|---|---|---|
 | FC24-00 | P0 | [x] GAP (`docs/addenda/v2.4/GAP_ANALYSIS.md`) + ADR-0034 + backlog | — |
 | FC24-01 | P0 | [x] leitura: catálogo fechado, ingestão `cpe-config`, `configuration` / `capabilities` / `form-schema`, perfis sintéticos; **só mocks, nada lido de ONT real** | FC22-002 |
-| FC24-02 | P0 | [~] PR 100: sidebar direito recolhível não modal na ONU 360° (miniatura, abas Resumo/Wi-Fi/LAN/WAN, seletor de rede real, óptica RO, formulários só leitura), e2e + a11y; **ajuda `ont/consultar-configuracao` em rascunho: falta a captura real** (seed com perfil sintético já no `seed_demo.py`) | 01 |
+| FC24-02 | P0 | [~] PR 100: sidebar direito recolhível não modal na ONU 360° (miniatura, abas Resumo/Wi-Fi/LAN/WAN, seletor de rede real, óptica RO, formulários só leitura), e2e + a11y; ajuda `ont/consultar-configuracao` **publicada** com captura do laboratório (2026-10-31) | 01 |
 | FC24-03 | P0 | [x] PR 102, ADR-0036: pré-visualização (`If-Match`, diff redigido, risco, aprovações exigidas, bloqueios em ordem fixa) e submissão que SEMPRE bloqueia, com mocks; sem job nem executor (restam: aprovação real, travas por dispositivo, despacho em FC24-04) | 01, jobs |
 | FC24-04 | P0 | [ ] adaptador GenieACS seguro no Edge (leitura ampla; escrita só em laboratório autorizado; SSID/enable primeiro numa combinação) | 03 |
 | FC24-05 | P1 | [ ] Wi-Fi abrangente (senha write-only por `secret_ref`, canal, largura, potência certificada) | 04 |
@@ -136,9 +136,18 @@ Fonte: `docs/addenda/v2.2/` (pacote intacto). Análise: `docs/addenda/v2.2/GAP_A
 | ID | Estado |
 |---|---|
 | QI-01 UI + dados read-only + miniatura + navegação (PR 101) | [x] flag `onu_quick_inspector` desligada por padrão; sem endpoint novo |
-| QI-02 captura real da ajuda `rede/resumo-da-onu`, ligar a flag por tenant após QA | [ ] |
+| QI-02 captura real da ajuda `rede/resumo-da-onu` | [x] publicada com captura do laboratório (2026-10-31). Ligar a flag por tenant após QA: decisão do responsável |
 | QI-03 [~] ADR-0037: árvore OLT/PON e matriz de PONs na Rede (entregue); falta NOC/associações como pontos de entrada; árvore PON/NOC como pontos de entrada; associações `medium/conflict` e estados ACS indisponível/unsupported quando houver dado | [ ] |
 | UX-LAYOUT ADR-0037 | [x] Gestão de ONUs no padrão Lovable: matriz de PONs, árvore, lista com filtros, painel com abas Resumo/Aparelho/Histórico, painéis frontais; ONU 360° com trilha e painel frontal (atrás da flag `onu_quick_inspector`) |
 
 ## Ideias de frontend (2026-10-31)
 Ver `docs/product/BACKLOG_IDEIAS_FRONTEND_2026-10-31.md` (análise de uma aplicação de referência e plano futuro, sem compromisso de prazo).
+
+
+## Atualização de 2026-11-02 (conferida contra o código)
+- **Entregue nesta rodada:** regras R-D003/R-D004 e `last_inform_at` do ACS (migração 0039); aba Histórico na Visão 360 do assinante; ONU 360° sem os cartões de banda e qualidade (ficam no Diagnóstico e nas abas do painel); e2e de UI do ping (achou e corrigiu um bug real: a aba **Ping e latência** nunca carregava); contraste WCAG medido e corrigido (`--ok`, régua); e2e 100 % verde; capturas da ajuda regeneradas (10 artigos); rotação do `cwmp.auth` concluída nas ONTs de bancada.
+- **Aberto, depende de alguém na bancada/ordem:** causa dos 80 % de perda de ping da Huawei (e então o aceite do `ping_test` dela); repetir ping e upload da ZTE em outros dias; identidade de bancada da Nokia; referência cabeada e repetições do 200 MB; captura supervisionada da OLT (ONT 11) como prova independente do vínculo físico ONU↔ZTE.
+- **Aberto, depende de decisão de produto/contrato:** envelope dos eventos do relay (`source`/`quality`); onde a Visão 360° deve ficar mais enxuta (o resumo no topo e o painel frontal já existem; sobram cartões duplicados Estado/Localização); busca por contrato no ⌘K.
+- **Aberto, é trabalho de construção (sem bancada):** mostrar R-D003/R-D004 no diagnóstico guiado; reimplantar o Edge da LAB com `last_inform_at` (precisa de ordem); FC22-010 (CTO/POP no modelo); FC22-014/015/016 (catálogo/dry-run com diff, lock por dispositivo, changelog/canary de módulos); FC24-04 a 08 (adaptador GenieACS de escrita, Wi-Fi abrangente, LAN/WAN, USP, métricas/rollback: **só em laboratório autorizado**); HubSoft HS-03 em diante; CSP com nonces; `includeSubDomains` no HSTS; rate-limit por agente do Edge; SNMP; cofre para senha de OLT e chave de assinatura; backup fora do host com criptografia; SMTP; CI remoto nunca verificado por este ambiente.
+- **Bloqueado por dado que ninguém coleta:** FC22-011/012/013 (telemetria Wi-Fi/WAN além do que o `cpe_state` já traz) e o Jitter/DNS no ping (o aparelho não informa; `dns_test` nem existe no catálogo de jobs).
+- **Adiado por ADR:** copiloto, Release Center, TR-369/USP (ADR-0015).
