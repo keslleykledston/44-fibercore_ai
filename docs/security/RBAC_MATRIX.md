@@ -38,6 +38,9 @@
 | `profiles:publish` | R3 | sim | sim | Publicar uma revisão IMUTÁVEL de um rascunho de profile (aprovador distinto de quem preparou; nada é enviado à OLT) |
 | `discovery:read` | R0 | não | sim | Ver a fila de ONUs aguardando autorização (somente leitura; nada é autorizado) |
 | `discovery:import` | R1 | não | sim | Registrar avistamentos de ONUs não autorizadas (fixture/importação manual; não escreve na OLT) |
+| `fleet:read` | R0 | não | sim | Ver as OLTs cadastradas, os POPs e o histórico de testes de conexão (somente leitura) |
+| `fleet:manage` | R2 | não | sim | Cadastrar e editar OLTs e POPs (nome, POP, rótulo e NOME da credencial local do Edge; nunca o segredo; nada é enviado à OLT) |
+| `fleet:test` | R1 | não | sim | Pedir um teste de conexão de uma OLT (leitura somente leitura pelo Edge, com orçamento por OLT) |
 | `members:read` | R1 | não | não | Ver os membros do provedor e o estado do MFA de cada um |
 | `members:manage` | R3 | sim | não | Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite) |
 | `platform:delegate` | R3 | sim | não | Conceder e revogar o acesso temporário (até 8 h, com motivo) do suporte da plataforma a este provedor |
@@ -83,6 +86,9 @@
 | `profiles:publish` | ✔ |  |  |  |  |  |  |  |  |
 | `discovery:read` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `discovery:import` | ✔ | ✔ |  |  |  |  |  |  |  |
+| `fleet:read` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
+| `fleet:manage` | ✔ | ✔ |  |  |  |  |  |  |  |
+| `fleet:test` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `members:read` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `members:manage` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `platform:delegate` | ✔ |  |  |  |  |  |  |  |  |
@@ -162,6 +168,10 @@
 | POST | `/v1/edge/speed-health` | `inventory:write` |
 | GET | `/v1/edges` | `edge:read` |
 | POST | `/v1/erp/import-csv` | `customers:import` |
+| GET | `/v1/fleet/olts` | `fleet:read` |
+| POST | `/v1/fleet/olts` | `fleet:manage` |
+| GET | `/v1/fleet/olts/{olt_id}` | `fleet:read` |
+| PATCH | `/v1/fleet/olts/{olt_id}` | `fleet:manage` |
 | GET | `/v1/incidents` | `incidents:read` |
 | GET | `/v1/incidents/{incident_id}` | `incidents:read` |
 | POST | `/v1/incidents/{incident_id}/ack` | `incidents:ack` |
@@ -209,6 +219,9 @@
 | DELETE | `/v1/platform-delegations/{delegation_id}` | `platform:delegate` |
 | GET | `/v1/platform/modules` | (sessão válida, sem permissão) |
 | GET | `/v1/platform/versions` | (sessão válida, sem permissão) |
+| GET | `/v1/pops` | `fleet:read` |
+| POST | `/v1/pops` | `fleet:manage` |
+| PATCH | `/v1/pops/{pop_id}` | `fleet:manage` |
 | GET | `/v1/profile-drafts` | `profiles:read` |
 | POST | `/v1/profile-drafts` | `profiles:edit` |
 | GET | `/v1/profile-drafts/{draft_id}` | `profiles:read` |

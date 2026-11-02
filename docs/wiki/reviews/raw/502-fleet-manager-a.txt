@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19e4c-5ccd-7503-b2b9-e2320066833e).
+[codex] Turn started (01a19e4c-615e-79d1-b0ce-858526bf3fdc).
+[codex] Assistant message captured: Vou comparar o branch com `main` e seguir os fluxos de API, banco e BFF nos pontos de seguran...
+[codex] Running command: /bin/bash -lc "git status --short && git diff --stat main...HEAD && git diff --unified=80 mai...
+[codex] Command completed: /bin/bash -lc "git status --short && git diff --stat main...HEAD && git diff --unified=80 mai... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --unified=30 main...HEAD -- apps/api/app/main.py apps/api/app/core/se...
+[codex] Command completed: /bin/bash -lc "git diff --unified=30 main...HEAD -- apps/api/app/main.py apps/api/app/core/se... (exit 0)
+[codex] Assistant message captured: Já apareceu um bloqueio direto no requisito de segredo: embora o banco guarde só uma referênc...
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/fleet.py | sed -n '128,205p'; nl -ba apps/api/alembic/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/fleet.py | sed -n '128,205p'; nl -ba apps/api/alembic/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: os endpoints de leitura e a tela d...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: os endpoints de leitura e a tela de detalhe devolvem e reapresentam a referência da credencial, contrariando o requisito de nunca repeti-la em respostas.
+
+Findings:
+- [high] A referência da credencial é exposta nas respostas da API (apps/api/app/api/fleet.py:134-145)
+  `_OLT_SQL` seleciona `credential_secret_ref` e `_olt_view` devolve seu valor como `credential_ref`. Isso afeta listagem, detalhe, cadastro e atualização; qualquer usuário com `fleet:read`, inclusive `noc_n2`, recebe a referência. A tela de detalhe também a carrega no formulário. Embora seja apenas o nome do segredo, o requisito explicitamente proíbe repeti-lo em respostas e isso expõe identificadores internos a todos os leitores da frota. Retorne apenas `has_credential_ref` e, se necessário, use um campo vazio no formulário para substituir a referência sem buscá-la novamente.
+  Recommendation: Remova `credential_secret_ref` do SELECT e `credential_ref` de `_olt_view`; ajuste a tela para nunca preencher o valor existente e mantenha a edição por substituição explícita.

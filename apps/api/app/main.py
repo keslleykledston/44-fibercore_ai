@@ -4,6 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app import __version__
@@ -22,6 +23,7 @@ from app.api.members import router as members_router
 from app.api.noc import router as noc_router
 from app.api.olt_queries import router as olt_queries_router
 from app.api.ont_config import router as ont_config_router
+from app.api.fleet import router as fleet_router
 from app.api.onu_discovery import router as onu_discovery_router
 from app.api.ping import router as ping_router
 from app.api.profile_studio import router as profile_studio_router
@@ -44,6 +46,13 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="FiberCore AI API", version=__version__, docs_url=None, redoc_url=None, lifespan=lifespan)
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_without_echo(_request, exc: RequestValidationError) -> JSONResponse:
+    """422 with WHERE and WHY, never WHAT: the default body repeats the rejected value (`input`) and the validator context, which would echo a credential name, an address or any other value
+    a client mistakenly sent (ADR-0041 D3). The location and the message stay, so a client can still fix its request."""
+    return JSONResponse(status_code=422, content={"detail": [{"type": e["type"], "loc": list(e["loc"]), "msg": e["msg"]} for e in exc.errors()]})
 MAX_BODY_BYTES = 8 * 1024 * 1024
 
 
@@ -76,6 +85,7 @@ app.include_router(ont_config_router)
 app.include_router(speed_router)
 app.include_router(ping_router)
 app.include_router(onu_discovery_router)
+app.include_router(fleet_router)
 app.include_router(profile_studio_router)
 app.include_router(quality_router)
 app.include_router(context_router)

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — Frota de OLTs: cadastro e POP (ADR-0041, PR2 parte A, 2026-11-02)
+- Banco (migração **0045**, aditiva e reversível): `pops` (RLS forçada, nome único sem diferenciar caixa) e, em `olts`, `pop_id`, `label`, `registered_by/at`; a credencial continua sendo `olts.credential_secret_ref`, agora com CHECK de FORMA (um NOME em minúsculas; endereço IPv4 e hexadecimal longo que parece chave são recusados pelo banco). O papel da aplicação só grava as colunas novas de cadastro; dono e troca de Edge seguem só do dono (ADR-0029).
+- API (flag **`fleet_manager`**, desligada por padrão; permissões `fleet:read`, `fleet:manage`, `fleet:test`): `GET/POST/PATCH /v1/pops`, `GET/POST /v1/fleet/olts`, `GET/PATCH /v1/fleet/olts/{id}`. Cadastra a OLT ANTES da primeira leitura (o Edge a adota pelo nome e preenche modelo/firmware/nível; POP, rótulo e credencial ficam); sem exclusão; sem escrita na OLT; a credencial é só um nome e nenhuma resposta, erro ou auditoria a repete (o 422 de TODA a API deixou de ecoar o valor recusado).
+- Web: **Frota de OLTs** (`/rede/frota`, detalhe e edição) com cadastro de OLT e de POP, miniatura do modelo e "Ainda não coletada" até a primeira leitura; atalho na Rede; ajuda `rede/frota-de-olts` com capturas reais.
+- Provas: API 1018 passed (suíte inteira); e2e `frota` + dependências 77 passed; recuo com a flag desligada 1 passed.
+- Corrigido junto: a entrada do catálogo de equipamentos no `screenshot-manifest.yaml` (PR1) tinha sido desfeita por engano e nunca chegou ao `main`.
+- Ainda NÃO existe: o teste de conexão pelo Edge (PR2 parte B), com o orçamento aprovado de 1 teste por 15 min e 4 por hora por OLT.
+
+
 ## Unreleased — Biblioteca visual multivendor: `DeviceAssetRegistry` e catálogo de equipamentos (ADR-0041, PR1, 2026-11-02)
 - Web (flag **`device_assets`**, desligada por padrão; desligada, `/rede/catalogo` é 404 e atalho e miniaturas somem): 28 OLT + 41 ONU/ONT de 8 fabricantes (Huawei, Datacom, ZTE, FiberHome, Intelbras, V-SOL, Ubiquiti, Parks) com SVG e PNG locais em `apps/web/public/devices/` (pacote auditado: `docs/addenda/v2.6/PACKAGE_AUDIT.md`, `scripts/audit_device_package.py`), registro `apps/web/src/lib/deviceAssets.ts` (resolver por igualdade exata normalizada, busca, caminho local obrigatório) e tela **Catálogo de equipamentos** com busca e filtros. Miniatura ao lado da OLT na Rede. Modelo fora do catálogo: desenho neutro da família e "Sem arte catalogada", nunca a arte de outro modelo.
 - Regras: toda arte é **esquemática** e rotulada; nenhuma imagem afirma suporte, porta, LED ou estado (esses vêm do inventário e do painel da OLT); `MODEL_VERIFIED` não existe no registro. Nenhuma foto de fabricante foi copiada.
