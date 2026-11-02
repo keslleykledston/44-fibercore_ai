@@ -158,7 +158,7 @@ Pacote em `docs/addenda/v2.5/package/`; GAP com os caminhos reais em `docs/adden
 | ID | Pri | Estado | Observação |
 |---|---|---|---|
 | FC25-00 / FC251-00 | P0 | [x] GAP, ADR-0040 e backlog (2026-11-02) | este PR |
-| FC251-04/05/06 (núcleo) | P0 | [ ] núcleo puro: modelo canônico tipado, validação por allowlist/capacidade, diff semântico, resolução por alvo, `plan_hash` | próximo PR; sem banco |
+| FC251-04/05/06 (núcleo) | P0 | [x] núcleo puro em `apps/api/app/core/profile_studio.py` (2026-11-02): modelo canônico tipado, validação por allowlist/capacidade, diff semântico, resolução por alvo, `plan_hash`, dry-run por OLT, sanitização de texto importado. Sem banco, rota ou flag ainda | 47 testes; falta ligar à migração/API/UI |
 | FC25-06 / FC251-01/02/03 | P0 | [ ] inventário e snapshot imutável de profiles, normalização com proveniência, importação e clone para rascunho | migração + API, flag off; consultas reais só após captura supervisionada |
 | FC25-01/02/03 | P0 | [ ] descoberta de ONU pendente (driver mock + fixtures), fila, associação HubSoft somente leitura | `olt.autofind` e `pon.ont.autofind` já no catálogo (`validated=false`) |
 | FC25-04/05 | P0 | [ ] service intent versionado e wizard assistido | depende do núcleo |
