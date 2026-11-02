@@ -46,6 +46,11 @@ export type DiagnosticFinding = {
   evidence: { pon_path: string; onus_observed: number; onus_down_recent: number; online: number; los: number; dying_gasp: number; chronic_offline: number; ratio: number };
   requires_human_confirmation: boolean; next_read_action: string; rule_id: string; rule_version: number;
 };
+/** R-D004 (ONU online na OLT e CPE sem Inform recente): o achado que a tela do diagnóstico guiado lê, com formato fechado (ver `readRd004`). */
+export type Rd004Finding = {
+  status: "observed" | "inferred" | "unknown"; hypothesis: string | null; reason?: string; suspected_cause?: string; requires_human_confirmation: boolean;
+  evidence: { onu: { link: string; status: string | null; fresh: boolean }; inform_age_seconds: number | null; inform_fresh: boolean; snapshot_fresh: boolean };
+};
 export type DiagnosticRun = { run_id: string; rule_id: string; rule_version: number; scope: { onu_id: string | null; pon_id: string | null }; created_at: string; findings: DiagnosticFinding[]; reproducible: boolean | null };
 
 export type OfflineBasis = "transition_observed" | "olt_reported" | "since_last_online";

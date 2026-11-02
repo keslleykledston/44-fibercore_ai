@@ -19,9 +19,10 @@ ui_route: "/assinantes/diagnostico/[id]"
 
 1. Abra a **Visão 360** do cliente (**Assinantes › Ver 360**) e clique em **Diagnóstico guiado**.
 2. Leia a **Conclusão** no topo. Ao abrir, ela costuma dizer "Sem conclusão": o diagnóstico ainda não foi executado.
-3. Percorra os 5 passos na coluna da esquerda: **Cliente e contrato**, **ONU aprovada**, **Estado e óptica da ONU**, **Padrão coletivo na PON (R-D001)** e **Roteador (CPE)**. O painel da direita mostra o resumo, os fatos e a fonte/idade de cada dado.
+3. Percorra os 6 passos na coluna da esquerda: **Cliente e contrato**, **ONU aprovada**, **Estado e óptica da ONU**, **Padrão coletivo na PON (R-D001)**, **Roteador (CPE)** e **Sessão do roteador com o ACS (R-D004)**. O painel da direita mostra o resumo, os fatos e a fonte/idade de cada dado.
 4. No passo 4, clique em **Executar diagnóstico (somente leitura)**. A leitura usa o que já foi coletado e **não altera nada na rede**; o resultado fica registrado e pode ser reproduzido.
-5. Para abrir um chamado, use **Gerar resumo para ticket** e copie o texto.
+5. No passo 6, quando a ONU tem roteador **confirmado**, clique em **Executar leitura** para comparar a ONU na OLT com o último contato do roteador com o ACS. Se a ONU está **online** e o roteador **não informou ao ACS recentemente**, o resultado é uma **Hipótese** sobre a sessão com o ACS (NAT, alcance, inform periódico): ela **não prova que o cliente esteja sem internet** e exige conferência no ACS. Sem roteador confirmado, o passo fica **Indisponível**. As duas leituras (passos 4 e 6) ficam juntas na tela.
+6. Para abrir um chamado, use **Gerar resumo para ticket** e copie o texto.
 
 ![Tela em desktop 1440×900 — Diagnóstico guiado](../../assets/assinantes/diagnostico-guiado/desktop.png)
 

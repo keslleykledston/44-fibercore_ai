@@ -242,6 +242,58 @@ test("Diagnóstico guiado: conclusão só após executar, hipótese com a PON em
   expect((await page.goto("/assinantes/diagnostico/nao-e-uuid"))?.status()).toBe(404);
 });
 
+test("Diagnóstico guiado: passo 6 (R-D004) só compara OLT e ACS com roteador confirmado; ONU online e Inform velho é HIPÓTESE da sessão com o ACS, nunca 'sem internet'", async ({ page, request }) => {
+  const tok = (await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json()).access_token as string;
+  const h = { Authorization: `Bearer ${tok}` };
+  const assoc = (await (await request.get(`${API_URL}/v1/associations?status=suggested&limit=200`, { headers: h })).json()) as { id: string; customer_name: string }[];
+  for (const name of ["Cliente Demo Dois", "Cliente Demo Cinco"]) {
+    const a = assoc.find((x) => x.customer_name === name);
+    if (a) expect((await request.post(`${API_URL}/v1/associations/${a.id}/approve`, { headers: h })).status()).toBe(200);
+  }
+  expect((await request.post(`${API_URL}/v1/onu-cpe-links/suggest`, { headers: h })).status()).toBe(201);
+  const links = (await (await request.get(`${API_URL}/v1/onu-cpe-links?status=suggested&limit=200`, { headers: h })).json()) as { id: string; onu: { serial: string } }[];
+  const mine = links.find((l) => l.onu.serial === "DEMOA0001");
+  if (mine) expect((await request.post(`${API_URL}/v1/onu-cpe-links/${mine.id}/confirm`, { headers: h })).status()).toBe(200);
+  await login(page);
+  const open = async (nome: string) => {
+    await page.goto(`/assinantes?q=${encodeURIComponent(nome)}`);
+    await page.getByTestId("customer-list").getByRole("link", { name: new RegExp(nome) }).click();
+    await page.getByTestId("open-diagnostic").click();
+    await expect(page.getByTestId("diag-ready")).toBeVisible();
+  };
+  await open("Cliente Demo Cinco");                                                           // ONU sem roteador confirmado: nada a comparar
+  await page.getByTestId("step-6").click();
+  await expect(page.getByTestId("step-6")).toContainText("Indisponível");
+  await expect(page.getByTestId("diag-evidence")).toContainText("Sem roteador confirmado");
+  await expect(page.getByTestId("diag-evidence").getByRole("button")).toHaveCount(0);        // sem botão de executar
+  await open("Cliente Demo Dois");                                                            // ONU online + roteador confirmado + Inform de 3 h atrás
+  await expect(page.getByTestId("step-6")).toContainText("Indisponível");                     // antes de executar nada se afirma
+  await page.getByTestId("step-6").click();
+  await expect(page.getByTestId("diag-evidence")).toContainText("Ainda não executado");
+  await page.getByTestId("step-action").click();
+  await expect(page.getByTestId("step-6")).toContainText("Hipótese");
+  await expect(page.getByTestId("diag-evidence")).toContainText("não informou ao ACS recentemente");
+  await expect(page.getByTestId("diag-evidence")).toContainText("não prova que o cliente esteja sem internet");
+  await expect(page.getByTestId("diag-evidence")).toContainText("Último Inform do roteador no ACS");
+  await expect(page.getByTestId("diag-evidence")).toContainText("há 3 h");
+  await expect(page.getByTestId("diag-conclusion")).toContainText("Hipótese");
+  await expect(page.getByTestId("diag-conclusion")).toContainText("Nenhuma alteração foi feita na rede");
+  await page.getByTestId("ticket").locator("summary").click();
+  const txt = await page.locator("#ticket-text").inputValue();
+  expect(txt).toContain("Sessão do roteador com o ACS (R-D004) [Hipótese]");
+  // a execução da R-D001 continua junto: executar a outra regra mantém as duas
+  await page.getByTestId("step-4").click();
+  await page.getByTestId("step-action").click();
+  await page.getByTestId("step-6").click();
+  await expect(page.getByTestId("step-6")).toContainText("Hipótese");
+  expect(page.url()).toContain("run4=");
+  expect(page.url()).toContain("run=");
+  // link de execução de outra ONU/inexistente: ignorado, nada afirmado
+  await page.goto(page.url().replace(/run4=[0-9a-f-]{36}/, "run4=00000000-0000-4000-8000-000000000000"));
+  await expect(page.getByTestId("step-6")).toContainText("Indisponível");
+  await expect(page.getByTestId("diag-evidence")).toContainText("ignorada");
+});
+
 for (const scheme of ["light", "dark"] as const) {
   test(`acessibilidade (axe) sem violações sérias - tema ${scheme}`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });

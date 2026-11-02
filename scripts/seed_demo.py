@@ -90,8 +90,10 @@ def main() -> None:
         {"canonical_serial": f"DEMOCPE{i:03d}", "vendor": "Huawei", "model": "HG8245H",
          "binding": {"protocol": "tr069", "external_id": f"DEMO-OUI-HG8245H-DEMOCPE{i:03d}", "connector_id": "genieacs-demo"}} for i in range(5)]
         + [{"canonical_serial": "DEMOA0002", "vendor": "Huawei", "model": "HG8245H", "firmware": "V3R017",  # alvo do e2e da configuração do aparelho (o vínculo é confirmado pelo teste)
+            "last_inform_at": (datetime.now(UTC) - timedelta(minutes=2)).isoformat(),  # R-D004: informou há pouco
             "binding": {"protocol": "tr069", "external_id": "DEMO-OUI-HG8245H-DEMOA0002", "connector_id": "genieacs-demo"}}]
         + [{"canonical_serial": "DEMOA0001", "vendor": "Huawei", "model": "HG8245H",  # same serial as an ONU: the link is only SUGGESTED, a person confirms
+            "last_inform_at": (datetime.now(UTC) - timedelta(hours=3)).isoformat(),  # R-D004: ONU online na OLT e o roteador sem Inform há 3 h (cenário da hipótese)
             "binding": {"protocol": "tr069", "external_id": "DEMO-OUI-HG8245H-DEMOA0001", "connector_id": "genieacs-demo"}}]})
     assert r.status_code == 202, r.text
     # --- como administrador do provedor: importa clientes fictícios e cria operações ---
