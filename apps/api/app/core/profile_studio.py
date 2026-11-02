@@ -219,16 +219,16 @@ def resolve_binding(requested: str, target: Target, diff: Mapping[str, str]) -> 
     """The strategy for ONE target and why. Ordered, fail closed; it never executes anything. `requested` can only be narrowed to `blocked`, never widened."""
     if requested not in STRATEGIES[:4]:
         return "blocked", "invalid_strategy"
+    obs = target.observation
+    if obs is not None and (obs.tenant_id != target.tenant_id or obs.olt_id != target.olt_id):
+        return "blocked", "cross_tenant_or_target"   # for EVERY strategy, clone included: an observation of another tenant or OLT is never a source
     if requested == "clone_new_revision":
         # a clone writes nothing by itself and needs no observation to exist; it is still scoped to this target
         if not target.driver_read_certified:
             return "blocked", "read_not_certified"
         return "clone_new_revision", "draft_only_needs_approval_to_deploy"
-    obs = target.observation
     if obs is None:
         return "blocked", "no_observation"
-    if obs.tenant_id != target.tenant_id or obs.olt_id != target.olt_id:
-        return "blocked", "cross_tenant_or_target"
     if not target.driver_read_certified:
         return "blocked", "read_not_certified"
     if obs.freshness != "fresh":
@@ -298,7 +298,8 @@ def dry_run(*, tenant_id: str, intent_revision: str, desired: Mapping[str, Any],
         elif t.tenant_id != tenant_id:
             diff, strategy, why = {}, "blocked", "cross_tenant_or_target"
         else:
-            diff = semantic_diff(t.observation, desired, supported=supported, required=required) if t.observation else {}
+            own = t.observation is not None and t.observation.tenant_id == t.tenant_id and t.observation.olt_id == t.olt_id
+            diff = semantic_diff(t.observation, desired, supported=supported, required=required) if own and t.observation else {}   # a foreign observation is never compared
             strategy, why = resolve_binding(requested, t, diff) if requested else suggest_strategy(t, diff)
         plans.append(TargetPlan(olt_id=t.olt_id, strategy=strategy, reason=why, diff=diff,
                                 changed_fields=[f for f, v in diff.items() if v in (CHANGE, ADD, REMOVE)],

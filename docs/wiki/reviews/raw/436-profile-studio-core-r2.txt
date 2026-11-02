@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19af1-f508-77e3-bf6b-13987829cdef).
+[codex] Turn started (01a19af1-f800-72a3-81cb-964c69726a43).
+[codex] Assistant message captured: Vou comparar o branch com `main` e seguir os fluxos do foco (diff semântico, dry-run, hash e ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/profile_s...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/profile_s... (exit 0)
+[codex] Running command: /bin/bash -lc 'git status --short && git diff --no-ext-diff --unified=40 main...HEAD -- docs/...
+[codex] Command completed: /bin/bash -lc 'git status --short && git diff --no-ext-diff --unified=40 main...HEAD -- docs/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: `clone_new_revision` contorna a va...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: `clone_new_revision` contorna a validação de tenant entre a observação e o alvo, permitindo que um plano do tenant atual use uma observação de outro tenant.
+
+Findings:
+- [high] Clone aceita observação vinculada a outro tenant ou OLT (apps/api/app/core/profile_studio.py:222-225)
+  `dry_run` bloqueia quando `target.tenant_id` difere do tenant do plano, mas ainda calcula o diff a partir de `target.observation`. Para `clone_new_revision`, `resolve_binding` retorna antes de verificar se a observação pertence ao mesmo tenant e OLT do alvo. Assim, um alvo do tenant T com observação do tenant U (ou de outro OLT) recebe um plano de clone usando dados dessa observação; o hash também incorpora seus identificadores e fingerprint. Isso cruza a fronteira de tenant no planejamento e pode vincular o clone à fonte errada. A inferência é que consumidores posteriores usam esse plano como origem do clone; mesmo sem execução neste módulo, o plano já declara a estratégia aprovada para esse alvo.
+  Recommendation: Validar a identidade tenant/OLT da observação antes de qualquer estratégia, inclusive clone; se clone não depende da observação, omitir a observação e seu diff do plano quando a identidade não corresponder.
+
+Next steps:
+- Adicionar casos de dry-run com alvo do tenant atual e observação de outro tenant e de outro OLT, usando `clone_new_revision` explicitamente e automaticamente.

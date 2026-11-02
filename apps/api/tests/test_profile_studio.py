@@ -213,6 +213,19 @@ def test_an_invalid_draft_or_a_target_of_another_tenant_is_blocked_and_never_pla
     assert same.plan_hash != p.plan_hash                                                   # the target's tenant is part of what the hash binds
 
 
+@pytest.mark.parametrize("foreign", [obs(tenant_id="U"), obs(olt_id="OLT-Z")])
+def test_an_observation_of_another_tenant_or_olt_is_never_a_source_for_any_strategy_clone_included(foreign):
+    t = target(foreign)
+    for req in ps.STRATEGIES[:4]:
+        assert ps.resolve_binding(req, t, eq_diff()) == ("blocked", "cross_tenant_or_target")
+    assert ps.suggest_strategy(t, eq_diff()) == ("blocked", "cross_tenant_or_target")        # automatic, too
+    for requested in (None, "clone_new_revision"):
+        p = ps.dry_run(tenant_id="T", intent_revision="r", desired=GOOD, requested=requested, targets=[t], supported=ALL, expires_at="e")[0]
+        assert p.strategy == "blocked" and p.reason == "cross_tenant_or_target" and p.diff == {}   # not even compared
+    # without any observation a clone is still possible (it needs none)
+    assert ps.resolve_binding("clone_new_revision", target(observation=None), {})[0] == "clone_new_revision"
+
+
 def _hash(**over):
     t = over.pop("target", target())
     kw = dict(tenant_id="T", intent_revision="rev-1", target=t, strategy="reuse_exact", diff=eq_diff(), expires_at="2026-11-03T00:00:00Z")
