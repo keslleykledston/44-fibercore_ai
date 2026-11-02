@@ -24,6 +24,8 @@ ui_route: "/assinantes/diagnostico/[id]"
 5. No passo 6, quando a ONU tem roteador **confirmado**, clique em **Executar leitura** para comparar a ONU na OLT com o último contato do roteador com o ACS. Se a ONU está **online** e o roteador **não informou ao ACS recentemente**, o resultado é uma **Hipótese** sobre a sessão com o ACS (NAT, alcance, inform periódico): ela **não prova que o cliente esteja sem internet** e exige conferência no ACS. Sem roteador confirmado, o passo fica **Indisponível**. As duas leituras (passos 4 e 6) ficam juntas na tela.
 6. Para abrir um chamado, use **Gerar resumo para ticket** e copie o texto.
 
+As imagens abaixo mostram um cliente cuja ONU está numa PON em queda coletiva (passo 4 com **Hipótese**) e **sem roteador confirmado** (passo 6 **Indisponível**). O passo 6 executado, com a hipótese sobre a sessão com o ACS, é coberto por teste automatizado (`app.spec.ts`) e ainda não tem captura própria.
+
 ![Tela em desktop 1440×900 — Diagnóstico guiado](../../assets/assinantes/diagnostico-guiado/desktop.png)
 
 ![Tela em mobile 390×844 — Diagnóstico guiado](../../assets/assinantes/diagnostico-guiado/mobile.png)
@@ -39,7 +41,7 @@ Cada passo traz um rótulo (texto + símbolo): **Confirmado** (fato medido e rec
 
 ## Permissões necessárias
 
-`customers:read`; `diagnostics:run` para executar (sem ela os passos 1–3 e 5 aparecem e o passo 4 fica Indisponível).
+`customers:read`; `diagnostics:run` para executar (sem ela os passos 1–3 e 5 aparecem e os passos 4 e 6 ficam Indisponíveis, sem botão de executar). O passo 6 também exige um vínculo ONU↔roteador **confirmado** por uma pessoa; sem ele a leitura nem é oferecida.
 
 ## Se algo não funcionar
 
