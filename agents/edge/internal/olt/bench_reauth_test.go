@@ -25,6 +25,7 @@ type fakeAuthOLT struct {
 	onInfo                        func()
 	onAdd                         func()
 	onAddSP                       func()
+	onUndo                        func()
 }
 
 func newAuth() *fakeAuthOLT {
@@ -35,7 +36,10 @@ func (f *fakeAuthOLT) info() string {
 	return fmt.Sprintf("  -----------------------------\n  F/S/P                   : 0/0/14\n  ONT-ID                  : 10\n  Control flag            : active\n  Run state               : online\n  Config state            : normal\n  Match state             : match\n  SN                      : 48575443E2247AA5\n  Description             : %s\n  Last up time            : %s\n  Line profile ID         : %d\n  Service profile ID      : %d\n", f.desc, f.lastUp, f.line, f.srv)
 }
 
-func (f *fakeAuthOLT) Run(_ context.Context, cmd string) (string, error) {
+func (f *fakeAuthOLT) Run(ctx context.Context, cmd string) (string, error) {
+	if err := ctx.Err(); err != nil { // a real session cannot run a command on a cancelled context
+		return "", err
+	}
 	f.sent = append(f.sent, cmd)
 	for p := range f.refuse {
 		if strings.HasPrefix(cmd, p) {
@@ -66,6 +70,9 @@ func (f *fakeAuthOLT) Run(_ context.Context, cmd string) (string, error) {
 		return fmt.Sprintf("Index               : 1708\nVLAN ID             : 1400\nPort type           : gpon\nF/S/P               : 0/0/14\nONT ID              : 10\nGEM port index      : 1\nFlow type           : vlan\nFlow para           : 1400\nInbound table name  : -\nOutbound table name : -\nAdmin status        : enable\nState               : up\nTag transform       : %s\n", f.tag), nil
 	case strings.HasPrefix(cmd, "undo service-port"):
 		f.spPresent = false
+		if f.onUndo != nil {
+			f.onUndo()
+		}
 	case strings.HasPrefix(cmd, "ont delete"):
 		f.ontPresent, f.inAuto = false, !f.neverInAutofind
 	case cmd == "display ont autofind all":
@@ -283,5 +290,19 @@ func TestReauthorizeRestoreChecksTheServicePortDetailToo(t *testing.T) {
 	out, err := runAuth(f, spec14, nil, far())
 	if err == nil || out.Done || strings.Contains(out.Detail, "baseline was restored") || !strings.Contains(err.Error(), "restore it by hand") {
 		t.Fatalf("out=%+v err=%v", out, err)
+	}
+}
+
+func TestReauthorizeRestoresEvenWhenTheJobContextIsCancelledAfterTheFirstChange(t *testing.T) {
+	// the job's context is cancelled right after the service port was removed: the restore must still bring the ONU and its service port back (Codex r5)
+	f := newAuth()
+	ctx, cancel := context.WithCancel(context.Background())
+	f.onUndo = cancel
+	out, err := RunBenchReauthorize(ctx, f, onu14, spec14, far(), func() error { return nil }, 500*time.Millisecond, time.Millisecond, time.Now, nil)
+	if err == nil || !out.Sent {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+	if !f.ontPresent || !f.spPresent || f.line != 179 {
+		t.Fatalf("the ONU and its service port must be back after a cancellation: ont=%v sp=%v", f.ontPresent, f.spPresent)
 	}
 }

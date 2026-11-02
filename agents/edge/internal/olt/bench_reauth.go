@@ -156,11 +156,12 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 		return ManeuverOutcome{}, ErrBenchOLTBefore
 	}
 	c := onu.ReauthCommands(spec)
+	rc := ctx // the context every command and wait uses; the restore swaps it for one that survives the cancellation of the job (below)
 	allowed := []string{c.Enable, c.Config, c.Iface, c.BySN, c.Info, c.Quit, c.ListSP, c.DetailSP, c.UndoSP, c.Delete, c.Add, c.AddSP, c.Autofind}
 	s := newBenchSessionWith(raw, allowed, map[string]bool{c.UndoSP: true}, map[string]*regexp.Regexp{c.Delete: ReauthConfirm["delete"]}, notAfter, now)
 	mode := "enable"
 	step := func(cmd string) (string, error) {
-		out, err := s.Run(ctx, cmd)
+		out, err := s.Run(rc, cmd)
 		if err == nil && refusedRe.MatchString(out) {
 			err = fmt.Errorf("%w: %s", ErrBenchOLTRefused, cmd)
 		}
@@ -222,11 +223,11 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 		return onu.identityOK(i) && p.Line == spec.LineProfileID && p.Srv == spec.SrvProfileID && p.Description == spec.Description
 	}
 	// ---- baseline: nothing changes until every one of these reads agrees with the configuration
-	out, err := s.Run(ctx, c.Enable)
+	out, err := s.Run(rc, c.Enable)
 	if err != nil || refusedRe.MatchString(out) {
 		return ManeuverOutcome{}, fmt.Errorf("%w: enable", ErrBenchOLTBefore)
 	}
-	out, err = s.Run(ctx, c.BySN)
+	out, err = s.Run(rc, c.BySN)
 	if err != nil {
 		return ManeuverOutcome{}, err
 	}
@@ -262,11 +263,11 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 			if ok() {
 				return true
 			}
-			if time.Now().After(deadline) || ctx.Err() != nil {
+			if time.Now().After(deadline) || rc.Err() != nil {
 				return false
 			}
 			select {
-			case <-ctx.Done():
+			case <-rc.Done():
 				return false
 			case <-time.After(poll):
 			}
@@ -278,7 +279,7 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 			if err := toConfig(); err != nil {
 				return false, err
 			}
-			o, err := s.Run(ctx, c.BySN)
+			o, err := s.Run(rc, c.BySN)
 			if err != nil {
 				return false, err
 			}
@@ -344,6 +345,10 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 	fail := func(sent bool, detail string, err error) (ManeuverOutcome, error) {
 		res.Sent, res.Detail = sent, detail
 		if sent {
+			// the job's context may be the very thing that failed (timeout, shutdown): the way back runs on its OWN bounded context, never on a cancelled one
+			rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), wait+2*time.Minute)
+			defer cancel()
+			rc = rctx
 			if rerr := restore(); rerr != nil {
 				return res, fmt.Errorf("%w: %v (first error: %v)", ErrReauthRestore, rerr, err)
 			}
@@ -416,8 +421,8 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 	}
 	res.Done, res.Detail = true, "service port removed, ONU deleted, seen in autofind, authorized again with the baseline profiles, service port restored and equal"
 	if mode == "iface" {
-		_, _ = s.Run(ctx, c.Quit)
+		_, _ = s.Run(rc, c.Quit)
 	}
-	_, _ = s.Run(ctx, c.Quit)
+	_, _ = s.Run(rc, c.Quit)
 	return res, nil
 }
