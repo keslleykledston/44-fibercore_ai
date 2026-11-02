@@ -1,0 +1,3 @@
+FIBERCORE AI — ADENDO v2.5 (OLT Provisioning & Profile Studio)
+
+Incorpore o ZIP v2.5 ao projeto atual de forma incremental. Leia README_START_HERE.md e prompts/01_CLAUDE_CODE_MASTER.md. Preserve v2.1–v2.4 e HubSoft-first. Faça GAP real e ADR, depois backlog integrado. Inicie por descoberta READ-ONLY de ONUs não autorizadas, associação HubSoft e Profile Studio com templates declarativos, apenas dry-run. Autorização de ONU e deploy de profiles em OLT real ficam BLOQUEADOS até homologação por versão/card/firmware, aprovação humana, preview, proteção contra alterações em perfis compartilhados e pós-verificação. Envolva Codex para revisão e Lovable no handoff UX; documente e capture telas reais no `/ajuda`. Não reinicie sprints nem execute writes em produção.

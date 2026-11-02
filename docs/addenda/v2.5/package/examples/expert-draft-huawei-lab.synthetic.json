@@ -1,0 +1,63 @@
+{
+  "api_version": "fibercore/v2.5.1",
+  "kind": "ExpertProfileDraft",
+  "metadata": {
+    "draft_id": "draft-example-huawei-001",
+    "revision": 1,
+    "status": "draft",
+    "reason": "Adequar perfil de VLAN do laboratório",
+    "base_template_id": "service-internet-bridge"
+  },
+  "source": {
+    "kind": "olt_snapshot",
+    "snapshot_id": "snapshot-synthetic-001",
+    "fingerprint": "0123456789abcdef"
+  },
+  "scope": {
+    "technology": "gpon",
+    "vendor": "huawei",
+    "model": "MA5608T",
+    "firmware": "V800R015-LAB-EXAMPLE",
+    "pon_card": "GPON-LAB-EXAMPLE",
+    "target_olt_ids": [
+      "olt-lab-01"
+    ]
+  },
+  "desired": {
+    "profile_kind": "bundle",
+    "settings": {
+      "dba_type": "type3",
+      "fixed_kbps": null,
+      "assured_kbps": 1000,
+      "maximum_kbps": 100000,
+      "tconts": [
+        {
+          "index": 1,
+          "dba_reference": "dba-lab-rev2"
+        }
+      ],
+      "gems": [
+        {
+          "gem_index": 1,
+          "tcont_index": 1,
+          "vlan": 200
+        }
+      ],
+      "customer_vlan": 200,
+      "service_vlan": 200,
+      "tagging": "tagged",
+      "ethernet_ports": [
+        1
+      ],
+      "shaping_owner": "bng",
+      "multicast": false,
+      "description": "Internet bridge GPON laboratório - somente exemplo"
+    },
+    "vendor_extensions": {}
+  },
+  "strategy": "clone_new_revision",
+  "migration": {
+    "requested": false,
+    "approval_separate": true
+  }
+}

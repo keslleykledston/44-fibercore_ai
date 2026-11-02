@@ -1,0 +1,37 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19ae8-bba1-73c1-8b51-5fad4ff39ce1).
+[codex] Turn started (01a19ae8-c1b1-7cf1-8ee0-eb986962c559).
+[codex] Assistant message captured: Vou confrontar o texto com o catálogo, políticas, ADRs e migrations existentes; também vou in...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/addenda/v2.5/GAP_ANALY...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/addenda/v2.5/GAP_ANALY... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=5 main...HEAD -- docs/addenda/v2.5 docs/wiki/...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=5 main...HEAD -- docs/addenda/v2.5 docs/wiki/... (exit 0)
+[codex] Running command: /bin/bash -lc "git status --short && rg -n \"olt\\.autofind|pon\\.ont\\.autofind|provision_on...
+[codex] Command failed: /bin/bash -lc "git status --short && rg -n \"olt\\.autofind|pon\\.ont\\.autofind|provision_on... (exit 2)
+[codex] Assistant message captured: Já há uma divergência material na base citada: ADR-0030 declara exceção de escrita restrita à...
+[codex] Running command: /bin/bash -lc "sed -n '1,90p' apps/api/app/api/jobs.py; sed -n '1,80p' apps/api/app/core/benc...
+[codex] Command completed: /bin/bash -lc "sed -n '1,90p' apps/api/app/api/jobs.py; sed -n '1,80p' apps/api/app/core/benc... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,130p' apps/api/app/core/olt_query.py; sed -n '100,220p' apps/api/app...
+[codex] Command completed: /bin/bash -lc "sed -n '1,130p' apps/api/app/core/olt_query.py; sed -n '100,220p' apps/api/app... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"olt\\.autofind|pon\\.ont\\.autofind|provision_onu|HOMOLOGATED_WRITES|v...
+[codex] Command completed: /bin/bash -lc "rg -n \"olt\\.autofind|pon\\.ont\\.autofind|provision_onu|HOMOLOGATED_WRITES|v... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: a descrição de prioridade está apo...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: a descrição de prioridade está apoiada em premissas incompletas, e o ADR promete bloqueio global de escrita que o código não implementa literalmente.
+
+Findings:
+- [high] `HOMOLOGATED_WRITES` vazio não significa que toda escrita está bloqueada (docs/addenda/v2.5/GAP_ANALYSIS.md:15-29)
+  O GAP e o ADR usam o conjunto vazio como evidência de que não há escrita habilitada. Porém `jobs.py` encaminha operações de `bench.BENCH_OPS` ao gate alternativo de ADR-0030; `bench.py` permite operações da bancada quando flags, alvo, capacidade e autorização prévia válidos estão presentes. Portanto, a afirmação de bloqueio global é falsa no estado atual. O próprio ADR-0040 exclui qualquer escrita em OLT nesta fase, mas não diz com clareza que operações de bancada existentes continuam sujeitas ao caminho excepcional e seus gates. Essa ambiguidade pode levar leitores a acreditar que uma configuração de bancada não consegue escrever. Declare explicitamente a exceção de ADR-0030 e diferencie “nenhuma nova escrita v2.5” de “nenhuma escrita existente”.
+  Recommendation: Ajustar GAP e ADR-0040 para descrever o gate alternativo de bancada e delimitar a afirmação de ausência de escrita ao escopo novo do v2.5.
+- [medium] A justificativa para passar à frente do FC22-014 não está demonstrada (docs/addenda/v2.5/GAP_ANALYSIS.md:5-6)
+  A decisão chama o fluxo de maior valor sem evidência no documento e considera o FC22-014 absorvido por FC25-07 e FC251-06/08, mas a própria matriz trata `plan_hash` como falta do motor v2.5 e o ADR-0036 existente é específico a mudanças de configuração ONT, sempre bloqueadas. Não está demonstrado que os escopos, contratos e critérios de aceite do FC22-014 serão integralmente cobertos pelo novo preview de profiles; a priorização pode retirar do backlog um item mais amplo antes de haver substituição equivalente.
+  Recommendation: Anexar comparação de escopo e critérios de aceite do FC22-014 contra FC25/FC251, ou manter o item ativo até a cobertura equivalente ser implementada e aceita.
+
+Next steps:
+- Corrigir a descrição do gate ADR-0030 e tornar explícita a distinção entre escritas existentes de bancada e novas escritas v2.5.
+- Justificar a absorção do FC22-014 com mapeamento verificável de requisitos e critérios de aceite.

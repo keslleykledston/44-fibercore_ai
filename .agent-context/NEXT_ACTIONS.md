@@ -261,3 +261,7 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 
 ## Atualização 2026-11-02 (noite): API e Edge da LAB com a R-D004
 - `main` enviada até `fdf4da8` (web, API e Edge da LAB nesse commit; migração 0039 aplicada; backup lógico feito antes, detalhes só no host). R-D003/R-D004 no ar; R-D004 conferida com dado real. Rotação do `cwmp.auth` concluída. Pendências: ver `docs/product/ROADMAP_BACKLOG.md` (seção de 2026-11-02).
+
+## Atualização 2026-11-02 (noite 2): v2.5 incorporado, push e deploy
+- `main` enviada até `cd1600b`; API e web da LAB nesse commit (sem migração nova, head 0039). Pacote v2.5 (OLT Provisioning, Profile Studio, Modo Especialista) lido, validado e copiado em `docs/addenda/v2.5/package/`; `GAP_ANALYSIS.md` e ADR-0040 decidem: **somente leitura primeiro, à frente do FC22-014** (que segue aberto: catálogo de workflows e o dry-run, este planejado para o v2.5).
+- Próximos PRs do v2.5 (ver `docs/product/ROADMAP_BACKLOG.md`): núcleo puro (modelo canônico, diff semântico, resolução por alvo, `plan_hash`); migração e API (snapshots imutáveis, rascunhos, comparação, dry-run, flag off); descoberta de ONU pendente com mock; UI e ajuda. Nada escreve na OLT; consultas reais (autofind, profiles) só após captura supervisionada e ordem do responsável.

@@ -1,0 +1,309 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fibercore.devops.k3gsolutions.com.br/schemas/expert-profile-draft.v2.5.1.json",
+  "title": "FiberCore ExpertProfileDraft v2.5.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "api_version",
+    "kind",
+    "metadata",
+    "source",
+    "scope",
+    "desired",
+    "strategy"
+  ],
+  "properties": {
+    "api_version": {
+      "const": "fibercore/v2.5.1"
+    },
+    "kind": {
+      "const": "ExpertProfileDraft"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "draft_id",
+        "revision",
+        "status",
+        "reason"
+      ],
+      "properties": {
+        "draft_id": {
+          "type": "string",
+          "minLength": 3
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "const": "draft"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 5
+        },
+        "base_template_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "fingerprint"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "olt_snapshot",
+            "catalog_revision"
+          ]
+        },
+        "snapshot_id": {
+          "type": "string"
+        },
+        "template_revision_id": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string",
+          "minLength": 8
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "technology",
+        "vendor",
+        "model",
+        "firmware",
+        "pon_card",
+        "target_olt_ids"
+      ],
+      "properties": {
+        "technology": {
+          "enum": [
+            "gpon",
+            "epon",
+            "xgspon"
+          ]
+        },
+        "vendor": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "firmware": {
+          "type": "string"
+        },
+        "pon_card": {
+          "type": "string"
+        },
+        "target_olt_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "desired": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_kind",
+        "settings",
+        "vendor_extensions"
+      ],
+      "properties": {
+        "profile_kind": {
+          "enum": [
+            "dba",
+            "line",
+            "service",
+            "tcont",
+            "gem",
+            "onu_type",
+            "vlan",
+            "traffic",
+            "bundle"
+          ]
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "dba_type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "fixed_kbps": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "assured_kbps": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "maximum_kbps": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            },
+            "tconts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "index",
+                  "dba_reference"
+                ],
+                "properties": {
+                  "index": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "dba_reference": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "gems": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "gem_index",
+                  "tcont_index"
+                ],
+                "properties": {
+                  "gem_index": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "tcont_index": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "vlan": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 4094
+                  }
+                }
+              }
+            },
+            "customer_vlan": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1,
+              "maximum": 4094
+            },
+            "service_vlan": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1,
+              "maximum": 4094
+            },
+            "tagging": {
+              "enum": [
+                "tagged",
+                "untagged",
+                "translation",
+                "qinq",
+                "unknown"
+              ]
+            },
+            "ethernet_ports": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "uniqueItems": true
+            },
+            "shaping_owner": {
+              "enum": [
+                "bng",
+                "olt",
+                "cpe",
+                "none",
+                "unknown"
+              ]
+            },
+            "multicast": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "description": {
+              "type": "string",
+              "maxLength": 256
+            }
+          }
+        },
+        "vendor_extensions": {
+          "type": "object",
+          "description": "Server must resolve this via an approved vendor- and firmware-scoped JSON schema; empty by default; no raw CLI."
+        }
+      }
+    },
+    "strategy": {
+      "enum": [
+        "reuse_exact",
+        "adopt_reference",
+        "clone_new_revision",
+        "plan_migration"
+      ]
+    },
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requested",
+        "approval_separate"
+      ],
+      "properties": {
+        "requested": {
+          "type": "boolean"
+        },
+        "approval_separate": {
+          "const": true
+        }
+      }
+    }
+  }
+}

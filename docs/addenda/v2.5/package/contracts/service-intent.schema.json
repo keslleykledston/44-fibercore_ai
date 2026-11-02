@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fibercore.devops.k3gsolutions.com.br/schemas/service-intent.v2.5.json",
+  "title": "FiberCore ServiceIntent v2.5",
+  "type": "object",
+  "required": [
+    "api_version",
+    "kind",
+    "metadata",
+    "scope",
+    "service",
+    "constraints"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "const": "fibercore/v2.5"
+    },
+    "kind": {
+      "const": "ServiceIntent"
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "id",
+        "revision",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 3
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "tested",
+            "certified",
+            "deprecated"
+          ]
+        },
+        "lab_certified": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "scope": {
+      "type": "object",
+      "required": [
+        "technology",
+        "compatible_onu_models",
+        "olt_targets"
+      ],
+      "properties": {
+        "technology": {
+          "enum": [
+            "gpon",
+            "epon",
+            "xgspon"
+          ]
+        },
+        "compatible_onu_models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "olt_targets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "service": {
+      "type": "object",
+      "required": [
+        "kind",
+        "delivery",
+        "subscriber_auth",
+        "handoff",
+        "vlans",
+        "qos",
+        "advanced"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "internet",
+            "voip",
+            "iptv",
+            "corporate"
+          ]
+        },
+        "delivery": {
+          "enum": [
+            "bridge",
+            "routed"
+          ]
+        },
+        "subscriber_auth": {
+          "enum": [
+            "pppoe",
+            "ipoe",
+            "none"
+          ]
+        },
+        "handoff": {
+          "type": "object",
+          "required": [
+            "ethernet_ports",
+            "tagging"
+          ],
+          "properties": {
+            "ethernet_ports": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "uniqueItems": true
+            },
+            "tagging": {
+              "enum": [
+                "tagged",
+                "untagged",
+                "qinq"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "vlans": {
+          "type": "object",
+          "required": [
+            "customer_vlan",
+            "service_vlan"
+          ],
+          "properties": {
+            "customer_vlan": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1,
+              "maximum": 4094
+            },
+            "service_vlan": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1,
+              "maximum": 4094
+            }
+          },
+          "additionalProperties": false
+        },
+        "qos": {
+          "type": "object",
+          "required": [
+            "shaping_owner",
+            "upstream_max_kbps",
+            "downstream_max_kbps"
+          ],
+          "properties": {
+            "shaping_owner": {
+              "enum": [
+                "bng",
+                "olt",
+                "cpe",
+                "none"
+              ]
+            },
+            "upstream_max_kbps": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "downstream_max_kbps": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "advanced": {
+          "type": "object",
+          "required": [
+            "dba_mode",
+            "multicast",
+            "voice"
+          ],
+          "properties": {
+            "dba_mode": {
+              "type": "string"
+            },
+            "multicast": {
+              "type": "boolean"
+            },
+            "voice": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "constraints": {
+      "type": "object",
+      "required": [
+        "require_known_device_capability",
+        "require_lab_certified_driver_write",
+        "require_preview_and_approval"
+      ],
+      "properties": {
+        "require_known_device_capability": {
+          "type": "boolean"
+        },
+        "require_lab_certified_driver_write": {
+          "type": "boolean"
+        },
+        "require_preview_and_approval": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

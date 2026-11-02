@@ -1,0 +1,18 @@
+# Valores SEGUROS de exemplo. O arquivo não configura por si só o FiberCore.
+olt_provisioning:
+  discovery_read: true
+  profile_inventory_read: true
+  expert_edit_drafts: true
+  semantic_diff_preview: true
+  dry_run: true
+  olt_writes_enabled: false
+  authorize_onu_real: false
+  create_profile_real: false
+  migrate_onus_real: false
+  bulk_rollout_real: false
+  agent_llm_writes: false
+  require_maker_checker: true
+  require_exact_driver_certification: true
+  require_independent_readback: true
+  require_plan_hash_and_ttl: true
+  require_fresh_snapshot: true
