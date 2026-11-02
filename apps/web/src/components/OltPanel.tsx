@@ -29,9 +29,9 @@ function Pon({ p, cap, y, onSelect, active }: { p: PortModel; cap: number; y: nu
       <rect x={x + 5} y={y + 8} width="12" height="12" rx="1" fill="#08131f" stroke="#526473" strokeWidth=".7" />
       <circle cx={x + 11} cy={y + 14} r="3.3" fill="#161b22" stroke="#9aa9b8" />
       <rect x={x + 7} y={y + 19} width="8" height="2" rx="1" fill="#677987" />
-      <circle cx={x + 11} cy={y + 31} r="3.3" fill={LED_FILL[p.led]} stroke="#f8fafc" strokeWidth=".8" />
-      {p.led === "warning" && <path d={`M${x + 11} ${y + 28.5}v3.4`} stroke="#1e293b" strokeWidth="1.2" />}
-      {p.led === "unknown" && <circle cx={x + 11} cy={y + 31} r="1.1" fill="#475569" />}
+      <circle cx={x + 11} cy={y + 32} r="5" fill={LED_FILL[p.led]} stroke="#f8fafc" strokeWidth="1" />
+      {p.led === "warning" && <path d={`M${x + 11} ${y + 29}v4.4`} stroke="#1e293b" strokeWidth="1.6" />}
+      {p.led === "unknown" && <circle cx={x + 11} cy={y + 32} r="1.4" fill="#475569" />}
       <title>{label}</title>
     </g>
   );
