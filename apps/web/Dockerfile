@@ -16,6 +16,7 @@ WORKDIR /app
 RUN addgroup -S app && adduser -S -u 10001 -G app app
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
+COPY --from=build /app/public ./public
 COPY docs/help /app/help
 USER 10001
 EXPOSE 3000

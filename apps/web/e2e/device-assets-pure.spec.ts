@@ -75,3 +75,13 @@ test("busca por fabricante e modelo, com filtro de tipo e fabricante", () => {
   expect(searchAssets("zzzzzz")).toEqual([]);
   expect(searchAssets("HUAWEI   ", { vendor: "Huawei Technologies" }).length).toBeGreaterThan(0);
 });
+
+test("a imagem de produção do web leva public/: sem isso o catálogo funciona em `next start` e dá 404 no LAB (standalone não copia public sozinho)", () => {
+  const docker = readFileSync(join(__dirname, "..", "Dockerfile"), "utf8");
+  expect(existsSync(join(PUB, "devices", "svg"))).toBe(true);
+  const stages = docker.split(/^FROM /m).slice(1);   // cada estágio começa em `FROM`; a cópia precisa estar no ÚLTIMO (a imagem que roda)
+  const last = stages[stages.length - 1]!;
+  expect(last).toMatch(/^COPY --from=build \/app\/public \.\/public$/m);
+  expect(last.indexOf("COPY --from=build /app/public")).toBeLessThan(last.indexOf("USER "));   // antes de largar o root: o arquivo existe e é legível pelo usuário da aplicação
+  expect(stages.slice(0, -1).join("")).not.toMatch(/COPY --from=build \/app\/public/);        // e não só num estágio intermediário
+});
