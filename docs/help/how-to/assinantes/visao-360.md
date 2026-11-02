@@ -29,7 +29,7 @@ ui_route: "/assinantes/[id]"
 
 ## Resultado esperado
 
-Uma visão só de leitura. Nada nesta tela altera a rede. Wi-Fi e Histórico não aparecem porque ainda não têm fonte homologada.
+Uma visão só de leitura. Nada nesta tela altera a rede. O **Histórico** (30 dias de mudanças de estado que o Edge observou; uma queda e a volta entre duas coletas não aparecem) é a mesma aba do painel da Rede e só existe com o painel de gestão ligado. O **Wi-Fi** não aparece porque ainda não tem fonte homologada.
 
 ## Como ler o estado geral
 - **Completo:** contrato, ONU e roteador confirmados, todos com dado recente.

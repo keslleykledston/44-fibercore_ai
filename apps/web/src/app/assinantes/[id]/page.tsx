@@ -5,13 +5,15 @@ import { Card, Row } from "@/components/Panel";
 import { SourceChip } from "@/components/SourceChip";
 import { EmptyState, ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
-import { diagnosticsOn, subscriber360On } from "@/lib/features";
+import { OnuHistoryTab } from "@/components/OnuHistoryTab";
+import { diagnosticsOn, featuresOn, subscriber360On } from "@/lib/features";
 import type { CustomerContext, CustomerOnu } from "@/lib/types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const TABS = [["conexao", "Conexão"], ["optica", "Óptica"], ["cpe", "Roteador (CPE)"], ["cliente", "Cliente"], ["acoes", "Ações"]] as const;
-/** Abas só onde há dado (FC22-005): sem ONU não há Conexão/Óptica/Ações; sem Rx não há Óptica; sem equipamento confirmado/candidato não há CPE. */
-const tabsFor = (o: CustomerOnu | undefined) => TABS.filter(([t]) => t === "cliente" || (!!o && (t === "conexao" || t === "acoes" || (t === "optica" && o.rx_dbm !== null) || (t === "cpe" && o.cpe.link !== "unavailable"))));
+const TABS = [["conexao", "Conexão"], ["optica", "Óptica"], ["cpe", "Roteador (CPE)"], ["historico", "Histórico"], ["cliente", "Cliente"], ["acoes", "Ações"]] as const;
+/** Abas só onde há dado (FC22-005): sem ONU não há Conexão/Óptica/Histórico/Ações; sem Rx não há Óptica; sem equipamento confirmado/candidato não há CPE.
+ *  O Histórico (30 dias de mudanças de estado que o Edge observou) usa a mesma rota e a mesma flag do painel da Rede (`onu_quick_inspector`). */
+const tabsFor = (o: CustomerOnu | undefined, hist: boolean) => TABS.filter(([t]) => t === "cliente" || (!!o && (t === "conexao" || t === "acoes" || (t === "historico" && hist) || (t === "optica" && o.rx_dbm !== null) || (t === "cpe" && o.cpe.link !== "unavailable"))));
 const TONE: Record<CustomerContext["status"], string> = { complete: "bg-ok-soft text-ok", partial: "bg-warn-soft text-warn", stale: "bg-warn-soft text-warn", unknown: "bg-stale-soft text-muted" };
 const STATE: Record<string, string> = { online: "Online", offline: "Offline", los: "Fora · LOS", dying_gasp: "Fora · sinal de energia (dying-gasp)" };
 const OVERALL: Record<CustomerContext["status"], { label: string; icon: string; why: string }> = {
@@ -50,6 +52,7 @@ function Panel({ tab, o }: { tab: string; o: CustomerOnu }) {
         : <p className="text-sm text-muted">Nenhum roteador vinculado a esta ONU.</p>}
     </Card>
   );
+  if (tab === "historico") return <Card title="Histórico (30 dias)" testid="sub-historico"><OnuHistoryTab key={o.id} onuId={o.id} /></Card>;
   if (tab === "acoes") return (
     <Card title="Ações" testid="sub-acoes">
       <p className="text-sm">Nenhuma ação de escrita está liberada.</p>
@@ -96,7 +99,7 @@ export default async function Subscriber360({ params, searchParams }: { params: 
   if (!r.data) return shell(<ErrorState title="Não foi possível carregar a Visão 360" hint="Nenhuma informação sobre a conexão pode ser afirmada enquanto as fontes não responderem. Recarregue a página." />);
   const d = r.data;
   const o = d.onus.find((x) => x.id === q.onu) ?? d.onus[0];
-  const tabs = tabsFor(o);
+  const tabs = tabsFor(o, await featuresOn("onu_quick_inspector"));
   const cur = tabs.some(([t]) => t === q.aba) ? (q.aba as string) : tabs[0][0];
   const ov = OVERALL[d.status];
   const diag = await diagnosticsOn();
@@ -136,7 +139,7 @@ export default async function Subscriber360({ params, searchParams }: { params: 
             ) : <Panel tab={cur} o={o} />}
           </>
         )}
-        <p className="text-xs text-muted">Wi-Fi e Histórico ainda não têm fonte homologada e por isso não aparecem aqui.</p>
+        <p className="text-xs text-muted">Wi-Fi ainda não tem fonte homologada e por isso não aparece aqui.</p>
       </div>
     </>,
   );

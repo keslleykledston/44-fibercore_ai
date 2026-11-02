@@ -185,7 +185,11 @@ test("Visão 360 do assinante: estado explicado, fonte por bloco, abas só com d
   await page.getByTestId("tab-acoes").click();
   await expect(page.getByTestId("sub-acoes")).toContainText("Nenhuma ação de escrita está liberada");
   await expect(page.getByTestId("tab-wifi")).toHaveCount(0);  // sem fonte homologada: a aba não existe
-  await expect(page.getByText("Wi-Fi e Histórico ainda não têm fonte homologada")).toBeVisible();
+  await expect(page.getByText("Wi-Fi ainda não tem fonte homologada")).toBeVisible();
+  await page.getByTestId("tab-historico").click();                                            // o histórico de 30 dias da ONU (mesma rota e flag do painel da Rede)
+  await expect(page.getByTestId("sub-historico")).toBeVisible();
+  await expect(page.getByTestId("sub-historico").getByTestId("onu-history")).toContainText("Quedas (30 dias)", { timeout: 15_000 });
+  await expect(page.getByTestId("sub-historico").getByTestId("onu-history")).toContainText("Primeira observação");
   const res = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
   expect(res.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
   expect((await page.goto("/assinantes/00000000-0000-0000-0000-000000000000"))?.status()).toBe(404);
