@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19a9a-25e7-7e50-950a-91321b672257).
+[codex] Turn started (01a19a9a-2851-70b3-a107-7efb6132f6df).
+[codex] Assistant message captured: Vou comparar o branch com `main` e rastrear especialmente a validade do snapshot usada por R-...
+[codex] Running command: /bin/bash -lc 'git diff --unified=80 main...HEAD -- apps/api/app/core/diagnostics.py apps/api...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=80 main...HEAD -- apps/api/app/core/diagnostics.py apps/api... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --unified=50 main...HEAD -- apps/api/app/core/diagnostics.py apps/api...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=50 main...HEAD -- apps/api/app/core/diagnostics.py apps/api... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "def _check_observed|EDGE_OFFLINE_AFTER|EVAL_FRESH_FOR|observed_at" apps...
+[codex] Command completed: /bin/bash -lc 'rg -n "def _check_observed|EDGE_OFFLINE_AFTER|EVAL_FRESH_FOR|observed_at" apps... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '294,304p'; nl -ba apps/api/app/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '294,304p'; nl -ba apps/api/app/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: snapshots sem last_inform_at podem ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: snapshots sem last_inform_at podem renovar a validade de um Inform antigo e provocar inferência falsa em R-D004.
+
+Findings:
+- [high] Snapshot sem Inform renova a atualidade do Inform antigo (apps/api/app/api/inventory.py:299-300)
+  Quando chega um snapshot mais recente sem `last_inform_at`, o upsert atualiza `observed_at`, mas `GREATEST` mantém o `last_inform_at` anterior. `_cpe_inputs` usa esse `observed_at` para marcar `snapshot_fresh`; assim, se o Inform preservado estiver velho, R-D004 pode inferir `acs_session_stale` embora o snapshot recente não tenha confirmado que esse valor ainda representa o estado observado pelo ACS. Isso ocorre, por exemplo, quando um Edge omite o campo. Persista a atualidade/proveniência do próprio `last_inform_at` e use-a no `snapshot_fresh`, sem renová-la quando o campo estiver ausente.
+  Recommendation: Registre separadamente quando `last_inform_at` foi efetivamente recebido e condicione a inferência de R-D004 à frescura desse registro; snapshots sem o campo não devem renová-la.

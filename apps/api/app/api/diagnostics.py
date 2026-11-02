@@ -15,7 +15,7 @@ from sqlalchemy import Connection, text
 
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.noc import DROP_WINDOW, EVAL_FRESH_FOR
-from app.api.routes import audit
+from app.api.routes import EDGE_OFFLINE_AFTER, audit
 from app.core import diagnostics, features
 
 router = APIRouter()
@@ -32,7 +32,8 @@ class RunRequest(BaseModel):
     olt_id: UUID | None = None
     pon_id: UUID | None = None
     onu_id: UUID | None = None   # the PON of this ONU (resolved server-side); exclusive with olt_id/pon_id
-    cpe_id: UUID | None = None   # for CPE rules (R-D002): the CPE; exclusive with olt_id/pon_id/onu_id
+    cpe_id: UUID | None = None   # for CPE rules (R-D002, R-D004): the CPE; exclusive with olt_id/pon_id/onu_id
+    edge_id: UUID | None = None  # for Edge rules (R-D003): the collector; exclusive with every other scope
 
     @model_validator(mode="after")
     def _one_scope(self) -> RunRequest:
@@ -40,6 +41,8 @@ class RunRequest(BaseModel):
             raise ValueError("onu_id cannot be combined with olt_id or pon_id")
         if self.cpe_id and (self.olt_id or self.pon_id or self.onu_id):
             raise ValueError("cpe_id cannot be combined with olt_id, pon_id or onu_id")
+        if self.edge_id and (self.olt_id or self.pon_id or self.onu_id or self.cpe_id):
+            raise ValueError("edge_id cannot be combined with another scope")
         return self
 
 
@@ -109,13 +112,36 @@ def _cpe_inputs(conn: Connection, cpe_id: UUID) -> list[dict]:
     conns = sorted(({"state": r.value, "fresh": fresh(r)} for r in st if r.metric == "wan_connection_status"),
                    key=lambda c: (c["state"], c["fresh"]))
     ages = [age(r) for r in st]
+    cp = conn.execute(text("SELECT last_inform_at, last_inform_observed_at FROM cpes WHERE id = :c"), {"c": cpe_id}).one()   # last_inform_at = the ACS's own _lastInform
+    inform_age = None if cp.last_inform_at is None else max(0, int((now - cp.last_inform_at).total_seconds()))
+    # when the Edge last REPORTED an Inform time: a snapshot that omitted it never renews this (an old Inform cannot borrow a newer snapshot's freshness)
+    snapshot_fresh = cp.last_inform_observed_at is not None and now - cp.last_inform_observed_at <= EVAL_FRESH_FOR
     onu = conn.execute(
         text("SELECT o.status, o.observed_at FROM onu_cpe_links l JOIN onus o ON o.id = l.onu_id AND o.tenant_id = l.tenant_id "
              "WHERE l.cpe_id = :c AND l.status = 'confirmed'"), {"c": cpe_id}).first()
     return [{"subject_id": str(cpe_id), "links": links, "connections": conns,
              "newest_age_seconds": min(ages, default=None), "oldest_age_seconds": max(ages, default=None),
              "onu_link": "confirmed" if onu else "none", "onu_status": onu.status if onu else None,
-             "onu_fresh": bool(onu and onu.observed_at and now - onu.observed_at <= EVAL_FRESH_FOR)}]
+             "onu_fresh": bool(onu and onu.observed_at and now - onu.observed_at <= EVAL_FRESH_FOR),
+             "inform_age_seconds": inform_age, "inform_fresh": inform_age is not None and inform_age <= STATE_FRESH_FOR.total_seconds(),
+             "snapshot_fresh": bool(snapshot_fresh)}]
+
+
+def _edge_inputs(conn: Connection, edge_id: UUID) -> list[dict]:
+    """One row for the Edge (RLS scopes the tenant). The silence verdict and the ONU freshness are STORED, so a replay needs no clock.
+    Only counts and ages go in: no name, no serial, no customer data."""
+    e = conn.execute(text("SELECT status, last_heartbeat_at FROM edges WHERE id = :e"), {"e": edge_id}).first()
+    if e is None:
+        raise HTTPException(404, "edge not found")
+    now = datetime.now(UTC)
+    age = None if e.last_heartbeat_at is None else max(0, int((now - e.last_heartbeat_at).total_seconds()))
+    c = conn.execute(
+        text("SELECT count(DISTINCT ol.id) AS olts, count(u.id) AS onus, "
+             "count(u.id) FILTER (WHERE u.observed_at IS NULL OR u.observed_at < :cut) AS stale "
+             "FROM olts ol LEFT JOIN onus u ON u.olt_id = ol.id AND u.tenant_id = ol.tenant_id WHERE ol.edge_id = :e"),
+        {"e": edge_id, "cut": now - EVAL_FRESH_FOR}).one()
+    return [{"subject_id": str(edge_id), "heartbeat_age_seconds": age, "silent": age is not None and age > EDGE_OFFLINE_AFTER.total_seconds(),
+             "revoked": e.status == "revoked", "olts": c.olts, "onus_total": c.onus, "onus_not_fresh": c.stale}]
 
 
 @router.post("/v1/diagnostics/runs", status_code=201)
@@ -125,7 +151,15 @@ def create_run(body: RunRequest, p: Principal = Depends(require("diagnostics:run
     if rule is None:
         raise HTTPException(404, "rule not found")
     pon_id, cpe_id = body.pon_id, body.cpe_id
-    if rule.subject == "cpe":
+    if rule.subject == "edge":
+        if not body.edge_id:
+            raise HTTPException(422, "this rule needs edge_id")
+        if body.olt_id or body.pon_id or body.onu_id or body.cpe_id:
+            raise HTTPException(422, "this rule takes only edge_id")
+        inputs, truncated = _edge_inputs(conn, body.edge_id), False
+    elif body.edge_id:
+        raise HTTPException(422, "this rule does not take edge_id")
+    elif rule.subject == "cpe":
         if body.olt_id or body.pon_id:
             raise HTTPException(422, "this rule takes cpe_id or onu_id")
         if body.onu_id:  # RLS: another tenant's ONU is simply not found
@@ -153,7 +187,8 @@ def create_run(body: RunRequest, p: Principal = Depends(require("diagnostics:run
         inputs, truncated = _pon_inputs(conn, body.olt_id, pon_id)
     findings = diagnostics.run(rule, inputs)
     scope = {"olt_id": str(body.olt_id) if body.olt_id else None, "pon_id": str(pon_id) if pon_id else None,
-             "onu_id": str(body.onu_id) if body.onu_id else None, **({"cpe_id": str(cpe_id)} if cpe_id else {})}
+             "onu_id": str(body.onu_id) if body.onu_id else None, **({"cpe_id": str(cpe_id)} if cpe_id else {}),
+             **({"edge_id": str(body.edge_id)} if body.edge_id else {})}
     run_id = conn.execute(
         text("INSERT INTO diagnostic_runs (tenant_id, rule_id, rule_version, scope, inputs, findings, truncated, requested_by) "
              "VALUES (:t,:r,:v,CAST(:s AS jsonb),CAST(:i AS jsonb),CAST(:f AS jsonb),:x,:u) RETURNING id"),

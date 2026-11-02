@@ -784,7 +784,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: {type: object, additionalProperties: false, required: [rule_id], properties: {rule_id: {type: string, pattern: '^R-D[0-9]{3}$'}, rule_version: {type: integer, minimum: 1}, olt_id: {type: string, format: uuid}, pon_id: {type: string, format: uuid}, onu_id: {type: string, format: uuid, description: 'PON desta ONU (resolvida no servidor); exclusivo com olt_id e pon_id. Em regras de CPE (R-D002): o CPE ligado a esta ONU por vínculo CONFIRMADO'}, cpe_id: {type: string, format: uuid, description: 'Regras de CPE (R-D002): o CPE; exclusivo com olt_id, pon_id e onu_id. Regras de PON não aceitam cpe_id'}}}
+            schema: {type: object, additionalProperties: false, required: [rule_id], properties: {rule_id: {type: string, pattern: '^R-D[0-9]{3}$'}, rule_version: {type: integer, minimum: 1}, olt_id: {type: string, format: uuid}, pon_id: {type: string, format: uuid}, onu_id: {type: string, format: uuid, description: 'PON desta ONU (resolvida no servidor); exclusivo com olt_id e pon_id. Em regras de CPE (R-D002, R-D004): o CPE ligado a esta ONU por vínculo CONFIRMADO'}, cpe_id: {type: string, format: uuid, description: 'Regras de CPE (R-D002, R-D004): o CPE; exclusivo com olt_id, pon_id e onu_id. Regras de PON não aceitam cpe_id'}, edge_id: {type: string, format: uuid, description: 'Regras de Edge (R-D003): o coletor; exclusivo com todos os outros escopos. Outras regras não aceitam edge_id'}}}
       responses:
         '201': {description: "{run_id, rule_id, rule_version, scope, truncated, findings[{finding_id, status, hypothesis, evidence, evidence_refs, requires_human_confirmation, next_read_action}]}"}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -1829,7 +1829,7 @@ components:
       properties:
         edge_id: {type: string, format: uuid}
         observed_at: {type: string, format: date-time}
-        cpes: {type: array, maxItems: 20000, items: {type: object, required: [canonical_serial, binding], properties: {canonical_serial: {type: string}, vendor: {type: string}, model: {type: string}, firmware: {type: string}, binding: {type: object, required: [protocol, external_id, connector_id], properties: {protocol: {type: string, enum: [tr069, tr369]}, external_id: {type: string}, connector_id: {type: string}}}}}}
+        cpes: {type: array, maxItems: 20000, items: {type: object, required: [canonical_serial, binding], properties: {canonical_serial: {type: string}, vendor: {type: string}, model: {type: string}, firmware: {type: string}, last_inform_at: {type: string, format: date-time, description: 'O _lastInform do próprio ACS (R-D004), NÃO a hora da coleta. Opcional: Edge antigo não envia; nunca no futuro; só avança'}, binding: {type: object, required: [protocol, external_id, connector_id], properties: {protocol: {type: string, enum: [tr069, tr369]}, external_id: {type: string}, connector_id: {type: string}}}}}}
     Capability:
       type: object
       required: [name, status, protocol, certification]

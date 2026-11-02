@@ -120,6 +120,83 @@ def r_d002_v1(i: dict) -> RuleResult:
     return observed("the reported WAN state is transitional or not conclusive")
 
 
+def r_d003_v1(i: dict) -> RuleResult:
+    """R-D003 v1: the collector (Edge) of these OLTs went silent, so ONU data that looks like dozens of outages may only be OLD data.
+
+    A silent Edge is a fact about the collection infrastructure, not about the network: its ONUs are not current and must not be read
+    as ONU outages (ADR-0018 suppresses their incidents the same way). Inputs: heartbeat_age_seconds (int|None), silent (bool, STORED: the
+    rule has no clock), revoked (bool), olts, onus_total, onus_not_fresh (counts of the OLTs this Edge collects)."""
+    evidence = {"heartbeat_age_seconds": i["heartbeat_age_seconds"], "silent": bool(i["silent"]), "olts": int(i["olts"]),
+                "onus_total": int(i["onus_total"]), "onus_not_fresh": int(i["onus_not_fresh"])}
+
+    def done(status: str, why: str) -> RuleResult:
+        f = {"status": status, "hypothesis": None, "reason": why, "evidence": evidence, "requires_human_confirmation": False,
+             "next_read_action": "re-read after the next heartbeat of this Edge"}
+        return RuleResult(False, "unknown", f)
+
+    if i["revoked"]:
+        return done("unknown", "this Edge was revoked: it is not expected to report")
+    if i["heartbeat_age_seconds"] is None:
+        return done("unknown", "this Edge never sent a heartbeat: nothing is known about its collection")
+    if not i["silent"]:
+        # a heartbeat proves the Edge process is alive, NOT that its OLT readings are current: say only what the counts show
+        if int(i["onus_total"]) == 0:
+            return done("observed", "the Edge is reporting (recent heartbeat); no ONU is known for its OLTs, so nothing is said about their data")
+        if int(i["onus_not_fresh"]) > 0:
+            return done("observed", f"the Edge is reporting (recent heartbeat), but {int(i['onus_not_fresh'])} of {int(i['onus_total'])} "
+                                    "ONU readings are old: read them as old data, not as outages")
+        return done("observed", "the Edge is reporting (recent heartbeat) and every known ONU reading is recent")
+    total, stale = int(i["onus_total"]), int(i["onus_not_fresh"])
+    if total == 0:
+        data = "no ONU is known for its OLTs"
+    elif stale == total:
+        data = f"all {total} known ONU readings are old"
+    elif stale > 0:
+        data = f"{stale} of {total} known ONU readings are old and the rest will age without a new collection"
+    else:
+        data = f"the {total} known ONU readings are still recent but will age without a new collection"
+    f = {"status": "inferred", "hypothesis": "this Edge stopped reporting: its OLT readings will not be renewed, so an ONU that looks offline may only be old data",
+         "suspected_cause": "edge_unreachable", "context": data, "evidence": evidence, "requires_human_confirmation": True,
+         "next_read_action": "check the Edge host and its link to the cloud; do not treat the ONUs of its OLTs as offline from here"}
+    return RuleResult(True, "edge_unreachable", f)
+
+
+def r_d004_v1(i: dict) -> RuleResult:
+    """R-D004 v1: the ONU is ONLINE on the OLT but its CPE has not informed the ACS recently.
+
+    This is NOT a claim that the subscriber has no internet: it points at the ACS session (NAT, reachability, periodic inform, controller
+    coverage) rather than at the access network. It applies only to a confirmed ONU link, a fresh ONU reading and an ONU that is online;
+    anything else claims nothing. Inputs: onu_link ("confirmed"|"none"), onu_status (str|None), onu_fresh (bool), inform_age_seconds
+    (int|None) and inform_fresh (bool), plus snapshot_fresh (bool): whether the CPE snapshot that carried the Inform time is itself recent.
+    All STORED: the rule has no clock. An old snapshot may hold an old Inform while the ACS already has newer ones, so it claims nothing."""
+    evidence = {"onu": {"link": i["onu_link"], "status": i["onu_status"], "fresh": bool(i["onu_fresh"])},
+                "inform_age_seconds": i["inform_age_seconds"], "inform_fresh": bool(i["inform_fresh"]),
+                "snapshot_fresh": bool(i["snapshot_fresh"])}
+
+    def done(status: str, why: str, nxt: str = "re-read after the next collection") -> RuleResult:
+        f = {"status": status, "hypothesis": None, "reason": why, "evidence": evidence, "requires_human_confirmation": False,
+             "next_read_action": nxt}
+        return RuleResult(False, "unknown", f)
+
+    if i["onu_link"] != "confirmed":
+        return done("unknown", "no confirmed ONU link: the OLT and the ACS cannot be compared for this CPE")
+    if not i["onu_fresh"]:
+        return done("unknown", "the ONU reading is too old to compare with the ACS", "wait for the next collection of this OLT")
+    if i["onu_status"] != "online":
+        return done("observed", "the linked ONU is not online on the OLT: this rule applies only to an online ONU")
+    if i["inform_age_seconds"] is None:
+        return done("unknown", "no Inform time is known for this CPE", "request a read-only refresh of this CPE (job refresh, R0)")
+    if not i["snapshot_fresh"]:
+        return done("unknown", "the CPE snapshot that carried the Inform time is itself old: the ACS may already have a newer one",
+                    "wait for the next collection of the ACS")
+    if i["inform_fresh"]:
+        return done("observed", "the CPE informed the ACS recently")
+    f = {"status": "inferred", "hypothesis": "the ONU is online on the OLT but its CPE has not informed the ACS recently",
+         "suspected_cause": "acs_session_stale", "evidence": evidence, "requires_human_confirmation": True,
+         "next_read_action": "check the ACS session, NAT and controller coverage; this does not mean the subscriber has no internet"}
+    return RuleResult(True, "acs_session_stale", f)
+
+
 @dataclass(frozen=True)
 class Rule:
     id: str
@@ -139,6 +216,14 @@ RULES: dict[tuple[str, int], Rule] = {
         "R-D002", 1, "Estado da WAN informado pelo CPE",
         "O que o CPE informa da sua WAN (enlace e conexão) em leitura recente do cache do ACS; sem leitura recente, nada é afirmado.",
         "cpe", r_d002_v1),
+    ("R-D003", 1): Rule(
+        "R-D003", 1, "Coletor (Edge) sem sinal",
+        "O Edge que coleta estas OLTs parou de reportar: os dados de ONU dele estão velhos e não provam queda de ONU.",
+        "edge", r_d003_v1),
+    ("R-D004", 1): Rule(
+        "R-D004", 1, "ONU online e CPE sem Inform recente",
+        "A ONU está online na OLT, mas o CPE não informou o ACS recentemente: aponta a sessão com o ACS, não a rede de acesso.",
+        "cpe", r_d004_v1),
 }
 
 
