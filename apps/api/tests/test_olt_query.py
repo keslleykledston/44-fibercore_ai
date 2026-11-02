@@ -241,9 +241,9 @@ def test_the_vectors_the_edge_pins_are_the_ones_the_cloud_computes():
 
     from app.api.jobs import _intent_hash
     oid = UUID("8f14e45f-ceea-467a-9a36-4a1b5c3d2e10")
-    assert olt_query.catalog_version() == "13e3eba2a75523c32c4544e855157aa75541dec8f6c196bd8db3238bce39481d"
+    assert olt_query.catalog_version() == "a02548436a036e3f3c68fc841c63e08239fb760b43fe0a2a7e2f04cc4ad44bf1"
     params = olt_query.build_intent(oid, {"query_id": "pon.ont.info", "slot": 1, "port": 0})
-    assert _intent_hash("olt_query", "olt", oid, params) == "50d1a38bb6d18ad719292153d52d2d3adffaba2487bd70cf6dbd3eeef4da90b1"
+    assert _intent_hash("olt_query", "olt", oid, params) == "f0045370070e4cda1c773a8431c1e51181af4c4a810303b671e497de05bb14f0"
 
 
 def _report(client, inv, jid, **body):
@@ -479,3 +479,20 @@ def test_profile_list_result_shape_is_closed():
         assert not olt_query.check_result(q, {"profiles": [{"id": 1, "name": "ok", "binding_times": 1, "sn": "x"}]})
         assert not olt_query.check_result(q, {"profiles": [{"id": 1, "name": "a", "binding_times": 1}, {"id": 1, "name": "b", "binding_times": 1}]})
         assert not olt_query.check_result(q, {"profiles": [{"id": True, "name": "a", "binding_times": 1}]})
+
+
+def test_dba_and_traffic_result_shapes_are_closed():
+    dba = {"profiles": [{"id": 0, "type": 3, "compensation": False, "fixed_kbps": 0, "assured_kbps": 8192, "maximum_kbps": 20480, "binding_times": 0}]}
+    assert olt_query.check_result("olt.profile.dba", dba)
+    bad = {"profiles": [{**dba["profiles"][0], "type": 1}]}             # type 1 is fixed only: an assured rate there is not a thing
+    assert not olt_query.check_result("olt.profile.dba", bad)
+    assert not olt_query.check_result("olt.profile.dba", {"profiles": [{**dba["profiles"][0], "type": 9}]})
+    assert not olt_query.check_result("olt.profile.dba", {"profiles": [{**dba["profiles"][0], "compensation": "No"}]})
+    assert not olt_query.check_result("olt.profile.dba", {"profiles": []})
+    row = {"id": 1, "cir_kbps": 2496, "cbs_bytes": 81872, "pir_kbps": 4992, "pbs_bytes": 163744, "priority": 6, "copy_policy": "-", "pri_policy": "tag-pri"}
+    assert olt_query.check_result("olt.profile.traffic", {"tables": [row]})
+    assert not olt_query.check_result("olt.profile.traffic", {"tables": [{**row, "pri_policy": "x;reboot"}]})
+    assert not olt_query.check_result("olt.profile.traffic", {"tables": [{**row, "priority": 9}]})
+    assert olt_query.check_result("olt.profile.traffic", {"tables": [{**row, "id": 6, "cir_kbps": None, "pbs_bytes": None}]})   # "off" = no limit
+    assert not olt_query.check_result("olt.profile.traffic", {"tables": [{**row, "cir_kbps": "off"}]})
+    assert not olt_query.check_result("olt.profile.traffic", {"tables": [row, row]})

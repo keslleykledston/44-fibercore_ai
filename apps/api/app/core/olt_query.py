@@ -41,10 +41,10 @@ CATALOG: tuple[Query, ...] = (
     Query("olt.autofind", "ONTs detectadas e não confirmadas", "global", False),
     Query("olt.temperature", "Temperatura", "global", True),
     Query("olt.sync", "Sincronismo de controladoras", "global", True),
-    Query("olt.profile.dba", "Perfis DBA (lista)", "global", False),
+    Query("olt.profile.dba", "Perfis DBA (lista)", "global", True),
     Query("olt.profile.line", "Perfis de linha da ONT (lista)", "global", True),
     Query("olt.profile.srv", "Perfis de serviço da ONT (lista)", "global", True),
-    Query("olt.profile.traffic", "Tabelas de tráfego (lista)", "global", False),
+    Query("olt.profile.traffic", "Tabelas de tráfego (lista)", "global", True),
     Query("slot.board", "Detalhe da placa", "slot", False),
     Query("slot.cpu", "CPU da placa", "slot", True),
     Query("slot.mem", "Memória da placa", "slot", True),
@@ -66,7 +66,7 @@ BY_ID = {q.id: q for q in CATALOG}
 
 # ADR-0029 item 7: the rollout is by steps. Only these are offered by the cloud now (the global, already validated ones); the PON ones come after a
 # supervised rehearsal in the LAB. Being in the catalog is not being offered.
-ROLLOUT: frozenset[str] = frozenset({"olt.version", "olt.board", "olt.time", "olt.sync", "olt.temperature"})
+ROLLOUT: frozenset[str] = frozenset({"olt.version", "olt.board", "olt.time", "olt.sync", "olt.temperature", "olt.profile.line", "olt.profile.srv", "olt.profile.dba", "olt.profile.traffic"})
 
 # the Edge side of the channel (queue, lease, parsers) exists; the tenant flag and the Edge's own configuration still decide whether anything runs
 EDGE_SUPPORT = True
@@ -121,6 +121,7 @@ _RELEASE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{1,39}$")
 _BOARD = re.compile(r"^[A-Za-z0-9]{3,20}$")
 _STATUS = re.compile(r"^[A-Za-z_]{3,24}$")
 _PROFILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_POLICY = re.compile(r"^(-|[a-z]+(-[a-z]+){0,2})$")
 _TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$")
 
 
@@ -167,6 +168,31 @@ def check_result(query_id: str, data) -> bool:
         for x in rows:
             if not (isinstance(x, dict) and set(x) == {"id", "name", "binding_times"} and _is_int(x["id"]) and 0 <= x["id"] <= 99999
                     and isinstance(x["name"], str) and _PROFILE_NAME.match(x["name"]) and _is_int(x["binding_times"]) and 0 <= x["binding_times"] <= 999999):
+                return False
+        return len({x["id"] for x in rows}) == len(rows)
+    if query_id == "olt.profile.dba":
+        rows = data.get("profiles")
+        if set(data) != {"profiles"} or not isinstance(rows, list) or not 1 <= len(rows) <= 2048:
+            return False
+        uses = {1: (True, False, False), 2: (False, True, False), 3: (False, True, True), 4: (False, False, True), 5: (True, True, True)}
+        for x in rows:
+            if not (isinstance(x, dict) and set(x) == {"id", "type", "compensation", "fixed_kbps", "assured_kbps", "maximum_kbps", "binding_times"}
+                    and _is_int(x["id"]) and 0 <= x["id"] <= 99999 and _is_int(x["type"]) and x["type"] in uses and isinstance(x["compensation"], bool)
+                    and all(_is_int(x[k]) and 0 <= x[k] <= 99999999 for k in ("fixed_kbps", "assured_kbps", "maximum_kbps")) and _is_int(x["binding_times"])
+                    and 0 <= x["binding_times"] <= 999999):
+                return False
+            if any(not u and x[k] != 0 for u, k in zip(uses[x["type"]], ("fixed_kbps", "assured_kbps", "maximum_kbps"), strict=True)):
+                return False
+        return len({x["id"] for x in rows}) == len(rows)
+    if query_id == "olt.profile.traffic":
+        rows = data.get("tables")
+        if set(data) != {"tables"} or not isinstance(rows, list) or len(rows) > 2048:
+            return False
+        for x in rows:
+            if not (isinstance(x, dict) and set(x) == {"id", "cir_kbps", "cbs_bytes", "pir_kbps", "pbs_bytes", "priority", "copy_policy", "pri_policy"}
+                    and _is_int(x["id"]) and 0 <= x["id"] <= 99999 and all(x[k] is None or (_is_int(x[k]) and 0 <= x[k] <= 999999999) for k in ("cir_kbps", "cbs_bytes", "pir_kbps", "pbs_bytes"))
+                    and _is_int(x["priority"]) and 0 <= x["priority"] <= 7 and isinstance(x["copy_policy"], str) and _POLICY.match(x["copy_policy"])
+                    and isinstance(x["pri_policy"], str) and _POLICY.match(x["pri_policy"])):
                 return False
         return len({x["id"] for x in rows}) == len(rows)
     if query_id == "olt.temperature":

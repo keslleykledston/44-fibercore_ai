@@ -29,7 +29,7 @@ var (
 // HasParser says whether a query can return a typed result.
 func HasParser(queryID string) bool {
 	switch queryID {
-	case "olt.version", "olt.board", "olt.time", "olt.sync", "olt.temperature", "slot.cpu", "slot.mem", "olt.profile.line", "olt.profile.srv":
+	case "olt.version", "olt.board", "olt.time", "olt.sync", "olt.temperature", "slot.cpu", "slot.mem", "olt.profile.line", "olt.profile.srv", "olt.profile.dba", "olt.profile.traffic":
 		return true
 	}
 	return false
@@ -54,6 +54,10 @@ func ParseResult(queryID, out string) (json.RawMessage, error) {
 		return parseOccupancy(out, "Memory", false)
 	case "olt.profile.line", "olt.profile.srv":
 		return parseProfileList(out)
+	case "olt.profile.dba":
+		return parseDBAProfiles(out)
+	case "olt.profile.traffic":
+		return parseTrafficTables(out)
 	}
 	return nil, ErrNoParser
 }
@@ -312,4 +316,132 @@ func parseProfileList(out string) (json.RawMessage, error) {
 		return nil, ErrBadOutput
 	}
 	return json.Marshal(map[string]any{"profiles": rows})
+}
+
+var (
+	reDBAHeader1 = regexp.MustCompile(`^Profile-ID\s+type\s+Bandwidth\s+Fix\s+Assure\s+Max\s+Bind$`)
+	reDBAHeader2 = regexp.MustCompile(`^compensation\s+\(kbps\)\s+\(kbps\)\s+\(kbps\)\s+times$`)
+	reDBARow     = regexp.MustCompile(`^(\d{1,5})\s+([1-5])\s+(Yes|No)\s+(\d{1,8})\s+(\d{1,8})\s+(\d{1,8})\s+(\d{1,6})$`)
+)
+
+type dbaRow struct {
+	ID           int  `json:"id"`
+	Type         int  `json:"type"`
+	Compensation bool `json:"compensation"`
+	FixKbps      int  `json:"fixed_kbps"`
+	AssureKbps   int  `json:"assured_kbps"`
+	MaxKbps      int  `json:"maximum_kbps"`
+	BindingTimes int  `json:"binding_times"`
+}
+
+// parseDBAProfiles: the OLT's DBA profiles (upstream bandwidth: type 1 fixed, 2 assured, 3 assured+maximum, 4 maximum, 5 all three). Numbers only, no ONT or text.
+// Strict like the others: the two header lines, unique IDs, and a rate that the type does not use must be zero.
+func parseDBAProfiles(out string) (json.RawMessage, error) {
+	rows := []dbaRow{}
+	seen := map[int]bool{}
+	stage := 0 // 0 nothing, 1 first header, 2 both headers
+	for _, line := range strings.Split(out, "\n") {
+		l := strings.TrimSpace(strings.TrimRight(line, "\r"))
+		switch {
+		case isEcho(l), reProfileRule.MatchString(l):
+			continue
+		case reDBAHeader1.MatchString(l):
+			if stage != 0 {
+				return nil, ErrBadOutput
+			}
+			stage = 1
+		case reDBAHeader2.MatchString(l):
+			if stage != 1 {
+				return nil, ErrBadOutput
+			}
+			stage = 2
+		default:
+			m := reDBARow.FindStringSubmatch(l)
+			if m == nil || stage != 2 {
+				return nil, ErrBadOutput
+			}
+			a := func(i int) int { v, _ := strconv.Atoi(m[i]); return v }
+			r := dbaRow{ID: a(1), Type: a(2), Compensation: m[3] == "Yes", FixKbps: a(4), AssureKbps: a(5), MaxKbps: a(6), BindingTimes: a(7)}
+			uses := map[int][3]bool{1: {true, false, false}, 2: {false, true, false}, 3: {false, true, true}, 4: {false, false, true}, 5: {true, true, true}}[r.Type]
+			if (!uses[0] && r.FixKbps != 0) || (!uses[1] && r.AssureKbps != 0) || (!uses[2] && r.MaxKbps != 0) || seen[r.ID] || len(rows) >= 2048 {
+				return nil, ErrBadOutput
+			}
+			seen[r.ID] = true
+			rows = append(rows, r)
+		}
+	}
+	if stage != 2 || len(rows) == 0 {
+		return nil, ErrBadOutput
+	}
+	return json.Marshal(map[string]any{"profiles": rows})
+}
+
+var (
+	reTrafficHeader1 = regexp.MustCompile(`^TID\s+CIR\s+CBS\s+PIR\s+PBS\s+Pri\s+Copy-policy\s+Pri-Policy$`)
+	reTrafficHeader2 = regexp.MustCompile(`^\(kbps\)\s+\(bytes\)\s+\(kbps\)\s+\(bytes\)$`)
+	reTrafficRow     = regexp.MustCompile(`^(\d{1,5})\s+(\d{1,9}|off)\s+(\d{1,9}|off)\s+(\d{1,9}|off)\s+(\d{1,9}|off)\s+([0-7])\s+(-|user-cos|[a-z]+(?:-[a-z]+){0,2})\s+([a-z]+(?:-[a-z]+){0,2})$`)
+	reTrafficTotal   = regexp.MustCompile(`^Total Num\s*:\s*(\d{1,5})$`)
+)
+
+type trafficRow struct {
+	ID         int    `json:"id"`
+	CIRKbps    *int   `json:"cir_kbps"` // null = the table says "off" (no limit)
+	CBSBytes   *int   `json:"cbs_bytes"`
+	PIRKbps    *int   `json:"pir_kbps"`
+	PBSBytes   *int   `json:"pbs_bytes"`
+	Priority   int    `json:"priority"`
+	CopyPolicy string `json:"copy_policy"`
+	PriPolicy  string `json:"pri_policy"`
+}
+
+// parseTrafficTables: the OLT's IP traffic tables (rate limits applied per service-port). Numbers and two closed keywords per row, no ONT or free text.
+func parseTrafficTables(out string) (json.RawMessage, error) {
+	rows := []trafficRow{}
+	seen := map[int]bool{}
+	stage, total := 0, -1
+	for _, line := range strings.Split(out, "\n") {
+		l := strings.TrimSpace(strings.TrimRight(line, "\r"))
+		switch {
+		case isEcho(l), reProfileRule.MatchString(l):
+			continue
+		case reTrafficHeader1.MatchString(l):
+			if stage != 0 {
+				return nil, ErrBadOutput
+			}
+			stage = 1
+		case reTrafficHeader2.MatchString(l):
+			if stage != 1 {
+				return nil, ErrBadOutput
+			}
+			stage = 2
+		case reTrafficTotal.MatchString(l):
+			if total >= 0 {
+				return nil, ErrBadOutput
+			}
+			total, _ = strconv.Atoi(reTrafficTotal.FindStringSubmatch(l)[1])
+		default:
+			m := reTrafficRow.FindStringSubmatch(l)
+			if m == nil || stage != 2 || total >= 0 {
+				return nil, ErrBadOutput
+			}
+			a := func(i int) int { v, _ := strconv.Atoi(m[i]); return v }
+			rate := func(i int) *int {
+				if m[i] == "off" {
+					return nil
+				}
+				v := a(i)
+				return &v
+			}
+			r := trafficRow{ID: a(1), CIRKbps: rate(2), CBSBytes: rate(3), PIRKbps: rate(4), PBSBytes: rate(5), Priority: a(6), CopyPolicy: m[7], PriPolicy: m[8]}
+			if seen[r.ID] || len(rows) >= 2048 {
+				return nil, ErrBadOutput
+			}
+			seen[r.ID] = true
+			rows = append(rows, r)
+		}
+	}
+	if stage != 2 || total != len(rows) {
+		return nil, ErrBadOutput
+	}
+	return json.Marshal(map[string]any{"tables": rows})
 }

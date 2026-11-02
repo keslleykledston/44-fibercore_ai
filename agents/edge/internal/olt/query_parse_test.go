@@ -197,3 +197,45 @@ func TestParseProfileListIsStrict(t *testing.T) {
 		}
 	}
 }
+
+func TestParseDBAAndTrafficFromTheCaptureLayout(t *testing.T) {
+	b, _ := os.ReadFile(r015Dir + "display_dba_profile_all.txt")
+	raw, err := ParseResult("olt.profile.dba", string(b))
+	var d struct {
+		Profiles []dbaRow `json:"profiles"`
+	}
+	if err != nil || json.Unmarshal(raw, &d) != nil || len(d.Profiles) != 4 || d.Profiles[0].Type != 3 || d.Profiles[0].AssureKbps != 8192 || d.Profiles[0].MaxKbps != 20480 || !d.Profiles[3].Compensation {
+		t.Fatalf("%v %+v", err, d)
+	}
+	// a rate the type does not use must be zero; duplicates and a missing header are refused
+	g := string(b)
+	for name, out := range map[string]string{
+		"fixed type with a maximum": strings.Replace(g, "1      1           No       5120          0             0", "1      1           No       5120          0           100", 1),
+		"duplicate id":              strings.Replace(g, "           5      4", "           1      4", 1),
+		"no headers":                "           5      4           No          0          0         51200        12\n",
+		"unknown type":              strings.Replace(g, "9      5", "9      7", 1),
+	} {
+		if _, err := ParseResult("olt.profile.dba", out); err == nil {
+			t.Errorf("%s must be refused", name)
+		}
+	}
+	b, _ = os.ReadFile(r015Dir + "display_traffic_table_ip_from_index_0.txt")
+	raw, err = ParseResult("olt.profile.traffic", string(b))
+	var tr struct {
+		Tables []trafficRow `json:"tables"`
+	}
+	if err != nil || json.Unmarshal(raw, &tr) != nil || len(tr.Tables) != 5 || tr.Tables[3].CopyPolicy != "user-cos" || tr.Tables[2].PriPolicy != "local-pri" || *tr.Tables[1].PIRKbps != 4992 || tr.Tables[4].CIRKbps != nil || tr.Tables[4].PBSBytes != nil {
+		t.Fatalf("%v %+v", err, tr)
+	}
+	g = string(b)
+	for name, out := range map[string]string{
+		"total disagrees": strings.Replace(g, "Total Num : 5", "Total Num : 9", 1),
+		"free text":       strings.Replace(g, "local-pri", "x;reboot", 1),
+		"priority 9":      strings.Replace(g, "     6 -", "     9 -", 1),
+		"paginated":       g + "---- More ( Press 'Q' to break ) ----",
+	} {
+		if _, err := ParseResult("olt.profile.traffic", out); err == nil {
+			t.Errorf("%s must be refused", name)
+		}
+	}
+}

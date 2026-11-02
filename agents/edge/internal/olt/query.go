@@ -61,10 +61,10 @@ var queryCatalog = []Query{
 	{"olt.temperature", "Temperatura", ScopeGlobal, "display temperature 0", true, "3"},
 	{"olt.sync", "Sincronismo de controladoras", ScopeGlobal, "display data sync state", true, "3"},
 	// profile inventory (ADR-0040): lists of the OLT's own profiles, which carry no ONT, serial or description of a subscriber
-	{"olt.profile.dba", "Perfis DBA (lista)", ScopeGlobal, "display dba-profile all", false, "11"},
+	{"olt.profile.dba", "Perfis DBA (lista)", ScopeGlobal, "display dba-profile all", true, "11"},
 	{"olt.profile.line", "Perfis de linha da ONT (lista)", ScopeGlobal, "display ont-lineprofile gpon all", true, "11"},
 	{"olt.profile.srv", "Perfis de serviço da ONT (lista)", ScopeGlobal, "display ont-srvprofile gpon all", true, "11"},
-	{"olt.profile.traffic", "Tabelas de tráfego (lista)", ScopeGlobal, "display traffic table ip from-index 0", false, "11"},
+	{"olt.profile.traffic", "Tabelas de tráfego (lista)", ScopeGlobal, "display traffic table ip from-index 0", true, "11"},
 	// per slot
 	{"slot.board", "Detalhe da placa", ScopeSlot, "display board 0/%[1]d", false, "3"},
 	{"slot.cpu", "CPU da placa", ScopeSlot, "display cpu 0/%[1]d", true, "3"},
