@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19dfc-9f74-7762-a15c-ebd69d7a739a).
+[codex] Turn started (01a19dfc-9fb5-7bf0-b21c-8bdc08f6211a).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir o cálculo da idade até a validação da API, concent...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/onu_discov...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/onu_discov... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"queries/.*/latest|asked_at|latest\\(\" apps/api/app apps/web/src/app -...
+[codex] Command completed: /bin/bash -lc "rg -n \"queries/.*/latest|asked_at|latest\\(\" apps/api/app apps/web/src/app -... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/olt_queries.py | sed -n '55,102p'; nl -ba apps/api/app...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/olt_queries.py | sed -n '55,102p'; nl -ba apps/api/app... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: a UI usa o relógio do navegador para ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: a UI usa o relógio do navegador para decidir se uma fila vazia tem leitura recente, então pode divergir do limite aplicado pela API.
+
+Findings:
+- [medium] A idade da leitura é calculada com o relógio do navegador (apps/web/src/app/rede/pendentes/page.tsx:38-42)
+  `readFresh` compara `asked_at` com `Date.now()` no navegador, enquanto o endpoint de sync aplica o limite usando o relógio da API. Se o relógio do navegador estiver atrasado, uma leitura que a API já considera velha pode aparecer como recente; com fila vazia, a tela pode afirmar que a leitura não detectou ONUs quando o sync recusaria essa mesma leitura. A idade fracionária corrige o arredondamento, mas não essa divergência entre relógios.
+  Recommendation: Calcule a idade no servidor ou use um timestamp/idade emitido pelo endpoint e aplique o mesmo limite inclusivo de 60 minutos usado pelo sync.
