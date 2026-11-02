@@ -164,6 +164,17 @@ func (s *shell) reset() {
 	}
 }
 
+var hexRunRe = regexp.MustCompile(`[0-9A-Fa-f]{12,}`)
+
+// screenTail: what the CLI was showing when a command timed out (its last line, at most 60 characters, long hexadecimal runs such as serials hidden), for the operator.
+func screenTail(t string) string {
+	l := hexRunRe.ReplaceAllString(lastLine(t), "<hex>")
+	if r := []rune(l); len(r) > 60 {
+		l = string(r[len(r)-60:])
+	}
+	return l
+}
+
 func stripCtl(t string) string { return strings.ReplaceAll(ansiRe.ReplaceAllString(t, ""), "\r", "") }
 
 func lastLine(t string) string {
@@ -201,7 +212,7 @@ func (s *shell) wait(ctx context.Context, cond func(text string) (bool, error)) 
 		select {
 		case <-s.notify:
 		case <-deadline.C:
-			return text, errors.New("ssh: command timeout")
+			return text, fmt.Errorf("ssh: command timeout (screen ends with %q)", screenTail(text))
 		case <-ctx.Done():
 			return text, ctx.Err()
 		}

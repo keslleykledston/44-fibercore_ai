@@ -436,14 +436,20 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 	if err := toConfig(); err != nil {
 		return fail(true, "could not reach the config mode to read autofind", err)
 	}
-	af, err := step(c.Autofind)
-	if err != nil {
-		return fail(true, "autofind could not be read", err)
+	// the ONU is only discovered again after it ranges anew (seconds to a minute on real hardware): poll, bounded by `wait`, never a single read
+	var af string
+	var aerr error
+	seen := waitFor(func() bool {
+		af, aerr = step(c.Autofind)
+		return aerr != nil || strings.Contains(strings.ToUpper(af), onu.GPONSerial)
+	}, wait)
+	if aerr != nil {
+		return fail(true, "autofind could not be read", aerr)
 	}
 	if saveRaw != nil {
 		saveRaw("autofind-after-delete", af)
 	}
-	if !strings.Contains(strings.ToUpper(af), onu.GPONSerial) {
+	if !seen {
 		return fail(true, "the serial did not show up in the autofind list after the delete", ErrBenchOLTNoReturn)
 	}
 	// ---- 4) authorized again with the baseline profiles, and the service port back; fail() converges on the baseline too
