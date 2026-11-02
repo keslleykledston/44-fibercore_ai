@@ -21,7 +21,10 @@ export default defineConfig({
     { name: "funcional", testMatch: /app\.spec\.ts/, dependencies: ["capturas"], use: { browserName: "chromium" } },
     // Por último: reconhecer o incidente demo muda o estado que os testes acima assumem (não reconhecido).
     { name: "posteriores", testMatch: /noc-ack-and-search\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
-    { name: "inspetor", testMatch: /onu-(quick|workspace)\.spec\.ts|(speed|quality)\.spec\.ts|assinante-historico-flag\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
+    { name: "inspetor", testMatch: /onu-(quick|workspace)\.spec\.ts|(speed|quality)\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
+    // Recuo com a flag `onu_quick_inspector` DESLIGADA no provedor: sem dependência de `funcional` (que exige a flag ligada). Só roda com ASSINANTE_HISTORICO_FLAG_OFF=1:
+    // npx playwright test --project=recuo-historico
+    { name: "recuo-historico", testMatch: /assinante-historico-flag\.spec\.ts/, use: { browserName: "chromium" } },
     { name: "aparelho", testMatch: /ont-sidebar\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
     { name: "consultas", testMatch: /olt-queries\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
   ],
