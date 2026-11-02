@@ -10,6 +10,7 @@ servers:
 tags:
   - name: Platform
   - name: ProfileStudio
+  - name: Discovery
   - name: Network
   - name: CPE
   - name: ERP
@@ -814,6 +815,40 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {description: Inexistente ou de outro provedor}
+  /olts/{oltId}/onus/unregistered/import:
+    post:
+      tags: [Discovery]
+      operationId: importOnuSightings
+      summary: 'Registra avistamentos de ONUs aguardando autorização (fixture ou importação manual; SOMENTE leitura: nada é autorizado nem escrito na OLT). Idempotente por OLT/PON/serial/origem; edge_read é reservado ao Edge. discovery:import; flag onu_discovery'
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: oltId, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, description: 'source (fixture|manual_import) e items[1..200] com pon_path, serial, observed_at (com fuso, não no futuro) e vendor_hint opcional'}}}}
+      responses:
+        '201': {description: OK}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Inexistente ou de outro provedor}
+        '422': {description: Valor fora do formato}
+  /olts/{oltId}/onus/unregistered:
+    get:
+      tags: [Discovery]
+      operationId: listUnregisteredOnus
+      summary: 'Fila de ONUs aguardando autorização desta OLT, com condição (new|waiting|stale|conflict), motivos, origem e se é autoritativa. Associação ERP sempre `unavailable` e autorização `not_available` nesta versão. discovery:read; flag onu_discovery'
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: oltId, in: path, required: true, schema: {type: string, format: uuid}}, {name: condition, in: query, required: false, schema: {type: string, enum: [new, waiting, stale, conflict]}}]
+      responses:
+        '200': {description: OK}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Inexistente ou de outro provedor}
+  /discovery/onus:
+    get:
+      tags: [Discovery]
+      operationId: listUnregisteredOnusAll
+      summary: 'A mesma fila, de todas as OLTs do provedor. discovery:read; flag onu_discovery'
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: condition, in: query, required: false, schema: {type: string, enum: [new, waiting, stale, conflict]}}]
+      responses:
+        '200': {description: OK}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /olts/{oltId}/profiles/import:
     post:
       tags: [ProfileStudio]

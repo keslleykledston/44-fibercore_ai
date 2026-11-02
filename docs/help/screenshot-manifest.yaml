@@ -169,3 +169,11 @@ articles:
   - assets/rede/perfis-olt/rascunho/mobile.png
   e2e_test: help-screenshots.spec.ts › rede/perfis-olt; fluxo em perfis.spec.ts (perfis)
   last_verified: '2026-11-02'
+- slug: rede/onus-pendentes
+  ui_route: /rede/pendentes
+  status: published
+  images:
+  - assets/rede/onus-pendentes/desktop.png
+  - assets/rede/onus-pendentes/mobile.png
+  e2e_test: help-screenshots.spec.ts › rede/onus-pendentes; fluxo em pendentes.spec.ts (pendentes)
+  last_verified: '2026-11-02'

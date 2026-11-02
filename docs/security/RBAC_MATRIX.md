@@ -35,6 +35,8 @@
 | `profiles:read` | R0 | não | sim | Ver os profiles de serviço da OLT (snapshots importados), comparar com um rascunho (somente leitura) |
 | `profiles:import` | R1 | não | sim | Importar um profile existente da OLT como referência imutável (somente leitura: não escreve na OLT) |
 | `profiles:edit` | R2 | não | sim | Criar e editar rascunhos de profile (clone) e simular a aplicação (dry-run); nada é enviado à OLT |
+| `discovery:read` | R0 | não | sim | Ver a fila de ONUs aguardando autorização (somente leitura; nada é autorizado) |
+| `discovery:import` | R1 | não | sim | Registrar avistamentos de ONUs não autorizadas (fixture/importação manual; não escreve na OLT) |
 | `members:read` | R1 | não | não | Ver os membros do provedor e o estado do MFA de cada um |
 | `members:manage` | R3 | sim | não | Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite) |
 | `platform:delegate` | R3 | sim | não | Conceder e revogar o acesso temporário (até 8 h, com motivo) do suporte da plataforma a este provedor |
@@ -77,6 +79,8 @@
 | `profiles:read` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `profiles:import` | ✔ | ✔ |  |  |  |  |  |  |  |
 | `profiles:edit` | ✔ | ✔ |  |  |  |  |  |  |  |
+| `discovery:read` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
+| `discovery:import` | ✔ | ✔ |  |  |  |  |  |  |  |
 | `members:read` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `members:manage` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `platform:delegate` | ✔ |  |  |  |  |  |  |  |  |
@@ -145,6 +149,7 @@
 | GET | `/v1/diagnostics/rules` | `incidents:read` |
 | POST | `/v1/diagnostics/runs` | `diagnostics:run` |
 | GET | `/v1/diagnostics/runs/{run_id}` | `incidents:read` |
+| GET | `/v1/discovery/onus` | `discovery:read` |
 | POST | `/v1/edge/cpe-config` | `inventory:write` |
 | POST | `/v1/edge/cpe-snapshots` | `inventory:write` |
 | POST | `/v1/edge/cpe-state` | `inventory:write` |
@@ -177,6 +182,8 @@
 | PUT | `/v1/members/{user_id}/role` | `members:manage` |
 | GET | `/v1/olts` | `inventory:read` |
 | GET | `/v1/olts/{olt_id}/capabilities` | `inventory:read` |
+| GET | `/v1/olts/{olt_id}/onus/unregistered` | `discovery:read` |
+| POST | `/v1/olts/{olt_id}/onus/unregistered/import` | `discovery:import` |
 | GET | `/v1/olts/{olt_id}/profiles` | `profiles:read` |
 | POST | `/v1/olts/{olt_id}/profiles/import` | `profiles:import` |
 | GET | `/v1/olts/{olt_id}/queries` | `inventory:read` |

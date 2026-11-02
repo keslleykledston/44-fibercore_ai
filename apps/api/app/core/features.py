@@ -31,6 +31,7 @@ FEATURES: dict[str, bool] = {
     "quality_active_tests": False,            # ADR-0039/ADR-0030 emenda: ping/DNS (escrevem no CPE; só bancada; ainda não implementado)
     "quality_full": False,                    # ADR-0039: leitura completa (referencia o SD-001)
     "smart_diagnostics_copilot": False,       # bloqueada até ADR-0015 / ADR-SD-006
+    "onu_discovery": False,                   # v2.5 (FC25-01/02/03): fila de ONUs aguardando autorização; SOMENTE leitura, nenhuma autorização
     "profile_studio": False,                  # ADR-0040 (v2.5): profiles da OLT: importar, rascunho, comparar e dry-run; SOMENTE leitura e simulação, nenhuma escrita
 }
 
