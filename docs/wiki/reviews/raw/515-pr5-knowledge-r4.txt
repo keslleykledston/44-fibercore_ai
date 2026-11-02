@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19ea4-ee46-7be2-bfc3-dafd2cd29c1b).
+[codex] Turn started (01a19ea4-ee81-7690-8ee1-8863a30fc507).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e rastrear especialmente os filtros fail-closed das rece...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=60 main...HEA...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=60 main...HEA... (exit 0)
+[codex] Running command: /bin/bash -lc "cat apps/api/app/knowledge_data/recipes.json && nl -ba apps/api/app/core/knowl...
+[codex] Command completed: /bin/bash -lc "cat apps/api/app/knowledge_data/recipes.json && nl -ba apps/api/app/core/knowl... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviaria ainda: o filtro fail-closed não bloqueia...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviaria ainda: o filtro fail-closed não bloqueia todos os verbos de alteração que a própria validação já reconhece.
+
+Findings:
+- [medium] Etapas iniciadas por verbo seguro podem incluir instruções de alteração (apps/api/app/core/knowledge.py:51)
+  `served_steps` bloqueia apenas `PROSE_BLOCK`, que não inclui verbos como `configure`, `config`, `set`, `enable` ou `disable`, embora `WRITE_WORDS` os reconheça. Assim, uma etapa como “Check the VLAN, then configure the service” começa com um verbo permitido, passa pelo filtro e é servida como segura. A base atual não contém essa frase, mas uma futura edição pode expor instrução de alteração sem a validação recusar a base, contrariando o fail-closed anunciado.
+  Recommendation: Validar o texto completo das etapas servidas contra a lista de verbos de alteração (`WRITE_WORDS`), ou centralizar os bloqueios numa lista abrangente compartilhada; acrescente um teste que tente servir uma etapa com abertura permitida seguida de `configure` ou `set`.

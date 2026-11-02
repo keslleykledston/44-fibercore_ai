@@ -8,4 +8,5 @@ test("flag fleet_manager desligada: sem atalho e /rede/frota é 404", async ({ p
   await page.goto("/rede");
   await expect(page.getByTestId("rede-frota-link")).toHaveCount(0);
   expect((await page.goto("/rede/frota"))?.status()).toBe(404);
+  expect((await page.goto("/rede/conhecimento"))?.status()).toBe(404);   // a base de conhecimento segue a mesma flag
 });

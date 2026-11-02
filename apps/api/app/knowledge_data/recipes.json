@@ -1,0 +1,175 @@
+{
+  "version": "1.0",
+  "deny_apply_by_default": true,
+  "recipes": [
+    {
+      "vendor": "datacom",
+      "family": "DM4610",
+      "source_ids": [
+        "DC-01",
+        "DC-02"
+      ],
+      "status": "documented_example_not_homologated",
+      "steps": [
+        "Check existing profiles / VLAN and service-port",
+        "Create/choose bandwidth-profile, line-profile, ONU profile, service-profile (according to DmOS manual)",
+        "Preview service VLAN and service-port graph",
+        "Bind ONU per discovered serial on exact GPON interface",
+        "Use vendor transactional commit only after reviewed diff",
+        "Read back ONU, service-port, PPPoE and optical info"
+      ],
+      "examples": [
+        "show interface gpon 1/1/1 discovered-onus",
+        "show interface gpon 1/1/1 onu"
+      ],
+      "restrictions": [
+        "Do not hardcode chassis 1/1/1",
+        "Do not issue commit in discovery step"
+      ]
+    },
+    {
+      "vendor": "zte",
+      "family": "C3xx",
+      "source_ids": [
+        "ZT-02",
+        "ZT-03"
+      ],
+      "status": "documented_example_not_homologated",
+      "steps": [
+        "Read show card and show gpon onu uncfg",
+        "Select ONU type capabilities (T-CONT/GEM/UNI)",
+        "Create TCONT+VLAN+service profiles for firmware",
+        "Preview interface gpon-olt_{shelf}/{slot}/{port} ONU authorization",
+        "Validate ONU optical state and flows"
+      ],
+      "examples": [
+        "show gpon onu uncfg",
+        "show gpon onu baseinfo gpon-olt_1/3/1"
+      ],
+      "restrictions": [
+        "Example ONU110B is not universal to all ONUs",
+        "Do not use C3xx syntax on C6xx without validation"
+      ]
+    },
+    {
+      "vendor": "intelbras",
+      "family": "G08",
+      "source_ids": [
+        "IB-01",
+        "IB-02"
+      ],
+      "status": "documented_example_not_homologated",
+      "steps": [
+        "Read existing DBA/VLAN profiles",
+        "Define or reuse LINE profile with T-CONT, GEM and VLAN mapping",
+        "Choose ETH for bridge or VEIP for router",
+        "Check compatibility notes for third-party ONU",
+        "Preview reference graph and validate ONU capabilities"
+      ],
+      "examples": [],
+      "restrictions": [
+        "G08 is different from 8820i/G16",
+        "Examples assume DBA 1 and VLAN 1 already exist; do not blindly create"
+      ]
+    },
+    {
+      "vendor": "parks",
+      "family": "Fiberlink 300xx/400xx",
+      "source_ids": [
+        "PK-01",
+        "PK-02"
+      ],
+      "status": "documented_example_not_homologated",
+      "steps": [
+        "Read flow and bandwidth profiles",
+        "Inspect usages to prevent deleting shared profiles",
+        "Create service intent then translate to bandwidth/flow/VLAN profiles",
+        "Preview ONU binding and test optical state",
+        "Verify post-change and backup"
+      ],
+      "examples": [
+        "show gpon profile flow",
+        "show gpon profile bandwidth"
+      ],
+      "restrictions": [
+        "Never delete a profile while referenced by other ONUs",
+        "Apply config via approved engine only"
+      ]
+    },
+    {
+      "vendor": "huawei",
+      "family": "MA5608T",
+      "source_ids": [
+        "HU-01",
+        "HU-04"
+      ],
+      "status": "inherited_in_fibercore_verify_local",
+      "steps": [
+        "Reuse current DBA/service/line templates from Profile Studio 2.5",
+        "Check ONU Run/Config/Match from display ont info",
+        "Do not overwrite existing profile IDs",
+        "Save and verify through existing executor"
+      ],
+      "examples": [
+        "display ont info"
+      ],
+      "restrictions": [
+        "Do not replace the already implemented Huawei path"
+      ]
+    },
+    {
+      "vendor": "fiberhome",
+      "family": "AN5516",
+      "source_ids": [
+        "FH-01"
+      ],
+      "status": "research_only",
+      "steps": [
+        "Acquire firmware-exact official config docs or export from vendor EMS",
+        "Record protocol/CLI and sanitize live output in lab",
+        "Create typed profile translation based on verified steps",
+        "Add golden fixtures and negative tests before enabling write"
+      ],
+      "examples": [],
+      "restrictions": [
+        "No write commands available as pre-certified"
+      ]
+    },
+    {
+      "vendor": "vsol",
+      "family": "V1600G1/G2-B",
+      "source_ids": [
+        "VS-01"
+      ],
+      "status": "research_only",
+      "steps": [
+        "Acquire firmware-exact official config docs or export from vendor EMS",
+        "Record protocol/CLI and sanitize live output in lab",
+        "Create typed profile translation based on verified steps",
+        "Add golden fixtures and negative tests before enabling write"
+      ],
+      "examples": [],
+      "restrictions": [
+        "No write commands available as pre-certified"
+      ]
+    },
+    {
+      "vendor": "ubiquiti",
+      "family": "UF-OLT",
+      "source_ids": [
+        "UB-01"
+      ],
+      "status": "research_only",
+      "steps": [
+        "Acquire firmware-exact official config docs or export from vendor EMS",
+        "Record protocol/CLI and sanitize live output in lab",
+        "Create typed profile translation based on verified steps",
+        "Add golden fixtures and negative tests before enabling write"
+      ],
+      "examples": [],
+      "restrictions": [
+        "No write commands available as pre-certified"
+      ]
+    }
+  ]
+}

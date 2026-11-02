@@ -1,0 +1,145 @@
+{
+  "version": "1.0",
+  "state": "design_only",
+  "note": "Normalized service intent independent of CLI; templates must resolve against exact driver before preview or apply",
+  "service_intents": [
+    {
+      "id": "bridge_pppoe",
+      "label": "Bridge PPPoE",
+      "onu_mode": "bridge",
+      "vlan_mode": "tagged_or_untagged",
+      "parameters": [
+        "service_vlan",
+        "uni_port",
+        "dba_profile",
+        "line_profile",
+        "service_profile"
+      ],
+      "required_tests": [
+        "onu_register",
+        "pppoe_discovery",
+        "vlan_correct",
+        "reconnect",
+        "rollback"
+      ]
+    },
+    {
+      "id": "router_ipoe",
+      "label": "Router IPoE/DHCP",
+      "onu_mode": "router",
+      "vlan_mode": "tagged_or_untagged",
+      "parameters": [
+        "service_vlan",
+        "veip",
+        "dhcp_policy",
+        "dba_profile"
+      ],
+      "required_tests": [
+        "onu_register",
+        "dhcp_lease",
+        "gateway",
+        "dns",
+        "reboot_persistence"
+      ]
+    },
+    {
+      "id": "router_pppoe",
+      "label": "Router PPPoE",
+      "onu_mode": "router",
+      "vlan_mode": "tagged_or_untagged",
+      "parameters": [
+        "service_vlan",
+        "veip",
+        "dba_profile",
+        "tr069_profile_optional"
+      ],
+      "required_tests": [
+        "onu_register",
+        "pppoe_session",
+        "mtu",
+        "reboot_persistence"
+      ]
+    },
+    {
+      "id": "management_tr069",
+      "label": "Gerência ACS TR-069",
+      "onu_mode": "bridge_or_router",
+      "vlan_mode": "tagged",
+      "parameters": [
+        "management_vlan",
+        "acs_url",
+        "acs_credential_ref",
+        "omci_capability"
+      ],
+      "required_tests": [
+        "cwmp_inform",
+        "connection_request",
+        "credential_rotation",
+        "wan_isolation"
+      ]
+    },
+    {
+      "id": "iptv_multicast",
+      "label": "IPTV Multicast",
+      "onu_mode": "bridge_or_router",
+      "vlan_mode": "tagged",
+      "parameters": [
+        "iptv_vlan",
+        "igmp_policy",
+        "gemport"
+      ],
+      "required_tests": [
+        "igmp_join_leave",
+        "multicast_isolation",
+        "throughput"
+      ]
+    },
+    {
+      "id": "lan_to_lan",
+      "label": "LAN-to-LAN TLS",
+      "onu_mode": "bridge",
+      "vlan_mode": "tagged",
+      "parameters": [
+        "dedicated_vlan",
+        "isolation_policy",
+        "gemport"
+      ],
+      "required_tests": [
+        "two_endpoint_connectivity",
+        "broadcast_control",
+        "rollback"
+      ]
+    }
+  ],
+  "cross_vendor_graph": [
+    "vlan",
+    "dba_bandwidth",
+    "tcont",
+    "gemport",
+    "line_profile",
+    "service_profile",
+    "onu_type_or_caps",
+    "onu_authorization",
+    "service_port_or_vlan_translation",
+    "omci_or_tr069_optional",
+    "verify",
+    "save_only_if_required"
+  ],
+  "parameters_validation": {
+    "vlan_id": {
+      "type": "integer",
+      "min": 1,
+      "max": 4094
+    },
+    "profile_name": {
+      "regex": "^[a-zA-Z][a-zA-Z0-9_-]{0,31}$"
+    },
+    "onu_serial": {
+      "regex": "^[A-Za-z0-9]{8,24}$"
+    },
+    "port_path": {
+      "source": "inventory_only"
+    },
+    "credential": "vault_ref_only"
+  }
+}

@@ -83,6 +83,7 @@ const screens: { slug: string; route: string; ready: string; prepare?: (r: APIRe
     steps: async (page: Page) => {   // as miniaturas são lazy: a captura só vale com todas carregadas
       await page.evaluate(async () => { for (const i of Array.from(document.images)) i.loading = "eager"; await Promise.all(Array.from(document.images).map((i) => (i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r; })))); });
     } },
+  { slug: "rede/base-de-conhecimento", route: "/rede/conhecimento?secao=comandos", ready: "kb-comandos" },
   { slug: "rede/onus-pendentes", route: "/rede/pendentes", ready: "pend-fila" },
   { slug: "assinantes/visao-360", route: "/assinantes", ready: "sub360-ready", dynamicRoute: sub360Route },
   { slug: "assinantes/diagnostico-guiado", route: "/assinantes", ready: "diag-ready", dynamicRoute: diagRoute },
