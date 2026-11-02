@@ -281,3 +281,45 @@ def test_result_report_is_idempotent_for_edge_retries(client, seed, inv, targets
     assert client.get(f"/v1/jobs/{jid}", headers=h).json()["status"] == "SUCCEEDED"
     # a DIFFERENT outcome after a terminal one is still refused
     assert client.post(f"/v1/edge/jobs/{jid}/result", headers=a, json={"state": "failed"}).status_code == 409
+
+
+def test_one_mutation_at_a_time_per_target_and_reads_never_wait(client, seed, inv, targets, monkeypatch):
+    """FC22-015: a second write on the SAME target waits (stays APPROVED, never dropped) while the first is in flight; reads neither wait nor hold a write back."""
+    monkeypatch.setattr(jobs_mod, "HOMOLOGATED_WRITES", frozenset({"reboot_cpe"}))
+    monkeypatch.setattr(jobs_mod.bench, "BENCH_OPS", {k: v for k, v in jobs_mod.bench.BENCH_OPS.items() if k != "reboot_cpe"})  # the generic rules
+    h = hdr(client, "alice", seed, "A")
+    a = agent(client, inv, "a1")
+    while client.get("/v1/edge/jobs/next", headers=a).status_code == 200:
+        pass
+
+    def approved(op):
+        jid = preview(client, h, op, targets["cpe"]).json()["id"]
+        assert client.post(f"/v1/jobs/{jid}/submit", headers=h).json()["status"] == "APPROVED"
+        return jid
+
+    first, second = approved("reboot_cpe"), approved("reboot_cpe")
+    got = client.get("/v1/edge/jobs/next", headers=a)
+    assert got.status_code == 200 and got.json()["job_id"] == first
+    assert client.get("/v1/edge/jobs/next", headers=a).status_code == 204                   # the second waits: the first is in flight on the SAME target
+    assert client.get(f"/v1/jobs/{second}", headers=h).json()["status"] == "APPROVED"       # waiting, not cancelled or expired
+    read = approved("refresh")                                                              # a read on the same CPE is not held back by the write
+    nxt = client.get("/v1/edge/jobs/next", headers=a)
+    assert nxt.status_code == 200 and nxt.json()["job_id"] == read
+    for state in ("accepted", "succeeded"):                                                 # the first finishes: the target is free again
+        body = {"state": state, **({"postcheck_ok": True} if state == "succeeded" else {})}
+        assert client.post(f"/v1/edge/jobs/{first}/result", headers=a, json=body).status_code == 204
+    done = client.get("/v1/edge/jobs/next", headers=a)
+    assert done.status_code == 200 and done.json()["job_id"] == second                      # and the waiting write is dispatched, once
+    assert client.get("/v1/edge/jobs/next", headers=a).status_code == 204
+    for state in ("accepted", "succeeded"):
+        client.post(f"/v1/edge/jobs/{second}/result", headers=a, json={"state": state, **({"postcheck_ok": True} if state == "succeeded" else {})})
+    # a write on ANOTHER target is never held back by one in flight elsewhere
+    client.post("/v1/edge/cpe-snapshots", headers=a, json={"edge_id": str(inv["a1"]["edge"]), "observed_at": snap(inv)["observed_at"], "cpes": [
+        {"canonical_serial": "JOBCPE0002", "binding": {"protocol": "tr069", "external_id": "job-ext-2", "connector_id": "c-job"}}]})
+    other = next(x["id"] for x in client.get("/v1/cpes", headers=h).json() if x["canonical_serial"] == "JOBCPE0002")
+    held = approved("reboot_cpe")                                                           # in flight on the first CPE again
+    assert client.get("/v1/edge/jobs/next", headers=a).json()["job_id"] == held
+    free = preview(client, h, "reboot_cpe", other).json()["id"]
+    assert client.post(f"/v1/jobs/{free}/submit", headers=h).json()["status"] == "APPROVED"
+    got = client.get("/v1/edge/jobs/next", headers=a)
+    assert got.status_code == 200 and got.json()["job_id"] == free

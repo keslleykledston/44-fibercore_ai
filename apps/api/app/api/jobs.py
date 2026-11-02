@@ -60,6 +60,9 @@ OPERATIONS: dict[str, Operation] = {
     # ADR-0029: a read-only query of the OLT's CLI; no approval, an exact closed intent, off by tenant flag and until the Edge channel exists
     "olt_query": Operation("R0", "olt", False, 0),
 }
+# FC22-015: the operations that change something (one at a time per target) and the states in which a job is still in flight
+WRITE_OPS: list[str] = sorted(k for k, v in OPERATIONS.items() if v.writes)
+LIVE_STATES: list[str] = ["DISPATCHED", "ACCEPTED", "DEVICE_PENDING", "VERIFYING"]
 # (operation) names whose firmware/model/transport homologation is complete. EMPTY by design in Sprint 3.
 HOMOLOGATED_WRITES: frozenset[str] = frozenset()
 
@@ -348,9 +351,13 @@ def next_job(
         text(
             f"SELECT {COLS}, nonce FROM jobs WHERE edge_id = :e AND status = 'APPROVED' "  # noqa: S608
             "AND (operation <> 'olt_query' OR CAST(:q AS boolean)) "  # no channel on the Edge yet: a query waits and expires, it is never sent
+            # one mutation at a time per target (FC22-015): a write waits (it is never dropped) while another write on the SAME target is in flight;
+            # reads (refresh, collect) are never held back by it and never hold a write back
+            "AND NOT (operation = ANY(CAST(:w AS text[])) AND EXISTS (SELECT 1 FROM jobs x WHERE x.target_id = jobs.target_id AND x.id <> jobs.id "
+            "AND x.status = ANY(CAST(:live AS text[])) AND x.operation = ANY(CAST(:w AS text[])))) "
             "ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED"
         ),
-        {"e": p.edge_id, "q": olt_query.EDGE_SUPPORT},
+        {"e": p.edge_id, "q": olt_query.EDGE_SUPPORT, "w": WRITE_OPS, "live": LIVE_STATES},
     ).first()
     if row is None:
         response.status_code = 204
@@ -359,6 +366,15 @@ def next_job(
         cas(conn, row.id, "EXPIRED")
         response.status_code = 204
         return None
+    if row.operation in WRITE_OPS:
+        # two `next` calls at once must not each see the target free: serialise on the target, then look again (the job stays APPROVED and waits)
+        conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"job-target|{p.tenant_id}|{row.target_id}"})
+        if conn.execute(
+            text("SELECT 1 FROM jobs WHERE target_id = :t AND id <> :i AND status = ANY(CAST(:live AS text[])) AND operation = ANY(CAST(:w AS text[])) LIMIT 1"),
+            {"t": row.target_id, "i": row.id, "live": LIVE_STATES, "w": WRITE_OPS},
+        ).first():
+            response.status_code = 204
+            return None
     if _write_gate(conn, p.tenant_id, row, "dispatch"):  # defence in depth: a write is never dispatched unless a gate passes NOW
         cas(conn, row.id, "CANCELLED")
         response.status_code = 204

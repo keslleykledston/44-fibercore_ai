@@ -106,7 +106,7 @@ Fonte: `docs/addenda/v2.2/` (pacote intacto). Análise: `docs/addenda/v2.2/GAP_A
 | FC22-012 | P1 | [ ] **bloqueado** (telemetria Wi-Fi/WAN não coletada; NBI aberto) | S3 | 002, ADR-0022 |
 | FC22-013 | P1 | [ ] falta | S3 | 011/012 |
 | FC22-014 | P1 | [ ] parcial: motor de jobs; falta catálogo/dry-run com diff | S4 | 002 |
-| FC22-015 | P1 | [ ] parcial: idempotência/CAS; sem lock por dispositivo; USP ausente | S4 | USP |
+| FC22-015 | P1 | [~] idempotência/CAS; **lock por dispositivo no despacho feito em 2026-11-02** (uma escrita por vez por alvo; a segunda espera `APPROVED`, nunca é descartada; leituras não esperam nem seguram); falta o lock comum com USP (ADR-0015, sem segundo protocolo) | S4 | USP |
 | FC22-016 | P1 | [ ] parcial: módulos/versões; falta changelog/canary | S4 | — |
 | FC22-017 | P1 | [x] prática vigente (gate por PR de tela) | contínuo | — |
 | FC22-018 | P2 | [ ] adiado (ADR-0015) | pós-S4 | 004, 006 |
