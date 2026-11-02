@@ -20,8 +20,8 @@ from app.events import bus
 
 log = logging.getLogger("relay")
 
-# v2.2 events contract (docs/addenda/v2.2/contracts/events.v2.2.schema.json): `quality` is one of these; the envelope adds `source` and `quality` ADDITIVELY
-# (consumers ignore what they do not know). Every event is written by this platform's own API or workers (device data reaches it through the API), so
+# `source` and `quality` carry the meaning they have in the v2.2 events contract (the quality enum), added to the envelope ADDITIVELY (consumers ignore what they
+# do not know). The envelope is NOT the v2.2 shape (that one needs event_id/subject_id/ingested_at and forbids extras): contracts/event-envelope.schema.json describes it. Every event is written by this platform's own API or workers (device data reaches it through the API), so
 # `source` is a constant; `quality` is only what the producer put in the payload, and "unknown" otherwise: the relay never invents that a datum is fresh.
 EVENT_SOURCE = "fibercore-api"
 EVENT_QUALITY = ("fresh", "stale", "unknown", "conflict")

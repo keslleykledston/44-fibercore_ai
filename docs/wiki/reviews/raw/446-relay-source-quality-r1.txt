@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19c84-c026-7511-860d-58760129f268).
+[codex] Turn started (01a19c84-c05f-7f81-a02b-2521b2591ddd).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir o payload pelos consumidores existentes, com fo...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/workers/relay....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/workers/relay.... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'events\\.v2\\.2|event_id|subject_id|ingested_at|\"quality\"|quality:' d...
+[codex] Command completed: /bin/bash -lc "rg -n 'events\\.v2\\.2|event_id|subject_id|ingested_at|\"quality\"|quality:' d... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: a decisão de manter os campos antigos está ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: a decisão de manter os campos antigos está documentada, e `quality` sem valor válido vira `unknown`; porém o envelope híbrido não valida contra o schema v2.2, que proíbe campos adicionais. A compatibilidade dos consumidores externos também não está demonstrada.
+
+Findings:
+- [medium] O envelope híbrido é inválido segundo o schema v2.2 (apps/api/app/workers/relay.py:50-59)
+  O relay mantém `id` e `aggregate` e acrescenta `source` e `quality`, mas o schema v2.2 exige `event_id`, `subject_id` e `ingested_at` e define `additionalProperties: false`. Portanto, consumidores que validam o contrato publicado rejeitarão o envelope: os campos novos não bastam para torná-lo compatível com o schema. A decisão de não migrar o formato inteiro está registrada em `KNOWN_ISSUES.md`, mas falta definir um contrato compatível e versionado para este envelope aditivo.
+  Recommendation: Documente e publique um schema específico para o envelope aditivo legado, ou migre o payload para o formato v2.2 e coordene a transição com os consumidores antes de anunciá-lo como compatível.
