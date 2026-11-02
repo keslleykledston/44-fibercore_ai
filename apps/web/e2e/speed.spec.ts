@@ -197,6 +197,11 @@ test("flag speed_diagnostics desligada: sem aba, sem teste na ONU 360° e o BFF 
   await page.getByTestId("onu-360-link").click();
   await expect(page.getByTestId("onu360-ready")).toBeVisible();
   await expect(page.getByTestId("onu360-speed")).toHaveCount(0);
+  await page.getByTestId("onu360-diag-link").click();                                                                   // o Diagnóstico também respeita a flag: sem teste, só o aviso
+  await page.getByTestId("diag-tab-velocidade").click();
+  await expect(page.getByTestId("diag-unavailable")).toBeVisible();
+  await expect(page.getByTestId("speed-blocked")).toHaveCount(0);
+  await expect(page.getByTestId("speed-start-download")).toHaveCount(0);
   const r = await page.request.get(`/bff/cpes/${CPE}/speed`);
   expect([403, 404]).toContain(r.status());
 });

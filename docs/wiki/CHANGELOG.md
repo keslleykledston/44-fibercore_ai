@@ -1,8 +1,8 @@
 # Changelog
 
 ## Unreleased — ONU 360° sem os cartões de teste de banda e de qualidade (2026-11-01)
-- Web: a ONU 360° deixa de ter os cartões **Teste de banda** e **Qualidade do serviço**. Os dois ficam só na página de Diagnóstico (abas Velocidade e Qualidade), que a 360° já liga pelo botão **Diagnóstico**, e nas abas do painel da Rede. Nada mudou nos componentes, nas flags nem no BFF.
-- Testes: os dois testes que esperavam o cartão passam a provar que ele não existe na 360° e que o conteúdo está no Diagnóstico. Docs (ajuda de banda e de qualidade, ADR-0038 e ADR-0039) ajustadas.
+- Web: a ONU 360° deixa de ter os cartões **Teste de banda** e **Qualidade do serviço**. Os dois continuam nas abas do painel da Rede e também na página de Diagnóstico (abas Velocidade e Qualidade), que a 360° já liga pelo botão **Diagnóstico**; só não há mais cartão na 360°. Nada mudou nos componentes, nas flags nem no BFF.
+- Testes: os dois testes que esperavam o cartão passam a provar que ele não existe na 360° e que o conteúdo está no Diagnóstico; os testes de flag desligada (`SPEED_FLAG_OFF`, `QUALITY_FLAG_OFF`) agora também abrem o Diagnóstico e provam que ele mostra só o aviso de indisponível. Docs (ajuda de banda e de qualidade, ADR-0038 e ADR-0039) ajustadas.
 
 ## Unreleased — base do e2e verde e contraste da régua (2026-11-01)
 - E2E: as 5 falhas que já existiam na base foram resolvidas. Causas reais: (1) `/dispositivos/capacidades` tinha uma região rolável sem foco de teclado (axe `scrollable-region-focusable`, claro e escuro): agora `tabIndex=0`, `role="region"` e nome acessível; (2) o teste de refresh de sessão procurava um título "Rede" que a UX nova não tem (o `h1` é o nome da OLT): a sessão já renovava, o teste foi corrigido; (3) três testes do painel/abas assumiam que a `DEMOA0001` não tem roteador vinculado, mas o `app.spec` (projeto `funcional`, que roda antes) a vincula: passaram a usar a `DEMOA0003`. Bateria completa: 17 puros, 32 funcionais, 48 do inspetor, 0 falhas.

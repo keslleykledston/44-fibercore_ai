@@ -138,6 +138,10 @@ test("flag quality_diagnostics desligada: sem aba, sem qualidade na ONU 360° e 
   await page.getByTestId("onu-360-link").click();
   await expect(page.getByTestId("onu360-ready")).toBeVisible();
   await expect(page.getByTestId("onu360-quality")).toHaveCount(0);
+  await page.getByTestId("onu360-diag-link").click();                                                                   // o Diagnóstico também respeita a flag: sem leitura, só o aviso
+  await page.getByTestId("diag-tab-qualidade").click();
+  await expect(page.getByTestId("diag-unavailable")).toBeVisible();
+  await expect(page.getByTestId("quality-run")).toHaveCount(0);
   const r = await page.request.get(`/bff/cpes/00000000-0000-4000-8000-000000000001/quality`);
   expect([403, 404]).toContain(r.status());
 });
