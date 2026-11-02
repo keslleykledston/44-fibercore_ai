@@ -57,7 +57,7 @@ var queryCatalog = []Query{
 	{"olt.alarm.active", "Alarmes ativos", ScopeGlobal, "display alarm active all", false, "2"},
 	{"olt.alarm.history", "Histórico de alarmes (lista)", ScopeGlobal, "display alarm history all list", false, "2"},
 	{"olt.event.history", "Histórico de eventos (lista)", ScopeGlobal, "display event history all list", false, "3"},
-	{"olt.autofind", "ONTs detectadas e não confirmadas", ScopeGlobal, "display ont autofind all", false, "2"},
+	{"olt.autofind", "ONTs detectadas e não confirmadas", ScopeGlobal, "display ont autofind all", true, "2"},
 	{"olt.temperature", "Temperatura", ScopeGlobal, "display temperature 0", true, "3"},
 	{"olt.sync", "Sincronismo de controladoras", ScopeGlobal, "display data sync state", true, "3"},
 	// profile inventory (ADR-0040): lists of the OLT's own profiles, which carry no ONT, serial or description of a subscriber

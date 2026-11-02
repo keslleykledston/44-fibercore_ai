@@ -241,9 +241,9 @@ def test_the_vectors_the_edge_pins_are_the_ones_the_cloud_computes():
 
     from app.api.jobs import _intent_hash
     oid = UUID("8f14e45f-ceea-467a-9a36-4a1b5c3d2e10")
-    assert olt_query.catalog_version() == "a02548436a036e3f3c68fc841c63e08239fb760b43fe0a2a7e2f04cc4ad44bf1"
+    assert olt_query.catalog_version() == "dadb833645db13245a918b809d973a9e83823cafdf13a9a5f2a3c0afe1301db8"
     params = olt_query.build_intent(oid, {"query_id": "pon.ont.info", "slot": 1, "port": 0})
-    assert _intent_hash("olt_query", "olt", oid, params) == "f0045370070e4cda1c773a8431c1e51181af4c4a810303b671e497de05bb14f0"
+    assert _intent_hash("olt_query", "olt", oid, params) == "74e7987b1aff3f310c99436c896911832c04e3cc04b5d06194599e8989605a8b"
 
 
 def _report(client, inv, jid, **body):
@@ -497,3 +497,19 @@ def test_dba_and_traffic_result_shapes_are_closed():
     assert olt_query.check_result("olt.profile.traffic", {"tables": [{**row, "id": 6, "cir_kbps": None, "pbs_bytes": None}]})   # "off" = no limit
     assert not olt_query.check_result("olt.profile.traffic", {"tables": [{**row, "cir_kbps": "off"}]})
     assert not olt_query.check_result("olt.profile.traffic", {"tables": [row, row]})
+
+
+def test_autofind_result_shape_is_closed_and_carries_no_registration_credential():
+    row = {"pon_path": "0/1/3", "serial": "48575443AABB0001", "vendor": "HWTC", "equipment": "EG8145V5", "found_at": "2026-01-15T10:20:30-04:00"}
+    assert olt_query.check_result("olt.autofind", {"entries": []})
+    assert olt_query.check_result("olt.autofind", {"entries": [row]})
+    assert olt_query.check_result("olt.autofind", {"entries": [{**row, "equipment": ""}]})
+    for bad in ({**row, "password": "0x00"}, {**row, "serial": "4857544GAABB0001"}, {**row, "serial": "48575443aabb0001"}, {**row, "pon_path": "0/1"},
+                {**row, "equipment": "EG; reboot"}, {**row, "found_at": "2026-01-15 10:20:30"},
+                {**row, "pon_path": "99/99/99"}, {**row, "pon_path": "0/18/0"}, {**row, "pon_path": "0/0/16"}, {**row, "found_at": "2026-99-99T99:99:99+99:99"},
+                {**row, "found_at": "2026-02-30T10:20:30-04:00"}, {**row, "found_at": "2026-01-15T10:20:30+30:00"}, {k: v for k, v in row.items() if k != "vendor"}):
+        assert not olt_query.check_result("olt.autofind", {"entries": [bad]})
+    assert not olt_query.check_result("olt.autofind", {"entries": [row, row]})            # the same serial twice
+    assert not olt_query.check_result("olt.autofind", {"entries": [row], "raw": "x"})       # nothing but entries
+    assert not olt_query.check_result("olt.autofind", {"entries": [{**row, "serial": f"{i:016X}"} for i in range(129)]})
+    assert "olt.autofind" in olt_query.ROLLOUT

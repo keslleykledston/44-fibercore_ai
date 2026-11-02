@@ -286,3 +286,74 @@ func TestProfileNamesStayOnTheEdgeUnlessTheOwnerOptsIn(t *testing.T) {
 		t.Fatal("other queries are not touched")
 	}
 }
+
+func TestParseAutofindFromTheRealLayout(t *testing.T) {
+	read := func(n string) string {
+		b, err := os.ReadFile(r015Dir + n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	raw, err := ParseResult("olt.autofind", read("display_ont_autofind_all_empty.txt"))
+	if err != nil || string(raw) != `{"entries":[]}` {
+		t.Fatalf("empty list: %s %v", raw, err)
+	}
+	raw, err = ParseResult("olt.autofind", read("display_ont_autofind_all.txt"))
+	want := `{"entries":[{"pon_path":"0/1/3","serial":"48575443AABB0001","vendor":"HWTC","equipment":"EG8145V5","found_at":"2026-01-15T10:20:30-04:00"}]}`
+	if err != nil || string(raw) != want {
+		t.Fatalf("one entry: %s %v", raw, err)
+	}
+	// the registration credentials of the ONT (Password, Loid, Checkcode) and the versions are recognised and NEVER forwarded
+	for _, no := range []string{"0x0000", "SYNTHETIC", "100D", "V5R019C00S100", "assword", "oid", "heckcode"} {
+		if strings.Contains(string(raw), no) {
+			t.Fatalf("the typed result carries %q: %s", no, raw)
+		}
+	}
+	if !HasParser("olt.autofind") {
+		t.Fatal("olt.autofind must have a parser once validated")
+	}
+}
+
+func TestParseAutofindFailsClosed(t *testing.T) {
+	b, err := os.ReadFile(r015Dir + "display_ont_autofind_all.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ok := string(b)
+	mut := func(from, to string) string { return strings.Replace(ok, from, to, 1) }
+	for name, in := range map[string]string{
+		"nothing":                  "",
+		"footer count disagrees":   mut("autofind ONT is 1", "autofind ONT is 2"),
+		"no footer":                mut("   The number of GPON autofind ONT is 1\n", ""),
+		"entries and failure":      ok + "  Failure: The automatically found ONTs do not exist\n",
+		"unknown label":            mut("Loid ", "Owner"),
+		"label before any rule":    "   Number : 1\n" + ok,
+		"vendor differs from SN":   mut("VendorID            : HWTC", "VendorID            : ZTEG"),
+		"bracket differs from SN":  mut("(HWTC-AABB0001)", "(HWTC-AABB0002)"),
+		"serial not hexadecimal":   mut("48575443AABB0001 (HWTC", "4857544GAABB0001 (HWTC"),
+		"position out of range":    mut("0/1/3", "0/99/3"),
+		"year before 2000":         mut("2026-01-15", "1999-12-31"),
+		"year after 2100":          mut("2026-01-15", "2101-01-01"),
+		"time without zone":        mut("10:20:30-04:00", "10:20:30"),
+		"equipment with a command": mut("EG8145V5", "EG8145V5; reboot"),
+		"free text":                ok + "reboot now\n",
+		"duplicate label":          mut("   Number              : 1\n", "   Number              : 1\n   Number              : 1\n"),
+		"missing Number":           mut("   Number              : 1\n", ""),
+		"missing position":         mut("   F/S/P               : 0/1/3\n", ""),
+		"missing vendor":           mut("   VendorID            : HWTC\n", ""),
+		"missing time":             mut("   Ont autofind time   : 2026-01-15 10:20:30-04:00\n", ""),
+		"missing serial":           mut("   Ont SN              : 48575443AABB0001 (HWTC-AABB0001)\n", ""),
+		"value too long":           mut("EG8145V5", strings.Repeat("A", 80)),
+	} {
+		if _, err := ParseResult("olt.autofind", in); !errors.Is(err, ErrBadOutput) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	// the same serial twice is refused even when the footer agrees
+	two := strings.Replace(ok, "   The number of GPON autofind ONT is 1\n", "", 1) + strings.SplitN(ok, "\n", 2)[1]
+	two = strings.Replace(two, "autofind ONT is 1", "autofind ONT is 2", 1)
+	if _, err := ParseResult("olt.autofind", two); !errors.Is(err, ErrBadOutput) {
+		t.Errorf("duplicate serial: %v", err)
+	}
+}

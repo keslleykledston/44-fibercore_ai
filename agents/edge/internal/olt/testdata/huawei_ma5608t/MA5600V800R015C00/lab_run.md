@@ -27,3 +27,10 @@
 
 ## Listas de perfis (2026-11-02, captura supervisionada, ADR-0032 lote 3)
 `display ont-lineprofile gpon all` e `display ont-srvprofile gpon all` foram capturados na OLT real; a saída crua ficou só no host do Edge (apagada depois). As fixtures `display_ont_lineprofile_gpon_all.txt` e `display_ont_srvprofile_gpon_all.txt` têm o MESMO layout (cabeçalho `Profile-ID  Profile-name  Binding times`, três linhas de traço, `Total: N`) com nomes, IDs e contagens SINTÉTICOS: os nomes reais são do provedor e não entram no repositório.
+
+## `display ont autofind all` (2026-11-02, durante a H5)
+
+Lista vazia: `Failure: The automatically found ONTs do not exist`. Com UMA ONT detectada (a ONU de bancada logo após o `ont delete`): linha tracejada, onze linhas `rótulo : valor`
+(`Number`, `F/S/P`, `Ont SN` como `<16 hex> (<fabricante>-<8 hex>)`, `Password`, `Loid`, `Checkcode`, `VendorID`, `Ont Version`, `Ont SoftwareVersion`, `Ont EquipmentID`, `Ont autofind time` com fuso),
+linha tracejada e `The number of GPON autofind ONT is N`. `display_ont_autofind_all.txt` é SINTÉTICO neste layout. `Password`, `Loid` e `Checkcode` são credenciais de registro da ONT: o parser reconhece o rótulo e
+nunca lê, guarda ou envia o valor. **Não observado:** o layout com mais de uma entrada (o parser usa a linha tracejada como separador e exige que o rodapé concorde com o que achou). Captura bruta destruída (`shred`).
