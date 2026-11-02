@@ -241,9 +241,9 @@ def test_the_vectors_the_edge_pins_are_the_ones_the_cloud_computes():
 
     from app.api.jobs import _intent_hash
     oid = UUID("8f14e45f-ceea-467a-9a36-4a1b5c3d2e10")
-    assert olt_query.catalog_version() == "2769fd0f39c46faaca4e4fa5eaf2803c5849552cbb520501ea04bcc627f9eb96"
+    assert olt_query.catalog_version() == "13e3eba2a75523c32c4544e855157aa75541dec8f6c196bd8db3238bce39481d"
     params = olt_query.build_intent(oid, {"query_id": "pon.ont.info", "slot": 1, "port": 0})
-    assert _intent_hash("olt_query", "olt", oid, params) == "29a83dae5fdf8037f3ef95193ff4f267b843fac8555a22b7e527c64a2b65d292"
+    assert _intent_hash("olt_query", "olt", oid, params) == "50d1a38bb6d18ad719292153d52d2d3adffaba2487bd70cf6dbd3eeef4da90b1"
 
 
 def _report(client, inv, jid, **body):
@@ -468,3 +468,14 @@ def test_slot_cpu_and_mem_results_are_one_integer_percentage():
         assert olt_query.check_result(q, {"percent": 0}) and olt_query.check_result(q, {"percent": 100})
         for bad in ({}, {"percent": 101}, {"percent": -1}, {"percent": 5.5}, {"percent": True}, {"percent": "5"}, {"percent": 5, "slot": 1}, {"value": 5}):
             assert not olt_query.check_result(q, bad), (q, bad)
+
+
+def test_profile_list_result_shape_is_closed():
+    ok = {"profiles": [{"id": 0, "name": "LINHA-A", "binding_times": 3}, {"id": 14, "name": "x.y_z-1", "binding_times": 0}]}
+    for q in ("olt.profile.line", "olt.profile.srv"):
+        assert olt_query.check_result(q, ok) and olt_query.check_result(q, {"profiles": []})
+        assert not olt_query.check_result(q, {**ok, "raw": "x"})
+        assert not olt_query.check_result(q, {"profiles": [{"id": 1, "name": "a b", "binding_times": 1}]})        # no free text
+        assert not olt_query.check_result(q, {"profiles": [{"id": 1, "name": "ok", "binding_times": 1, "sn": "x"}]})
+        assert not olt_query.check_result(q, {"profiles": [{"id": 1, "name": "a", "binding_times": 1}, {"id": 1, "name": "b", "binding_times": 1}]})
+        assert not olt_query.check_result(q, {"profiles": [{"id": True, "name": "a", "binding_times": 1}]})

@@ -29,7 +29,7 @@ var (
 // HasParser says whether a query can return a typed result.
 func HasParser(queryID string) bool {
 	switch queryID {
-	case "olt.version", "olt.board", "olt.time", "olt.sync", "olt.temperature", "slot.cpu", "slot.mem":
+	case "olt.version", "olt.board", "olt.time", "olt.sync", "olt.temperature", "slot.cpu", "slot.mem", "olt.profile.line", "olt.profile.srv":
 		return true
 	}
 	return false
@@ -52,6 +52,8 @@ func ParseResult(queryID, out string) (json.RawMessage, error) {
 		return parseOccupancy(out, "CPU", true)
 	case "slot.mem":
 		return parseOccupancy(out, "Memory", false)
+	case "olt.profile.line", "olt.profile.srv":
+		return parseProfileList(out)
 	}
 	return nil, ErrNoParser
 }
@@ -256,4 +258,58 @@ func parseOccupancy(out, label string, preamble bool) (json.RawMessage, error) {
 		return nil, ErrBadOutput
 	}
 	return json.Marshal(map[string]int{"percent": pct})
+}
+
+var (
+	reProfileHeader = regexp.MustCompile(`^Profile-ID\s+Profile-name\s+Binding times$`)
+	reProfileRule   = regexp.MustCompile(`^-{20,}$`)
+	reProfileRow    = regexp.MustCompile(`^(\d{1,5})\s+([A-Za-z0-9][A-Za-z0-9._-]{0,63})\s+(\d{1,6})$`)
+	reProfileTotal  = regexp.MustCompile(`^Total:\s*(\d{1,5})$`)
+)
+
+type profileRow struct {
+	ID           int    `json:"id"`
+	Name         string `json:"name"`
+	BindingTimes int    `json:"binding_times"`
+}
+
+// parseProfileList: the OLT's own list of ONT line or service profiles (ID, name, how many ONTs use it). It carries no ONT, serial or subscriber text; the name is
+// the operator's label and is kept to a safe alphabet. Strict: the header, the Total line and the number of rows must agree, IDs are unique, anything else is bad_output.
+func parseProfileList(out string) (json.RawMessage, error) {
+	rows := []profileRow{}
+	seen := map[int]bool{}
+	header, total := false, -1
+	for _, line := range strings.Split(out, "\n") {
+		l := strings.TrimSpace(strings.TrimRight(line, "\r"))
+		switch {
+		case isEcho(l), reProfileRule.MatchString(l):
+			continue
+		case reProfileHeader.MatchString(l):
+			if header || len(rows) > 0 {
+				return nil, ErrBadOutput
+			}
+			header = true
+		case reProfileTotal.MatchString(l):
+			if total >= 0 {
+				return nil, ErrBadOutput
+			}
+			total, _ = strconv.Atoi(reProfileTotal.FindStringSubmatch(l)[1])
+		default:
+			m := reProfileRow.FindStringSubmatch(l)
+			if m == nil || !header || total >= 0 {
+				return nil, ErrBadOutput
+			}
+			id, _ := strconv.Atoi(m[1])
+			n, _ := strconv.Atoi(m[3])
+			if seen[id] || len(rows) >= 2048 {
+				return nil, ErrBadOutput
+			}
+			seen[id] = true
+			rows = append(rows, profileRow{ID: id, Name: m[2], BindingTimes: n})
+		}
+	}
+	if !header || total != len(rows) {
+		return nil, ErrBadOutput
+	}
+	return json.Marshal(map[string]any{"profiles": rows})
 }

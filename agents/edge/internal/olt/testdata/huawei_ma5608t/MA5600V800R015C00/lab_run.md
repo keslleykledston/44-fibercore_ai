@@ -24,3 +24,6 @@
 
 ## Mapa da causa de queda (SNMP × CLI), 2026-10-28
 `display ont register-info 14 <ont>` lido em 10 ONTs offline da PON 0/0/14 e cruzado com `46.1.24` por SNMP: 13 = `ONT dying-gasp`, 2 = `ONT LOSi/LOBi alarm`, 1 = `ONT link-down` (10/10 coerentes). O histórico por ONU traz várias quedas com causas diferentes; o código SNMP corresponde à mais recente. Dados brutos ficam fora do Git.
+
+## Listas de perfis (2026-11-02, captura supervisionada, ADR-0032 lote 3)
+`display ont-lineprofile gpon all` e `display ont-srvprofile gpon all` foram capturados na OLT real; a saída crua ficou só no host do Edge (apagada depois). As fixtures `display_ont_lineprofile_gpon_all.txt` e `display_ont_srvprofile_gpon_all.txt` têm o MESMO layout (cabeçalho `Profile-ID  Profile-name  Binding times`, três linhas de traço, `Total: N`) com nomes, IDs e contagens SINTÉTICOS: os nomes reais são do provedor e não entram no repositório.

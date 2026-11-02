@@ -158,3 +158,42 @@ func TestLot2ParsersFailClosed(t *testing.T) {
 		}
 	}
 }
+
+func TestParseProfileListsFromTheCaptureLayout(t *testing.T) {
+	for file, id := range map[string]string{"display_ont_lineprofile_gpon_all.txt": "olt.profile.line", "display_ont_srvprofile_gpon_all.txt": "olt.profile.srv"} {
+		b, err := os.ReadFile(r015Dir + file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := ParseResult(id, string(b))
+		if err != nil {
+			t.Fatalf("%s: %v", id, err)
+		}
+		var got struct {
+			Profiles []profileRow `json:"profiles"`
+		}
+		if err := json.Unmarshal(raw, &got); err != nil || len(got.Profiles) < 3 || got.Profiles[0].ID != 0 || got.Profiles[1].BindingTimes < 1 {
+			t.Fatalf("%s: %v %+v", id, err, got)
+		}
+	}
+}
+
+func TestParseProfileListIsStrict(t *testing.T) {
+	good, _ := os.ReadFile(r015Dir + "display_ont_lineprofile_gpon_all.txt")
+	g := string(good)
+	bad := map[string]string{
+		"total disagrees":     strings.Replace(g, "Total: 4", "Total: 5", 1),
+		"no header":           strings.Replace(g, "Profile-ID  Profile-name                                Binding times", "", 1),
+		"duplicate id":        strings.Replace(g, "  14          ", "  0           ", 1),
+		"name with a space":   strings.Replace(g, "LINHA-SINTETICA-A", "LINHA SINTETICA A", 1),
+		"command in the name": strings.Replace(g, "LINHA-SINTETICA-B", "x;reboot", 1),
+		"paginated":           g + "---- More ( Press 'Q' to break ) ----",
+		"empty":               "",
+		"row after the total": g + "  99          EXTRA                                       1            \n",
+	}
+	for name, out := range bad {
+		if _, err := ParseResult("olt.profile.line", out); err == nil {
+			t.Errorf("%s must be refused", name)
+		}
+	}
+}

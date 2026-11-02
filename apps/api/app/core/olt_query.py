@@ -42,8 +42,8 @@ CATALOG: tuple[Query, ...] = (
     Query("olt.temperature", "Temperatura", "global", True),
     Query("olt.sync", "Sincronismo de controladoras", "global", True),
     Query("olt.profile.dba", "Perfis DBA (lista)", "global", False),
-    Query("olt.profile.line", "Perfis de linha da ONT (lista)", "global", False),
-    Query("olt.profile.srv", "Perfis de serviço da ONT (lista)", "global", False),
+    Query("olt.profile.line", "Perfis de linha da ONT (lista)", "global", True),
+    Query("olt.profile.srv", "Perfis de serviço da ONT (lista)", "global", True),
     Query("olt.profile.traffic", "Tabelas de tráfego (lista)", "global", False),
     Query("slot.board", "Detalhe da placa", "slot", False),
     Query("slot.cpu", "CPU da placa", "slot", True),
@@ -120,6 +120,7 @@ _PRODUCT = re.compile(r"^[A-Z0-9][A-Z0-9-]{1,23}$")
 _RELEASE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{1,39}$")
 _BOARD = re.compile(r"^[A-Za-z0-9]{3,20}$")
 _STATUS = re.compile(r"^[A-Za-z_]{3,24}$")
+_PROFILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$")
 
 
@@ -159,6 +160,15 @@ def check_result(query_id: str, data) -> bool:
         return data == {"standby": "absent_or_fault"}
     if query_id in ("slot.cpu", "slot.mem"):   # one integer percentage; the slot is the one asked (it is in the cache key), never in the result
         return set(data) == {"percent"} and _is_int(data["percent"]) and 0 <= data["percent"] <= 100
+    if query_id in ("olt.profile.line", "olt.profile.srv"):
+        rows = data.get("profiles")
+        if set(data) != {"profiles"} or not isinstance(rows, list) or len(rows) > 2048:
+            return False
+        for x in rows:
+            if not (isinstance(x, dict) and set(x) == {"id", "name", "binding_times"} and _is_int(x["id"]) and 0 <= x["id"] <= 99999
+                    and isinstance(x["name"], str) and _PROFILE_NAME.match(x["name"]) and _is_int(x["binding_times"]) and 0 <= x["binding_times"] <= 999999):
+                return False
+        return len({x["id"] for x in rows}) == len(rows)
     if query_id == "olt.temperature":
         rows = data.get("boards")
         if set(data) != {"boards"} or not isinstance(rows, list) or not 1 <= len(rows) <= LIMITS["slot"] + 1:
