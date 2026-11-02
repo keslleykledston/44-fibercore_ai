@@ -16,7 +16,7 @@ export default defineConfig({
   },
   // Capturas primeiro (estado do seed intacto), depois os testes funcionais que mutam dados.
   projects: [
-    { name: "puros", testMatch: /(optics|optics-contrast|optics-colormix|quality-source|olt-panel-pure|edge-diagnostic-pure)\.spec\.ts/, use: { browserName: "chromium" } },   // funções puras: sem navegador nem API
+    { name: "puros", testMatch: /(optics|optics-contrast|optics-colormix|quality-source|olt-panel-pure|edge-diagnostic-pure|device-assets-pure)\.spec\.ts/, use: { browserName: "chromium" } },   // funções puras: sem navegador nem API
     { name: "capturas", testMatch: /help-(screenshots|speed|quality)\.spec\.ts/, use: { browserName: "chromium" } },
     { name: "funcional", testMatch: /app\.spec\.ts/, dependencies: ["capturas"], use: { browserName: "chromium" } },
     // Por último: reconhecer o incidente demo muda o estado que os testes acima assumem (não reconhecido).
@@ -27,6 +27,9 @@ export default defineConfig({
     { name: "recuo-historico", testMatch: /assinante-historico-flag\.spec\.ts/, use: { browserName: "chromium" } },
     // Recuo da ONU 360° enxuta com a flag `onu_quick_inspector` DESLIGADA: ONU360_FLAG_OFF=1 npx playwright test --project=recuo-onu360
     { name: "recuo-onu360", testMatch: /onu360-flag\.spec\.ts/, use: { browserName: "chromium" } },
+    { name: "catalogo", testMatch: /catalogo\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
+    // Recuo do catálogo de equipamentos com a flag `device_assets` DESLIGADA: DEVICE_ASSETS_FLAG_OFF=1 npx playwright test --project=recuo-catalogo
+    { name: "recuo-catalogo", testMatch: /catalogo-flag\.spec\.ts/, use: { browserName: "chromium" } },
     { name: "perfis", testMatch: /perfis\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
     // Recuo com a flag `profile_studio` DESLIGADA: PERFIS_FLAG_OFF=1 npx playwright test --project=recuo-perfis
     { name: "recuo-perfis", testMatch: /perfis-flag\.spec\.ts/, use: { browserName: "chromium" } },

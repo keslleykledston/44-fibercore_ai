@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { DataFreshness, EmptyState, ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { DevicesTabs } from "@/components/DevicesTabs";
+import { DeviceThumb } from "@/components/DeviceThumb";
 import { OltQueries } from "@/components/OltQueries";
 import { OnuTable } from "@/components/OnuTable";
 import { OnuWorkspace } from "@/components/OnuWorkspace";
@@ -25,6 +26,7 @@ export default async function Rede({ searchParams }: { searchParams: Promise<{ s
   const ontConfig = quick ? await featuresOn("ont_config") : false;
   const profiles = quick ? await featuresOn("profile_studio") : false;   // ADR-0040: desligada, o atalho para os perfis não existe
   const pending = quick ? await featuresOn("onu_discovery") : false;   // v2.5: desligada, o atalho para a fila de ONUs pendentes não existe
+  const assets = await featuresOn("device_assets");   // ADR-0041: desligada, o atalho do catálogo e as miniaturas não existem
   const speed = quick ? await featuresOn("speed_diagnostics") : false;   // ADR-0038: desligada, a aba "Teste de banda" não existe
   const quality = quick ? await featuresOn("quality_diagnostics") : false;   // ADR-0039: desligada, a aba "Qualidade" não existe
 
@@ -42,6 +44,7 @@ export default async function Rede({ searchParams }: { searchParams: Promise<{ s
               <ul className="panel divide-y divide-line">
                 {olts.data.map((o) => (
                   <li key={o.id} className="p-3">
+                    {assets && <div className="mb-1" data-testid="olt-list-thumb"><DeviceThumb category="olt" vendor={o.vendor} model={o.model} width={72} label /></div>}
                     <div className="font-medium">{o.name}</div>
                     <div className="text-sm text-muted">{o.vendor} {o.model ?? ""} · {o.onu_count} ONUs</div>
                     <div className="mt-1 flex items-center gap-3"><StatusPill value={o.support_level} /><DataFreshness freshness={o.freshness} observedAt={o.observed_at} /></div>
@@ -103,9 +106,11 @@ export default async function Rede({ searchParams }: { searchParams: Promise<{ s
     <AppShell active="/rede" user="1">
       <PageHeader title={title} subtitle={bySerial ? `Busca “${serial}” em todas as OLTs` : "OLTs, PONs e ONUs com frescor e fonte do dado"} helpSlug="rede/consultar-onu">
         {pending && <Link href={olt ? `/rede/pendentes?olt=${olt.id}` : "/rede/pendentes"} data-testid="rede-pendentes-link" className="inline-flex min-h-touch items-center rounded-btn border border-line px-3 text-sm hover:bg-bg">ONUs pendentes</Link>}
+        {assets && <Link href="/rede/catalogo" data-testid="rede-catalogo-link" className="inline-flex min-h-touch items-center rounded-btn border border-line px-3 text-sm hover:bg-bg">Catálogo de equipamentos</Link>}
         {profiles && <Link href={olt ? `/rede/perfis?olt=${olt.id}` : "/rede/perfis"} data-testid="rede-perfis-link" className="inline-flex min-h-touch items-center rounded-btn border border-line px-3 text-sm hover:bg-bg">Perfis da OLT</Link>}
         {olt && !bySerial && (
           <div className="flex flex-wrap items-center gap-3">
+            {assets && <span data-testid="olt-header-thumb"><DeviceThumb category="olt" vendor={olt.vendor} model={olt.model} width={64} label /></span>}
             <StatusPill value={olt.support_level} /><DataFreshness freshness={olt.freshness} observedAt={olt.observed_at} />
             <OltQueries oltId={olt.id} oltName={olt.name} />
           </div>

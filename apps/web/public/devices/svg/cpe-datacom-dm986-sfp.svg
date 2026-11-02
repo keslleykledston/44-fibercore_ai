@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="480" viewBox="0 0 720 480" role="img" aria-labelledby="title desc" data-vendor="datacom" data-model="DM986-SFP" data-accuracy="schematic" data-category="onu_ont">
+ <title id="title">DATACOM DM986-SFP — ilustração esquemática onu_ont</title>
+ <desc id="desc">Arte vetorial original, esquemática e não homologada como reprodução física do equipamento. Portas e slots funcionais são determinados pelo inventário real.</desc>
+ <defs><linearGradient id="metal" x2="0" y2="1"><stop offset="0" stop-color="#4c5969"/><stop offset="1" stop-color="#202a38"/></linearGradient><linearGradient id="plastic" x2="0" y2="1"><stop offset="0" stop-color="#f9fbfe"/><stop offset="1" stop-color="#dfe5ee"/></linearGradient></defs>
+
+<g id="device-body" data-physical-accuracy="generic-by-form-factor">
+<rect x="216" y="133" width="280" height="110" rx="13" fill="#2d3c50" stroke="#72879d" stroke-width="3" />
+<rect x="192" y="157" width="35" height="60" rx="3" fill="#63778d" stroke="#2f4154" stroke-width="1" />
+<rect x="487" y="158" width="46" height="60" rx="3" fill="#d3ad65" stroke="#8d6c34" stroke-width="1" />
+<rect x="535" y="174" width="28" height="28" rx="3" fill="#8fb1a1" stroke="#527c6d" stroke-width="1" />
+<rect x="269" y="141" width="12" height="77" rx="3" fill="#607287" stroke="none" stroke-width="1" />
+<rect x="298" y="141" width="12" height="77" rx="3" fill="#607287" stroke="none" stroke-width="1" />
+<rect x="327" y="141" width="12" height="77" rx="3" fill="#607287" stroke="none" stroke-width="1" />
+<rect x="356" y="141" width="12" height="77" rx="3" fill="#607287" stroke="none" stroke-width="1" />
+<rect x="385" y="141" width="12" height="77" rx="3" fill="#607287" stroke="none" stroke-width="1" />
+<rect x="414" y="141" width="12" height="77" rx="3" fill="#607287" stroke="none" stroke-width="1" />
+</g>
+<text x="54" y="403" font-size="26" font-family="Inter,Arial,sans-serif" fill="#1a3046" font-weight="700" >DATACOM  /  DM986-SFP</text>
+<text x="54" y="435" font-size="15" font-family="Inter,Arial,sans-serif" fill="#586e82" font-weight="500" >GPON · sfp · silhueta genérica, não reprodução exata do produto</text>
+</svg>

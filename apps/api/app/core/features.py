@@ -33,6 +33,7 @@ FEATURES: dict[str, bool] = {
     "smart_diagnostics_copilot": False,       # bloqueada até ADR-0015 / ADR-SD-006
     "onu_discovery": False,                   # v2.5 (FC25-01/02/03): fila de ONUs aguardando autorização; SOMENTE leitura, nenhuma autorização
     "profile_studio": False,                  # ADR-0040 (v2.5): profiles da OLT: importar, rascunho, comparar e dry-run; SOMENTE leitura e simulação, nenhuma escrita
+    "device_assets": False,                   # ADR-0041 (PR1): catálogo de equipamentos e miniaturas esquemáticas por modelo; SOMENTE arte, nenhuma capacidade nem porta
 }
 
 

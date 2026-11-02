@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="480" viewBox="0 0 720 480" role="img" aria-labelledby="title desc" data-vendor="vsol" data-model="V2901Q-A" data-accuracy="schematic" data-category="onu_ont">
+ <title id="title">VSOL V2901Q-A — ilustração esquemática onu_ont</title>
+ <desc id="desc">Arte vetorial original, esquemática e não homologada como reprodução física do equipamento. Portas e slots funcionais são determinados pelo inventário real.</desc>
+ <defs><linearGradient id="metal" x2="0" y2="1"><stop offset="0" stop-color="#4c5969"/><stop offset="1" stop-color="#202a38"/></linearGradient><linearGradient id="plastic" x2="0" y2="1"><stop offset="0" stop-color="#f9fbfe"/><stop offset="1" stop-color="#dfe5ee"/></linearGradient></defs>
+
+<g id="device-body" data-physical-accuracy="generic-by-form-factor">
+<rect x="152" y="142" width="417" height="205" rx="25" fill="#b8c4d0" stroke="#7e8fa4" stroke-width="3" />
+<rect x="164" y="155" width="393" height="180" rx="17" fill="url(#plastic)" stroke="#a8b5c5" stroke-width="1" />
+<rect x="191" y="193" width="10" height="80" rx="5" fill="#2563eb" stroke="none" stroke-width="1" />
+<text x="225" y="228" font-size="24" font-family="Inter,Arial,sans-serif" fill="#344a61" font-weight="700" >VSOL</text>
+<text x="225" y="256" font-size="15" font-family="Inter,Arial,sans-serif" fill="#61758d" font-weight="600" >GPON / XPON</text>
+<circle cx="230" cy="302" r="5" fill="#38bd86" />
+<text x="240" y="307" font-size="11" font-family="Inter,Arial,sans-serif" fill="#50647a" font-weight="500" >PWR</text>
+<circle cx="300" cy="302" r="5" fill="#38bd86" />
+<text x="310" y="307" font-size="11" font-family="Inter,Arial,sans-serif" fill="#50647a" font-weight="500" >PON</text>
+<circle cx="370" cy="302" r="5" fill="#8f9caa" />
+<text x="380" y="307" font-size="11" font-family="Inter,Arial,sans-serif" fill="#50647a" font-weight="500" >LOS</text>
+<circle cx="440" cy="302" r="5" fill="#38bd86" />
+<text x="450" y="307" font-size="11" font-family="Inter,Arial,sans-serif" fill="#50647a" font-weight="500" >LAN</text>
+</g>
+<text x="54" y="403" font-size="26" font-family="Inter,Arial,sans-serif" fill="#1a3046" font-weight="700" >VSOL  /  V2901Q-A</text>
+<text x="54" y="435" font-size="15" font-family="Inter,Arial,sans-serif" fill="#586e82" font-weight="500" >XGS-PON · bridge · silhueta genérica, não reprodução exata do produto</text>
+</svg>

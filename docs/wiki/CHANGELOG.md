@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — Biblioteca visual multivendor: `DeviceAssetRegistry` e catálogo de equipamentos (ADR-0041, PR1, 2026-11-02)
+- Web (flag **`device_assets`**, desligada por padrão; desligada, `/rede/catalogo` é 404 e atalho e miniaturas somem): 28 OLT + 41 ONU/ONT de 8 fabricantes (Huawei, Datacom, ZTE, FiberHome, Intelbras, V-SOL, Ubiquiti, Parks) com SVG e PNG locais em `apps/web/public/devices/` (pacote auditado: `docs/addenda/v2.6/PACKAGE_AUDIT.md`, `scripts/audit_device_package.py`), registro `apps/web/src/lib/deviceAssets.ts` (resolver por igualdade exata normalizada, busca, caminho local obrigatório) e tela **Catálogo de equipamentos** com busca e filtros. Miniatura ao lado da OLT na Rede. Modelo fora do catálogo: desenho neutro da família e "Sem arte catalogada", nunca a arte de outro modelo.
+- Regras: toda arte é **esquemática** e rotulada; nenhuma imagem afirma suporte, porta, LED ou estado (esses vêm do inventário e do painel da OLT); `MODEL_VERIFIED` não existe no registro. Nenhuma foto de fabricante foi copiada.
+- Provas: `puros` 42 passed (7 do registro: integridade, SVG seguro, resolver, caminhos, busca); e2e `catalogo` + dependências 76 passed; recuo com a flag desligada 1 passed; `validate_help` PASS; captura real do catálogo.
+
+
 ## Unreleased — H5 `onu_reauthorize` executada na bancada e `olt.autofind` validado (2026-11-02)
 - Bancada (ADR-0030, H5): ciclo completo `undo service-port` → `ont delete` → autofind → `ont add` → `service-port` na ONU de bancada Huawei, **passou na 4ª tentativa** (job `97046bd6`, pós-check do Edge igual ao baseline). As 3 primeiras acharam defeitos reais (campos recuados, autofind lido uma só vez, eco quebrado em 80 colunas); duas deixaram a ONU sem service-port, reposta à mão. Evidência em `docs/wiki/bench/H5-onu_reauthorize-ma5608t-2026-11-02.md`; emenda no ADR-0030. Capacidade segue `identified` (falta o aceite do responsável).
 - Edge: `joinWrappedEcho` (eco de comando longo quebrado em 80 colunas, só na primeira linha e só em coluna de quebra), autofind em polling limitado, `command timeout` informa o fim da tela. Codex approve (r2, r1 e r4 nas três frentes).

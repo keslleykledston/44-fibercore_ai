@@ -1,0 +1,18 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19e25-bad9-7e63-a515-6e2db71602f3).
+[codex] Turn started (01a19e25-ce9d-7431-9bc0-d73080b13a94).
+[codex] Assistant message captured: Vou conferir o diff em relação a `main` e seguir o caminho dos parâmetros no código atual, in...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/app/rede/catal...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/web/src/app/rede/catal... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- apps/web/src/app/rede/catal...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=20 main...HEAD -- apps/web/src/app/rede/catal... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"Não encontrei risco material restante no tratamento de `q`, `...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+Não encontrei risco material restante no tratamento de `q`, `tipo` ou `fab`: valores repetidos são reduzidos ao primeiro texto antes do uso, a busca limita `q` a 60 caracteres e os filtros aceitam apenas valores reconhecidos. O teste e2e cobre os casos adversariais citados.
+
+No material findings.

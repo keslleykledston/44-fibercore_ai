@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="480" viewBox="0 0 720 480" role="img" aria-labelledby="title desc" data-vendor="datacom" data-model="DM986-414Q" data-accuracy="schematic" data-category="onu_ont">
+ <title id="title">DATACOM DM986-414Q — ilustração esquemática onu_ont</title>
+ <desc id="desc">Arte vetorial original, esquemática e não homologada como reprodução física do equipamento. Portas e slots funcionais são determinados pelo inventário real.</desc>
+ <defs><linearGradient id="metal" x2="0" y2="1"><stop offset="0" stop-color="#4c5969"/><stop offset="1" stop-color="#202a38"/></linearGradient><linearGradient id="plastic" x2="0" y2="1"><stop offset="0" stop-color="#f9fbfe"/><stop offset="1" stop-color="#dfe5ee"/></linearGradient></defs>
+
+<g id="device-body" data-physical-accuracy="generic-by-form-factor">
+<g data-role="antenna"><rect x="223" y="67" width="14" height="125" rx="7" fill="#333e4a" stroke="#7c8897" stroke-width="2" /><rect x="221" y="170" width="18" height="31" rx="3" fill="#515c6b" stroke="none" stroke-width="1" /></g>
+<g data-role="antenna"><rect x="477" y="67" width="14" height="125" rx="7" fill="#333e4a" stroke="#7c8897" stroke-width="2" /><rect x="475" y="170" width="18" height="31" rx="3" fill="#515c6b" stroke="none" stroke-width="1" /></g>
+<rect x="138" y="185" width="447" height="175" rx="24" fill="#b9c5d1" stroke="#6b7e94" stroke-width="3" />
+<rect x="148" y="196" width="426" height="151" rx="19" fill="url(#plastic)" stroke="#a4b4c1" stroke-width="1.5" />
+<rect x="170" y="220" width="11" height="72" rx="5" fill="#1495bb" stroke="none" stroke-width="1" />
+<text x="199" y="250" font-size="23" font-family="Inter,Arial,sans-serif" fill="#25384d" font-weight="700" >DATACOM</text>
+<text x="200" y="275" font-size="11" font-family="Inter,Arial,sans-serif" fill="#5b7084" font-weight="600" >OPTICAL NETWORK TERMINAL</text>
+<circle cx="219" cy="318" r="4" fill="#31a879" />
+<text x="229" y="323" font-size="10" font-family="Inter,Arial,sans-serif" fill="#5d6f7d" font-weight="500" >PWR</text>
+<circle cx="275" cy="318" r="4" fill="#31a879" />
+<text x="285" y="323" font-size="10" font-family="Inter,Arial,sans-serif" fill="#5d6f7d" font-weight="500" >PON</text>
+<circle cx="331" cy="318" r="4" fill="#bfc8d3" />
+<text x="341" y="323" font-size="10" font-family="Inter,Arial,sans-serif" fill="#5d6f7d" font-weight="500" >LOS</text>
+<circle cx="387" cy="318" r="4" fill="#31a879" />
+<text x="397" y="323" font-size="10" font-family="Inter,Arial,sans-serif" fill="#5d6f7d" font-weight="500" >LAN</text>
+<circle cx="443" cy="318" r="4" fill="#31a879" />
+<text x="453" y="323" font-size="10" font-family="Inter,Arial,sans-serif" fill="#5d6f7d" font-weight="500" >WIFI</text>
+</g>
+<text x="54" y="403" font-size="26" font-family="Inter,Arial,sans-serif" fill="#1a3046" font-weight="700" >DATACOM  /  DM986-414Q</text>
+<text x="54" y="435" font-size="15" font-family="Inter,Arial,sans-serif" fill="#586e82" font-weight="500" >GPON · wifi · silhueta genérica, não reprodução exata do produto</text>
+</svg>
