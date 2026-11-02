@@ -168,6 +168,7 @@
 | POST | `/v1/edge/speed-health` | `inventory:write` |
 | GET | `/v1/edges` | `edge:read` |
 | POST | `/v1/erp/import-csv` | `customers:import` |
+| GET | `/v1/fleet/homologation` | `fleet:read` |
 | GET | `/v1/fleet/olts` | `fleet:read` |
 | POST | `/v1/fleet/olts` | `fleet:manage` |
 | GET | `/v1/fleet/olts/{olt_id}` | `fleet:read` |

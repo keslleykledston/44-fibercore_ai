@@ -1,0 +1,211 @@
+{
+  "version": "1.0",
+  "levels": [
+    "L0",
+    "L1",
+    "L2",
+    "L3",
+    "L4"
+  ],
+  "checklist": [
+    {
+      "n": 1,
+      "label": "SSH/TLS host key"
+    },
+    {
+      "n": 2,
+      "label": "SNMPv3 auth"
+    },
+    {
+      "n": 3,
+      "label": "Identidade"
+    },
+    {
+      "n": 4,
+      "label": "Firmware"
+    },
+    {
+      "n": 5,
+      "label": "OID"
+    },
+    {
+      "n": 6,
+      "label": "Placa presente"
+    },
+    {
+      "n": 7,
+      "label": "Slot vazio"
+    },
+    {
+      "n": 8,
+      "label": "PON 0-/1-based"
+    },
+    {
+      "n": 9,
+      "label": "PON fisicamente UP"
+    },
+    {
+      "n": 10,
+      "label": "PON desligada administrativamente"
+    },
+    {
+      "n": 11,
+      "label": "PON sem ONU"
+    },
+    {
+      "n": 12,
+      "label": "ONU online"
+    },
+    {
+      "n": 13,
+      "label": "ONU offline"
+    },
+    {
+      "n": 14,
+      "label": "ONU stale"
+    },
+    {
+      "n": 15,
+      "label": "OLT inalcançável"
+    },
+    {
+      "n": 16,
+      "label": "Pager da CLI"
+    },
+    {
+      "n": 17,
+      "label": "Idioma/locale da saída"
+    },
+    {
+      "n": 18,
+      "label": "Saída truncada"
+    },
+    {
+      "n": 19,
+      "label": "Colunas ocultas"
+    },
+    {
+      "n": 20,
+      "label": "Perfil já existe"
+    },
+    {
+      "n": 21,
+      "label": "ID de perfil em conflito"
+    },
+    {
+      "n": 22,
+      "label": "Perfil em uso por outras ONUs"
+    }
+  ],
+  "devices": [
+    {
+      "vendor": "huawei",
+      "model": "MA5608T",
+      "firmware": "MA5600V800R015C00",
+      "technology": "gpon",
+      "driver_level": "identified",
+      "note": "Capturas reais de 2026-10-28 e 2026-11-02 (uma OLT de laboratório). Falta uma PON vazia (item 11): as 32 PONs têm de 6 a 60 ONUs.",
+      "coverage": {
+        "1": {
+          "kind": "unit_test",
+          "ref": "agents/edge/internal/olt/ssh_test.go::TestSSHRejectsWrongHostKeyBadPasswordAndMissingPin"
+        },
+        "3": {
+          "kind": "real_fixture",
+          "ref": "agents/edge/internal/olt/testdata/huawei_ma5608t/MA5600V800R015C00/display_version.txt",
+          "sha256": "0951bfb8c9b0605aea4ceb9b44526b60a0bc7e110f2b6ac059b204fa19092aff"
+        },
+        "4": {
+          "kind": "real_fixture",
+          "ref": "agents/edge/internal/olt/testdata/huawei_ma5608t/MA5600V800R015C00/display_version.txt",
+          "sha256": "0951bfb8c9b0605aea4ceb9b44526b60a0bc7e110f2b6ac059b204fa19092aff"
+        },
+        "5": {
+          "kind": "unit_test",
+          "ref": "agents/edge/internal/olt/huawei_snmp_test.go::TestSNMPPonIfIndexFormulaAndRefusals"
+        },
+        "6": {
+          "kind": "real_fixture",
+          "ref": "agents/edge/internal/olt/testdata/huawei_ma5608t/MA5600V800R015C00/board_0.txt",
+          "sha256": "d578197c071eb8ee110b999e915f77c925724b46891bf6bdf309bdfc352c3345"
+        },
+        "8": {
+          "kind": "real_fixture",
+          "ref": "agents/edge/internal/olt/testdata/huawei_ma5608t/MA5600V800R015C00/ont_info_14_all_paged.txt",
+          "sha256": "484d860464ee9cdc36e9cee74575c349693a3086053c97f04da219fb61947e02"
+        },
+        "12": {
+          "kind": "real_fixture",
+          "ref": "agents/edge/internal/olt/testdata/huawei_ma5608t/MA5600V800R015C00/ont_info_14_all_paged.txt",
+          "sha256": "484d860464ee9cdc36e9cee74575c349693a3086053c97f04da219fb61947e02"
+        },
+        "13": {
+          "kind": "real_fixture",
+          "ref": "agents/edge/internal/olt/testdata/huawei_ma5608t/MA5600V800R015C00/register_info_14_0_offline_dying_gasp.txt",
+          "sha256": "5609c9d33f1ae2455c7dee14c725598bda5ebf50e7121d56054dbaa7e4f1f24c"
+        },
+        "15": {
+          "kind": "unit_test",
+          "ref": "agents/edge/internal/collector/olt_test.go::TestAFailedSNMPCollectionLeavesTheDeviceAloneForTheCooldown"
+        },
+        "16": {
+          "kind": "real_fixture",
+          "ref": "agents/edge/internal/olt/testdata/huawei_ma5608t/MA5600V800R015C00/ont_info_5_all_paged.txt",
+          "sha256": "14a9fd5a4c7b3893c32ab15f284dddc004e40155cf83c217ea240a907e04f269"
+        },
+        "18": {
+          "kind": "unit_test",
+          "ref": "agents/edge/internal/olt/huawei_r015_test.go::TestR015IncompleteOrInconsistentListingIsNeverVerified"
+        }
+      },
+      "certifications": []
+    },
+    {
+      "vendor": "huawei",
+      "model": "MA5800",
+      "firmware": "R018",
+      "technology": "gpon",
+      "driver_level": "identified",
+      "note": "Só fixtures sintéticas: nenhuma saída de equipamento real.",
+      "coverage": {
+        "3": {
+          "kind": "synthetic_fixture",
+          "ref": "agents/edge/internal/olt/testdata/huawei_ma5800/R018/display_version.txt",
+          "sha256": "f7b75309bd0d20f61968abaaa5e33cc44d311094800a392df5ff1c77dd61e3bc"
+        },
+        "4": {
+          "kind": "synthetic_fixture",
+          "ref": "agents/edge/internal/olt/testdata/huawei_ma5800/R018/display_version.txt",
+          "sha256": "f7b75309bd0d20f61968abaaa5e33cc44d311094800a392df5ff1c77dd61e3bc"
+        },
+        "16": {
+          "kind": "synthetic_fixture",
+          "ref": "agents/edge/internal/olt/testdata/huawei_ma5800/R018/ont_info_summary_paginated_0_1_0.txt",
+          "sha256": "7343dda4206b650ddecb25a3c748b6dbae43fb8162fd33213a94157c29742d44"
+        }
+      },
+      "certifications": []
+    },
+    {
+      "vendor": "zte",
+      "model": "C300",
+      "firmware": "V2.1",
+      "technology": "gpon",
+      "driver_level": "identified",
+      "note": "Só fixtures sintéticas: nenhuma saída de equipamento real e nenhuma OLT ZTE no laboratório.",
+      "coverage": {
+        "3": {
+          "kind": "synthetic_fixture",
+          "ref": "agents/edge/internal/olt/testdata/zte_c300/V2.1/show_version.txt",
+          "sha256": "343b689399f98ac23ef6d70c954fec3185f3dca2b7969628adf04142b1ccc54c"
+        },
+        "4": {
+          "kind": "synthetic_fixture",
+          "ref": "agents/edge/internal/olt/testdata/zte_c300/V2.1/show_version.txt",
+          "sha256": "343b689399f98ac23ef6d70c954fec3185f3dca2b7969628adf04142b1ccc54c"
+        }
+      },
+      "certifications": []
+    }
+  ]
+}

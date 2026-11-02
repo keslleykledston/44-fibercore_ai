@@ -1,0 +1,33 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19eae-f1e1-7e50-83da-2bbe5a84ebdf).
+[codex] Turn started (01a19eae-f45c-7293-8e4e-461525513783).
+[codex] Assistant message captured: Vou conferir o diff completo contra `main` e seguir especialmente o cálculo dos níveis, o end...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/homologat...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/homologat... (exit 0)
+[codex] Assistant message captured: O ponto mais delicado até aqui é a garantia de tenant: o endpoint consulta diretamente duas t...
+[codex] Running command: /bin/bash -lc "rg -n \"CREATE POLICY|POLICY .*olts|olt_connection_tests|ALTER TABLE olts|ENAB...
+[codex] Command completed: /bin/bash -lc "rg -n \"CREATE POLICY|POLICY .*olts|olt_connection_tests|ALTER TABLE olts|ENAB... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,90p' apps/api/alembic/versions/0045_fleet_pops_and_olt_registration....
+[codex] Command completed: /bin/bash -lc "sed -n '1,90p' apps/api/alembic/versions/0045_fleet_pops_and_olt_registration.... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/homologation.py | sed -n '22,82p'; nl -ba apps/api/ap...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/homologation.py | sed -n '22,82p'; nl -ba apps/api/ap... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o painel soma dados de conexão de ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o painel soma dados de conexão de todos os tenants e a contagem omite o escopo por OLT; além disso, a tela declara idade em dia sem estado explícito para OLT lida recentemente.
+
+Findings:
+- [high] A contagem de testes de conexão vaza entre tenants (apps/api/app/api/knowledge.py:47)
+  A consulta agrega `olt_connection_tests` sem filtrar por tenant. A tabela tem RLS por `app.tenant_id`, mas o endpoint usa `TENANT_CONN`; se essa conexão não definir a variável que a política exige, a consulta tende a falhar, e se a consulta for executada fora de um contexto tenant efetivo, pode expor contagens globais. Em qualquer caso, esse trecho não demonstra isolamento. A contagem também agrega todos os tenants caso RLS esteja desativada ou bypassada para a role. Filtre explicitamente por `tenant_id = :tenant` e cubra o isolamento com registros em dois tenants.
+  Recommendation: Restringir a consulta a `p.tenant_id` e adicionar teste que confirma que testes de outro tenant não afetam a resposta.
+- [medium] O painel apresenta idade recente como se estivesse em dia (apps/web/src/app/rede/homologacao/page.tsx:45-46)
+  Para leituras com menos de 60 minutos, `stale` é falso, mas a coluna mostra apenas `ageText(...)`, por exemplo “agora há pouco” ou “há 12 min”; não existe marcador explícito de “em dia”. O texto auxiliar diz que leituras acima de 60 minutos são desatualizadas e nunca mostradas como em dia, o que deixa o status indefinido para leituras recentes e não entrega a promessa de estado legível. A lógica também calcula idade sem arredondar o limite de 60 minutos, então o rótulo pode oscilar no corte, embora o valor da idade seja arredondado.
+  Recommendation: Exibir um estado explícito para leituras recentes e alinhar o texto de ajuda com o comportamento; testar valores imediatamente abaixo e acima do limite.
+
+Next steps:
+- Corrigir o escopo da agregação de testes por tenant e adicionar cobertura de isolamento.
+- Definir e testar a apresentação de estado para leituras recentes e o limite de 60 minutos.

@@ -495,3 +495,8 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - Observação: a espera até ~17 min é o desenho (OLT frágil: leitura de fila só entre coletas); a tela mostra "Aguardando o Edge". Não é falha.
 - Roteiro de retry/429 (mesma chave → `existing`; chave nova → 429) rodou no script, mas a saída foi perdida (token de serviço expirou durante a espera); essas duas respostas estão provadas pelos testes automáticos, não pelo LAB.
 - NÃO verificado: UI de Frota/teste na LAB por trás do MFA (cabe ao responsável).
+
+## ADR-0041 PR4 e PR5 (2026-11-02)
+- PR4 (sidebar da ONU/ONT com a arte do modelo): e2e aparelho + catalogo 6 passed, recuo com `device_assets` desligada 2 passed, Codex approve r1. Web da LAB atualizado em `a3ef52d`.
+- PR5 (base de conhecimento somente leitura): API 1051 passed (suite completa, sem o flake de envelope, corrigido antes em `762ae4d`); `test_knowledge.py` 24 (validador parametrizado: escrita em consulta, exemplo, passo, runbook, roteiro, em qualquer posição de um trecho em código); e2e conhecimento/frota/aparelho/catalogo 12 + recuo 1; ajuda 29 artigos; Codex approve na 5ª rodada. Deploy LAB (`main` = `0c70134`, backup antes, sem migração, head 0046): leitura real pela API com conta descartável = 25 fontes, 19 consultas (todas `executable=false`), 8 receitas com etapas de alteração omitidas; conta desativada.
+- Achado de conteúdo: o pacote trazia 3 exemplos de ESCRITA na receita Intelbras; removidos e registrados em `PACKAGE_AUDIT.md`.

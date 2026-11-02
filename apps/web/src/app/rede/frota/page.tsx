@@ -22,6 +22,7 @@ export default async function Frota({ searchParams }: { searchParams: Promise<{ 
   return (
     <AppShell active="/rede" user="1">
       <PageHeader title="Frota de OLTs" subtitle="Cadastro, POP e identificação das OLTs. Somente leitura: nada é enviado à OLT e a credencial fica no Edge." helpSlug="rede/frota-de-olts">
+        <Link href="/rede/homologacao" data-testid="frota-homologacao-link" className="inline-flex min-h-touch items-center rounded-btn border border-line px-3 text-sm hover:bg-bg">Homologação</Link>
         <Link href="/rede/conhecimento" data-testid="frota-conhecimento-link" className="inline-flex min-h-touch items-center rounded-btn border border-line px-3 text-sm hover:bg-bg">Base de conhecimento</Link>
         <Link href="/rede" className="inline-flex min-h-touch items-center rounded-btn px-3 text-sm text-accent hover:underline">← Voltar para Rede</Link>
       </PageHeader>
