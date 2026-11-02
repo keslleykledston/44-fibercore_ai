@@ -48,3 +48,9 @@ Autorize explicitamente **uma** OLT de laboratório/baixo risco e informe o aces
 
 ## GenieACS (ONUs via TR-069)
 Se já houver ONU real: configurar o ACS com a credencial CWMP nova e me avisar. Eu leio, por GET, **apenas os nomes** dos parâmetros (sem valores) de uma ONU por modelo/firmware, para confirmar os caminhos de Rx Power e dados de WAN/Wi-Fi.
+
+## Prioridade atual (2026-11-02, ADR-0041 PR3)
+O pacote Fleet Manager está parado no PR3 por falta destes insumos, nesta ordem. São **insumos iniciais para escrever o driver**, não prova suficiente de `observed`:
+1. **Uma OLT real de outro fabricante** (hoje só existe a Huawei MA5608T): saída do comando de identidade (`display version`/`show version` equivalente) e de uma PON com ONUs. Com isso dá para escrever o parser contra saída real; a promoção a `observed` e o teste de conexão desse vendor só valem depois de cumprir o checklist completo de `DRIVER_SDK_INTERFACE.md` (fixture por firmware com entradas e saídas esperadas, casos não suportados e de falha, prova de completude da listagem e do fim real da resposta, e a revisão do Codex).
+2. **Uma PON vazia** (ou uma OLT/placa sem ONU) na MA5608T: é o item (a) que falta do checklist da Huawei R015; os demais itens já têm captura real.
+Nada disso exige escrita. Sem esses insumos e sem o checklist cumprido, os modelos ficam `identified`, por desenho.
