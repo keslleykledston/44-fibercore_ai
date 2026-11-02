@@ -4,7 +4,7 @@ slug: "assinantes/importar-e-revisar-vinculos"
 role: [isp_admin, engineer]
 status: published
 product_version: "0.1.0"
-last_verified: "2026-10-28"
+last_verified: "2026-11-02"
 help_owner: "Plataforma FiberCore"
 ui_route: "/assinantes"
 ---
@@ -44,7 +44,7 @@ O vínculo aprovado sai da lista de sugestões. Cada ONU só pode ter um cliente
 
 ## Evidências de documentação
 
-- Build/commit: árvore de trabalho do PR web/14
+- Build/commit: d2e519b (ramo principal; capturas regeneradas em 2026-11-02 na pilha efêmera de teste)
 - Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844
 - Caso de teste E2E: help-screenshots.spec.ts › assinantes/importar-e-revisar-vinculos; app.spec.ts › assinantes (2 testes)
 - Dados: fictícios (seed `scripts/seed_demo.py`); sem informações reais de clientes

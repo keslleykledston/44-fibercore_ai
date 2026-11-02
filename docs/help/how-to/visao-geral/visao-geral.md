@@ -4,7 +4,7 @@ slug: "visao-geral/visao-geral"
 role: [isp_admin, engineer, noc_n2, noc_n1, support]
 status: published
 product_version: "0.1.0"
-last_verified: "2026-10-28"
+last_verified: "2026-11-02"
 help_owner: "Plataforma FiberCore"
 ui_route: "/"
 ---
@@ -42,7 +42,7 @@ Os indicadores mostram apenas dados atualizados em **ONUs fora**; dados antigos 
 
 ## Evidências de documentação
 
-- Build/commit: 1d9fb94 (árvore de trabalho do PR)
+- Build/commit: d2e519b (ramo principal; capturas regeneradas em 2026-11-02 na pilha efêmera de teste)
 - Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844
 - Caso de teste E2E: help-screenshots.spec.ts › visao-geral/visao-geral
 - Dados: fictícios (seed `scripts/seed_demo.py`); sem informações reais de clientes

@@ -4,7 +4,7 @@ slug: "rede/qualidade-do-servico"
 role: [isp_admin, engineer, noc_n1, noc_n2]
 status: published
 product_version: "0.1.0"
-last_verified: "2026-10-31"
+last_verified: "2026-11-02"
 help_owner: "Plataforma FiberCore"
 ui_route: "/rede"
 ---
@@ -55,7 +55,7 @@ As duas telas acima são **reais** (aplicação integrada, dados sintéticos): o
 
 ## Evidências de documentação
 
-- Build/commit: ramo `feat/qos001-ui` (PR B do QoS-001, ADR-0039)
+- Build/commit: d2e519b (ramo principal; capturas regeneradas em 2026-11-02 na pilha efêmera de teste)
 - Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844
 - Origem: `desktop.png` e `mobile.png` são capturas REAIS da aplicação integrada (pilha efêmera de teste, API e banco reais, dados sintéticos); `cenario-*.png` são CENÁRIOS DE TESTE com a resposta do BFF simulada, rotulados como tal acima
 - Não verificado: leitura sobre ONT real com dados do ACS atuais (o LAB está com o estado do aparelho de bancada desatualizado e o recurso desligado); ping, DNS e Ethernet não fazem parte desta entrega

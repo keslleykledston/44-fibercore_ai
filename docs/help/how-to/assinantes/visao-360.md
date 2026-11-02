@@ -4,7 +4,7 @@ slug: "assinantes/visao-360"
 role: [isp_admin, engineer, noc_n2, support]
 status: published
 product_version: "0.1.0"
-last_verified: "2026-10-29"
+last_verified: "2026-11-02"
 help_owner: "Plataforma FiberCore"
 ui_route: "/assinantes/[id]"
 ---
@@ -48,3 +48,10 @@ Uma visão só de leitura. Nada nesta tela altera a rede. O **Histórico** (30 d
 - **"Nenhuma ONU aprovada":** aprove o vínculo ONU↔cliente em **Assinantes**.
 - **"Seu papel não permite ver incidentes":** falta `incidents:read`; isso não significa que não haja incidente.
 - **"Falha ao carregar":** recarregue; isso não significa que o cliente não tenha ONU.
+
+## Evidências de documentação
+
+- Build/commit: d2e519b (ramo principal; capturas regeneradas em 2026-11-02 na pilha efêmera de teste)
+- Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844
+- Caso de teste E2E: help-screenshots.spec.ts › assinantes/visao-360; app.spec.ts › Visão 360 do assinante
+- Dados: fictícios (seed `scripts/seed_demo.py`); sem informações reais de clientes

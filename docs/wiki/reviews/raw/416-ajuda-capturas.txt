@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19ab2-c83a-7f62-8ed3-eeae6ebe5c36).
+[codex] Turn started (01a19ab2-ca87-77f0-be59-4b5e27a7daa2).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main`, incluindo os metadados das capturas e a ferramenta `val...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames -- docs/help/how-to doc...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames -- docs/help/how-to doc... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff main...HEAD -- docs/help/how-to docs/wiki/CHANGELOG.md && git diff ma...
+[codex] Command completed: /bin/bash -lc "git diff main...HEAD -- docs/help/how-to docs/wiki/CHANGELOG.md && git diff ma... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,240p' docs/help/how-to/rede/onu-360.md; sed -n '1,200p' docs/help/ho...
+[codex] Command completed: /bin/bash -lc "sed -n '1,240p' docs/help/how-to/rede/onu-360.md; sed -n '1,200p' docs/help/ho... (exit 0)
+[codex] Running command: /bin/bash -lc "python3 tests/validate_help.py; nl -ba docs/help/how-to/rede/onu-360.md | tail...
+[codex] Command completed: /bin/bash -lc "python3 tests/validate_help.py; nl -ba docs/help/how-to/rede/onu-360.md | tail... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: a Visão 360 da ONU mantém evidências ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: a Visão 360 da ONU mantém evidências de captura incompatíveis com as imagens regeneradas, apesar do `last_verified` atualizado.
+
+Findings:
+- [medium] Evidência da ONU 360 contradiz as capturas regeneradas (docs/help/how-to/rede/onu-360.md:67-68)
+  O changelog afirma que as imagens foram regeneradas com seed sintético, mas o artigo ainda declara que as capturas são do ambiente de laboratório, mostram apenas a ONU de bancada e ocultam a lista filtrando pelo serial. A captura atual exibe várias ONUs `DEMO...` e OLTs demo; portanto, a proveniência descrita já não corresponde ao artefato publicado. Isso torna `last_verified` enganoso para quem usa essa seção para avaliar exposição de dados e origem da imagem.
+  Recommendation: Atualizar as evidências do artigo para identificar a captura atual como seed sintético e descrever corretamente os dados visíveis; registrar a proveniência usada na regeneração.
+
+Next steps:
+- `python3 tests/validate_help.py` passou, mas esse gate só verifica manifesto, presença e referências dos arquivos; não detecta divergência entre a captura e as declarações de proveniência do artigo.
