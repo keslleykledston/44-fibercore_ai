@@ -239,7 +239,7 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 - Em `main` local ficaram ainda SEM push os commits depois de `74719f0` (correção do Edge, merge e docs).
 - **Upload da ZTE:** `speed_test_upload` promovido a `observed` com o aceite do responsável (2026-11-01).
 - **Push:** `main` enviada até `74719f0` (scan de segredos exit 0; nenhum IP real no histórico), sem tags.
-- **Rotação do `cwmp.auth`: CONCLUÍDA em 2026-11-02** (fases 2 e 3; só o par novo é aceito, antigo → 401, ONTs de bancada informando). Resta o responsável guardar o par novo no cofre e então apagar o arquivo local e os backups 0600 no host do ACS. Ver `docs/operations/GENIEACS_CWMP_AUTH_ROTATION.md`.
+- **Rotação do `cwmp.auth`: CONCLUÍDA em 2026-11-02** (fases 2 e 3; só o par novo é aceito, antigo → 401, ONTs de bancada informando). Par novo no cofre; arquivo local e backups do host apagados (`shred`). Ver `docs/operations/GENIEACS_CWMP_AUTH_ROTATION.md`.
 - Próximos passos: Lovable aguarda aprovação de plano (projeto 13aaf09e…, mensagem umsg_01m6atbzzrfmr8489m2f1kqn7b); entender os 80 % da Huawei (comparar o ping de outra origem pela mesma WAN, precisa de alguém na bancada) e repetir o ping da ZTE; portar o protocolo de trava do ping para `SpeedTestSection` (KNOWN_ISSUES); registrar `dns_test` como unsupported/observed (evidência da leitura de NSLookup).
 
 ## Atualização 2026-11-01 (noite): push, aceite do ping, trava do speed, Lovable
