@@ -96,8 +96,10 @@ def _read_certified(conn: Connection, tenant_id: UUID, olt) -> bool:
         text("SELECT status, certification, verified_at FROM device_capabilities WHERE tenant_id = :t AND lower(vendor) = lower(:v) AND lower(model) = lower(:m) AND firmware = :f "
              "AND protocol = :p AND operation = :o"),
         {"t": tenant_id, "v": olt.vendor.strip(), "m": olt.model.strip(), "f": olt.firmware.strip(), "p": ps.PROFILE_READ[1], "o": ps.PROFILE_READ[0]}).first()
-    return bool(row and row.status == "supported" and row.certification in ("observed", "certified") and row.verified_at is not None
-                and datetime.now(UTC) - row.verified_at <= CERTIFICATION_VALID_FOR)
+    if not (row and row.status == "supported" and row.certification in ("observed", "certified") and row.verified_at is not None):
+        return False
+    age = datetime.now(UTC) - row.verified_at
+    return -MAX_FUTURE_SKEW <= age <= CERTIFICATION_VALID_FOR   # a verification dated in the FUTURE is not a verification (only a few minutes of clock skew are tolerated)
 
 
 # ---- import -------------------------------------------------------------------------------------------------------------------------------

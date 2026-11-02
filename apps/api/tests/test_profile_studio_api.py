@@ -310,3 +310,9 @@ def test_a_manual_import_is_never_a_basis_to_reuse_and_an_old_certification_stop
     assert client.get(f"/v1/olts/{a}/profiles", headers=h).json()["driver_read_certified"] is False
     old = client.post(path, headers=h, json={"requested": "reuse_exact"}).json()["plans"][0]
     assert old["strategy"] == "blocked" and old["reason"] in ("invalid_draft", "read_not_certified")
+    with migrated.begin() as c:                                                             # a verification dated in the future is not a verification
+        c.execute(text("UPDATE device_capabilities SET verified_at = now() + interval '30 days' WHERE operation = 'olt_profile_read'"))
+    assert client.get(f"/v1/olts/{a}/profiles", headers=h).json()["driver_read_certified"] is False
+    with migrated.begin() as c:                                                             # and a few minutes of clock skew are tolerated
+        c.execute(text("UPDATE device_capabilities SET verified_at = now() + interval '2 minutes' WHERE operation = 'olt_profile_read'"))
+    assert client.get(f"/v1/olts/{a}/profiles", headers=h).json()["driver_read_certified"] is True
