@@ -15,8 +15,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   if (c.data && r.data) {
     const caps = readPingCaps(c.data), runs = readPingRuns(r.data);
     const run_seen = one ? (one.status === 200 ? true : one.status === 404 ? false : null) : null;
-    // validado aqui E de novo na tela: o corpo que segue é o da API (a tela lê o formato bruto), nunca o objeto já tratado (a tela o recusaria)
-    return caps && runs ? reply({ caps: c.data, runs: (r.data as { items: unknown[] }).items, run_seen }) : reply({ error: "failed" }, 502);
+    if (!caps || !runs) return reply({ error: "failed" }, 502);
+    // Lista fechada de campos (nada de `cpe_id`, `job_id`, `edge_support`, certificação...): no formato bruto da API, porque a tela o valida de novo e não aceita o objeto já tratado.
+    const open = {
+      bench_target: caps.bench_target, test: { offered: caps.offered, reason: caps.reason }, ready: caps.ready,
+      targets: caps.targets.map((t) => ({ id: t.id, label: t.label, target_kind: t.target_kind, region: t.region, ready: t.ready })),
+      shape: { repetitions: caps.repetitions, timeout_ms: caps.timeout_ms }, limits: { per_cpe_per_hour: caps.per_hour },
+    };
+    return reply({ caps: open, runs, run_seen });
   }
   const bad = c.status !== 200 ? c : r;   // o status/código da leitura que FALHOU (uma delas respondeu erro; se as duas responderam 200, o corpo é que não tem o formato)
   const st = c.status === 200 && r.status === 200 ? 502 : bad.status;

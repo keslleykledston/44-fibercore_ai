@@ -44,6 +44,14 @@ test("ping: no aparelho demo o teste está indisponível, com o motivo, e não h
   await expect(page.getByTestId("ping-kpis")).toContainText("—");
   await expect(page.getByTestId("ping-kpis")).not.toContainText("0 ms");
   await expect(page.getByTestId("ping-limits")).toContainText("Jitter e DNS: não disponíveis");
+  // contrato do BFF: lista fechada de campos; nada interno da API (cpe_id, job_id, edge_support, certificação...) chega ao navegador
+  const tok = (await (await page.request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json()).access_token as string;
+  const cpes = (await (await page.request.get(`${API_URL}/v1/cpes`, { headers: { Authorization: `Bearer ${tok}` } })).json()) as { id: string; canonical_serial: string }[];
+  const body = await (await page.request.get(`/bff/cpes/${cpes.find((c) => c.canonical_serial === "DEMOA0002")!.id}/ping`)).json();
+  expect(Object.keys(body).sort()).toEqual(["caps", "run_seen", "runs"]);
+  expect(Object.keys(body.caps).sort()).toEqual(["bench_target", "limits", "ready", "shape", "targets", "test"]);
+  expect(Object.keys(body.caps.test).sort()).toEqual(["offered", "reason"]);
+  expect(JSON.stringify(body)).not.toMatch(/cpe_id|job_id|edge_support|certification|unsupported/);
   expect((await new AxeBuilder({ page: page as never }).include('[data-testid="ping-section"]').analyze()).violations).toEqual([]);
 });
 
