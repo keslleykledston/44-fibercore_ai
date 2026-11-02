@@ -88,7 +88,10 @@ class CpeIn(BaseModel):
     vendor: Short | None = None
     model: Short | None = None
     firmware: Short | None = None
+    last_inform_at: datetime | None = None  # the ACS's own `_lastInform` (NOT the collection time); older Edges omit it
     binding: CpeBinding
+
+    _inf = field_validator("last_inform_at")(lambda cls, v: v if v is None else _check_observed(v))
 
     @field_validator("canonical_serial")
     @classmethod
@@ -291,14 +294,15 @@ def ingest_cpe_snapshot(
         first_per_serial.setdefault(c.canonical_serial, c)
     conn.execute(
         text(
-            "INSERT INTO cpes (tenant_id, edge_id, canonical_serial, vendor, model, firmware, observed_at) "
-            "VALUES (:t,:e,:s,:v,:m,:f,:o) ON CONFLICT (tenant_id, canonical_serial) DO UPDATE SET vendor=EXCLUDED.vendor, "
-            "model=EXCLUDED.model, firmware=EXCLUDED.firmware, observed_at=EXCLUDED.observed_at "
+            "INSERT INTO cpes (tenant_id, edge_id, canonical_serial, vendor, model, firmware, observed_at, last_inform_at) "
+            "VALUES (:t,:e,:s,:v,:m,:f,:o,:li) ON CONFLICT (tenant_id, canonical_serial) DO UPDATE SET vendor=EXCLUDED.vendor, "
+            "model=EXCLUDED.model, firmware=EXCLUDED.firmware, observed_at=EXCLUDED.observed_at, "
+            "last_inform_at=GREATEST(cpes.last_inform_at, EXCLUDED.last_inform_at) "
             "WHERE cpes.edge_id = EXCLUDED.edge_id AND (cpes.observed_at IS NULL OR cpes.observed_at <= EXCLUDED.observed_at)"
         ),
         # ONE row per serial (first claim wins): a device announced over several protocols/connectors still maps to a single cpes row;
         # its extra bindings are inserted below, one per claim key.
-        [{"t": p.tenant_id, "e": body.edge_id, "s": c.canonical_serial, "v": c.vendor, "m": c.model, "f": c.firmware, "o": body.observed_at}
+        [{"t": p.tenant_id, "e": body.edge_id, "s": c.canonical_serial, "v": c.vendor, "m": c.model, "f": c.firmware, "o": body.observed_at, "li": c.last_inform_at}
          for c in first_per_serial.values()],
     )
     resolved = list(

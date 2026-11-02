@@ -54,11 +54,14 @@ type cpeBinding struct {
 	ConnectorID string `json:"connector_id"`
 }
 type cpeIn struct {
-	CanonicalSerial string     `json:"canonical_serial"`
-	Vendor          string     `json:"vendor,omitempty"`
-	Model           string     `json:"model,omitempty"`
-	Firmware        string     `json:"firmware,omitempty"`
-	Binding         cpeBinding `json:"binding"`
+	CanonicalSerial string `json:"canonical_serial"`
+	Vendor          string `json:"vendor,omitempty"`
+	Model           string `json:"model,omitempty"`
+	Firmware        string `json:"firmware,omitempty"`
+	// LastInformAt is the ACS's own `_lastInform` for this device (R-D004), distinct from the collection time. Omitted when the ACS
+	// gave none, when it does not parse, or when it lies in the future: the cloud then knows nothing about the last Inform.
+	LastInformAt string     `json:"last_inform_at,omitempty"`
+	Binding      cpeBinding `json:"binding"`
 }
 type cpeStateIn struct {
 	Binding cpeBinding   `json:"binding"`
@@ -94,6 +97,19 @@ var serialRe = regexp.MustCompile(`^[A-Z0-9][A-Z0-9._-]{3,63}$`)
 // canonicalSerial is the ONE form the Cloud stores (trimmed, upper case); grouping and validation use it so case/space variants of a
 // serial collapse into the same claim instead of looking like two devices.
 func canonicalSerial(s string) string { return strings.ToUpper(strings.TrimSpace(s)) }
+
+// lastInform normalises the ACS `_lastInform` to RFC 3339 UTC. Anything that does not parse, or that is in the future, becomes "" (omitted).
+func lastInform(raw string, now time.Time) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	t, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil || t.After(now.Add(5*time.Minute)) {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}
 
 func isPlaceholder(d nbi.Device) bool {
 	return d.DeviceID.OUI == placeholderID || d.DeviceID.Manufacturer == placeholderID || d.DeviceID.ProductClass == placeholderID
@@ -165,7 +181,8 @@ func (g *GenieACS) Collect(ctx context.Context) ([]Item, error) {
 		}
 		batch = append(batch, cpeIn{
 			CanonicalSerial: serial, Vendor: d.DeviceID.Manufacturer, Model: d.DeviceID.ProductClass, Firmware: d.Firmware(),
-			Binding: cpeBinding{Protocol: "tr069", ExternalID: d.ID, ConnectorID: g.ConnectorID},
+			LastInformAt: lastInform(d.LastInform, now()),
+			Binding:      cpeBinding{Protocol: "tr069", ExternalID: d.ID, ConnectorID: g.ConnectorID},
 		})
 		kept = append(kept, d)
 		if len(batch) == maxPerSnapshot {

@@ -505,12 +505,20 @@ def test_r_d004_run_flags_an_online_onu_whose_cpe_stopped_informing(client, seed
     _on(migrated, seed["A"])
     h = hdr(client, "alice", seed, "A")
     cpe, onu = _cpe_with_state(client, inv, migrated, seed, "DGC-0007", "dgc-7", [], onu_status="online")
-    fresh = client.post("/v1/diagnostics/runs", headers=h, json={"rule_id": "R-D004", "cpe_id": cpe}).json()["findings"][0]
-    assert fresh["status"] == "observed" and fresh["evidence"]["inform_fresh"] is True          # the snapshot just informed
+    run = lambda body: client.post("/v1/diagnostics/runs", headers=h, json=body)  # noqa: E731
+    with migrated.begin() as c:   # a snapshot WITHOUT last_inform_at (an older Edge): the collection time says nothing about the CPE
+        none = c.execute(text("SELECT last_inform_at, observed_at FROM cpes WHERE canonical_serial = 'DGC-0007'")).one()
+    assert none.last_inform_at is None and none.observed_at is not None
+    f = run({"rule_id": "R-D004", "cpe_id": cpe}).json()["findings"][0]
+    assert f["status"] == "unknown" and "no Inform time" in f["reason"] and f["hypothesis"] is None
     with migrated.begin() as c:
-        c.execute(text("UPDATE cpes SET observed_at = now() - interval '3 hours' WHERE canonical_serial = 'DGC-0007'"))
+        c.execute(text("UPDATE cpes SET last_inform_at = now() - interval '2 minutes' WHERE canonical_serial = 'DGC-0007'"))
+    fresh = run({"rule_id": "R-D004", "cpe_id": cpe}).json()["findings"][0]
+    assert fresh["status"] == "observed" and fresh["evidence"]["inform_fresh"] is True
+    with migrated.begin() as c:
+        c.execute(text("UPDATE cpes SET last_inform_at = now() - interval '3 hours' WHERE canonical_serial = 'DGC-0007'"))
         before = c.execute(text("SELECT (SELECT count(*) FROM incidents), (SELECT count(*) FROM events_outbox)")).one()
-    r = client.post("/v1/diagnostics/runs", headers=h, json={"rule_id": "R-D004", "onu_id": onu})
+    r = run({"rule_id": "R-D004", "onu_id": onu})
     assert r.status_code == 201, r.text
     d = r.json()
     f = d["findings"][0]
@@ -520,6 +528,26 @@ def test_r_d004_run_flags_an_online_onu_whose_cpe_stopped_informing(client, seed
         stored = c.execute(text("SELECT inputs FROM diagnostic_runs WHERE id = :i"), {"i": d["run_id"]}).scalar_one()
     assert after == before and "DGC-0007" not in json.dumps(stored)                              # read-only, no serial stored
     assert client.get(f"/v1/diagnostics/runs/{d['run_id']}", headers=h).json()["reproducible"] is True
+
+
+def test_cpe_snapshot_keeps_the_acs_last_inform_apart_from_the_collection_time_and_only_moves_it_forward(client, seed, inv, migrated):
+    edge = str(inv["a1"]["edge"])
+    snap_ = lambda obs, li: {"edge_id": edge, "observed_at": obs, "cpes": [{"canonical_serial": "DGC-0008", "vendor": "ACME", "model": "G3000",  # noqa: E731
+                             **({"last_inform_at": li} if li else {}), "binding": {"protocol": "tr069", "external_id": "dgc-8", "connector_id": "c-dg"}}]}
+    post = lambda body: client.post("/v1/edge/cpe-snapshots", headers=agent(client, inv, "a1"), json=body)  # noqa: E731
+    row = lambda: migrated.connect().execute(text("SELECT last_inform_at, observed_at FROM cpes WHERE canonical_serial = 'DGC-0008'")).one()  # noqa: E731
+    assert post(snap_(_now(-100), _now(-3000))).status_code == 202
+    first = row()
+    assert first.last_inform_at is not None and first.last_inform_at < first.observed_at          # not the collection time
+    assert post(snap_(_now(-50), _now(-5000))).status_code == 202                                 # an OLDER Inform never moves it back
+    second = row()
+    assert second.last_inform_at == first.last_inform_at and second.observed_at > first.observed_at
+    assert post(snap_(_now(-20), None)).status_code == 202                                        # an Edge that omits it never erases it
+    assert row().last_inform_at == first.last_inform_at
+    assert post(snap_(_now(-10), _now(-60))).status_code == 202
+    assert row().last_inform_at > first.last_inform_at                                            # a newer one moves it forward
+    future = (__import__("datetime").datetime.now(__import__("datetime").UTC) + __import__("datetime").timedelta(days=2)).isoformat()
+    assert post(snap_(_now(-5), future)).status_code == 422                                       # a future Inform is refused
 
 
 def test_r_d003_run_reads_the_edge_state_is_scoped_and_tenant_isolated(client, seed, inv, migrated):

@@ -112,7 +112,7 @@ def _cpe_inputs(conn: Connection, cpe_id: UUID) -> list[dict]:
     conns = sorted(({"state": r.value, "fresh": fresh(r)} for r in st if r.metric == "wan_connection_status"),
                    key=lambda c: (c["state"], c["fresh"]))
     ages = [age(r) for r in st]
-    inform_at = conn.execute(text("SELECT observed_at FROM cpes WHERE id = :c"), {"c": cpe_id}).scalar_one()   # the Edge sends the ACS _lastInform
+    inform_at = conn.execute(text("SELECT last_inform_at FROM cpes WHERE id = :c"), {"c": cpe_id}).scalar_one()   # the ACS's own _lastInform, NOT the collection time
     inform_age = None if inform_at is None else max(0, int((now - inform_at).total_seconds()))
     onu = conn.execute(
         text("SELECT o.status, o.observed_at FROM onu_cpe_links l JOIN onus o ON o.id = l.onu_id AND o.tenant_id = l.tenant_id "

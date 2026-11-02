@@ -400,3 +400,38 @@ func TestSnapshotCarriesTheFirmwareTheAcsHoldsAndOmitsAnythingElse(t *testing.T)
 		t.Fatalf("firmware %v", fw)
 	}
 }
+
+// R-D004 needs the ACS's own last Inform, not the collection time: it is sent only when the ACS gave a valid, non-future value.
+func TestLastInformIsTheACSValueNotTheCollectionTime(t *testing.T) {
+	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	mk := func(i int, serial, li string) nbi.Device { d := dev(i, serial); d.LastInform = li; return d }
+	g := &GenieACS{EdgeID: "e1", ConnectorID: "c", Now: func() time.Time { return now }, Client: fakeLister{[]nbi.Device{
+		mk(1, "SER00001", "2026-11-02T11:30:00.000Z"),      // valid: normalised to RFC 3339 UTC
+		mk(2, "SER00002", ""),                              // none
+		mk(3, "SER00003", "not a time"),                    // unparseable
+		mk(4, "SER00004", "2026-11-02T13:00:00.000Z"),      // in the future
+		mk(5, "SER00005", "2026-11-02T14:30:00.000+03:00"), // offset: same instant as 11:30Z
+	}}}
+	items, err := g.Collect(context.Background())
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items=%v err=%v", items, err)
+	}
+	var snap struct {
+		ObservedAt string           `json:"observed_at"`
+		CPEs       []map[string]any `json:"cpes"`
+	}
+	_ = json.Unmarshal(items[0].Payload, &snap)
+	got := map[string]any{}
+	for _, c := range snap.CPEs {
+		got[c["canonical_serial"].(string)] = c["last_inform_at"]
+	}
+	want := map[string]any{"SER00001": "2026-11-02T11:30:00Z", "SER00002": nil, "SER00003": nil, "SER00004": nil, "SER00005": "2026-11-02T11:30:00Z"}
+	for k, v := range want {
+		if got[k] != v {
+			t.Fatalf("%s: got %v want %v (all=%v)", k, got[k], v, got)
+		}
+	}
+	if snap.ObservedAt != "2026-11-02T12:00:00Z" {
+		t.Fatalf("observed_at must stay the collection time: %s", snap.ObservedAt)
+	}
+}

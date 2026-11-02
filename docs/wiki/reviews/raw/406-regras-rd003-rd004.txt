@@ -1,0 +1,32 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19a94-075b-7f60-9c00-ce964c1a9378).
+[codex] Turn started (01a19a94-0a56-7052-b0d7-04b8cc2ef1fc).
+[codex] Assistant message captured: Vou comparar a branch com `main` e seguir os caminhos de diagnóstico, tenant/RLS e contrato p...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/diagnostic...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/diagnostic... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/app/core/diagnosti...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=20 main...HEAD -- apps/api/app/core/diagnosti... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "observed_at.*cpes|UPDATE cpes|INSERT INTO cpes|lastInform|_lastInform" ...
+[codex] Command completed: /bin/bash -lc 'rg -n "observed_at.*cpes|UPDATE cpes|INSERT INTO cpes|lastInform|_lastInform" ... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '210,315p'; rg -n \"CREATE TABLE...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '210,315p'; rg -n \"CREATE TABLE... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"class Cpe(In|Snapshot)|CpeSnapshot|observed_at\" apps/api/app/api/inve...
+[codex] Command completed: /bin/bash -lc "rg -n \"class Cpe(In|Snapshot)|CpeSnapshot|observed_at\" apps/api/app/api/inve... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/alembic/versions/0019_cpe_state.py | sed -n '12,52p'; nl -ba a...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/alembic/versions/0019_cpe_state.py | sed -n '12,52p'; nl -ba a... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar: R-D004 usa o horário do snapshot do Edge ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar: R-D004 usa o horário do snapshot do Edge como se fosse o último Inform do ACS, então pode inferir uma sessão ACS desatualizada sem evidência disso.
+
+Findings:
+- [high] R-D004 interpreta cpes.observed_at como horário do último Inform (apps/api/app/api/diagnostics.py:115-116)
+  `cpes.observed_at` é gravado com `body.observed_at` na ingestão do snapshot do Edge ([inventory.py](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/apps/api/app/api/inventory.py:294)); o campo marca quando o Edge observou o snapshot, não o `_lastInform` do ACS. Assim, um Edge que parou de enviar snapshots pode fazer uma ONU online e com Inform recente parecer sem Inform, gerando a inferência `acs_session_stale` com base no relógio de coleta. A regra pode atribuir um problema à sessão ACS quando o dado só demonstra que o snapshot está velho.
+  Recommendation: Transportar e persistir um campo separado para o timestamp de `_lastInform` do ACS; basear R-D004 nesse campo e tratar sua ausência como `unknown`. Não reutilizar `cpes.observed_at` para essa decisão.
+
+Next steps:
+- Corrigir a origem temporal usada por R-D004 e alinhar a documentação e o contrato ao campo efetivamente persistido.

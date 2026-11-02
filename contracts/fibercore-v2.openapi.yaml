@@ -1829,7 +1829,7 @@ components:
       properties:
         edge_id: {type: string, format: uuid}
         observed_at: {type: string, format: date-time}
-        cpes: {type: array, maxItems: 20000, items: {type: object, required: [canonical_serial, binding], properties: {canonical_serial: {type: string}, vendor: {type: string}, model: {type: string}, firmware: {type: string}, binding: {type: object, required: [protocol, external_id, connector_id], properties: {protocol: {type: string, enum: [tr069, tr369]}, external_id: {type: string}, connector_id: {type: string}}}}}}
+        cpes: {type: array, maxItems: 20000, items: {type: object, required: [canonical_serial, binding], properties: {canonical_serial: {type: string}, vendor: {type: string}, model: {type: string}, firmware: {type: string}, last_inform_at: {type: string, format: date-time, description: 'O _lastInform do próprio ACS (R-D004), NÃO a hora da coleta. Opcional: Edge antigo não envia; nunca no futuro; só avança'}, binding: {type: object, required: [protocol, external_id, connector_id], properties: {protocol: {type: string, enum: [tr069, tr369]}, external_id: {type: string}, connector_id: {type: string}}}}}}
     Capability:
       type: object
       required: [name, status, protocol, certification]
