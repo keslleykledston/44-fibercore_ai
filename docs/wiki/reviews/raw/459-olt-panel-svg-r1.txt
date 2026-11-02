@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19d2d-3284-7441-a3c2-e0b56fb021fc).
+[codex] Turn started (01a19d2d-3502-7c73-ac1b-1df40e98d222).
+[codex] Assistant message captured: Vou conferir o diff diretamente contra `main` e seguir os caminhos de dados entre consulta/ca...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- apps/web/src/components/Olt...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- apps/web/src/components/Olt... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/components/OltPanel.tsx | sed -n '85,165p'; rg -n \"querie...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/components/OltPanel.tsx | sed -n '85,165p'; rg -n \"querie... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/cli.py | sed -n '455,505p'; nl -ba apps/web/src/lib/oltPan...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/cli.py | sed -n '455,505p'; nl -ba apps/web/src/lib/oltPan... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar: o comando de mock pode sobrescrever o in...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar: o comando de mock pode sobrescrever o inventário em cache de uma OLT real se ela tiver um nome com prefixo `OLT-DEMO`; o nome não identifica com segurança um equipamento de demonstração.
+
+Findings:
+- [high] Prefixo do nome não impede gravar mock em OLT real (apps/api/app/cli.py:472-489)
+  A única barreira antes da gravação sintética é `olt_name.startswith("OLT-DEMO")`. O comando então busca a OLT por tenant e nome e grava `source="mock"` no cache, sem verificar se ela é de demonstração por um identificador ou estado protegido. Uma OLT física chamada, por exemplo, `OLT-DEMO-01` passa pela mesma validação; a gravação pode substituir seu inventário em cache e fazer o painel apresentar slots e placas sintéticos como dados da OLT. Exija uma marcação de demo controlada no cadastro/tenant ou uma allowlist de IDs de OLT, e recuse o mock para qualquer OLT sem essa prova.
+  Recommendation: Substituir a validação por prefixo por uma condição verificável no cadastro e no escopo do tenant, validada na mesma transação antes de `store_latest`; incluir teste que tenta aplicar o mock a uma OLT real cujo nome começa com `OLT-DEMO`.

@@ -36,7 +36,7 @@ def _password(env_name: str | None) -> str:
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="fibercore-admin")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    t = sub.add_parser("create-tenant"); t.add_argument("name")
+    t = sub.add_parser("create-tenant"); t.add_argument("name"); t.add_argument("--demo", action="store_true", help="mark the tenant as a DEMONSTRATION tenant (fixed at creation, never changeable: the only kind that accepts synthetic mocks)")
     u = sub.add_parser("create-user")
     u.add_argument("email"); u.add_argument("display_name"); u.add_argument("--password-env")
     po = sub.add_parser("platform-operator", help="ADR-0031: mark/unmark an account as a platform operator (the only accounts a workspace can delegate access to)")
@@ -83,6 +83,8 @@ def main(argv: list[str] | None = None) -> None:
     fs.add_argument("tenant_id"); fs.add_argument("feature"); fs.add_argument("state", choices=["on", "off", "default"])
     oc = sub.add_parser("ont-config-mock", help="ADR-0034: write a SYNTHETIC configuration profile for a CPE (source 'mock', labelled synthetic; lab/demo only; owner-only)")
     oc.add_argument("tenant_id"); oc.add_argument("cpe_id"); oc.add_argument("profile", help="dualband | multi_ssid | no_wifi | inactive_5g | clear")
+    ob = sub.add_parser("olt-board-mock", help="SYNTHETIC board inventory (`olt.board`, source 'mock') for a DEMO OLT so the front-panel screen can be shown without equipment (demo/e2e only: refuses any tenant that is not the demonstration tenant and any OLT that already has an inventory read from the equipment; owner-only)")
+    ob.add_argument("tenant_id"); ob.add_argument("olt_name"); ob.add_argument("--slots", default="0:H805GPFD,1:H805GPFD", help="service boards as slot:MODEL,... (the control and power boards are added)")
     se = sub.add_parser("speed-endpoint-set", help="ADR-0038: create/update a LOGICAL speed-test endpoint (id, label, CORE|INTERNET, region, enabled). No URL: the Edge holds the address (owner-only)")
     se.add_argument("tenant_id"); se.add_argument("endpoint_id"); se.add_argument("label")
     se.add_argument("kind", choices=["CORE", "INTERNET"]); se.add_argument("region"); se.add_argument("state", choices=["on", "off"])
@@ -110,7 +112,7 @@ def main(argv: list[str] | None = None) -> None:
     eng = _engine()
     with eng.begin() as c:
         if a.cmd == "create-tenant":
-            print(c.execute(text("INSERT INTO tenants(name) VALUES (:n) RETURNING id"), {"n": a.name}).scalar())
+            print(c.execute(text("INSERT INTO tenants(name, demo) VALUES (:n, :d) RETURNING id"), {"n": a.name, "d": bool(a.demo)}).scalar())
         elif a.cmd == "create-user":
             h = hash_secret(_password(a.password_env))
             print(c.execute(
@@ -462,6 +464,13 @@ def main(argv: list[str] | None = None) -> None:
                            "VALUES (:t,'olt',:o,'olt.transfer_finished','1',CAST(:p AS jsonb))"),
                       {"t": a.tenant_id, "o": a.olt_id, "p": json.dumps({"owner_epoch": ep})})
             print(f"transfer finished: owner_epoch {ep}")
+        elif a.cmd == "olt-board-mock":
+            from app.core import olt_board_mock
+            try:
+                got = olt_board_mock.store(c, a.tenant_id, a.olt_name, a.slots)
+            except ValueError as e:
+                sys.exit(str(e))
+            print(f"synthetic board inventory stored for {a.olt_name}: slots {got}")
         elif a.cmd == "ont-config-mock":
             from app.core import ont_config_mock
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})

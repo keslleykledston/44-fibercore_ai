@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19d2e-04aa-7ff3-ac97-d679de8a3f33).
+[codex] Turn started (01a19d2e-04e1-7d13-a7f5-a58819b4f030).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir especialmente a validação transacional do mock,...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/olt_board...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/olt_board... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/core/olt_board...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/core/olt_board... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"def store_latest|store_latest\\(\" apps/api/app/core/olt_cache.py apps...
+[codex] Command completed: /bin/bash -lc "rg -n \"def store_latest|store_latest\\(\" apps/api/app/core/olt_cache.py apps... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/olt_cache.py | sed -n '1,55p'; nl -ba apps/api/app/ap...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/olt_cache.py | sed -n '1,55p'; nl -ba apps/api/app/ap... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: uma leitura real de placa em andame...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: uma leitura real de placa em andamento pode ser substituída pelo mock apesar da validação transacional.
+
+Findings:
+- [high] Leitura real concorrente pode perder para o mock (apps/api/app/core/olt_board_mock.py:28-42)
+  A checagem em `olt_query_latest` e a gravação do mock não impedem que um job `olt.board` já em andamento grave seu resultado real em paralelo: o caminho de resultado não bloqueia a linha da OLT. Se o mock gravar primeiro, a leitura real usa `row.created_at` como `asked_at`, anterior ao timestamp atual do mock, e `store_latest` a rejeita pela condição de ordenação. Assim, o cache fica com dados sintéticos mesmo após uma coleta real bem-sucedida, contrariando a garantia de nunca sobrescrever uma leitura do equipamento. Bloqueie/serializa também a finalização da coleta real com a gravação do mock, ou faça o upsert impedir que uma origem `mock` prevaleça sobre resultado real.
+  Recommendation: Use um mecanismo de exclusão mútua compartilhado pelo mock e pelo caminho de resultado real; ao gravar, aplique também uma regra de precedência que sempre permita à origem real substituir `mock`, independentemente de `asked_at`.
