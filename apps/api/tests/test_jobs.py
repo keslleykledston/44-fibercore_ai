@@ -323,3 +323,73 @@ def test_one_mutation_at_a_time_per_target_and_reads_never_wait(client, seed, in
     assert client.post(f"/v1/jobs/{free}/submit", headers=h).json()["status"] == "APPROVED"
     got = client.get("/v1/edge/jobs/next", headers=a)
     assert got.status_code == 200 and got.json()["job_id"] == free
+    for jid in (held, free):                                                                 # leave nothing in flight for the next test
+        for state in ("accepted", "succeeded"):
+            assert client.post(f"/v1/edge/jobs/{jid}/result", headers=a, json={"state": state, **({"postcheck_ok": True} if state == "succeeded" else {})}).status_code == 204
+
+
+def test_a_write_stuck_in_flight_stops_holding_the_target_after_its_window(client, seed, inv, targets, monkeypatch, migrated):
+    """A lost Edge report (job stuck in ACCEPTED) must not hold the target for ever: after LIVE_FOR without moving, it no longer excludes."""
+    monkeypatch.setattr(jobs_mod, "HOMOLOGATED_WRITES", frozenset({"reboot_cpe"}))
+    monkeypatch.setattr(jobs_mod.bench, "BENCH_OPS", {k: v for k, v in jobs_mod.bench.BENCH_OPS.items() if k != "reboot_cpe"})
+    h = hdr(client, "alice", seed, "A")
+    a = agent(client, inv, "a1")
+    while client.get("/v1/edge/jobs/next", headers=a).status_code == 200:
+        pass
+
+    def approved():
+        jid = preview(client, h, "reboot_cpe", targets["cpe"]).json()["id"]
+        assert client.post(f"/v1/jobs/{jid}/submit", headers=h).json()["status"] == "APPROVED"
+        return jid
+
+    stuck, waiting = approved(), approved()
+    assert client.get("/v1/edge/jobs/next", headers=a).json()["job_id"] == stuck
+    assert client.post(f"/v1/edge/jobs/{stuck}/result", headers=a, json={"state": "accepted"}).status_code == 204     # ...and then the Edge goes quiet
+    assert client.get("/v1/edge/jobs/next", headers=a).status_code == 204                                             # held while it is recent
+    with migrated.begin() as c:
+        c.execute(text("UPDATE jobs SET updated_at = now() - interval '31 minutes' WHERE id = :i"), {"i": stuck})
+    got = client.get("/v1/edge/jobs/next", headers=a)
+    assert got.status_code == 200 and got.json()["job_id"] == waiting                                                 # the stale one no longer holds it
+    for state in ("accepted", "succeeded"):                                                                           # leave nothing in flight for the next test
+        assert client.post(f"/v1/edge/jobs/{waiting}/result", headers=a, json={"state": state, **({"postcheck_ok": True} if state == "succeeded" else {})}).status_code == 204
+
+
+def test_two_simultaneous_next_calls_never_dispatch_two_writes_on_one_target(seed, inv, targets, monkeypatch):
+    """The race the advisory lock closes: both calls select before either dispatches. Repeated rounds, a barrier lines the two calls up."""
+    import threading
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    monkeypatch.setattr(jobs_mod, "HOMOLOGATED_WRITES", frozenset({"reboot_cpe"}))
+    monkeypatch.setattr(jobs_mod.bench, "BENCH_OPS", {k: v for k, v in jobs_mod.bench.BENCH_OPS.items() if k != "reboot_cpe"})
+    c0 = TestClient(app)
+    h = hdr(c0, "alice", seed, "A")
+    a = agent(c0, inv, "a1")
+    while c0.get("/v1/edge/jobs/next", headers=a).status_code == 200:
+        pass
+    for _ in range(12):
+        ids = []
+        for _ in range(2):
+            jid = preview(c0, h, "reboot_cpe", targets["cpe"]).json()["id"]
+            assert c0.post(f"/v1/jobs/{jid}/submit", headers=h).json()["status"] == "APPROVED"
+            ids.append(jid)
+        gate, codes = threading.Barrier(2), []
+
+        def call(gate=gate, codes=codes):
+            cl = TestClient(app)
+            gate.wait()
+            codes.append(cl.get("/v1/edge/jobs/next", headers=a).status_code)
+
+        ts = [threading.Thread(target=call) for _ in range(2)]
+        [t.start() for t in ts]
+        [t.join() for t in ts]
+        assert sorted(codes) == [200, 204], codes        # exactly one envelope, never two writes in flight on the same target
+        sent = next(i for i in ids if c0.get(f"/v1/jobs/{i}", headers=h).json()["status"] == "DISPATCHED")
+        other = next(i for i in ids if i != sent)
+        assert c0.get(f"/v1/jobs/{other}", headers=h).json()["status"] == "APPROVED"
+        for jid in (sent, other):                        # drain: finish the sent one, dispatch and finish the waiting one
+            if jid == other:
+                assert c0.get("/v1/edge/jobs/next", headers=a).json()["job_id"] == other
+            for state in ("accepted", "succeeded"):
+                assert c0.post(f"/v1/edge/jobs/{jid}/result", headers=a, json={"state": state, **({"postcheck_ok": True} if state == "succeeded" else {})}).status_code == 204

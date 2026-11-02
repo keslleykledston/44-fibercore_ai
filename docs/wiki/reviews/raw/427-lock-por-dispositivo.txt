@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19ad3-429d-7d93-8b78-c3d938da3c7a).
+[codex] Turn started (01a19ad3-42d8-7030-842c-8fa5d89749d1).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir o fluxo de despacho, locks e estados relacionad...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/jobs.py ap...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/jobs.py ap... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=8 main...HEAD -- apps/api/tests/test_jobs.py;...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=8 main...HEAD -- apps/api/tests/test_jobs.py;... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '58,72p;330,445p'; rg -n \"jobs.*POLI...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/jobs.py | sed -n '58,72p;330,445p'; rg -n \"jobs.*POLI... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "CREATE POLICY.*jobs|ON jobs|tenant_id.*current_setting|app.tenant" apps...
+[codex] Command completed: /bin/bash -lc 'rg -n "CREATE POLICY.*jobs|ON jobs|tenant_id.*current_setting|app.tenant" apps... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: jobs de escrita podem manter o alv...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: jobs de escrita podem manter o alvo bloqueado indefinidamente, e o teste novo não exercita a corrida simultânea que a mudança promete cobrir.
+
+Findings:
+- [high] Estados após DISPATCHED podem bloquear o alvo para sempre (apps/api/app/api/jobs.py:65)
+  `LIVE_STATES` inclui `ACCEPTED`, `DEVICE_PENDING` e `VERIFYING`, então qualquer job de escrita nesses estados impede novos despachos para o alvo. O sweep abaixo só expira jobs em `DISPATCHED` e só roda quando o mesmo Edge chama `/next`; não há expiração equivalente para os outros estados. Se o Edge parar de reportar após aceitar o job ou iniciar a verificação, o alvo fica bloqueado sem saída automática, inclusive quando o Edge não volta a chamar `/next`. Isso contradiz a garantia de que o sweep impede jobs presos. Defina uma recuperação com prazo para todos os estados vivos, ou outra liberação explícita e segura do bloqueio.
+  Recommendation: Implemente expiração ou reconciliação dos estados vivos com regras seguras para resultados incertos; não dependa exclusivamente de uma chamada futura de `/next` do Edge para liberar o alvo.
+- [medium] O teste não demonstra a proteção contra chamadas simultâneas (apps/api/tests/test_jobs.py:280-292)
+  O teste chama `/next` sequencialmente: primeiro despacha um job, depois verifica que o segundo espera. Ele não inicia dois despachos concorrentes nem demonstra que o advisory lock e a re-checagem impedem ambos de observar o alvo livre ao mesmo tempo. Assim, a afirmação central de FC22-015 sobre a corrida não está coberta pelo teste apresentado; uma regressão na serialização poderia passar nessa suíte.
+  Recommendation: Adicione um teste concorrente com duas transações/conexões e sincronização que force ambas a iniciar `/next` antes de qualquer despacho concluir; verifique que no máximo uma recebe envelope e que a outra permanece APPROVED.
