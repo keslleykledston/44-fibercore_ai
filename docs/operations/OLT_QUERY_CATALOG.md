@@ -15,6 +15,10 @@ Legenda: **V** = já executado na OLT real e coberto por fixture (aceito por pad
 | `olt.autofind` | `display ont autofind all` | global | N | 2 |
 | `olt.temperature` | `display temperature 0` | global | V | 3 |
 | `olt.sync` | `display data sync state` | global | V | 3 |
+| `olt.profile.dba` | `display dba-profile all` | global | V (capturada e validada em 02/11/2026) | 11 |
+| `olt.profile.line` | `display ont-lineprofile gpon all` | global | V (capturada e validada em 02/11/2026) | 11 |
+| `olt.profile.srv` | `display ont-srvprofile gpon all` | global | V (capturada e validada em 02/11/2026) | 11 |
+| `olt.profile.traffic` | `display traffic table ip from-index 0` | global | V (capturada e validada em 02/11/2026) | 11 |
 | `slot.board` (⚠ a saída lista TODAS as ONTs da placa com serial e descrição de cliente: ver ADR-0032, emenda 31/10/2026) | `display board 0/<slot>` | slot | N | 3 |
 | `slot.cpu` | `display cpu 0/<slot>` | slot | S (validada em 31/10/2026; ainda não oferecida: falta o seletor de slot na tela) | 3 |
 | `slot.mem` | `display mem 0/<slot>` | slot | S (validada em 31/10/2026; ainda não oferecida: falta o seletor de slot na tela) | 3 |

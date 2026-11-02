@@ -46,9 +46,11 @@ type Config struct {
 	Ping *ping.Config `json:"ping"`
 	// OLTQueryEnabled (ADR-0029): run the Cloud's approved read-only OLT queries, in the collection's own CLI session. Needs jobs_enabled, "olt_query" in
 	// allowed_operations (explicit) and at least one huawei_ma56_r015 OLT with cloud_id. Off by default.
-	OLTQueryEnabled bool   `json:"olt_query_enabled"`
-	RefreshTasks    bool   `json:"refresh_tasks"` // ADR-SD-002 item 4: let signed refresh jobs ask the ACS to read ONE CPE (needs nbi_url + jobs_enabled)
-	Version         string `json:"-"`
+	OLTQueryEnabled bool `json:"olt_query_enabled"`
+	// OLTProfileNamesToCloud: let the LABELS of the OLT's profiles (free text chosen by the operator) go to the Cloud. Off by default: the Cloud then gets only numbers and rates.
+	OLTProfileNamesToCloud bool   `json:"olt_profile_names_to_cloud"`
+	RefreshTasks           bool   `json:"refresh_tasks"` // ADR-SD-002 item 4: let signed refresh jobs ask the ACS to read ONE CPE (needs nbi_url + jobs_enabled)
+	Version                string `json:"-"`
 }
 
 // BenchConfig is the Edge's own, independent copy of the bench list (ADR-0030): the Cloud can name a device, never add one here.

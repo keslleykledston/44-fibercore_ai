@@ -26,6 +26,7 @@ def _cleanup(migrated):
         c.execute(text("DELETE FROM profile_dry_runs"))
         c.execute(text("DELETE FROM profile_drafts"))
         c.execute(text("DELETE FROM olt_profile_snapshots"))
+        c.execute(text("DELETE FROM olt_query_latest WHERE query_id = 'olt.profile.dba'"))
         c.execute(text("DELETE FROM device_capabilities WHERE operation = 'olt_profile_read'"))
         c.execute(text("DELETE FROM olts WHERE name LIKE 'OLT-PS-%'"))
 
@@ -316,3 +317,81 @@ def test_a_manual_import_is_never_a_basis_to_reuse_and_an_old_certification_stop
     with migrated.begin() as c:                                                             # and a few minutes of clock skew are tolerated
         c.execute(text("UPDATE device_capabilities SET verified_at = now() + interval '2 minutes' WHERE operation = 'olt_profile_read'"))
     assert client.get(f"/v1/olts/{a}/profiles", headers=h).json()["driver_read_certified"] is True
+
+
+# ---- sync from the Edge's supervised reads ---------------------------------------------------------------------------------------------------
+def _store_dba_read(migrated, tenant, olt, rows, age=timedelta(0)):
+    from app.core import olt_cache
+    from app.core.db import get_engine, scoped_connection
+    with scoped_connection(get_engine(), tenant_id=tenant) as c:
+        epoch = c.execute(text("SELECT owner_epoch FROM olts WHERE id = :i"), {"i": olt}).scalar()
+        olt_cache.store_latest(c, tenant, __import__("uuid").UUID(str(olt)), "olt.profile.dba", "", {"profiles": rows}, epoch, datetime.now(UTC))
+    if age:
+        with migrated.begin() as c:
+            c.execute(text("UPDATE olt_query_latest SET asked_at = asked_at - make_interval(secs => :s) WHERE olt_id = :i"), {"s": age.total_seconds(), "i": olt})
+
+
+def test_sync_turns_the_dba_read_into_authoritative_snapshots_and_is_idempotent(client, seed, inv, migrated):
+    _on(migrated, seed["A"])
+    h = hdr(client, "alice", seed, "A")
+    olt = _olt(client, inv, h, "OLT-PS-SYNC")
+    assert client.post(f"/v1/olts/{olt}/profiles/sync", headers=h).status_code == 409           # nothing was read yet
+    rows = [{"id": 0, "type": 3, "compensation": False, "fixed_kbps": 0, "assured_kbps": 8192, "maximum_kbps": 20480, "binding_times": 0},
+            {"id": 1, "type": 1, "compensation": False, "fixed_kbps": 5120, "assured_kbps": 0, "maximum_kbps": 0, "binding_times": 40},
+            {"id": 2, "type": 3, "compensation": False, "fixed_kbps": 0, "assured_kbps": 9000, "maximum_kbps": 1000, "binding_times": 1}]   # assured above maximum: not storable
+    _store_dba_read(migrated, seed["A"], olt, rows)
+    r = client.post(f"/v1/olts/{olt}/profiles/sync", headers=h)
+    assert r.status_code == 200, r.text
+    b = r.json()
+    assert (b["created"], b["unchanged"]) == (2, 0) and b["skipped"] == [{"native_key": "2", "issues": [{"field": "assured_kbps", "code": "qos_min_exceeds_max"}]}]
+    assert client.post(f"/v1/olts/{olt}/profiles/sync", headers=h).json()["unchanged"] == 2    # same read, same fingerprints: nothing new
+    items = {x["native_key"]: x for x in client.get(f"/v1/olts/{olt}/profiles", headers=h).json()["items"]}
+    assert set(items) == {"0", "1"} and items["0"]["source"] == "edge_read" and items["0"]["authoritative"] is True and items["0"]["completeness"] == "partial"
+    snap0 = client.get(f"/v1/profile-snapshots/{items['0']['id']}", headers=h).json()
+    assert snap0["settings"]["dba_type"] == "type3" and snap0["settings"]["maximum_kbps"] == 20480 and snap0["settings"]["fixed_kbps"] is None
+    assert "tagging" in snap0["unknown_fields"] and "assured_kbps" not in snap0["unknown_fields"]   # what the read does not state is named, not invented
+    assert client.get(f"/v1/profile-snapshots/{items['1']['id']}", headers=h).json()["settings"]["maximum_kbps"] is None   # type 1 has no maximum
+    # the read changes -> a NEW snapshot for that profile only
+    rows[1] = {**rows[1], "fixed_kbps": 10240}
+    _store_dba_read(migrated, seed["A"], olt, rows)
+    again = client.post(f"/v1/olts/{olt}/profiles/sync", headers=h).json()
+    assert (again["created"], again["unchanged"]) == (1, 1)
+    # profile 1 disappears from the next complete read: it is not kept as current -> a newer snapshot that states nothing (unknown, no settings)
+    _store_dba_read(migrated, seed["A"], olt, rows[:1])
+    gone = client.post(f"/v1/olts/{olt}/profiles/sync", headers=h).json()
+    assert (gone["created"], gone["unchanged"], gone["absent"]) == (0, 1, 1)
+    items = {x["native_key"]: x for x in client.get(f"/v1/olts/{olt}/profiles", headers=h).json()["items"]}
+    assert items["1"]["completeness"] == "unknown" and items["1"]["freshness"] == "unknown" and items["0"]["completeness"] == "partial"
+    assert client.get(f"/v1/profile-snapshots/{items['1']['id']}", headers=h).json()["settings"] == {}
+    assert client.post(f"/v1/olts/{olt}/profiles/sync", headers=h).json()["absent"] == 0      # idempotent: the absence is recorded once
+    # an OLDER read (late job) delivered after a newer one was applied is refused: it never goes on top
+    _store_dba_read(migrated, seed["A"], olt, rows, age=timedelta(hours=2))
+    r = client.post(f"/v1/olts/{olt}/profiles/sync", headers=h)
+    assert r.status_code == 409 and "older_than_applied" in r.text
+
+
+def test_sync_refuses_an_old_read_a_missing_permission_and_the_flag_off(client, seed, inv, migrated):
+    h, hn = hdr(client, "alice", seed, "A"), hdr(client, "dave", seed, "A")
+    olt = _olt(client, inv, h, "OLT-PS-SYNC2")
+    assert client.post(f"/v1/olts/{olt}/profiles/sync", headers=h).status_code == 403            # flag off
+    _on(migrated, seed["A"])
+    _store_dba_read(migrated, seed["A"], olt, [{"id": 0, "type": 4, "compensation": False, "fixed_kbps": 0, "assured_kbps": 0, "maximum_kbps": 1000, "binding_times": 0}],
+                    age=timedelta(hours=25))
+    r = client.post(f"/v1/olts/{olt}/profiles/sync", headers=h)
+    assert r.status_code == 409 and "read_too_old" in r.text
+    assert client.post(f"/v1/olts/{olt}/profiles/sync", headers=hn).status_code == 403            # no profiles:import
+    assert client.get(f"/v1/olts/{olt}/profiles", headers=h).json()["items"] == []
+    # a LATE delivery (Codex r2): the answer reached the Cloud just now (observed_at = now) but the QUESTION is 25 h old -> still refused, nothing stored
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        assert c.execute(text("SELECT observed_at > now() - interval '1 minute' AND asked_at < now() - interval '24 hours' FROM olt_query_latest WHERE olt_id = :i"), {"i": olt}).scalar() is True
+    assert client.post(f"/v1/olts/{olt}/profiles/sync", headers=h).status_code == 409
+
+
+def test_nothing_but_the_sync_can_write_an_edge_read_snapshot(client, seed, inv, migrated):
+    """The ordering guard of the sync relies on it (Codex r5): the import route refuses `edge_read`, so every edge_read row carries the sync's own asked_at clock."""
+    _on(migrated, seed["A"])
+    h = hdr(client, "alice", seed, "A")
+    olt = _olt(client, inv, h, "OLT-PS-SYNC3")
+    r = _import(client, h, olt, source="edge_read")
+    assert r.status_code == 422

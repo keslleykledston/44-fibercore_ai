@@ -21,6 +21,8 @@ type Queries struct {
 	Lease LeaseChecker
 	// Run executes one catalog query on the open session (olt.HuaweiR015.RunQuery); nil makes every query end as `no_driver`.
 	Run func(ctx context.Context, s olt.Session, queryID string, p olt.Params) (olt.QueryResult, error)
+	// ProfileNames: the owner of this Edge allows profile LABELS (operator free text) to go to the Cloud; off, they stay here (olt.ScrubProfileNames).
+	ProfileNames bool
 	// SessionTimeout bounds the whole batch of one session (0 = 3 minutes).
 	SessionTimeout time.Duration
 	Now            func() time.Time
@@ -174,6 +176,9 @@ func (q *Queries) Drain(ctx context.Context, src OLTSource, raw olt.Session, clo
 		typed, err := olt.ParseResult(e.Intent.QueryID, res.Output)
 		if err == nil && res.Truncated {
 			err = olt.ErrBadOutput // a cut listing is not a result
+		}
+		if err == nil {
+			typed, err = olt.ScrubProfileNames(e.Intent.QueryID, typed, q.ProfileNames)
 		}
 		if err != nil {
 			fail(err)

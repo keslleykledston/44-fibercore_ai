@@ -60,6 +60,11 @@ var queryCatalog = []Query{
 	{"olt.autofind", "ONTs detectadas e não confirmadas", ScopeGlobal, "display ont autofind all", false, "2"},
 	{"olt.temperature", "Temperatura", ScopeGlobal, "display temperature 0", true, "3"},
 	{"olt.sync", "Sincronismo de controladoras", ScopeGlobal, "display data sync state", true, "3"},
+	// profile inventory (ADR-0040): lists of the OLT's own profiles, which carry no ONT, serial or description of a subscriber
+	{"olt.profile.dba", "Perfis DBA (lista)", ScopeGlobal, "display dba-profile all", true, "11"},
+	{"olt.profile.line", "Perfis de linha da ONT (lista)", ScopeGlobal, "display ont-lineprofile gpon all", true, "11"},
+	{"olt.profile.srv", "Perfis de serviço da ONT (lista)", ScopeGlobal, "display ont-srvprofile gpon all", true, "11"},
+	{"olt.profile.traffic", "Tabelas de tráfego (lista)", ScopeGlobal, "display traffic table ip from-index 0", true, "11"},
 	// per slot
 	{"slot.board", "Detalhe da placa", ScopeSlot, "display board 0/%[1]d", false, "3"},
 	{"slot.cpu", "CPU da placa", ScopeSlot, "display cpu 0/%[1]d", true, "3"},
@@ -79,6 +84,17 @@ var queryCatalog = []Query{
 	{"onu.version", "Versão da ONT", ScopeONU, "display ont version %[2]d %[3]d", false, "7"},
 	{"onu.capability", "Capacidades da ONT", ScopeONU, "display ont capability %[2]d %[3]d", false, "7"},
 	{"onu.eth", "Portas Ethernet da ONT", ScopeONU, "display ont port state %[2]d %[3]d eth-port all", false, "10"},
+}
+
+// profileReleases: the profile-inventory queries were captured and validated on EXACTLY this release; another C-release of R015 may print another layout, so it is
+// refused (no command is sent) until it is captured too. The other queries keep the broader R015 rule they were validated under.
+var profileReleases = map[string]bool{"MA5600V800R015C00": true}
+
+func releaseValidatedFor(queryID, firmware string) bool {
+	if !strings.HasPrefix(queryID, "olt.profile.") {
+		return true
+	}
+	return profileReleases[strings.TrimSpace(firmware)]
 }
 
 var (
@@ -226,7 +242,7 @@ func (h HuaweiR015) runQuery(ctx context.Context, s Session, queryID string, p P
 	if err != nil {
 		return QueryResult{}, err
 	}
-	if !isR015(id) {
+	if !isR015(id) || !releaseValidatedFor(q.ID, id.Firmware) {
 		return QueryResult{}, ErrQueryFirmware
 	}
 	run := func(cmd string) (string, error) {

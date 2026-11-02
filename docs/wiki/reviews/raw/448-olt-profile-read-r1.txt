@@ -1,0 +1,30 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19cb3-faff-7d53-ad19-61e6ef5c7d4d).
+[codex] Turn started (01a19cb3-fdf8-75e0-8f46-50ee5ac36bfe).
+[codex] Assistant message captured: Vou comparar o diff com `main` e rastrear o caminho completo das quatro consultas: catálogo/r...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/qu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/qu... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- agents/edge/internal/olt/qu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- agents/edge/internal/olt/qu... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/query_parse.go | sed -n '250,325p'; nl -ba app...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/query_parse.go | sed -n '250,325p'; nl -ba app... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n 'func isEcho|func .*Query|ParseResult|check_result|ROLLOUT|catalog_versi...
+[codex] Command completed: /bin/bash -lc "rg -n 'func isEcho|func .*Query|ParseResult|check_result|ROLLOUT|catalog_versi... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/query_parse.go | sed -n '150,175p'; git status...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/query_parse.go | sed -n '150,175p'; git status... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: o rollout global envia nomes de pe...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: o rollout global envia nomes de perfis definidos pelo operador à nuvem, e o filtro aceita rótulos que podem conter dados identificáveis de clientes/ONTs.
+
+Findings:
+- [high] Nomes de perfis podem carregar dados de clientes até a nuvem (agents/edge/internal/olt/query_parse.go:270-281)
+  O parser inclui `Profile-name` no resultado enviado, e `[A-Za-z0-9._-]{1,64}` só restringe caracteres, não o conteúdo. Um operador pode nomear um perfil com nome, endereço ou identificador de cliente/ONT usando esse alfabeto; a consulta agora está no rollout global e a validação da nuvem aceita o mesmo campo. Assim, conteúdo identificável pode ser armazenado na nuvem apesar da afirmação de que o resultado não contém texto de assinante. Remova o nome do resultado ou imponha uma regra que garanta rótulos não identificáveis antes de habilitar o rollout.
+  Recommendation: Não encaminhe `name` para fora do Edge; se necessário à funcionalidade, use um identificador controlado e não derivado do rótulo configurável. Mantenha o rollout bloqueado até essa fronteira de dados estar explícita.
+
+Next steps:
+- Rever o contrato das quatro consultas para excluir nomes de perfil potencialmente identificáveis e alinhar parser Edge e validação da nuvem.

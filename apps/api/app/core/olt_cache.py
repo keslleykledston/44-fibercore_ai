@@ -44,7 +44,7 @@ def store_latest(conn: Connection, tenant_id: UUID, olt_id: UUID, query_id: str,
 
 def latest(conn: Connection, olt_id: UUID, query_id: str, key: str) -> dict | None:
     r = conn.execute(
-        text("SELECT l.data, l.observed_at, l.received_at, l.owner_epoch, l.source, l.version, EXTRACT(EPOCH FROM (now() - l.observed_at)) AS age FROM olt_query_latest l "
+        text("SELECT l.data, l.observed_at, l.asked_at, l.received_at, l.owner_epoch, l.source, l.version, EXTRACT(EPOCH FROM (now() - l.observed_at)) AS age FROM olt_query_latest l "
              "WHERE l.olt_id = :o AND l.query_id = :q AND l.params_key = :k "
              "AND l.owner_epoch = (SELECT owner_epoch FROM olts WHERE id = l.olt_id)"), {"o": olt_id, "q": query_id, "k": key}).first()
     if r is None:
@@ -52,7 +52,7 @@ def latest(conn: Connection, olt_id: UUID, query_id: str, key: str) -> dict | No
     age = max(0, int(r.age))
     limit = int(ttl(query_id).total_seconds())
     data = r.data if isinstance(r.data, dict) else json.loads(r.data)
-    return {"data": data, "observed_at": r.observed_at.isoformat(), "age_seconds": age, "ttl_seconds": limit, "stale": age > limit, "source": r.source}
+    return {"data": data, "observed_at": r.observed_at.isoformat(), "asked_at": r.asked_at.isoformat(), "age_seconds": age, "ttl_seconds": limit, "stale": age > limit, "source": r.source}
 
 
 def samples_of(query_id: str, data: dict) -> list[tuple[str, str, float]]:

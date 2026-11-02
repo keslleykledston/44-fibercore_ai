@@ -50,7 +50,7 @@ def _ask(client, h, olt, qid="olt.version", params=None, key=None):
 def test_the_cloud_catalog_is_the_edge_catalog():
     src = GO_CATALOG.read_text()
     rows = re.findall(r'\{"([a-z.]+)", "[^"]*", Scope(Global|Slot|PON|ONU), "[^"]*", (true|false), "\d+"\}', src)
-    assert len(rows) == len(olt_query.CATALOG) == 25
+    assert len(rows) == len(olt_query.CATALOG) == 29
     for (qid, scope, validated), q in zip(rows, olt_query.CATALOG, strict=True):
         assert (qid, scope.lower(), validated == "true") == (q.id, q.scope, q.validated)
     gate = {"MaxSlot": "slot", "MaxPort": "port", "MaxONT": "ont"}
@@ -241,9 +241,9 @@ def test_the_vectors_the_edge_pins_are_the_ones_the_cloud_computes():
 
     from app.api.jobs import _intent_hash
     oid = UUID("8f14e45f-ceea-467a-9a36-4a1b5c3d2e10")
-    assert olt_query.catalog_version() == "959fdad3e4dc820399aec98bc2a232e35a714136043353424c12a5f67c36e62c"
+    assert olt_query.catalog_version() == "a02548436a036e3f3c68fc841c63e08239fb760b43fe0a2a7e2f04cc4ad44bf1"
     params = olt_query.build_intent(oid, {"query_id": "pon.ont.info", "slot": 1, "port": 0})
-    assert _intent_hash("olt_query", "olt", oid, params) == "e3ccc5caef226c81094daf5c66f85399c06ea2f241ca35c39c044549dbde8fe0"
+    assert _intent_hash("olt_query", "olt", oid, params) == "f0045370070e4cda1c773a8431c1e51181af4c4a810303b671e497de05bb14f0"
 
 
 def _report(client, inv, jid, **body):
@@ -468,3 +468,32 @@ def test_slot_cpu_and_mem_results_are_one_integer_percentage():
         assert olt_query.check_result(q, {"percent": 0}) and olt_query.check_result(q, {"percent": 100})
         for bad in ({}, {"percent": 101}, {"percent": -1}, {"percent": 5.5}, {"percent": True}, {"percent": "5"}, {"percent": 5, "slot": 1}, {"value": 5}):
             assert not olt_query.check_result(q, bad), (q, bad)
+
+
+def test_profile_list_result_shape_is_closed():
+    ok = {"profiles": [{"id": 0, "name": "LINHA-A", "binding_times": 3}, {"id": 14, "name": "x.y_z-1", "binding_times": 0}]}
+    for q in ("olt.profile.line", "olt.profile.srv"):
+        assert olt_query.check_result(q, ok) and olt_query.check_result(q, {"profiles": []})
+        assert olt_query.check_result(q, {"profiles": [{"id": 3, "name": None, "binding_times": 1}]})   # the Edge keeps the label by default
+        assert not olt_query.check_result(q, {**ok, "raw": "x"})
+        assert not olt_query.check_result(q, {"profiles": [{"id": 1, "name": "a b", "binding_times": 1}]})        # no free text
+        assert not olt_query.check_result(q, {"profiles": [{"id": 1, "name": "ok", "binding_times": 1, "sn": "x"}]})
+        assert not olt_query.check_result(q, {"profiles": [{"id": 1, "name": "a", "binding_times": 1}, {"id": 1, "name": "b", "binding_times": 1}]})
+        assert not olt_query.check_result(q, {"profiles": [{"id": True, "name": "a", "binding_times": 1}]})
+
+
+def test_dba_and_traffic_result_shapes_are_closed():
+    dba = {"profiles": [{"id": 0, "type": 3, "compensation": False, "fixed_kbps": 0, "assured_kbps": 8192, "maximum_kbps": 20480, "binding_times": 0}]}
+    assert olt_query.check_result("olt.profile.dba", dba)
+    bad = {"profiles": [{**dba["profiles"][0], "type": 1}]}             # type 1 is fixed only: an assured rate there is not a thing
+    assert not olt_query.check_result("olt.profile.dba", bad)
+    assert not olt_query.check_result("olt.profile.dba", {"profiles": [{**dba["profiles"][0], "type": 9}]})
+    assert not olt_query.check_result("olt.profile.dba", {"profiles": [{**dba["profiles"][0], "compensation": "No"}]})
+    assert not olt_query.check_result("olt.profile.dba", {"profiles": []})
+    row = {"id": 1, "cir_kbps": 2496, "cbs_bytes": 81872, "pir_kbps": 4992, "pbs_bytes": 163744, "priority": 6, "copy_policy": "-", "pri_policy": "tag-pri"}
+    assert olt_query.check_result("olt.profile.traffic", {"tables": [row]})
+    assert not olt_query.check_result("olt.profile.traffic", {"tables": [{**row, "pri_policy": "x;reboot"}]})
+    assert not olt_query.check_result("olt.profile.traffic", {"tables": [{**row, "priority": 9}]})
+    assert olt_query.check_result("olt.profile.traffic", {"tables": [{**row, "id": 6, "cir_kbps": None, "pbs_bytes": None}]})   # "off" = no limit
+    assert not olt_query.check_result("olt.profile.traffic", {"tables": [{**row, "cir_kbps": "off"}]})
+    assert not olt_query.check_result("olt.profile.traffic", {"tables": [row, row]})

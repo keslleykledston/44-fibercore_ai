@@ -861,6 +861,18 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {description: Inexistente ou de outro provedor}
+  /olts/{oltId}/profiles/sync:
+    post:
+      tags: [ProfileStudio]
+      operationId: syncOltProfiles
+      summary: 'Transforma a última leitura tipada dos perfis DBA da OLT (olt.profile.dba, trazida pelo Edge) em snapshots edge_read, a única fonte autoritativa. Só o que a leitura afirma é gravado; o resto vai em unknown_fields (snapshot parcial). Idempotente por impressão digital; leitura com mais de 24 h é recusada (409). Nada é perguntado ao equipamento. profiles:import'
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: oltId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: 'created, unchanged, skipped (perfis que não cabem no modelo tipado), idade da leitura'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Inexistente ou de outro provedor}
+        '409': {description: 'Sem leitura, leitura antiga demais ou identidade da OLT incompleta'}
   /profile-snapshots/{snapshotId}:
     get:
       tags: [ProfileStudio]

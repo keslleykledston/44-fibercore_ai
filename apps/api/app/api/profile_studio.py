@@ -153,6 +153,88 @@ def import_snapshot(olt_id: UUID, body: ImportIn, p: Principal = Depends(require
     return _snapshot_view(r, now)
 
 
+# ---- sync from the Edge's supervised reads --------------------------------------------------------------------------------------------------
+SYNC_MAX_AGE = timedelta(hours=24)   # a profile read older than this is not turned into a snapshot: ask the OLT again first
+_DBA_USES = {1: (True, False, False), 2: (False, True, False), 3: (False, True, True), 4: (False, False, True), 5: (True, True, True)}
+
+
+def dba_settings(row: dict) -> dict:
+    """The typed fields a DBA profile row of the OLT actually states. A rate the DBA type does not use is None (not 0), and a maximum of 0 is not a maximum."""
+    fix, assure, mx = _DBA_USES[row["type"]]
+    return {"dba_type": f"type{row['type']}", "fixed_kbps": row["fixed_kbps"] if fix else None, "assured_kbps": row["assured_kbps"] if assure else None,
+            "maximum_kbps": (row["maximum_kbps"] or None) if mx else None}
+
+
+@router.post("/v1/olts/{olt_id}/profiles/sync")
+def sync_from_reads(olt_id: UUID, p: Principal = Depends(require("profiles:import")), conn: Connection = TENANT_CONN) -> dict:
+    """Turn the Edge's last typed read of the OLT's DBA profiles (`olt.profile.dba`, already checked against its closed shape by the job that brought it) into
+    `edge_read` snapshots: the only authoritative source. Only what the read states is stored; every other field is named in `unknown_fields` (the read says nothing
+    about it), so a snapshot from here is `partial` and a plan that needs a line or service profile detail still cannot rely on it. Idempotent: a profile whose newest
+    snapshot has the same fingerprint is left alone. Nothing is asked of the equipment here."""
+    from app.core import olt_cache
+    _flag(conn, p)
+    olt = _olt(conn, olt_id)
+    if not (olt.vendor and olt.model and olt.firmware):
+        raise HTTPException(409, "olt identity incomplete: vendor, model and firmware must be known before a profile is imported")
+    # one sync at a time per OLT, and never an older read on top of a newer one already applied (the order is the QUESTION's time, asked_at)
+    conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"profile-sync:{olt_id}"})
+    got = olt_cache.latest(conn, olt_id, "olt.profile.dba", "")
+    if got is None:
+        raise HTTPException(409, "no_read: ask the OLT for its DBA profiles first (query olt.profile.dba)")
+    # the age that counts is the age of the QUESTION (asked_at): `observed_at` is when the Cloud received the answer, which a late delivery would make look new
+    now = datetime.now(UTC)
+    observed = datetime.fromisoformat(got["asked_at"])
+    if now - observed > SYNC_MAX_AGE:
+        raise HTTPException(409, "read_too_old: ask the OLT again")
+    # INVARIANT: the only writer of source = 'edge_read' is this function (the import route refuses that source: 422), and it writes the question's time (asked_at,
+    # taken from the Cloud's own job clock) into observed_at, so the two timestamps compared here come from one clock and mean the same thing.
+    newest = conn.execute(text("SELECT max(observed_at) FROM olt_profile_snapshots WHERE olt_id = :o AND native_type = 'dba-profile' AND source = 'edge_read'"), {"o": olt_id}).scalar()
+    if newest is not None and observed < newest:
+        raise HTTPException(409, "older_than_applied: a newer read of this OLT's profiles was already applied")
+    created = unchanged = 0
+    skipped: list[dict] = []
+    for row in got["data"]["profiles"]:
+        key = str(row["id"])
+        settings = dba_settings(row)
+        issues = ps.validate_settings(settings, supported=ALL_FIELDS)
+        if issues:
+            skipped.append({"native_key": key, "issues": _issues(issues)})   # never stored when it does not fit the typed model
+            continue
+        unknown = sorted(ALL_FIELDS - set(settings))
+        fp = _fingerprint("dba-profile", key, olt.firmware, "all", settings, unknown)
+        last = conn.execute(text("SELECT fingerprint FROM olt_profile_snapshots WHERE olt_id = :o AND native_type = 'dba-profile' AND native_key = :k "
+                                 "AND source = 'edge_read' ORDER BY observed_at DESC, created_at DESC LIMIT 1"), {"o": olt_id, "k": key}).first()
+        if last is not None and last.fingerprint == fp:
+            unchanged += 1
+            continue
+        conn.execute(
+            text("INSERT INTO olt_profile_snapshots (tenant_id, olt_id, native_type, native_key, technology, vendor, model, firmware, pon_card, observed_at, freshness, completeness, "
+                 "reference_count, fingerprint, settings, unknown_fields, evidence, source, created_by) "
+                 "VALUES (:t,:o,'dba-profile',:nk,'gpon',:v,:m,:f,'all',:oa,'fresh','partial',:rc,:fp,CAST(:s AS jsonb),:u,NULL,'edge_read',:by)"),
+            {"t": p.tenant_id, "o": olt_id, "nk": key, "v": olt.vendor.strip(), "m": olt.model.strip(), "f": olt.firmware.strip(), "oa": observed, "rc": row["binding_times"],
+             "fp": fp, "s": json.dumps(ps.normalize(settings)), "u": unknown, "by": p.id})
+        created += 1
+    # A profile that an earlier read had and this complete read no longer lists is gone (or at least not confirmed): snapshots are immutable, so say it with a NEWER one that
+    # states nothing (completeness `unknown`, no settings). Nothing may reuse or plan from it, and a later read that lists the profile again supersedes it.
+    present = {str(r["id"]) for r in got["data"]["profiles"]}
+    gone = 0
+    for last in conn.execute(text("SELECT DISTINCT ON (native_key) native_key, completeness, pon_card FROM olt_profile_snapshots WHERE olt_id = :o AND native_type = 'dba-profile' "
+                                  "AND source = 'edge_read' ORDER BY native_key, observed_at DESC, created_at DESC"), {"o": olt_id}).all():
+        if last.native_key in present or last.completeness == "unknown":
+            continue
+        fp = _fingerprint("dba-profile", last.native_key, olt.firmware, "all", {}, sorted(ALL_FIELDS) + ["absent_from_read"])
+        conn.execute(
+            text("INSERT INTO olt_profile_snapshots (tenant_id, olt_id, native_type, native_key, technology, vendor, model, firmware, pon_card, observed_at, freshness, completeness, "
+                 "reference_count, fingerprint, settings, unknown_fields, evidence, source, created_by) "
+                 "VALUES (:t,:o,'dba-profile',:nk,'gpon',:v,:m,:f,'all',:oa,'unknown','unknown',NULL,:fp,'{}'::jsonb,:u,:ev,'edge_read',:by)"),
+            {"t": p.tenant_id, "o": olt_id, "nk": last.native_key, "v": olt.vendor.strip(), "m": olt.model.strip(), "f": olt.firmware.strip(), "oa": observed, "fp": fp,
+             "u": sorted(ALL_FIELDS), "ev": "ausente da leitura completa mais recente das DBA da OLT", "by": p.id})
+        gone += 1
+    audit(conn, p, "profile.snapshot.synced", "olt", str(olt_id), {"created": created, "unchanged": unchanged, "absent": gone, "skipped": len(skipped), "source": "edge_read"})
+    return {"created": created, "unchanged": unchanged, "absent": gone, "skipped": skipped, "observed_at": observed.isoformat(), "age_seconds": int((now - observed).total_seconds()),
+            "read_certified": _read_certified(conn, p.tenant_id, olt), "at": now.isoformat()}
+
+
 @router.get("/v1/olts/{olt_id}/profiles")
 def list_profiles(olt_id: UUID, p: Principal = Depends(require("profiles:read")), conn: Connection = TENANT_CONN) -> dict:
     """The newest snapshot of each native profile of this OLT, with the freshness it has NOW, and whether the driver read is certified for this firmware."""
