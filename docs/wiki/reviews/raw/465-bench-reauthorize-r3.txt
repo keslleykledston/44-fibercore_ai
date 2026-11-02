@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19d39-949e-7691-b8bc-d4d8077e2066).
+[codex] Turn started (01a19d39-94d6-79f2-9603-1e1781aee40b).
+[codex] Assistant message captured: Vou inspecionar o diff da branch contra `main`, priorizando a nova comparação `matches` e o c...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/be...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/be... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/bench_reauth.go | sed -n '235,315p' && nl -ba ...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/bench_reauth.go | sed -n '235,315p' && nl -ba ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não shippar ainda: o caminho de restauração pode decl...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não shippar ainda: o caminho de restauração pode declarar baseline restaurado sem validar a descrição da ONU.
+
+Findings:
+- [high] Restauração aceita ONU com descrição divergente (agents/edge/internal/olt/bench_reauth.go:310-313)
+  Quando a restauração precisa executar `ont add`, a espera verifica identidade e perfis, mas omite `p.Description` (linhas 310–313). Depois, `restore` valida apenas a service-port e retorna sucesso, levando `fail` a acrescentar “the baseline was restored”. Se a ONU voltar com a descrição errada, o ciclo reporta restauração bem-sucedida apesar de não convergir para o baseline que `matches` exige. Isso deixa um estado de bancada incorreto mascarado justamente após uma falha parcial.
+  Recommendation: Use `matches(i, p)` na espera da restauração e faça uma verificação final da ONU com `matches` antes de `restore` retornar sucesso.

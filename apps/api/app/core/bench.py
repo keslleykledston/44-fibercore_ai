@@ -38,6 +38,9 @@ BENCH_OPS: dict[str, BenchOp] = {
     # H4: the bench ONU on the real OLT. No parameter at all: port and ONT-ID come from the Edge's LOCAL list, never from here.
     "onu_reset": BenchOp("olt", frozenset()),
     "onu_deactivate": BenchOp("olt", frozenset()),    # a cycle: deactivate, verify, REACTIVATE, verify
+    # H5 (ADR-0030 amendment of 2026-11-02): remove the bench ONU's registration and authorize it AGAIN with the same profiles and service port, then compare with the baseline
+    # pinned in the Edge's local configuration. No parameter at all: every value comes from the Edge's local list.
+    "onu_reauthorize": BenchOp("olt", frozenset()),
     # ADR-0038 (amendment to this ADR): the TR-143 throughput test of the bench CPE. The parameters are two LOGICAL names: the endpoint id (cloud catalog,
     # never a URL) and a file-size profile from a closed list; the Edge maps the id to its own local address.
     "speed_test_download": BenchOp("tr069", frozenset({"target", "profile"})),

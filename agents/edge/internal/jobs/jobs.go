@@ -22,7 +22,7 @@ var ReadOnlyOps = map[string]bool{"collect": true, "refresh": true}
 
 // BenchWriteOps (ADR-0030) is a SEPARATE compile-time set: the only writes this Edge can ever run, and only on the configured bench devices,
 // with a single-use prior authorization, a durable claim, a valid lease and the device confirmed against the ACS. ReadOnlyOps never grows.
-var BenchWriteOps = map[string]bool{"reboot_cpe": true, "set_wifi_ssid": true, "onu_reset": true, "onu_deactivate": true,
+var BenchWriteOps = map[string]bool{"reboot_cpe": true, "set_wifi_ssid": true, "onu_reset": true, "onu_deactivate": true, "onu_reauthorize": true,
 	"speed_test_download": true, "speed_test_upload": true, "ping_test": true}
 
 // SpeedOps (ADR-0038) are the bench operations that are a TR-143 throughput test. They need, besides everything a bench write needs, the local `speed`

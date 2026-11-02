@@ -112,7 +112,7 @@ func (r *Runner) run(ctx context.Context, env *jobs.Envelope) Result {
 	if err := r.Lease.Check(env.TargetRef, env.OwnerEpoch); err != nil {
 		return r.deny(env, "no valid Cloud lease for this target", err)
 	}
-	if env.Operation == "onu_reset" || env.Operation == "onu_deactivate" {
+	if env.Operation == "onu_reset" || env.Operation == "onu_deactivate" || env.Operation == "onu_reauthorize" {
 		return r.oltOp(ctx, env, notAfter) // the identity of THIS ONU is confirmed on the OLT itself, in the maneuver's own session
 	}
 	var sreq nbi.SpeedRequest

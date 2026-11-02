@@ -3,7 +3,7 @@ import { sameOrigin } from "@/lib/csrf";
 import { reply } from "@/lib/mfa-bff";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const OPS = new Set(["reboot_cpe", "set_wifi_ssid", "onu_reset", "onu_deactivate"]);
+const OPS = new Set(["reboot_cpe", "set_wifi_ssid", "onu_reset", "onu_deactivate", "onu_reauthorize"]);
 const SSID = /^BANCADA-[A-Z0-9]{1,16}$/;
 const KNOWN = new Set(["role_cannot_authorize", "target_not_bench", "target_write_locked", "bench_writes_disabled", "authorization_already_open", "edge_support_missing", "mfa_recent_required"]);
 

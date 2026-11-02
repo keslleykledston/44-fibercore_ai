@@ -1,0 +1,34 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19d3c-5e30-7012-b77e-c644b0d2dff5).
+[codex] Turn started (01a19d3c-5e69-7e70-b8ed-c5a6a9ce9d0b).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir especialmente o caminho de falha entre a remoçã...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- agents/edge/internal/olt/be...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- agents/edge/internal/olt/be... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=12 main...HEAD -- agents/edge/internal/olt/be...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=12 main...HEAD -- agents/edge/internal/olt/be... (exit 0)
+[codex] Assistant message captured: O cancelamento do job é tratado na restauração. Estou verificando agora se a sessão CLI subja...
+[codex] Running command: /bin/bash -lc "rg -n \"type Session|func .*Run\\(ctx context.Context|func \\(.*Exclusive|RunB...
+[codex] Command completed: /bin/bash -lc "rg -n \"type Session|func .*Run\\(ctx context.Context|func \\(.*Exclusive|RunB... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/ssh.go | sed -n '35,130p'; nl -ba agents/edge/...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/ssh.go | sed -n '35,130p'; nl -ba agents/edge/... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"func \\(o \\*OLT\\) guarded|func \\(s \\*.*Source\\) Open|func .*Open\...
+[codex] Command completed: /bin/bash -lc "rg -n \"func \\(o \\*OLT\\) guarded|func \\(s \\*.*Source\\) Open|func .*Open\... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '300,365p'; rg -n \"func...
+[codex] Command failed: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '300,365p'; rg -n \"func... (exit 1)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '360,420p'; rg -n 'Open:...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/collector/olt.go | sed -n '360,420p'; rg -n 'Open:... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/cmd/fibercore-edge/main.go | sed -n '155,188p';"
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/cmd/fibercore-edge/main.go | sed -n '155,188p';" (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberaria ainda: o contexto separado pode expirar...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberaria ainda: o contexto separado pode expirar antes de concluir a restauração quando o OLT demora em vários comandos CLI.
+
+Findings:
+- [medium] O prazo de restauração pode não cobrir a sequência de comandos (agents/edge/internal/olt/bench_reauth.go:349-351)
+  A restauração cria um prazo de `wait + 2m`, mas pode executar vários comandos sequenciais: verificar a ONU, alternar modos, reler a ONU, verificar e detalhar a service-port e fazer a conferência final. Cada comando SSH tem timeout próprio de 30s por padrão. Com um `wait` configurado baixo, alguns comandos lentos podem consumir o prazo antes de a ONU e a service-port serem restauradas; o teste só cancela o contexto e usa um fake que responde imediatamente. A restauração então retorna erro e pode deixar o equipamento em estado parcial.
+  Recommendation: Defina um orçamento de restauração que cubra a sequência completa de comandos e a espera pelo retorno da ONU, ou aplique prazos por etapa com reserva explícita para adicionar ONU e service-port. Acrescente cobertura com comandos que atrasam até perto do timeout.

@@ -51,6 +51,7 @@ OPERATIONS: dict[str, Operation] = {
     # ADR-0030 H4 (bench only): the ONU of the bench CPE, on the OLT. The target is the bench CPE; the Edge resolves the ONU from its own local list.
     "onu_reset": Operation("R2", "cpe", True, 1),
     "onu_deactivate": Operation("R2", "cpe", True, 1),
+    "onu_reauthorize": Operation("R2", "cpe", True, 1),   # ADR-0030 H5 (bench only): delete + authorize again the bench ONU, baseline restored and compared
     # ADR-0038 (bench only): TR-143 throughput test of the bench CPE; the writes are the diagnostic's own parameters, the traffic goes to a logical endpoint
     "speed_test_download": Operation("R2", "cpe", True, 1),
     "speed_test_upload": Operation("R2", "cpe", True, 1),

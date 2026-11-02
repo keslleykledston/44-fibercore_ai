@@ -63,7 +63,7 @@ def test_who_may_authorize_what(client, seed, migrated, lab):
     r = _auth(client, op, cpe)
     assert r.status_code == 201, r.text
     # the operator covers the two CPE operations only; the OLT-side maneuvers are for the engineering roles
-    for o in ("onu_reset", "onu_deactivate"):
+    for o in ("onu_reset", "onu_deactivate", "onu_reauthorize"):
         x = _auth(client, op, cpe, o)
         assert (x.status_code, x.json()["detail"]) == (403, "role_cannot_authorize"), o
     eng = _h(client, seed, _member(migrated, seed, "engineer"))

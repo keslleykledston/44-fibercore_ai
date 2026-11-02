@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -357,6 +358,20 @@ func main() {
 						defer closeFn()
 						opened() // the login worked: from here a failure may use the shorter cooldown
 						var rerr error
+						if op == "onu_reauthorize" {
+							if bo.Reauthorize == nil {
+								return olt.ErrBenchOLTBefore
+							}
+							// the raw text of the autofind list (the real format) stays on THIS host, 0600, with the other captures; it is deleted after 24 h
+							keep := func(name, text string) {
+								dir := config.CapturesDir(cfg.QueuePath)
+								if os.MkdirAll(dir, 0o700) == nil {
+									_ = os.WriteFile(filepath.Join(dir, fmt.Sprintf("%s-00000000-bench_%s.txt", time.Now().UTC().Format("20060102T150405Z"), strings.ReplaceAll(name, "-", "_"))), []byte(text), 0o600)
+								}
+							}
+							out, rerr = olt.RunBenchReauthorize(cctx, raw, onu, bo.Reauthorize.Spec(), notAfter, before, wait, 10*time.Second, time.Now, keep)
+							return rerr
+						}
 						out, rerr = olt.RunBenchManeuver(cctx, raw, onu, op, notAfter, before, wait, 10*time.Second, time.Now)
 						return rerr
 					})
