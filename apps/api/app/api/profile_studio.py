@@ -176,6 +176,8 @@ def sync_from_reads(olt_id: UUID, p: Principal = Depends(require("profiles:impor
     olt = _olt(conn, olt_id)
     if not (olt.vendor and olt.model and olt.firmware):
         raise HTTPException(409, "olt identity incomplete: vendor, model and firmware must be known before a profile is imported")
+    # one sync at a time per OLT, and never an older read on top of a newer one already applied (the order is the QUESTION's time, asked_at)
+    conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"profile-sync:{olt_id}"})
     got = olt_cache.latest(conn, olt_id, "olt.profile.dba", "")
     if got is None:
         raise HTTPException(409, "no_read: ask the OLT for its DBA profiles first (query olt.profile.dba)")
@@ -184,6 +186,9 @@ def sync_from_reads(olt_id: UUID, p: Principal = Depends(require("profiles:impor
     observed = datetime.fromisoformat(got["asked_at"])
     if now - observed > SYNC_MAX_AGE:
         raise HTTPException(409, "read_too_old: ask the OLT again")
+    newest = conn.execute(text("SELECT max(observed_at) FROM olt_profile_snapshots WHERE olt_id = :o AND native_type = 'dba-profile' AND source = 'edge_read'"), {"o": olt_id}).scalar()
+    if newest is not None and observed < newest:
+        raise HTTPException(409, "older_than_applied: a newer read of this OLT's profiles was already applied")
     created = unchanged = 0
     skipped: list[dict] = []
     for row in got["data"]["profiles"]:

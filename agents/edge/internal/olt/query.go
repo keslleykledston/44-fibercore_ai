@@ -86,6 +86,17 @@ var queryCatalog = []Query{
 	{"onu.eth", "Portas Ethernet da ONT", ScopeONU, "display ont port state %[2]d %[3]d eth-port all", false, "10"},
 }
 
+// profileReleases: the profile-inventory queries were captured and validated on EXACTLY this release; another C-release of R015 may print another layout, so it is
+// refused (no command is sent) until it is captured too. The other queries keep the broader R015 rule they were validated under.
+var profileReleases = map[string]bool{"MA5600V800R015C00": true}
+
+func releaseValidatedFor(queryID, firmware string) bool {
+	if !strings.HasPrefix(queryID, "olt.profile.") {
+		return true
+	}
+	return profileReleases[strings.TrimSpace(firmware)]
+}
+
 var (
 	// queryLine is the shape every rendered command must have: "display" plus words and bounded integers. It cannot contain separators,
 	// quotes, redirections or a second command.
@@ -231,7 +242,7 @@ func (h HuaweiR015) runQuery(ctx context.Context, s Session, queryID string, p P
 	if err != nil {
 		return QueryResult{}, err
 	}
-	if !isR015(id) {
+	if !isR015(id) || !releaseValidatedFor(q.ID, id.Firmware) {
 		return QueryResult{}, ErrQueryFirmware
 	}
 	run := func(cmd string) (string, error) {

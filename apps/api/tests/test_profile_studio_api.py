@@ -364,6 +364,10 @@ def test_sync_turns_the_dba_read_into_authoritative_snapshots_and_is_idempotent(
     assert items["1"]["completeness"] == "unknown" and items["1"]["freshness"] == "unknown" and items["0"]["completeness"] == "partial"
     assert client.get(f"/v1/profile-snapshots/{items['1']['id']}", headers=h).json()["settings"] == {}
     assert client.post(f"/v1/olts/{olt}/profiles/sync", headers=h).json()["absent"] == 0      # idempotent: the absence is recorded once
+    # an OLDER read (late job) delivered after a newer one was applied is refused: it never goes on top
+    _store_dba_read(migrated, seed["A"], olt, rows, age=timedelta(hours=2))
+    r = client.post(f"/v1/olts/{olt}/profiles/sync", headers=h)
+    assert r.status_code == 409 and "older_than_applied" in r.text
 
 
 def test_sync_refuses_an_old_read_a_missing_permission_and_the_flag_off(client, seed, inv, migrated):

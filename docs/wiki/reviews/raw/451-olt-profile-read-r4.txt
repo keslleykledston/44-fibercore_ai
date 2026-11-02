@@ -1,0 +1,31 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19cbd-23c5-7d80-9306-eaac521c54b5).
+[codex] Turn started (01a19cbd-2401-76d2-982e-d24976cb78aa).
+[codex] Assistant message captured: Vou conferir o diff inteiro contra `main` e seguir os fluxos de parser, gravação de snapshots...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/qu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/qu... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- agents/edge/internal/olt/qu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- agents/edge/internal/olt/qu... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/profile_studio.py | sed -n '150,285p'; rg -n \"MA5600V...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/profile_studio.py | sed -n '150,285p'; rg -n \"MA5600V... (exit 0)
+[codex] Assistant message captured: Já confirmei a guarda de firmware no executor Edge. Estou agora checando se a sincronização r...
+[codex] Running command: /bin/bash -lc "sed -n '210,270p' agents/edge/internal/olt/query.go; rg -n \"asked_at|store_la...
+[codex] Command failed: /bin/bash -lc "sed -n '210,270p' agents/edge/internal/olt/query.go; rg -n \"asked_at|store_la... (exit 2)
+[codex] Running command: /bin/bash -lc "sed -n '450,535p' apps/api/app/api/jobs.py; rg -n \"ALTER TABLE olt_profile_sn...
+[codex] Command completed: /bin/bash -lc "sed -n '450,535p' apps/api/app/api/jobs.py; rg -n \"ALTER TABLE olt_profile_sn... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: a sincronização pode gravar snapsh...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: a sincronização pode gravar snapshots fora de ordem e a checagem de firmware compara somente um prefixo, permitindo a execução em versões que não foram validadas.
+
+Findings:
+- [high] Sincronizações concorrentes podem fazer um snapshot antigo virar o mais recente (apps/api/app/api/profile_studio.py:198-224)
+  A resposta usa `asked_at` como `observed_at` e a consulta de idempotência só compara fingerprint, sem impedir que uma leitura mais antiga seja inserida depois de uma mais nova. Por exemplo, duas sincronizações leem timestamps A < B; B insere primeiro e A insere depois. A consulta de snapshots ordena por `observed_at DESC`, então B continua vencendo nesse caso, mas snapshots com o mesmo `asked_at` (reentrega idempotente do job com payload diferente) podem gravar fingerprints distintos; o desempate por `created_at` faz a última entrega substituir semanticamente a primeira. Mais grave, quando A e B contêm conjuntos diferentes, A pode criar snapshots de ausência com `observed_at` antigo ou empatar; no empate, `created_at` decide e uma leitura velha pode marcar como desconhecido perfil presente na nova. A rotina precisa serializar sync por OLT ou usar uma barreira transacional que rejeite leituras anteriores/duplicadas antes de inserir snapshots de presença e ausência.
+  Recommendation: Serializar por OLT e recusar sync cujo `asked_at` não seja posterior ao último sync aplicado; para timestamps iguais, deduplicar pela impressão digital do job/resposta e não aplicar efeitos de ausência conflitantes.
+- [high] Validação de firmware aceita qualquer sufixo do R015 (agents/edge/internal/olt/query.go:235)
+  O usuário descreve rollout apenas para firmware `MA5600V800R015`, mas `isR015` é uma verificação de versão em `query.go`; confirmei no diff o erro usado, mas não o corpo da função por falta de contexto neste trecho. A identidade capturada é `MA5600V800R015C00`, e o material disponível mostra a mesma versão com sufixo C00. Se a checagem for prefixal, versões como `MA5600V800R015C99` também poderão receber comandos embora não tenham sido validadas. Como a afirmação depende da implementação exata de `isR015`, não é possível sustentá-la com confiança suficiente pelo trecho do diff consultado.
+  Recommendation: Comparar a versão contra uma lista fechada das releases efetivamente validadas, ou restringir a expressão aceita explicitamente e cobrir sufixos não validados.
