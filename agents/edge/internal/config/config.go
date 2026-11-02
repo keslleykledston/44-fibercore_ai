@@ -91,6 +91,23 @@ type BenchOLTConfig struct {
 	MinGapSeconds   int    `json:"min_gap_seconds"`  // between two OLT sessions (any kind); 0 = 900 (15 min); floor 60
 	WaitSeconds     int    `json:"wait_seconds"`     // how long to watch the ONU come back; 0 = 240; 30..600
 	CooldownSeconds int    `json:"cooldown_seconds"` // after a FAILED maneuver session; 0 = 900 (15 min); 60..900
+	// Reauthorize is the BASELINE of the bench ONU for `onu_reauthorize` (ADR-0030 H5): its line/service profile ids, its one service port and its description, exactly as
+	// they are on the OLT today. The maneuver refuses to start if the OLT reports anything else, and it ends only when the OLT reports the same again.
+	Reauthorize *BenchReauthorizeConfig `json:"reauthorize"`
+}
+
+// BenchReauthorizeConfig: see BenchOLTConfig.Reauthorize.
+type BenchReauthorizeConfig struct {
+	LineProfileID    int    `json:"line_profile_id"`
+	SrvProfileID     int    `json:"srv_profile_id"`
+	ServicePortIndex int    `json:"service_port_index"`
+	VLAN             int    `json:"vlan"`
+	Gem              int    `json:"gem_index"`
+	Description      string `json:"description"`
+}
+
+func (r BenchReauthorizeConfig) Spec() olt.ReauthSpec {
+	return olt.ReauthSpec{LineProfileID: r.LineProfileID, SrvProfileID: r.SrvProfileID, ServicePortIndex: r.ServicePortIndex, VLAN: r.VLAN, Gem: r.Gem, Description: r.Description}
 }
 
 // BenchDeviceConfig: the ACS identity (the three parts of the GenieACS _id) of one bench device, in clear: it is checked against the ACS.
@@ -320,10 +337,15 @@ func (c *Config) Validate() error {
 		}
 		oltOps := false
 		for _, o := range c.AllowedOps {
-			oltOps = oltOps || o == "onu_reset" || o == "onu_deactivate"
+			oltOps = oltOps || o == "onu_reset" || o == "onu_deactivate" || o == "onu_reauthorize"
 		}
 		if oltOps && b.OLT == nil {
-			errs = append(errs, errors.New("onu_reset/onu_deactivate in allowed_operations need bench.olt"))
+			errs = append(errs, errors.New("onu_reset/onu_deactivate/onu_reauthorize in allowed_operations need bench.olt"))
+		}
+		for _, o := range c.AllowedOps {
+			if o == "onu_reauthorize" && (b.OLT == nil || b.OLT.Reauthorize == nil || !b.OLT.Reauthorize.Spec().Valid()) {
+				errs = append(errs, errors.New("onu_reauthorize needs bench.olt.reauthorize (line/service profile ids, service port index, vlan, gem, description) with valid values"))
+			}
 		}
 		ids := map[string]bool{}
 		for _, d := range b.Devices {
@@ -335,7 +357,7 @@ func (c *Config) Validate() error {
 		}
 		ok := false
 		for _, o := range c.AllowedOps {
-			ok = ok || o == "reboot_cpe" || o == "set_wifi_ssid" || o == "onu_reset" || o == "onu_deactivate" || o == "speed_test_download" || o == "speed_test_upload" || o == "ping_test"
+			ok = ok || o == "reboot_cpe" || o == "set_wifi_ssid" || o == "onu_reset" || o == "onu_deactivate" || o == "onu_reauthorize" || o == "speed_test_download" || o == "speed_test_upload" || o == "ping_test"
 		}
 		if !ok {
 			errs = append(errs, errors.New("bench writes need \"reboot_cpe\", \"set_wifi_ssid\" and/or a speed or ping test listed in allowed_operations (explicit)"))

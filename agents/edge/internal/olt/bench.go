@@ -77,12 +77,17 @@ type benchSession struct {
 }
 
 func newBenchSession(inner Session, c BenchCommands, notAfter time.Time, now func() time.Time) *benchSession {
+	conf := map[string]*regexp.Regexp{c.Reset: BenchConfirm["reset"], c.Deactivate: BenchConfirm["deactivate"], c.Activate: BenchConfirm["activate"]}
+	return newBenchSessionWith(inner, []string{c.Enable, c.Config, c.Iface, c.BySN, c.Info, c.Reset, c.Deactivate, c.Activate, c.Quit}, map[string]bool{c.Reset: true, c.Deactivate: true}, conf, notAfter, now)
+}
+
+// newBenchSessionWith: the same guard for any other closed command list (the H5 cycle).
+func newBenchSessionWith(inner Session, allowed []string, starters map[string]bool, conf map[string]*regexp.Regexp, notAfter time.Time, now func() time.Time) *benchSession {
 	a := map[string]bool{}
-	for _, s := range []string{c.Enable, c.Config, c.Iface, c.BySN, c.Info, c.Reset, c.Deactivate, c.Activate, c.Quit} {
+	for _, s := range allowed {
 		a[s] = true
 	}
-	conf := map[string]*regexp.Regexp{c.Reset: BenchConfirm["reset"], c.Deactivate: BenchConfirm["deactivate"], c.Activate: BenchConfirm["activate"]}
-	return &benchSession{inner: inner, allowed: a, starters: map[string]bool{c.Reset: true, c.Deactivate: true}, confirm: conf, notAfter: notAfter, now: now}
+	return &benchSession{inner: inner, allowed: a, starters: starters, confirm: conf, notAfter: notAfter, now: now}
 }
 
 // ConfirmRunner is implemented by a session that can answer ONE expected confirmation (see shell.RunConfirm).
