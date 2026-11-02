@@ -481,3 +481,8 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - Bancada real: 4 execuções (1 falha segura sem comando, 2 falhas parciais repostas à mão e conferidas por leitura, 1 `SUCCEEDED` com `postcheck_ok`); detalhes em `docs/wiki/bench/H5-onu_reauthorize-ma5608t-2026-11-02.md`.
 - Edge: `go vet ./... && go test ./...` limpo; testes novos: eco quebrado (unitário e de ponta a ponta com dispositivo falso que ecoa como a OLT real e FALHA sem a correção), autofind em polling, parser de `olt.autofind` (real: lista vazia e uma entrada; 20 casos de falha fechada). API: `tests/test_olt_query.py` passa com os pins de hash novos e a forma tipada de `olt.autofind`.
 - NÃO verificado: layout do autofind com mais de uma entrada; pergunta de confirmação do `ont delete`/`undo service-port` na OLT (não registrada pelo Edge); `olt.autofind` ainda não implantado no LAB (API e Edge precisam trocar juntos).
+
+## Ingest `edge_read` do onu_discovery, R-D003 no NOC e ONU 360° enxuta (2026-11-02)
+- API: `test_onu_discovery.py` 12 passed (sync: autoritativo, idempotente por leitura, serial ausente não é tocado, recusas 409 sem gravar nada, futuro, lista vazia), `test_olt_cache.py` 19 passed (inclui `asked_age_seconds`), `test_olt_query.py` 31 passed, `test_noc*.py` 41 passed. Web: `tsc` limpo; projeto `puros` 35 passed (5 do leitor R-D003); e2e `funcional + aparelho` 73 passed, `pendentes` 72 passed, recuo `recuo-onu360` (flag desligada) 1 passed.
+- Produção (LAB), só leitura: `olt.autofind` real pelo caminho completo = lista vazia tipada; sync real 200 com 0 entradas.
+- NÃO verificado: e2e de navegador da R-D003 (sem Edge silencioso no seed da pilha efêmera); ingest com ONU realmente em autofind; layout de várias entradas.
