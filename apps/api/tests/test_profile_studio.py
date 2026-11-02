@@ -19,7 +19,8 @@ GOOD = {
 
 def obs(settings=None, **kw):
     base = dict(tenant_id="T", olt_id="OLT-A", native_key="gpon-line-profile/42", vendor="huawei", model="MA5608T", firmware="V800R015-X", pon_card="GPON-X",
-                freshness="fresh", completeness="complete", fingerprint="fp1", reference_count=3, settings=dict(GOOD if settings is None else settings))
+                freshness="fresh", completeness="complete", fingerprint="fp1", reference_count=3, settings=dict(GOOD if settings is None else settings),
+                authoritative=True)
     base.update(kw)
     return ps.Observation(**base)
 
@@ -161,9 +162,18 @@ def test_reuse_is_blocked_when_the_target_or_the_source_is_not_what_was_observed
 @pytest.mark.parametrize("o,reason", [
     (obs(freshness="stale"), "stale_or_unknown_snapshot"), (obs(freshness="unknown"), "stale_or_unknown_snapshot"),
     (obs(completeness="partial"), "incomplete_observation"), (obs(completeness="unknown"), "incomplete_observation"),
+    (obs(authoritative=False), "snapshot_not_authoritative"),
 ])
 def test_stale_unknown_or_partial_observation_blocks_reuse(o, reason):
     assert ps.resolve_binding("reuse_exact", target(o), eq_diff()) == ("blocked", reason)
+
+
+def test_a_manual_or_fixture_snapshot_never_sustains_reuse_adoption_or_migration_but_a_clone_is_fine():
+    t = target(obs(authoritative=False))
+    for req in ("reuse_exact", "adopt_reference", "plan_migration"):
+        assert ps.resolve_binding(req, t, eq_diff()) == ("blocked", "snapshot_not_authoritative")
+    assert ps.resolve_binding("clone_new_revision", t, eq_diff())[0] == "clone_new_revision"
+    assert ps.suggest_strategy(t, eq_diff())[0] == "clone_new_revision"
 
 
 def test_a_not_equivalent_or_unobservable_diff_blocks_reuse_but_never_blocks_a_clone():
@@ -265,7 +275,7 @@ def test_property_reuse_or_adoption_only_ever_comes_from_a_proven_equivalence():
         desired = dict(GOOD)
         if rnd.random() < 0.4:
             desired["customer_vlan"] = rnd.choice([100, 200, 300])
-        o = obs(s, freshness=rnd.choice(["fresh", "fresh", "stale", "unknown"]), completeness=rnd.choice(["complete", "complete", "partial"]),
+        o = obs(s, freshness=rnd.choice(["fresh", "fresh", "stale", "unknown"]), completeness=rnd.choice(["complete", "complete", "partial"]), authoritative=rnd.random() < 0.8,
                 unknown_fields=frozenset(rnd.sample(["multicast", "gems", "description"], rnd.randint(0, 1))),
                 reference_count=rnd.choice([None, 0, 5]))
         t = target(o, driver_read_certified=rnd.random() < 0.9, firmware=rnd.choice(["V800R015-X", "V800R015-X", "OTHER"]))
@@ -275,7 +285,7 @@ def test_property_reuse_or_adoption_only_ever_comes_from_a_proven_equivalence():
             assert res == ps.resolve_binding(req, t, dict(diff))                              # pure
             assert res[0] in ps.STRATEGIES and res[0] != "in_place"
             if res[0] in ("reuse_exact", "adopt_reference"):
-                assert o.freshness == "fresh" and o.completeness == "complete" and t.driver_read_certified and t.firmware == o.firmware
+                assert o.freshness == "fresh" and o.completeness == "complete" and t.driver_read_certified and t.firmware == o.firmware and o.authoritative
                 assert set(diff.values()) == {ps.EQUAL} and not o.unknown_fields & set(desired)
             if res[0] == "plan_migration":
                 assert o.reference_count is not None

@@ -22,7 +22,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
         "members:mfa_reset", "diagnostics:run", "members:manage", "roles:read", "platform:delegate",
         "devices:act:reboot_cpe", "devices:act:set_wifi_ssid", "bench:authorize", "olt_query:run", "erp:manage", "erp:test",
         "ont_config:request", "ont_config:request_high", "diagnostics:speed_run", "diagnostics:ping_run",
-        "diagnostics:quality_read", "diagnostics:quality_run", "diagnostics:quality_run_full",
+        "diagnostics:quality_read", "diagnostics:quality_run", "diagnostics:quality_run_full", "profiles:read", "profiles:import", "profiles:edit",
     }),
     # ADR-0031: grants roles, has NO operational power at all (cannot see customers, jobs, incidents or the network)
     "access_manager": frozenset({"tenant:read", "members:read", "members:manage", "roles:read", "audit:read"}),
@@ -30,12 +30,12 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
         "customers:read", "associations:review", "incidents:read", "incidents:ack", "jobs:read", "jobs:request",
         "inventory:read", "tenant:read", "edge:read", "diagnostics:run", "devices:act:reboot_cpe", "devices:act:set_wifi_ssid", "bench:authorize", "olt_query:run",
         "ont_config:request", "ont_config:request_high", "diagnostics:speed_run", "diagnostics:ping_run",
-        "diagnostics:quality_read", "diagnostics:quality_run", "diagnostics:quality_run_full",
+        "diagnostics:quality_read", "diagnostics:quality_run", "diagnostics:quality_run_full", "profiles:read", "profiles:import", "profiles:edit",
     }),
     "noc_n2": frozenset({
         "customers:read", "incidents:read", "incidents:ack", "jobs:read", "jobs:request", "inventory:read", "tenant:read", "edge:read",
         "diagnostics:run", "devices:act:reboot_cpe", "bench:authorize", "olt_query:run", "ont_config:request", "ont_config:request_high", "diagnostics:speed_run", "diagnostics:ping_run",
-        "diagnostics:quality_read", "diagnostics:quality_run", "diagnostics:quality_run_full",
+        "diagnostics:quality_read", "diagnostics:quality_run", "diagnostics:quality_run_full", "profiles:read",
     }),
     "noc_n1": frozenset({"tenant:read", "inventory:read", "incidents:read", "diagnostics:quality_read", "diagnostics:quality_run"}),
     "support": frozenset({"tenant:read", "inventory:read", "customers:read"}),

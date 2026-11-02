@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 PLAN_VERSION = "fibercore-plan-v1"
+# the registry row that says a driver can READ profiles of an OLT (vendor/model/firmware): (operation, protocol). It is an observation, not a job operation.
+PROFILE_READ = ("olt_profile_read", "olt")
 
 # status of a field in the diff (docs/addenda/v2.5 PROFILE_RECONCILIATION)
 EQUAL, CHANGE, ADD, REMOVE, NOT_OBSERVABLE, UNSUPPORTED, CONFLICT = "EQUAL", "CHANGE", "ADD", "REMOVE", "NOT_OBSERVABLE", "UNSUPPORTED", "CONFLICT"
@@ -167,6 +169,8 @@ class Observation:
     reference_count: int | None         # None = unknown: it blocks migration
     settings: Mapping[str, Any] = field(default_factory=dict)
     unknown_fields: frozenset[str] = frozenset()
+    # True only for a snapshot read by the certified reader (the Edge). A manual import or a fixture is evidence for people to read, NOT a basis to reuse, adopt or migrate.
+    authoritative: bool = False
 
 
 def semantic_diff(obs: Observation, desired: Mapping[str, Any], *, supported: frozenset[str], required: frozenset[str] | None = None) -> dict[str, str]:
@@ -231,6 +235,8 @@ def resolve_binding(requested: str, target: Target, diff: Mapping[str, str]) -> 
         return "blocked", "no_observation"
     if not target.driver_read_certified:
         return "blocked", "read_not_certified"
+    if not obs.authoritative:
+        return "blocked", "snapshot_not_authoritative"
     if obs.freshness != "fresh":
         return "blocked", "stale_or_unknown_snapshot"
     if obs.completeness != "complete":

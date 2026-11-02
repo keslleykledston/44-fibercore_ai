@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19b03-0ee5-77a0-a982-173cead846b5).
+[codex] Turn started (01a19b03-121f-7953-b7a8-cbeca6af1665).
+[codex] Assistant message captured: Vou revisar o diff inteiro contra `main`, dando peso especial à origem dos snapshots e à vali...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=70 main...HEA...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=70 main...HEA... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --unified=15 main...HEAD -- apps/api/app/api/profile_studio.py apps/a...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=15 main...HEAD -- apps/api/app/api/profile_studio.py apps/a... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/profile_studio.py | sed -n '75,105p;295,445p'; git dif...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/profile_studio.py | sed -n '75,105p;295,445p'; git dif... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: a validade de 90 dias aceita certif...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: a validade de 90 dias aceita certificações com timestamp futuro, permitindo que uma certificação vencida continue autorizando planos.
+
+Findings:
+- [medium] Timestamp futuro mantém a certificação válida (apps/api/app/api/profile_studio.py:99-100)
+  A verificação só exige `now - verified_at <= 90 dias`. Se `verified_at` estiver no futuro, essa diferença é negativa e passa na condição; assim, uma linha `supported` pode continuar autorizando reuse/adopt/migration muito além dos 90 dias pretendidos. O timestamp vem do registro de capabilities, e esta rota não o limita. **Inferência:** isso é explorável se esse registro puder conter datas futuras por importação, erro ou atualização administrativa.
+  Recommendation: Exija `verified_at <= now` (com tolerância explícita, se necessária) e `now - verified_at <= CERTIFICATION_VALID_FOR`; rejeite timestamps futuros ao gravar a capability também.

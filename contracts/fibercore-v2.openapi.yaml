@@ -9,6 +9,7 @@ servers:
   - url: /api/v1
 tags:
   - name: Platform
+  - name: ProfileStudio
   - name: Network
   - name: CPE
   - name: ERP
@@ -802,6 +803,117 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {description: Execução inexistente ou de outro provedor}
+  /olts/{oltId}/profiles:
+    get:
+      tags: [ProfileStudio]
+      operationId: listOltProfiles
+      summary: 'Profiles da OLT: o snapshot mais novo de cada um, com a idade que tem AGORA e se a leitura do driver é certificada. profiles:read + flag profile_studio (ADR-0040)'
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: oltId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: OK}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Inexistente ou de outro provedor}
+  /olts/{oltId}/profiles/import:
+    post:
+      tags: [ProfileStudio]
+      operationId: importOltProfile
+      summary: 'Importa um profile da OLT como snapshot IMUTÁVEL (somente leitura: nada é escrito na OLT). Fabricante/modelo/firmware vêm da OLT; a impressão digital é calculada no servidor; valor fora do modelo tipado é recusado (422). profiles:import'
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: oltId, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, description: 'native_type, native_key, technology, pon_card, observed_at, completeness, reference_count|null, settings (modelo tipado), unknown_fields, evidence (vira texto inerte), source fixture|manual_import'}}}}
+      responses:
+        '201': {description: OK}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Inexistente ou de outro provedor}
+  /profile-snapshots/{snapshotId}:
+    get:
+      tags: [ProfileStudio]
+      operationId: getProfileSnapshot
+      summary: 'Snapshot com a evidência sanitizada (texto escapado). profiles:read'
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: snapshotId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: OK}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Inexistente ou de outro provedor}
+  /profile-drafts:
+    get:
+      tags: [ProfileStudio]
+      operationId: listProfileDrafts
+      summary: Rascunhos do provedor. profiles:read
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      responses:
+        '200': {description: Rascunhos}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [ProfileStudio]
+      operationId: createProfileDraft
+      summary: Cria um rascunho por CLONE de um snapshot (o escopo vem do snapshot) ou com escopo explícito. ETag = versão da linha. profiles:edit
+      parameters: [{$ref: '#/components/parameters/TenantId'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, description: 'name, reason, source_snapshot_id|escopo, profile_kind, target_olt_ids, desired'}}}}
+      responses:
+        '201': {description: Rascunho (ETag)}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Snapshot ou OLT inexistente ou de outro provedor}
+        '422': {description: Fora do modelo tipado (campo desconhecido, chave de comando, faixa)}
+  /profile-drafts/{draftId}:
+    get:
+      tags: [ProfileStudio]
+      operationId: getProfileDraft
+      summary: 'Rascunho com ETag. profiles:read'
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: draftId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: OK}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Inexistente ou de outro provedor}
+    patch:
+      tags: [ProfileStudio]
+      operationId: patchProfileDraft
+      summary: 'Edita um rascunho com If-Match (428 sem ele, 412 se mudou). Escopo e origem não mudam. vendor_extensions só com esquema aprovado (nenhum ainda). profiles:edit'
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: draftId, in: path, required: true, schema: {type: string, format: uuid}}, {name: If-Match, in: header, required: true, schema: {type: string}}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false}}}}
+      responses:
+        '200': {description: Rascunho (novo ETag)}
+        '412': {description: O rascunho mudou desde a leitura}
+        '422': {description: Fora do modelo tipado}
+        '428': {description: If-Match ausente}
+  /profile-drafts/{draftId}/compare:
+    post:
+      tags: [ProfileStudio]
+      operationId: compareProfileDraft
+      summary: 'Diff SEMÂNTICO do rascunho contra um snapshot (EQUAL/CHANGE/ADD/REMOVE/NOT_OBSERVABLE/UNSUPPORTED/CONFLICT); campo não observado nunca é igual; sem leitura certificada nada é equivalente. Não grava. profiles:read'
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: draftId, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, description: 'snapshot_id'}}}}
+      responses:
+        '200': {description: OK}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Inexistente ou de outro provedor}
+  /profile-drafts/{draftId}/dry-run:
+    post:
+      tags: [ProfileStudio]
+      operationId: dryRunProfileDraft
+      summary: 'Simulação POR OLT (reuse_exact, adopt_reference, clone_new_revision, plan_migration ou blocked), com diff, impacto e plan_hash. ZERO escritas, `executable: false`; a execução NÃO existe. Grava a simulação (append-only). profiles:edit'
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: draftId, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, description: 'requested?, target_olt_ids?, ttl_minutes'}}}}
+      responses:
+        '201': {description: OK}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Inexistente ou de outro provedor}
+  /profile-dry-runs/{runId}:
+    get:
+      tags: [ProfileStudio]
+      operationId: getProfileDryRun
+      summary: 'Simulação gravada + `reproducible` (reavaliar as ENTRADAS gravadas dá os mesmos planos e hashes) + `expired`. profiles:read'
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: runId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: OK}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Inexistente ou de outro provedor}
   /olts/{oltId}/queries:
     get:
       tags: [Network]

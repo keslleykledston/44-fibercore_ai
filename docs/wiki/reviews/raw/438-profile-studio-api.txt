@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19aff-501f-79e3-a4d7-757a3e23ec86).
+[codex] Turn started (01a19aff-532a-7843-a1ce-9390893ca254).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de banco, autorização, concorrência...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/profile_studio.py | sed -n '180,490p'; nl -ba apps/api...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/profile_studio.py | sed -n '180,490p'; nl -ba apps/api... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/profile_studio.py | sed -n '440,510p'; nl -ba apps/api...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/profile_studio.py | sed -n '440,510p'; nl -ba apps/api... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: imports declarados pelo cliente co...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: imports declarados pelo cliente como fixture/manual_import podem sustentar planos de reutilização como se fossem observações atuais, e certificações de leitura não expiram.
+
+Findings:
+- [high] Import não confiável pode ser tratado como observação fresca para reutilização (apps/api/app/api/profile_studio.py:43-44)
+  O endpoint permite que o cliente escolha `source` como `fixture` ou `manual_import` e envie settings e `observed_at`; a API então grava a observação como `fresh` quando a data está na janela, sem vincular o snapshot à certificação do driver nem exigir evidência de leitura. Mais tarde, `_targets_for` usa esses snapshots para comparar e `resolve_binding` pode selecionar `reuse_exact` se a certificação do equipamento existir. Assim, um import inventado ou baseado em dump antigo pode produzir um plano de reutilização aparentemente válido, com impacto operacional se esse plano for aprovado fora deste endpoint. Vincule a aptidão para reutilização a uma leitura certificada e verificável, ou marque imports manuais/fixture como não autoritativos e bloqueie `reuse_exact` para eles.
+  Recommendation: Separe imports manuais de observações verificadas pelo Edge; só permita decisões de equivalência/reutilização para snapshots cuja origem e coleta sejam verificáveis.
+- [medium] Certificação de leitura nunca envelhece (apps/api/app/api/profile_studio.py:91-96)
+  A consulta considera suficiente `status='supported'` e `certification` observado/certificado, mas ignora `verified_at`. Uma certificação antiga continua habilitando comparação e dry-run indefinidamente, mesmo que a leitura do driver deixe de ser válida após mudanças ou degradação. Isso pode fazer uma observação parecer certificada sem evidência recente. Aplique prazo de validade à certificação ou exija revalidação antes de permitir planos não bloqueados.
+  Recommendation: Leia e valide `verified_at` contra uma janela definida; certificações vencidas devem bloquear compare/dry-run até revalidação.
