@@ -177,6 +177,22 @@ articles:
   - assets/rede/painel-da-olt/mobile.png
   e2e_test: help-screenshots.spec.ts › rede/painel-da-olt; fluxo em olt-painel.spec.ts (painel)
   last_verified: '2026-11-02'
+- slug: rede/catalogo-de-equipamentos
+  ui_route: /rede/catalogo
+  status: published
+  images:
+  - assets/rede/catalogo-de-equipamentos/desktop.png
+  - assets/rede/catalogo-de-equipamentos/mobile.png
+  e2e_test: help-screenshots.spec.ts › rede/catalogo-de-equipamentos; fluxo em catalogo.spec.ts (catalogo)
+  last_verified: '2026-11-02'
+- slug: rede/frota-de-olts
+  ui_route: /rede/frota
+  status: published
+  images:
+  - assets/rede/frota-de-olts/desktop.png
+  - assets/rede/frota-de-olts/mobile.png
+  e2e_test: help-screenshots.spec.ts › rede/frota-de-olts; fluxo em frota.spec.ts (frota)
+  last_verified: '2026-11-02'
 - slug: rede/onus-pendentes
   ui_route: /rede/pendentes
   status: published

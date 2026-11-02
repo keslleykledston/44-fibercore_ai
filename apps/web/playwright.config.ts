@@ -30,6 +30,9 @@ export default defineConfig({
     { name: "catalogo", testMatch: /catalogo\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
     // Recuo do catálogo de equipamentos com a flag `device_assets` DESLIGADA: DEVICE_ASSETS_FLAG_OFF=1 npx playwright test --project=recuo-catalogo
     { name: "recuo-catalogo", testMatch: /catalogo-flag\.spec\.ts/, use: { browserName: "chromium" } },
+    { name: "frota", testMatch: /frota\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
+    // Recuo da Frota de OLTs com a flag `fleet_manager` DESLIGADA: FLEET_FLAG_OFF=1 npx playwright test --project=recuo-frota
+    { name: "recuo-frota", testMatch: /frota-flag\.spec\.ts/, use: { browserName: "chromium" } },
     { name: "perfis", testMatch: /perfis\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
     // Recuo com a flag `profile_studio` DESLIGADA: PERFIS_FLAG_OFF=1 npx playwright test --project=recuo-perfis
     { name: "recuo-perfis", testMatch: /perfis-flag\.spec\.ts/, use: { browserName: "chromium" } },

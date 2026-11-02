@@ -67,6 +67,7 @@ const screens: { slug: string; route: string; ready: string; prepare?: (r: APIRe
   { slug: "rede/perfis-olt/rascunho", route: "/rede/perfis", ready: "perfis-resultado", dynamicRoute: perfisRoute },
   { slug: "rede/painel-da-olt", route: "/rede", ready: "olt-popover", dynamicRoute: painelRoute,
     steps: async (page: Page) => { await page.locator('[data-testid="olt-pon"][data-port-key="0/0/1"]').click(); await expect(page.getByTestId("olt-popover")).toBeVisible(); } },
+  { slug: "rede/frota-de-olts", route: "/rede/frota", ready: "frota-lista" },
   { slug: "rede/catalogo-de-equipamentos", route: "/rede/catalogo", ready: "catalogo-grade",
     steps: async (page: Page) => {   // as miniaturas são lazy: a captura só vale com todas carregadas
       await page.evaluate(async () => { for (const i of Array.from(document.images)) i.loading = "eager"; await Promise.all(Array.from(document.images).map((i) => (i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r; })))); });
