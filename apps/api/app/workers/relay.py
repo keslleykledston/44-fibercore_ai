@@ -20,6 +20,17 @@ from app.events import bus
 
 log = logging.getLogger("relay")
 
+# `source` and `quality` carry the meaning they have in the v2.2 events contract (the quality enum), added to the envelope ADDITIVELY (consumers ignore what they
+# do not know). The envelope is NOT the v2.2 shape (that one needs event_id/subject_id/ingested_at and forbids extras): contracts/event-envelope.schema.json describes it. Every event is written by this platform's own API or workers (device data reaches it through the API), so
+# `source` is a constant; `quality` is only what the producer put in the payload, and "unknown" otherwise: the relay never invents that a datum is fresh.
+EVENT_SOURCE = "fibercore-api"
+EVENT_QUALITY = ("fresh", "stale", "unknown", "conflict")
+
+
+def event_quality(payload) -> str:
+    q = payload.get("quality") if isinstance(payload, dict) else None
+    return q if isinstance(q, str) and q in EVENT_QUALITY else "unknown"
+
 
 async def relay_once(engine: Engine, js, *, batch: int = 100, crash_after_publish: bool = False) -> int:
     """Publish up to `batch` events. Returns how many were marked published.
@@ -43,6 +54,8 @@ async def relay_once(engine: Engine, js, *, batch: int = 100, crash_after_publis
                 "schema_version": r.schema_version,
                 "aggregate": {"type": r.aggregate_type, "id": str(r.aggregate_id)},
                 "occurred_at": r.created_at.isoformat(),
+                "source": EVENT_SOURCE,
+                "quality": event_quality(r.payload),
                 "payload": r.payload,
             }
             await js.publish(

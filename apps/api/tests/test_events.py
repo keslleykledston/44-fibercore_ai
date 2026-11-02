@@ -251,3 +251,34 @@ def test_env_stream_limits_units_are_seconds(monkeypatch):
     age, size, raw = run(go())
     assert (age, size) == (3600, 1_000_000)
     assert b'"max_age":3600000000000' in raw
+
+
+def test_envelope_carries_source_and_quality_without_inventing_freshness(engines, seed):
+    """The envelope adds `source` and `quality` (the v2.2 meaning, NOT the v2.2 shape) additively; quality is only what the producer put in the payload."""
+    import json as _json
+
+    from app.workers.relay import EVENT_QUALITY, EVENT_SOURCE, event_quality
+
+    assert event_quality({}) == "unknown" and event_quality(None) == "unknown" and event_quality({"quality": "fresh"}) == "fresh"
+    assert event_quality({"quality": "excellent"}) == "unknown" and event_quality({"quality": 3}) == "unknown"   # outside the contract's enum
+    app_e, worker_e = engines
+    new_event(app_e, seed["A"])
+    sent: list[dict] = []
+
+    class FakeJS:
+        async def publish(self, subject, data, headers=None):
+            sent.append(_json.loads(data))
+
+    assert run(relay_once(worker_e, FakeJS())) == 1
+    env = sent[0]
+    assert env["source"] == EVENT_SOURCE and env["quality"] in EVENT_QUALITY
+    assert {"id", "tenant_id", "type", "schema_version", "aggregate", "occurred_at", "payload"} <= set(env)   # the old fields are all still there
+    # the published envelope validates against ITS OWN schema (contracts/event-envelope.schema.json); it is not claimed to be events.v2.2
+    import pathlib
+
+    import jsonschema
+    schema = _json.loads((pathlib.Path(__file__).resolve().parents[3] / "contracts" / "event-envelope.schema.json").read_text())
+    jsonschema.validate(env, schema)
+    bad = {**env, "quality": "excellent"}
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(bad, schema)

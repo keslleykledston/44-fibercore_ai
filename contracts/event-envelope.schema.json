@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fibercore.invalid/contracts/event-envelope.schema.json",
+  "title": "FiberCore event envelope (as published by the outbox relay)",
+  "description": "The envelope the relay publishes today. It is NOT the events.v2.2 schema (docs/addenda/v2.2/contracts/events.v2.2.schema.json): that one requires event_id, subject_id and ingested_at and forbids extra fields, so an external consumer that validates against v2.2 must not be pointed at this stream. `source` and `quality` carry the v2.2 meaning (quality enum) additively. Moving to the v2.2 shape is a coordinated change with the consumers, not done here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "tenant_id", "type", "schema_version", "aggregate", "occurred_at", "source", "quality", "payload"],
+  "properties": {
+    "id": {"type": "string", "format": "uuid"},
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "type": {"type": "string", "minLength": 1},
+    "schema_version": {"type": ["integer", "string"]},
+    "aggregate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {"type": {"type": "string", "minLength": 1}, "id": {"type": "string", "format": "uuid"}}
+    },
+    "occurred_at": {"type": "string", "minLength": 10},
+    "source": {"type": "string", "const": "fibercore-api"},
+    "quality": {"enum": ["fresh", "stale", "unknown", "conflict"]},
+    "payload": {"type": "object"}
+  }
+}
