@@ -63,9 +63,8 @@ OPERATIONS: dict[str, Operation] = {
 # FC22-015: the operations that change something (one at a time per target) and the states in which a job is still in flight
 WRITE_OPS: list[str] = sorted(k for k, v in OPERATIONS.items() if v.writes)
 LIVE_STATES: list[str] = ["DISPATCHED", "ACCEPTED", "DEVICE_PENDING", "VERIFYING"]
-# a job that has not moved for this long after the Edge accepted it is RECONCILED to UNKNOWN (the outcome is not known), never just ignored, before its target is
-# released: a lost Edge report must not hold a target for ever. It is twice JOB_TTL, and a job's envelope is never valid past its own expiry (at most JOB_TTL after
-# creation; bench envelopes die in minutes), so a write that was never reported cannot start after this point.
+# a BENCH write the Edge accepted and never finished is reconciled to UNKNOWN after this long and its target is write-locked until a person reconciles it (the clock
+# never releases a target). Twice JOB_TTL: a job's envelope is never valid past its own expiry (bench envelopes die in minutes), so it cannot START after this point.
 STALE_AFTER = timedelta(minutes=30)
 # (operation) names whose firmware/model/transport homologation is complete. EMPTY by design in Sprint 3.
 HOMOLOGATED_WRITES: frozenset[str] = frozenset()
@@ -345,16 +344,17 @@ def next_job(
     for s_ in swept:  # a bench write that was sent and never reported may have been applied: lock the target (ADR-0030 item 6)
         if s_.operation in bench.BENCH_OPS and _blocked_reason(s_.operation):
             bench.lock_target(conn, s_.target_id, "bench write dispatched and never reported")
-    # FC22-015: a write the Edge accepted and then went quiet about holds its target; after STALE_AFTER it becomes UNKNOWN (terminal; a late report is refused as a
-    # conflict) and a bench write locks its target like any other write that ended UNKNOWN (ADR-0030 item 6), until a person reconciles it
+    # FC22-015: a BENCH write the Edge accepted and then went quiet about holds its target; after STALE_AFTER it becomes UNKNOWN (terminal; a late report is refused as
+    # a conflict) and the target is write-locked like any other bench write that ended UNKNOWN (ADR-0030 item 6): it is released only when a person reconciles it
+    # (`bench-unlock`), never by the clock. Any other write (none is homologated today) is NOT released by time: it keeps holding its target (fail closed).
+    gated = [o for o in bench.BENCH_OPS if _blocked_reason(o)]
     stale = conn.execute(
         text("UPDATE jobs SET status = 'UNKNOWN', updated_at = now() WHERE edge_id = :e AND status IN ('ACCEPTED', 'DEVICE_PENDING', 'VERIFYING') "
              "AND operation = ANY(CAST(:w AS text[])) AND updated_at < now() - make_interval(secs => :s) RETURNING operation, target_id"),
-        {"e": p.edge_id, "w": WRITE_OPS, "s": STALE_AFTER.total_seconds()},
+        {"e": p.edge_id, "w": gated, "s": STALE_AFTER.total_seconds()},
     ).all()
     for s_ in stale:
-        if s_.operation in bench.BENCH_OPS and _blocked_reason(s_.operation):
-            bench.lock_target(conn, s_.target_id, "bench write accepted and never finished")
+        bench.lock_target(conn, s_.target_id, "bench write accepted and never finished")
     lease = _bench_lease(conn, p, settings)  # on EVERY answer, job or not: this is how the Edge's bench lease is renewed or withdrawn
     if lease:
         response.headers["X-Bench-Lease"] = lease
