@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 PLAN_VERSION = "fibercore-plan-v1"
+# the registry row that says a driver can READ profiles of an OLT (vendor/model/firmware): (operation, protocol). It is an observation, not a job operation.
+PROFILE_READ = ("olt_profile_read", "olt")
 
 # status of a field in the diff (docs/addenda/v2.5 PROFILE_RECONCILIATION)
 EQUAL, CHANGE, ADD, REMOVE, NOT_OBSERVABLE, UNSUPPORTED, CONFLICT = "EQUAL", "CHANGE", "ADD", "REMOVE", "NOT_OBSERVABLE", "UNSUPPORTED", "CONFLICT"

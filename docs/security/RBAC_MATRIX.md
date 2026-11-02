@@ -32,6 +32,9 @@
 | `diagnostics:quality_read` | R0 | não | sim | Ver a leitura de qualidade do serviço da ONT e o histórico (somente leitura) |
 | `diagnostics:quality_run` | R0 | não | sim | Pedir a leitura de qualidade RÁPIDA da ONT (usa só dados já coletados; não toca o aparelho) |
 | `diagnostics:quality_run_full` | R1 | não | sim | Pedir a leitura de qualidade COMPLETA (referencia o teste de banda; não inicia tráfego) |
+| `profiles:read` | R0 | não | sim | Ver os profiles de serviço da OLT (snapshots importados), comparar com um rascunho (somente leitura) |
+| `profiles:import` | R1 | não | sim | Importar um profile existente da OLT como referência imutável (somente leitura: não escreve na OLT) |
+| `profiles:edit` | R2 | não | sim | Criar e editar rascunhos de profile (clone) e simular a aplicação (dry-run); nada é enviado à OLT |
 | `members:read` | R1 | não | não | Ver os membros do provedor e o estado do MFA de cada um |
 | `members:manage` | R3 | sim | não | Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite) |
 | `platform:delegate` | R3 | sim | não | Conceder e revogar o acesso temporário (até 8 h, com motivo) do suporte da plataforma a este provedor |
@@ -71,6 +74,9 @@
 | `diagnostics:quality_read` | ✔ | ✔ | ✔ | ✔ |  |  |  |  |  |
 | `diagnostics:quality_run` | ✔ | ✔ | ✔ | ✔ |  |  |  |  |  |
 | `diagnostics:quality_run_full` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
+| `profiles:read` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
+| `profiles:import` | ✔ | ✔ |  |  |  |  |  |  |  |
+| `profiles:edit` | ✔ | ✔ |  |  |  |  |  |  |  |
 | `members:read` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `members:manage` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `platform:delegate` | ✔ |  |  |  |  |  |  |  |  |
@@ -171,6 +177,8 @@
 | PUT | `/v1/members/{user_id}/role` | `members:manage` |
 | GET | `/v1/olts` | `inventory:read` |
 | GET | `/v1/olts/{olt_id}/capabilities` | `inventory:read` |
+| GET | `/v1/olts/{olt_id}/profiles` | `profiles:read` |
+| POST | `/v1/olts/{olt_id}/profiles/import` | `profiles:import` |
 | GET | `/v1/olts/{olt_id}/queries` | `inventory:read` |
 | POST | `/v1/olts/{olt_id}/queries/{query_id}` | `olt_query:run` |
 | GET | `/v1/olts/{olt_id}/queries/{query_id}/latest` | `olt_query:run` |
@@ -190,6 +198,14 @@
 | DELETE | `/v1/platform-delegations/{delegation_id}` | `platform:delegate` |
 | GET | `/v1/platform/modules` | (sessão válida, sem permissão) |
 | GET | `/v1/platform/versions` | (sessão válida, sem permissão) |
+| GET | `/v1/profile-drafts` | `profiles:read` |
+| POST | `/v1/profile-drafts` | `profiles:edit` |
+| GET | `/v1/profile-drafts/{draft_id}` | `profiles:read` |
+| PATCH | `/v1/profile-drafts/{draft_id}` | `profiles:edit` |
+| POST | `/v1/profile-drafts/{draft_id}/compare` | `profiles:read` |
+| POST | `/v1/profile-drafts/{draft_id}/dry-run` | `profiles:edit` |
+| GET | `/v1/profile-dry-runs/{run_id}` | `profiles:read` |
+| GET | `/v1/profile-snapshots/{snapshot_id}` | `profiles:read` |
 | GET | `/v1/roles` | `roles:read` |
 | GET | `/v1/speed/health` | `inventory:read` |
 | GET | `/v1/team` | `members:read` |

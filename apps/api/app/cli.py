@@ -139,14 +139,17 @@ def main(argv: list[str] | None = None) -> None:
                 sys.exit("any claim (supported/unsupported, or observed/certified) requires --evidence and --verified-at")
             from app.api.jobs import OPERATIONS  # the catalog is the job engine's operations: no invented names
             from app.core import speed as _speed0
-            if a.operation not in OPERATIONS and a.operation not in {o for o, _ in _speed0.REGISTRY_ONLY}:
+            registry_only = {o for o, _ in _speed0.REGISTRY_ONLY} | {"olt_profile_read"}   # registry rows that are an observation, not a job operation
+            if a.operation not in OPERATIONS and a.operation not in registry_only:
                 sys.exit(f"unknown operation {a.operation!r}; known: {', '.join(sorted(OPERATIONS))}")
             from app.core.capabilities import catalog_for
             valid = {(e.operation, e.protocol) for kind in ("cpe", "olt") for e in catalog_for(kind, OPERATIONS)}
             from app.core import bench as _bench
             valid |= {(n, sp.protocol) for n, sp in _bench.BENCH_OPS.items()}   # the bench catalog names its own (operation, protocol) pairs
             from app.core import speed as _speed
-            valid |= set(_speed.REGISTRY_ONLY)   # registry rows that are an observation of the device, not an operation (e.g. what the CPE does with a 3xx)
+            valid |= set(_speed.REGISTRY_ONLY)
+            from app.core import profile_studio as _ps
+            valid.add(_ps.PROFILE_READ)   # ADR-0040: a driver can READ the profiles of this OLT firmware (an observation, not a job operation)
             if (a.operation, a.protocol) not in valid:  # a row the API could never show would hide the recorded state
                 sys.exit(f"{a.operation!r} is not catalogued over {a.protocol!r}; valid pairs: {sorted(valid)}")
             from app.core import bench

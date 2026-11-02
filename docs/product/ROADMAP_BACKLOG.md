@@ -159,7 +159,8 @@ Pacote em `docs/addenda/v2.5/package/`; GAP com os caminhos reais em `docs/adden
 |---|---|---|---|
 | FC25-00 / FC251-00 | P0 | [x] GAP, ADR-0040 e backlog (2026-11-02) | este PR |
 | FC251-04/05/06 (núcleo) | P0 | [x] núcleo puro em `apps/api/app/core/profile_studio.py` (2026-11-02): modelo canônico tipado, validação por allowlist/capacidade, diff semântico, resolução por alvo, `plan_hash`, dry-run por OLT, sanitização de texto importado. Sem banco, rota ou flag ainda | 47 testes; falta ligar à migração/API/UI |
-| FC25-06 / FC251-01/02/03 | P0 | [ ] inventário e snapshot imutável de profiles, normalização com proveniência, importação e clone para rascunho | migração + API, flag off; consultas reais só após captura supervisionada |
+| FC25-06 / FC251-01/02/03 | P0 | [~] **feito em 2026-11-02:** migração 0040, snapshot imutável, importação (fixture/manual), clone para rascunho com `If-Match`, comparação e dry-run por OLT (API, flag `profile_studio` off). **Falta:** leitura REAL do Edge (consultas de profile no catálogo + parser; só após captura supervisionada e ordem do responsável) | API em `apps/api/app/api/profile_studio.py`; 10 testes |
+| FC25-07 / FC251-06 (API) | P0 | [~] dry-run por OLT na API (feito); falta a tela e a prova com OLT real | ver acima |
 | FC25-01/02/03 | P0 | [ ] descoberta de ONU pendente (driver mock + fixtures), fila, associação HubSoft somente leitura | `olt.autofind` e `pon.ont.autofind` já no catálogo (`validated=false`) |
 | FC25-04/05 | P0 | [ ] service intent versionado e wizard assistido | depende do núcleo |
 | FC25-07 / FC251-06 | P0 | [ ] dry-run `reuse/adopt/clone/blocked` por OLT, com impacto | cobrirá a lacuna (b) do FC22-014 para provisionamento (planejado) |
