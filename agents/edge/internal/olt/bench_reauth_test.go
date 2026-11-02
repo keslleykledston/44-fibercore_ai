@@ -194,12 +194,16 @@ func TestReauthorizeRestoresTheBaselineWhenTheAddFailsOnce(t *testing.T) {
 	}
 }
 
-func TestReauthorizeRestoresWhenTheSerialNeverShowsInAutofind(t *testing.T) {
+func TestReauthorizeDoesNotAddAgainWhenTheONUIsNeitherReadableNorInAutofind(t *testing.T) {
+	// the serial never shows up in autofind after the delete: the cycle stops, and the restore does NOT guess "absent" from an unreadable answer (Codex r8): no extra ont add
 	f := newAuth()
 	f.neverInAutofind = true
 	out, err := runAuth(f, spec14, nil, far())
-	if err == nil || !out.Sent || out.Done || !f.ontPresent || !f.spPresent {
-		t.Fatalf("out=%+v err=%v state ont=%v sp=%v", out, err, f.ontPresent, f.spPresent)
+	if err == nil || !out.Sent || out.Done || !strings.Contains(err.Error(), "restore it by hand") {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+	if f.addCount != 0 {
+		t.Fatalf("no ont add may be sent when the state is unknown, got %d", f.addCount)
 	}
 }
 

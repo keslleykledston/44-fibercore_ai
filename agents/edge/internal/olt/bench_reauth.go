@@ -287,10 +287,16 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 			if perr == nil {
 				return i.SN == onu.GPONSerial && i.FSP == onu.fsp() && i.OntID == onu.OntID, nil
 			}
-			if regexp.MustCompile(`(?i)does not exist|failure`).MatchString(o) && !strings.Contains(o, "F/S/P") {
+			// the ONU could not be read: that is NOT proof it is gone (a transient error looks the same). Absence is only ever concluded from POSITIVE evidence: the serial is
+			// waiting in the autofind list. Anything else is an unknown state: no `ont add` is sent, the restore stops and the operator is told.
+			af, aerr := step(c.Autofind)
+			if aerr != nil {
+				return false, aerr
+			}
+			if strings.Contains(strings.ToUpper(af), onu.GPONSerial) {
 				return false, nil
 			}
-			return false, perr
+			return false, fmt.Errorf("%w: the ONU can neither be read nor found in the autofind list", ErrReauthBaseline)
 		}
 		ok, err := present()
 		if err != nil {
