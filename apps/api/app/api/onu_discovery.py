@@ -24,7 +24,6 @@ router = APIRouter()
 MAX_FUTURE_SKEW = timedelta(minutes=5)
 MAX_ITEMS = 200
 LIST_LIMIT = 200      # default page size (max 500)
-SCAN_CAP = 20_000     # most de-duplicated sightings examined per request; beyond it the answer says so (`scan_capped`)
 
 
 def _flag(conn: Connection, p: Principal) -> None:
@@ -83,33 +82,46 @@ def import_observations(olt_id: UUID, body: ImportIn, p: Principal = Depends(req
     return {"olt_id": str(olt_id), "source": body.source, "created": created, "updated": updated}
 
 
+# The condition is decided IN SQL (one place), per row, with indexed EXISTS lookups: the filter, the total and the page are all computed by the database, so a page can
+# never hide a match and no request materialises the tenant's whole history. `conflict` wins (an uncertain identity blocks everything else), then `stale`, `new`, `waiting`.
+_QUEUE_SQL = """
+WITH d AS (
+  SELECT DISTINCT ON (d.olt_id, d.pon_path, d.serial) d.id, d.tenant_id, d.olt_id, o.name AS olt_name, d.pon_path, d.serial, d.vendor_hint, d.source, d.first_seen_at, d.last_seen_at,
+         d.seen_count
+  FROM onu_discovery_observations d JOIN olts o ON o.tenant_id = d.tenant_id AND o.id = d.olt_id
+  WHERE (CAST(:o AS uuid) IS NULL OR d.olt_id = CAST(:o AS uuid))
+  ORDER BY d.olt_id, d.pon_path, d.serial, (d.source = 'edge_read') DESC, d.last_seen_at DESC
+), c AS (
+  SELECT d.*,
+         EXISTS (SELECT 1 FROM onus r WHERE upper(r.serial) = d.serial) AS already_registered,
+         EXISTS (SELECT 1 FROM onu_discovery_observations x WHERE x.tenant_id = d.tenant_id AND x.serial = d.serial AND (x.olt_id <> d.olt_id OR x.pon_path <> d.pon_path)) AS seen_elsewhere
+  FROM d
+), k AS (
+  SELECT c.*, CASE WHEN already_registered OR seen_elsewhere THEN 'conflict' WHEN now() - last_seen_at > make_interval(secs => :fresh) THEN 'stale'
+                   WHEN now() - first_seen_at <= make_interval(secs => :newfor) THEN 'new' ELSE 'waiting' END AS condition
+  FROM c
+)
+SELECT k.*, count(*) OVER () AS total FROM k WHERE (CAST(:cond AS text) IS NULL OR condition = CAST(:cond AS text))
+ORDER BY olt_name, olt_id, pon_path, serial LIMIT :lim OFFSET :off
+"""
+
+
 def _queue(conn: Connection, olt_id: UUID | None, cond: str | None, limit: int, offset: int) -> dict:
-    now = datetime.now(UTC)
-    rows = conn.execute(
-        text("SELECT DISTINCT ON (d.olt_id, d.pon_path, d.serial) d.id, d.olt_id, o.name AS olt_name, d.pon_path, d.serial, d.vendor_hint, d.source, d.first_seen_at, d.last_seen_at, d.seen_count "
-             "FROM onu_discovery_observations d JOIN olts o ON o.tenant_id = d.tenant_id AND o.id = d.olt_id "
-             "WHERE (CAST(:o AS uuid) IS NULL OR d.olt_id = CAST(:o AS uuid)) "
-             "ORDER BY d.olt_id, d.pon_path, d.serial, (d.source = 'edge_read') DESC, d.last_seen_at DESC LIMIT :lim"),
-        {"o": olt_id, "lim": SCAN_CAP}).all()
-    registered = frozenset(r.serial.upper() for r in conn.execute(text("SELECT serial FROM onus")).all())
-    places: dict[str, set[tuple[str, str]]] = {}
-    for r in conn.execute(text("SELECT DISTINCT olt_id, pon_path, serial FROM onu_discovery_observations")).all():
-        places.setdefault(r.serial.upper(), set()).add((str(r.olt_id), r.pon_path))
-    frozen = {k: frozenset(v) for k, v in places.items()}
-    items = []
-    for r in rows:
-        seen = od.Seen(str(r.olt_id), r.pon_path, r.serial, r.first_seen_at, r.last_seen_at, r.source)
-        c, why = od.condition(seen, now=now, registered_serials=registered, places=frozen)
-        if cond and c != cond:
-            continue
-        items.append({
-            "id": str(r.id), "olt_id": str(r.olt_id), "olt_name": r.olt_name, "pon_path": r.pon_path, "serial": r.serial, "vendor_hint": r.vendor_hint, "source": r.source,
-            "authoritative": od.authoritative(r.source), "first_seen_at": r.first_seen_at.isoformat(), "last_seen_at": r.last_seen_at.isoformat(), "seen_count": r.seen_count,
-            "condition": c, "reasons": why, "erp_association": "unavailable", "customer": None, "authorization": "not_available",
-        })
-    page = items[offset:offset + limit]   # the condition filter is applied BEFORE paging, so a page never hides a match that sits later in the scan
-    return {"items": page, "total": len(items), "offset": offset, "limit": limit, "truncated": offset + limit < len(items), "scan_capped": len(rows) >= SCAN_CAP,
-            "fresh_window_minutes": int(od.FRESH_FOR.total_seconds() // 60)}
+    rows = conn.execute(text(_QUEUE_SQL), {"o": olt_id, "cond": cond, "fresh": od.FRESH_FOR.total_seconds(), "newfor": od.NEW_FOR.total_seconds(), "lim": limit, "off": offset}).all()
+    items = [{
+        "id": str(r.id), "olt_id": str(r.olt_id), "olt_name": r.olt_name, "pon_path": r.pon_path, "serial": r.serial, "vendor_hint": r.vendor_hint, "source": r.source,
+        "authoritative": od.authoritative(r.source), "first_seen_at": r.first_seen_at.isoformat(), "last_seen_at": r.last_seen_at.isoformat(), "seen_count": r.seen_count,
+        "condition": r.condition, "reasons": od.reasons(r.condition, already_registered=r.already_registered, seen_elsewhere=r.seen_elsewhere),
+        "erp_association": "unavailable", "customer": None, "authorization": "not_available",
+    } for r in rows]
+    if rows:
+        total = rows[0].total
+    elif offset == 0:
+        total = 0
+    else:   # a page past the end: the total still has to be right
+        first = conn.execute(text(_QUEUE_SQL), {"o": olt_id, "cond": cond, "fresh": od.FRESH_FOR.total_seconds(), "newfor": od.NEW_FOR.total_seconds(), "lim": 1, "off": 0}).first()
+        total = first.total if first else 0
+    return {"items": items, "total": total, "offset": offset, "limit": limit, "truncated": offset + len(items) < total, "fresh_window_minutes": int(od.FRESH_FOR.total_seconds() // 60)}
 
 
 @router.get("/v1/olts/{olt_id}/onus/unregistered")

@@ -148,11 +148,13 @@ def test_the_filter_is_applied_before_paging_so_a_page_never_hides_a_match(clien
     assert _post(client, h, a, [_item(f"DSPAGE{i:06d}", pon="0/1/1") for i in range(5)]).status_code == 201
     assert _post(client, h, b, [_item("HWTC00000001", pon="0/9/9")]).status_code == 201         # the only conflict, on the LAST OLT in the scan order
     first = client.get("/v1/discovery/onus?limit=2", headers=h).json()
-    assert len(first["items"]) == 2 and first["total"] >= 6 and first["truncated"] is True and first["scan_capped"] is False
+    assert len(first["items"]) == 2 and first["total"] >= 6 and first["truncated"] is True
     conflicts = client.get("/v1/discovery/onus?condition=conflict&limit=2", headers=h).json()
     assert [i["serial"] for i in conflicts["items"]] == ["HWTC00000001"] and conflicts["total"] == 1 and conflicts["truncated"] is False
     seen: list[str] = []
     for off in range(0, first["total"], 2):                                                         # paging walks every row exactly once
         seen += [i["id"] for i in client.get(f"/v1/discovery/onus?limit=2&offset={off}", headers=h).json()["items"]]
     assert len(seen) == len(set(seen)) == first["total"]
+    past = client.get(f"/v1/discovery/onus?limit=2&offset={first['total'] + 10}", headers=h).json()
+    assert past["items"] == [] and past["total"] == first["total"] and past["truncated"] is False
     assert client.get("/v1/discovery/onus?limit=0", headers=h).status_code == 422 and client.get("/v1/discovery/onus?limit=501", headers=h).status_code == 422

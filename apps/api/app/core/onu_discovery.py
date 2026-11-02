@@ -7,8 +7,7 @@ a fixture or a manual import is shown but never counts as the OLT's word. Nothin
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 FRESH_FOR = timedelta(hours=1)    # the autofind list is the OLT's CURRENT state: an observation older than this is `stale` (never shown as "offline")
 NEW_FOR = timedelta(hours=24)     # first seen within this window = `new`
@@ -18,33 +17,14 @@ SOURCES = ("fixture", "manual_import", "edge_read")
 CONDITIONS = ("new", "waiting", "stale", "conflict")
 
 
-@dataclass(frozen=True)
-class Seen:
-    olt_id: str
-    pon_path: str
-    serial: str
-    first_seen_at: datetime
-    last_seen_at: datetime
-    source: str
-
-
 def authoritative(source: str) -> bool:
     return source == "edge_read"
 
 
-def condition(o: Seen, *, now: datetime, registered_serials: frozenset[str], places: dict[str, frozenset[tuple[str, str]]]) -> tuple[str, list[str]]:
-    """The queue condition and WHY (stable codes). `conflict` wins: an identity that is not certain blocks everything else. Conflicts: the serial is already a
-    registered ONU of this tenant, or the same serial was seen at another OLT/PON (a physical ONU is in one place: one of the two is wrong or it moved)."""
-    why: list[str] = []
-    serial = o.serial.upper()
-    if serial in registered_serials:
-        why.append("already_registered")
-    if len(places.get(serial, frozenset()) - {(o.olt_id, o.pon_path)}) > 0:
-        why.append("seen_elsewhere")
-    if why:
-        return "conflict", why
-    if now - o.last_seen_at > FRESH_FOR:
-        return "stale", ["not_seen_recently"]
-    if now - o.first_seen_at <= NEW_FOR:
-        return "new", []
-    return "waiting", []
+def reasons(cond: str, *, already_registered: bool, seen_elsewhere: bool) -> list[str]:
+    """Stable reason codes for a condition the database decided (see the CASE in `app.api.onu_discovery`): `conflict` wins over `stale`, `stale` over `new`/`waiting`.
+    Conflicts: the serial is already a registered ONU of this tenant, or the same serial was seen at another OLT/PON (a physical ONU is in one place: one of the two is
+    wrong or it moved)."""
+    if cond == "conflict":
+        return (["already_registered"] if already_registered else []) + (["seen_elsewhere"] if seen_elsewhere else [])
+    return ["not_seen_recently"] if cond == "stale" else []

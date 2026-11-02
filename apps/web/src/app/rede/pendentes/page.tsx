@@ -66,7 +66,6 @@ export default async function Pendentes({ searchParams }: { searchParams: Promis
             </table></div>
           )}
           {queue.data && queue.data.total > 0 && <p data-testid="pend-contagem" className="mt-2 text-xs text-muted">Mostrando {queue.data.offset + 1}–{queue.data.offset + items.length} de {queue.data.total}.</p>}
-          {queue.data?.scan_capped && <p className="mt-2 text-xs text-warn">Lista parcial: há mais avistamentos que o limite de leitura; o total pode estar incompleto.</p>}
           <div className="mt-2 flex gap-3 text-sm">
             {offset > 0 && <Link href={href(sel?.id, cond, Math.max(0, offset - (queue.data?.limit ?? 200)))} className="text-accent hover:underline" data-testid="pend-anterior">← Anteriores</Link>}
             {queue.data?.truncated && <Link href={href(sel?.id, cond, offset + (queue.data.limit))} className="text-accent hover:underline" data-testid="pend-proximas">Próximas →</Link>}

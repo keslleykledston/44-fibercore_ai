@@ -4,7 +4,7 @@ export type Pending = {
   first_seen_at: string; last_seen_at: string; seen_count: number; condition: "new" | "waiting" | "stale" | "conflict"; reasons: string[];
   erp_association: string; customer: null; authorization: string;
 };
-export type PendingList = { items: Pending[]; total: number; offset: number; limit: number; truncated: boolean; scan_capped: boolean; fresh_window_minutes: number };
+export type PendingList = { items: Pending[]; total: number; offset: number; limit: number; truncated: boolean; fresh_window_minutes: number };
 
 export const CONDITION_LABEL: Record<string, string> = { new: "Nova", waiting: "Aguardando", stale: "Dado antigo", conflict: "Conflito" };
 export const CONDITION_MARK: Record<string, string> = { new: "●", waiting: "○", stale: "○", conflict: "▲" };
