@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19aae-5b47-7733-b35d-860d58970461).
+[codex] Turn started (01a19aae-5b7f-7ee3-8bb2-5f55925dc550).
+[codex] Assistant message captured: Vou comparar o branch com `main` e seguir o fluxo BFF→componente, além de conferir se os E2E ...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=60 main...HEAD -- apps/web/src/app/bff/cpes/'...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=60 main...HEAD -- apps/web/src/app/bff/cpes/'... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"readPing(Caps|Runs)|ping/capabilities|ping/runs|ping-blocked|ping-star...
+[codex] Command completed: /bin/bash -lc "rg -n \"readPing(Caps|Runs)|ping/capabilities|ping/runs|ping-blocked|ping-star... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,180p' apps/web/src/lib/ping.ts && sed -n '55,190p' apps/web/src/comp...
+[codex] Command completed: /bin/bash -lc "sed -n '1,180p' apps/web/src/lib/ping.ts && sed -n '55,190p' apps/web/src/comp... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,180p' apps/api/app/api/ping.py; rg -n \"class .*Ping|ping.*response|...
+[codex] Command completed: /bin/bash -lc "sed -n '1,180p' apps/api/app/api/ping.py; rg -n \"class .*Ping|ping.*response|... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviaria ainda: o BFF valida o formato, mas repas...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviaria ainda: o BFF valida o formato, mas repassa ao navegador campos internos extras da API que o componente não precisa.
+
+Findings:
+- [medium] Resposta bruta expõe campos extras da API ao navegador (apps/web/src/app/bff/cpes/[id]/ping/route.ts:19)
+  Depois da validação, a rota encaminha `c.data` e os itens completos de `r.data` (`c.data` inclui, por exemplo, `cpe_id`, `edge_support`, `unsupported` e detalhes de certificação; cada execução inclui `cpe_id`, `job_id` e `completed_at`). O componente consome apenas um subconjunto. Isso amplia sem necessidade os dados disponíveis no navegador e acopla o contrato público do BFF a campos internos da API; IDs de jobs e detalhes de capacidade podem ser inspecionados por qualquer usuário com acesso à tela. A validação dupla não remove esses campos: valide e construa uma resposta allowlist com somente os campos requeridos pela tela.
+  Recommendation: Projetar `caps` e cada item de `runs` para objetos fechados com os campos consumidos pelo componente, sem repassar os objetos brutos.
+
+Next steps:
+- Adicionar cobertura que rejeite campos internos no payload do BFF e confirmar o contrato mínimo consumido por `PingTestSection`.
