@@ -116,6 +116,16 @@ def test_a_field_the_olt_did_not_report_is_never_equal():
     assert d["multicast"] == ps.NOT_OBSERVABLE and d["gems"] == ps.NOT_OBSERVABLE
 
 
+def test_a_required_field_that_neither_side_carries_is_not_proven_and_blocks_reuse():
+    both = {k: v for k, v in GOOD.items() if k != "multicast"}
+    o = obs(both)                                                                          # the OLT did not report it and the draft did not mention it
+    d = ps.semantic_diff(o, both, supported=ALL)
+    assert d["multicast"] == ps.NOT_OBSERVABLE and set(d.values()) != {ps.EQUAL}
+    assert ps.resolve_binding("reuse_exact", target(o), d) == ("blocked", "incomplete_or_conflicting_observation")
+    narrow = ps.semantic_diff(o, both, supported=ALL, required=frozenset(both))            # a kind of profile that does not need it
+    assert set(narrow.values()) == {ps.EQUAL}
+
+
 def test_unsupported_and_conflict_are_never_equal():
     d = ps.semantic_diff(obs(), GOOD, supported=ALL - {"multicast"})
     assert d["multicast"] == ps.UNSUPPORTED
@@ -193,6 +203,16 @@ def test_the_same_draft_reuses_on_olt_a_and_clones_on_olt_b_with_independent_pla
     assert plans[0].reference_count == 3
 
 
+def test_an_invalid_draft_or_a_target_of_another_tenant_is_blocked_and_never_planned():
+    plans = ps.dry_run(tenant_id="T", intent_revision="r", desired={**GOOD, "raw_cli": "x"}, requested=None, targets=[target()], supported=ALL, expires_at="e")
+    assert plans[0].strategy == "blocked" and plans[0].reason == "invalid_draft" and plans[0].diff == {}
+    foreign = target(obs(tenant_id="T2"), tenant_id="T2")                                  # a consistent target... of ANOTHER tenant
+    p = ps.dry_run(tenant_id="T", intent_revision="r", desired=GOOD, requested="reuse_exact", targets=[foreign], supported=ALL, expires_at="e")[0]
+    assert p.strategy == "blocked" and p.reason == "cross_tenant_or_target"
+    same = ps.dry_run(tenant_id="T", intent_revision="r", desired=GOOD, requested="reuse_exact", targets=[target()], supported=ALL, expires_at="e")[0]
+    assert same.plan_hash != p.plan_hash                                                   # the target's tenant is part of what the hash binds
+
+
 def _hash(**over):
     t = over.pop("target", target())
     kw = dict(tenant_id="T", intent_revision="rev-1", target=t, strategy="reuse_exact", diff=eq_diff(), expires_at="2026-11-03T00:00:00Z")
@@ -208,7 +228,7 @@ def test_any_change_after_the_preview_changes_the_plan_hash():
                   _hash(diff={**eq_diff(), "customer_vlan": ps.CHANGE}),
                   _hash(target=target(obs(fingerprint="fp2"))), _hash(target=target(obs(reference_count=4))), _hash(target=target(obs(reference_count=None))),
                   _hash(target=target(firmware="V800R016")), _hash(target=target(olt_id="OLT-B")), _hash(target=target(obs(native_key="other/1"))),
-                  _hash(target=target(obs(freshness="stale")))):
+                  _hash(target=target(obs(freshness="stale"))), _hash(target=target(tenant_id="T9")), _hash(target=target(obs(tenant_id="T9")))):
         assert other != base
 
 

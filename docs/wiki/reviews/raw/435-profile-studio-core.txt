@@ -1,0 +1,34 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19aee-905d-7301-9fa5-3fb1f3ed111b).
+[codex] Turn started (01a19aee-9341-7c22-bf26-87673499efef).
+[codex] Assistant message captured: Vou ler o diff contra `main` e acompanhar os testes até o comportamento concreto, com foco no...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/profile_s...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/profile_s... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=5 main...HEAD -- apps/api/app/core/profile_st...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=5 main...HEAD -- apps/api/app/core/profile_st... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/profile_studio.py | sed -n '100,306p'"
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/profile_studio.py | sed -n '100,306p'" (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/profile_studio.py | sed -n '1,105p'"
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/profile_studio.py | sed -n '1,105p'" (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar: o diff semântico permite declarar equiva...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar: o diff semântico permite declarar equivalência sem provar que a observação é completa, e o hash omite a identidade do tenant do alvo.
+
+Findings:
+- [high] Campos obrigatórios ausentes podem ser tratados como equivalentes (apps/api/app/core/profile_studio.py:177-189)
+  `completeness="complete"` não garante que as chaves ausentes sejam detectadas: `semantic_diff` percorre apenas `o`, `d` e `unknown_fields`. Se `desired` também omitir um campo, ele não aparece no diff, e os demais campos podem resultar todos `EQUAL`; `resolve_binding` então autoriza reuse/adopt. Isso permite reusar um perfil legado/parcial como equivalente apesar de não haver prova sobre campos que o modelo espera comparar. Exija observabilidade explícita para o conjunto relevante de campos e valide o draft antes da resolução; adicione caso em que ambos omitem um campo.
+  Recommendation: Defina o conjunto de campos exigidos para equivalência por alvo e marque ausências como `NOT_OBSERVABLE` ou bloqueie reuse; valide `desired` antes de gerar o plano.
+- [high] Hash do plano não vincula o tenant do alvo (apps/api/app/core/profile_studio.py:258-266)
+  A resolução compara `obs.tenant_id` com `target.tenant_id`, mas `plan_hash` inclui apenas o `tenant_id` passado separadamente, não `target.tenant_id`. `dry_run` aceita esses valores sem conferir igualdade. Se a chamada usar tenant do plano A com um `Target` pertencente ao tenant B, poderá produzir hash idêntico ao de outro alvo B com os mesmos demais dados, enquanto a resolução também pode permitir reuse para B. O hash de aprovação não representa integralmente o escopo de autorização do alvo.
+  Recommendation: Rejeite `tenant_id != target.tenant_id` antes de planejar e inclua explicitamente a identidade tenant do alvo no payload hasheado.
+- [medium] `sanitize_evidence` deixa conteúdo ativo dependente do renderizador (apps/api/app/core/profile_studio.py:296-306)
+  A remoção por regex de tags `<...>` não neutraliza texto HTML/URL como `javascript:` em atributos malformados ou tags acima de 200 caracteres; além disso, manter texto simples não o torna inerte se um consumidor renderizar o resultado como HTML. O docstring promete torná-lo inerte, mas a função não escapa HTML e o teste só verifica a remoção de uma tag curta. Evidência importada pode virar XSS ou conteúdo enganoso quando exibida por um consumidor que injete HTML.
+  Recommendation: Defina a saída como texto escapado para o contexto de renderização ou imponha renderização textual no consumidor; teste tags longas, atributos/event handlers e texto com delimitadores HTML.
+
+Next steps:
+- Corrigir os dois caminhos de aprovação/hash antes de integrar; ampliar os testes de observabilidade e escopo tenant.

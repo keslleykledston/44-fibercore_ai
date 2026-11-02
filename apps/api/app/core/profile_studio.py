@@ -11,6 +11,7 @@ Rules that hold everywhere in this module:
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import re
 from collections.abc import Mapping
@@ -168,19 +169,24 @@ class Observation:
     unknown_fields: frozenset[str] = frozenset()
 
 
-def semantic_diff(obs: Observation, desired: Mapping[str, Any], *, supported: frozenset[str]) -> dict[str, str]:
+def semantic_diff(obs: Observation, desired: Mapping[str, Any], *, supported: frozenset[str], required: frozenset[str] | None = None) -> dict[str, str]:
     """Per field: EQUAL/CHANGE/ADD/REMOVE/NOT_OBSERVABLE/UNSUPPORTED/CONFLICT. A field the OLT did not report is NOT_OBSERVABLE, never EQUAL; a field the driver does
-    not certify is UNSUPPORTED; an observed value that breaks the typed model (or contradicts itself) is CONFLICT."""
+    not certify is UNSUPPORTED; an observed value that breaks the typed model (or contradicts itself) is CONFLICT.
+    `required` = the fields whose equality must be PROVEN for this kind of profile (default: every field the driver certifies). A required field that NEITHER side
+    carries is NOT_OBSERVABLE too: if both omit it, nothing was compared, so nothing is proven (an absent field is not an equal one)."""
     o, d = normalize(obs.settings), normalize(desired)
+    req = supported if required is None else required
     inconsistent = {i.field for i in validate_settings(o, supported=frozenset(FIELDS)) if i.code not in ("driver_capability_unsupported",)}
     out: dict[str, str] = {}
-    for f in sorted(set(o) | set(d) | set(obs.unknown_fields)):
+    for f in sorted(set(o) | set(d) | set(obs.unknown_fields) | set(req)):
         if f in obs.unknown_fields:
             out[f] = NOT_OBSERVABLE
         elif f in d and f not in supported:
             out[f] = UNSUPPORTED
         elif f in o and f in inconsistent:
             out[f] = CONFLICT
+        elif f not in o and f not in d:
+            out[f] = NOT_OBSERVABLE
         elif f not in o:
             out[f] = ADD
         elif f not in d:
@@ -259,9 +265,10 @@ def plan_hash(*, tenant_id: str, intent_revision: str, target: Target, strategy:
     """The hash an approval is bound to: tenant, intent revision, target identity, strategy, diff, the preconditions that must still hold (fingerprint, firmware,
     card, reference count) and the expiry. Any change after the preview gives another hash, so an approval of the old plan stops applying."""
     obs = target.observation
-    body = {"v": PLAN_VERSION, "tenant": tenant_id, "intent": intent_revision, "olt": target.olt_id, "vendor": target.vendor, "model": target.model,
+    body = {"v": PLAN_VERSION, "tenant": tenant_id, "target_tenant": target.tenant_id, "intent": intent_revision, "olt": target.olt_id, "vendor": target.vendor, "model": target.model,
             "firmware": target.firmware, "pon_card": target.pon_card, "strategy": strategy, "diff": dict(sorted(diff.items())),
-            "pre": {"fingerprint": obs.fingerprint if obs else None, "native_key": obs.native_key if obs else None,
+            "pre": {"fingerprint": obs.fingerprint if obs else None, "native_key": obs.native_key if obs else None, "obs_tenant": obs.tenant_id if obs else None,
+                    "obs_olt": obs.olt_id if obs else None,
                     "reference_count": obs.reference_count if obs else None, "freshness": obs.freshness if obs else None},
             "expires_at": expires_at}
     return hashlib.sha256(canonical_json(body).encode()).hexdigest()
@@ -280,12 +287,19 @@ class TargetPlan:
 
 
 def dry_run(*, tenant_id: str, intent_revision: str, desired: Mapping[str, Any], requested: str | None, targets: list[Target], supported: frozenset[str],
-            expires_at: str) -> list[TargetPlan]:
-    """One independent plan per OLT, ZERO writes. The same desired profile can reuse on OLT A and clone on OLT B; diffs, ids and hashes never cross targets."""
+            expires_at: str, required: frozenset[str] | None = None) -> list[TargetPlan]:
+    """One independent plan per OLT, ZERO writes. The same desired profile can reuse on OLT A and clone on OLT B; diffs, ids and hashes never cross targets.
+    An invalid draft, or a target that belongs to another tenant than the plan, is `blocked` for that target (never planned, never hashed as if valid)."""
+    invalid = bool(validate_settings(desired, supported=supported))
     plans = []
     for t in targets:
-        diff = semantic_diff(t.observation, desired, supported=supported) if t.observation else {}
-        strategy, why = resolve_binding(requested, t, diff) if requested else suggest_strategy(t, diff)
+        if invalid:
+            diff, strategy, why = {}, "blocked", "invalid_draft"
+        elif t.tenant_id != tenant_id:
+            diff, strategy, why = {}, "blocked", "cross_tenant_or_target"
+        else:
+            diff = semantic_diff(t.observation, desired, supported=supported, required=required) if t.observation else {}
+            strategy, why = resolve_binding(requested, t, diff) if requested else suggest_strategy(t, diff)
         plans.append(TargetPlan(olt_id=t.olt_id, strategy=strategy, reason=why, diff=diff,
                                 changed_fields=[f for f, v in diff.items() if v in (CHANGE, ADD, REMOVE)],
                                 reference_count=t.observation.reference_count if t.observation else None, writes=0,
@@ -294,13 +308,11 @@ def dry_run(*, tenant_id: str, intent_revision: str, desired: Mapping[str, Any],
 
 
 _ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b[@-Z\\-_]")
-_TAG = re.compile(r"<[^>]{0,200}>")
-_CTRL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f​-‏‪-‮⁦-⁩]")
+_CTRL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2066-\u2069]")
 
 
 def sanitize_evidence(text: str, *, limit: int = 20_000) -> str:
-    """Make imported text (a legacy CLI dump) inert: ANSI escapes, HTML tags and control/bidi characters removed, length capped. The result is shown as TEXT only."""
-    t = _ANSI.sub("", text)
-    t = _TAG.sub("", t)
-    t = _CTRL.sub("", t)
-    return t[:limit]
+    """Make imported text (a legacy CLI dump) inert PLAIN TEXT: ANSI escapes and control/bidi characters removed, length capped, then HTML-escaped, so it is safe even if a
+    consumer inserts it into HTML. Nothing is stripped by pattern (a `<cr>` prompt marker is content, not markup). It is displayed as text and never parsed as an instruction."""
+    t = _CTRL.sub("", _ANSI.sub("", text))[:limit]
+    return html.escape(t, quote=True)
