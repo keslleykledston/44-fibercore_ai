@@ -330,6 +330,12 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 		if !spOK(rows, onu, spec) {
 			return ErrReauthBaseline
 		}
+		if err := toConfig(); err != nil {
+			return err
+		}
+		if d, err := step(c.DetailSP); err != nil || !spDetailOK(d, onu, spec) { // the service port too, down to its tag transform, state and (absent) traffic tables
+			return ErrReauthBaseline
+		}
 		if i, p, e := readONU(); e != nil || !matches(i, p) { // the restore reports success only when the WHOLE ONU equals the baseline
 			return ErrReauthBaseline
 		}

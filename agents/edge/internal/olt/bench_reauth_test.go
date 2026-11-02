@@ -24,6 +24,7 @@ type fakeAuthOLT struct {
 	addCount                      int
 	onInfo                        func()
 	onAdd                         func()
+	onAddSP                       func()
 }
 
 func newAuth() *fakeAuthOLT {
@@ -86,6 +87,9 @@ func (f *fakeAuthOLT) Run(_ context.Context, cmd string) (string, error) {
 		}
 	case strings.HasPrefix(cmd, "service-port 1708"):
 		f.spPresent = true
+		if f.onAddSP != nil {
+			f.onAddSP()
+		}
 	}
 	return "", nil
 }
@@ -265,6 +269,17 @@ func TestReauthorizeRestoreByAddingAlsoChecksTheDescription(t *testing.T) {
 	f := newAuth()
 	f.addFailsOnce = true
 	f.onAdd = func() { f.desc = "OUTRA" }
+	out, err := runAuth(f, spec14, nil, far())
+	if err == nil || out.Done || strings.Contains(out.Detail, "baseline was restored") || !strings.Contains(err.Error(), "restore it by hand") {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+}
+
+func TestReauthorizeRestoreChecksTheServicePortDetailToo(t *testing.T) {
+	// the OLT accepts the service port again but with another tag transform: the restore must not call it the baseline (Codex r4)
+	f := newAuth()
+	f.addFailsOnce = true
+	f.onAddSP = func() { f.tag = "transparent" }
 	out, err := runAuth(f, spec14, nil, far())
 	if err == nil || out.Done || strings.Contains(out.Detail, "baseline was restored") || !strings.Contains(err.Error(), "restore it by hand") {
 		t.Fatalf("out=%+v err=%v", out, err)
