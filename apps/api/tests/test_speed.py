@@ -398,7 +398,7 @@ def test_the_envelope_carries_two_logical_names_and_no_address(client, seed, inv
     bad = {**env, "params": {**env["params"], "target": "http://10.0.0.1/f"}}
     assert list(Draft202012Validator(schema).iter_errors(bad)), "the contract must refuse a URL as the target"
     assert env["operation"] == "speed_test_download" and env["params"] == PARAMS and env["authorization_id"]
-    blob = str(env).lower()
+    blob = str({k: v for k, v in env.items() if k != "signature"}).lower()   # the signature is random base64 and can hold "url"/"http" by chance; it is no address
     assert "http" not in blob and "url" not in blob
 
 

@@ -347,8 +347,9 @@ def test_the_envelope_carries_one_logical_name_and_no_address(client, seed, inv,
     assert not list(Draft202012Validator(schema).iter_errors(env)), "the ping envelope must match contracts/job-envelope.schema.json"
     assert list(Draft202012Validator(schema).iter_errors({**env, "params": {"target": "http://10.0.0.1/f"}})), "the contract must refuse a URL as the target"
     assert env["operation"] == "ping_test" and env["params"] == PARAMS and env["authorization_id"]
-    blob = str(env).lower()
+    blob = str({k: v for k, v in env.items() if k != "signature"}).lower()   # the signature is random base64: ~0.3% of runs it holds "url"/"host"/"http" by chance; it is no address
     assert "http" not in blob and "url" not in blob and "host" not in blob
+    assert "http" not in str(env["params"]) and "." not in env["params"]["target"]
 
 
 def test_a_valid_report_becomes_a_computed_run_the_screen_can_read(client, seed, inv, migrated):
