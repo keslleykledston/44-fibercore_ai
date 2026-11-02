@@ -175,6 +175,42 @@ func screenTail(t string) string {
 	return l
 }
 
+var wrapEchoRe = regexp.MustCompile(` \x1b\[1D`)
+
+// joinWrappedEcho undoes the wrap of the ECHO of a long command. The CLI breaks the echo at column 80 as one blank, "ESC[1D" and the next character, which overwrites
+// that blank (real capture: "...AA ESC[1D5 omci"). Without this the echo would no longer equal the command and the command would never be seen as finished.
+// It touches ONLY the first non-empty line (the echo, never the payload) and ONLY where the line really was at a wrap column: the prompt that preceded the command
+// plus the visible text so far fill a whole number of 80-column rows. Anything else is left as received and fails closed later.
+func joinWrappedEcho(t, prompt string) string {
+	start := 0
+	for start < len(t) && (t[start] == '\r' || t[start] == '\n') {
+		start++
+	}
+	end := len(t)
+	if i := strings.IndexAny(t[start:], "\r\n"); i >= 0 {
+		end = start + i
+	}
+	line := t[start:end]
+	locs := wrapEchoRe.FindAllStringIndex(line, -1)
+	if len(locs) == 0 {
+		return t
+	}
+	var b strings.Builder
+	last, rows := 0, len([]rune(prompt))
+	for _, loc := range locs {
+		seg := stripCtl(line[last:loc[0]])
+		rows += len([]rune(seg))
+		if rows == 0 || rows%80 != 0 {
+			return t // not at a wrap column: not a wrapped echo
+		}
+		b.WriteString(line[last:loc[0]])
+		last = loc[1]
+		rows = 0 // the next row starts empty; the overwritten character is counted with the next segment
+	}
+	b.WriteString(line[last:])
+	return t[:start] + b.String() + t[end:]
+}
+
 func stripCtl(t string) string { return strings.ReplaceAll(ansiRe.ReplaceAllString(t, ""), "\r", "") }
 
 func lastLine(t string) string {
@@ -263,7 +299,7 @@ func (s *shell) run(ctx context.Context, cmd string, expect *regexp.Regexp, answ
 	pages, spaceAt := 0, 0
 	var final string
 	text, err := s.wait(ctx, func(t string) (bool, error) {
-		c := stripCtl(eraseMarkers(t))
+		c := stripCtl(eraseMarkers(joinWrappedEcho(t, s.prompt)))
 		tail := strings.TrimRight(c, " \t\n")
 		if s.pager && moreTailRe.MatchString(tail) {
 			if pages >= s.maxPage {
@@ -314,8 +350,9 @@ func (s *shell) run(ctx context.Context, cmd string, expect *regexp.Regexp, answ
 		s.close()
 		return "", err
 	}
+	out := tidy(eraseMarkers(joinWrappedEcho(text, s.prompt)), cmd, final)
 	s.prompt = final
-	return tidy(eraseMarkers(text), cmd, final), nil
+	return out, nil
 }
 
 // finished reports whether the command output is complete. The prompt is text the device controls, so the end is only

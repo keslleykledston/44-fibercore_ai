@@ -241,6 +241,35 @@ func TestEraseMarkersOnlyRemovesWhatTheDeviceErased(t *testing.T) {
 	}
 }
 
+func TestJoinWrappedEchoOnlyJoinsTheEchoAtARealWrapColumn(t *testing.T) {
+	// real capture, serial cut at the wrap: the prompt (43 columns) plus 37 typed characters fill the first 80-column row
+	prompt := "OLT-BVA-4WNET-BRT-HW-1(config-if-gpon-0/0)#"
+	cmd := "ont add 14 10 sn-auth 48575443E2247AA5 omci ont-lineprofile-id 179 ont-srvprofile-id 179 desc 5"
+	wrapped := "ont add 14 10 sn-auth 48575443E2247AA \x1b[1D5 omci ont-lineprofile-id 179 ont-srvprofile-id 179 desc 5"
+	pr := regexp.MustCompile(`^[^\s>#]{1,128}(\([^)]*\))?[>#]$`)
+	clean := func(raw string) string { return stripCtl(eraseMarkers(joinWrappedEcho(raw, prompt))) }
+	c := clean("\r\n" + wrapped + "\r\n\r\nPayload\r\n\r\n" + prompt)
+	if _, done, err := finished(c, cmd, pr); err != nil || !done {
+		t.Fatalf("the wrapped echo must be recognised as the command: done=%v err=%v", done, err)
+	}
+	// the same bytes anywhere else are payload, never an echo: not on a later line, not away from a wrap column, not with another prompt width
+	later := "\r\nsomething else\r\n" + wrapped + "\r\n\r\n" + prompt
+	if got := joinWrappedEcho(later, prompt); got != later {
+		t.Errorf("a later line must not be touched: %q", got)
+	}
+	if got := joinWrappedEcho("\r\n"+wrapped, "OLT#"); got != "\r\n"+wrapped {
+		t.Errorf("not at a wrap column for this prompt, must stay: %q", got)
+	}
+	if _, done, _ := finished(stripCtl(eraseMarkers(joinWrappedEcho("\r\n"+wrapped+"\r\n\r\n"+prompt, "OLT#"))), cmd, pr); done {
+		t.Error("an echo that cannot be proven a wrap must not finish the command")
+	}
+	for _, in := range []string{"short \x1b[1D", "\r\n\r\n", ""} {
+		if got := joinWrappedEcho(in, prompt); got != in {
+			t.Errorf("%q must stay, got %q", in, got)
+		}
+	}
+}
+
 func TestR015LargeRealPonsParseAndAreProvenComplete(t *testing.T) {
 	for _, c := range []struct {
 		file, path   string

@@ -146,8 +146,15 @@ func (srv *shellServer) cli(ch ssh.Channel) {
 			srv.crs++
 		}
 		srv.mu.Unlock()
-		ch.Write([]byte(line + "\r\n"))
+		echo := line
+		if cur := pr(); len(cur)+len(line) > 80 { // like the real CLI: the echo is wrapped at column 80 as " ESC[1D" + the next character
+			at := 80 - len(cur)
+			echo = line[:at] + " \x1b[1D" + line[at:]
+		}
+		ch.Write([]byte(echo + "\r\n"))
 		switch {
+		case strings.HasPrefix(line, "display wrapped "):
+			ch.Write([]byte("\r\n  WRAPPED OK\r\n\r\n" + pr()))
 		case line == "display version":
 			ch.Write([]byte("{ <cr>|backplane<K>|frameid/slotid<S><Length 1-15> }:"))
 			if _, ok := readLine(); !ok {
@@ -682,5 +689,27 @@ func TestStaleAfterAnswerIsOnlyTheQuestionPlusOurEcho(t *testing.T) {
 		if got := staleAfterAnswer(line, q, "y"); got != want {
 			t.Errorf("%q: got %v want %v", line, got, want)
 		}
+	}
+}
+
+func TestShellRecognisesTheWrappedEchoOfALongCommand(t *testing.T) {
+	srv := startShellSSH(t, false)
+	s, err := DialSSH(context.Background(), shellCfg(srv, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, c := range []string{"enable", "config"} {
+		if _, err := s.Run(context.Background(), c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	long := "display wrapped " + strings.Repeat("abcdefghij ", 8) + "end" // prompt + command is well over 80 columns
+	out, err := s.Run(context.Background(), long)
+	if err != nil {
+		t.Fatalf("a long command whose echo the CLI wraps must complete: %v", err)
+	}
+	if !strings.Contains(out, "WRAPPED OK") || strings.Contains(out, "\x1b") {
+		t.Fatalf("out=%q", out)
 	}
 }
