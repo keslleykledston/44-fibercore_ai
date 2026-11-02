@@ -33,6 +33,7 @@ class Query:
 # Same ids, scopes and flags as agents/edge/internal/olt/query.go (tests/test_olt_query.py compares them).
 CATALOG: tuple[Query, ...] = (
     Query("olt.version", "Software, patch e uptime", "global", True),
+    Query("olt.connection", "Teste de conexão (identidade da OLT)", "global", True),   # ADR-0041 PR2: a mesma leitura de olt.version com a SUA classe de orçamento (1 por 15 min, 4 por hora, por OLT)
     Query("olt.time", "Hora e fuso da OLT", "global", True),
     Query("olt.board", "Placas e estado", "global", True),
     Query("olt.alarm.active", "Alarmes ativos", "global", False),
@@ -66,7 +67,7 @@ BY_ID = {q.id: q for q in CATALOG}
 
 # ADR-0029 item 7: the rollout is by steps. Only these are offered by the cloud now (the global, already validated ones); the PON ones come after a
 # supervised rehearsal in the LAB. Being in the catalog is not being offered.
-ROLLOUT: frozenset[str] = frozenset({"olt.version", "olt.board", "olt.time", "olt.sync", "olt.temperature", "olt.profile.line", "olt.profile.srv", "olt.profile.dba", "olt.profile.traffic", "olt.autofind"})
+ROLLOUT: frozenset[str] = frozenset({"olt.version", "olt.connection", "olt.board", "olt.time", "olt.sync", "olt.temperature", "olt.profile.line", "olt.profile.srv", "olt.profile.dba", "olt.profile.traffic", "olt.autofind"})
 
 # the Edge side of the channel (queue, lease, parsers) exists; the tenant flag and the Edge's own configuration still decide whether anything runs
 EDGE_SUPPORT = True
@@ -137,7 +138,7 @@ def check_result(query_id: str, data) -> bool:
     """True only for the exact typed shape of a query that has a parser; anything else (extra keys, wrong types, free text) is refused."""
     if not isinstance(data, dict):
         return False
-    if query_id == "olt.version":
+    if query_id in ("olt.version", "olt.connection"):   # the connection test returns the very same typed identity
         return (set(data) == {"product", "version", "patch", "uptime_seconds"} and isinstance(data["product"], str) and bool(_PRODUCT.match(data["product"]))
                 and isinstance(data["version"], str) and bool(_RELEASE.match(data["version"])) and isinstance(data["patch"], str)
                 and bool(_RELEASE.match(data["patch"])) and _is_int(data["uptime_seconds"]) and 0 <= data["uptime_seconds"] <= 10**9)

@@ -36,8 +36,13 @@ const (
 	MaxPerSession      = 8
 	CapturesPerSession = 2
 	CapturesPerHour    = 4
-	MaxQueuedPerOLT    = 50
-	KeepReported       = 24 * time.Hour
+	// ADR-0041 §4.1 (approved by the owner on 2026-11-02): the connection test of the OLT registration has its OWN class budget, counted here AND in the Cloud: at most ONE test per OLT
+	// every 15 minutes and FOUR per hour. A waiting test over budget is not refused: it simply is not handed out until the budget allows (the rest of the queue is not blocked), or it expires.
+	TestQueryID     = "olt.connection"
+	TestMinGap      = 15 * time.Minute
+	TestPerHour     = 4
+	MaxQueuedPerOLT = 50
+	KeepReported    = 24 * time.Hour
 	// StaleClaim: a CLAIMED entry older than this belongs to a session that cannot still be running (a session lives at most ~12 minutes), so its outcome
 	// is unknown and it becomes UNKNOWN without waiting for a restart.
 	StaleClaim = 15 * time.Minute
@@ -90,9 +95,26 @@ type file struct {
 	Entries map[string]*Entry `json:"entries"`
 	// Captures (ADR-0032 item 5): the supervised captures of unvalidated queries have their OWN persisted class budget, apart from the on-demand one.
 	Captures    map[string][]time.Time `json:"captures,omitempty"`     // by olt_ref: instants of captures in the last hour
+	Tests       map[string][]time.Time `json:"tests,omitempty"`        // by olt_ref: instants of connection tests handed out in the last hour (class budget above)
 	CaptureSess map[string]capSess     `json:"capture_sess,omitempty"` // by session id: how many captures ran in it
 	Epochs      map[string]int         `json:"epochs"`                 // highest owner epoch ever seen per OLT: an envelope of a lower one belongs to an owner that was replaced
 	Claims      map[string][]time.Time `json:"claims"`                 // by olt_ref: the instants of claims in the last hour
+}
+
+// checkTestHistory: the instants of the connection tests of each OLT must be real (not zero) and in ascending order (the future is checked in Claim, which holds the clock); anything else is
+// not a history this Edge wrote, so the file is treated as corrupt (the budget counts as spent) instead of being read as "no tests".
+func checkTestHistory(m map[string][]time.Time) error {
+	for ref, ts := range m {
+		if ref == "" {
+			return fmt.Errorf("%w: a test history without an OLT", ErrCorrupt)
+		}
+		for i, t := range ts {
+			if t.IsZero() || (i > 0 && t.Before(ts[i-1])) {
+				return fmt.Errorf("%w: the connection-test history is not a history this Edge wrote", ErrCorrupt)
+			}
+		}
+	}
+	return nil
 }
 
 // Store is the durable queue. All methods are safe for concurrent use.
@@ -112,7 +134,7 @@ func (s *Store) now() time.Time {
 func (s *Store) load() (*file, error) {
 	b, err := os.ReadFile(s.Path)
 	if errors.Is(err, os.ErrNotExist) {
-		return &file{Entries: map[string]*Entry{}, Claims: map[string][]time.Time{}, Epochs: map[string]int{}, Captures: map[string][]time.Time{}, CaptureSess: map[string]capSess{}}, nil
+		return &file{Entries: map[string]*Entry{}, Claims: map[string][]time.Time{}, Epochs: map[string]int{}, Captures: map[string][]time.Time{}, Tests: map[string][]time.Time{}, CaptureSess: map[string]capSess{}}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrCorrupt, err)
@@ -123,6 +145,12 @@ func (s *Store) load() (*file, error) {
 	}
 	if f.Claims == nil { // a file that lost its budget history would hand out a fresh budget: it is corrupt, not new
 		return nil, fmt.Errorf("%w: no claims history", ErrCorrupt)
+	}
+	if f.Tests == nil { // a file from before the connection-test class existed: no test was ever handed out, which is the truth
+		f.Tests = map[string][]time.Time{}
+	}
+	if err := checkTestHistory(f.Tests); err != nil { // an edited or damaged history must not hand out a fresh budget
+		return nil, err
 	}
 	if f.Captures == nil {
 		f.Captures = map[string][]time.Time{}
@@ -289,7 +317,27 @@ func (s *Store) Claim(oltRef, sessionID string) (Entry, error) {
 		if len(keep) >= PerHour {
 			return ErrNothingToDo
 		}
-		inSession, anyOLT := 0, 0 // this OLT's executions of the session, and every OLT's (the aggregate cap is per session, whatever the OLT)
+		if f.Tests == nil {
+			f.Tests = map[string][]time.Time{}
+		}
+		tkeep := make([]time.Time, 0, len(f.Tests[oltRef])+1)
+		for _, t := range f.Tests[oltRef] {
+			if t.After(now.Add(5 * time.Minute)) { // an instant in the future was not written by this Edge's clock: the history is not trusted, the budget counts as spent
+				return fmt.Errorf("%w: the connection-test history has an instant in the future", ErrCorrupt)
+			}
+			if now.Sub(t) < time.Hour {
+				tkeep = append(tkeep, t)
+			}
+		}
+		f.Tests[oltRef] = tkeep
+		newest := time.Time{}
+		for _, t := range tkeep {
+			if t.After(newest) {
+				newest = t
+			}
+		}
+		testOK := len(tkeep) < TestPerHour && (len(tkeep) == 0 || now.Sub(newest) >= TestMinGap) // the class budget of the connection test (the NEWEST instant counts)
+		inSession, anyOLT := 0, 0                                                                // this OLT's executions of the session, and every OLT's (the aggregate cap is per session, whatever the OLT)
 		var cand []*Entry
 		for _, e := range f.Entries {
 			if e.SessionID == sessionID && e.State != Queued {
@@ -298,7 +346,7 @@ func (s *Store) Claim(oltRef, sessionID string) (Entry, error) {
 					inSession++
 				}
 			}
-			if e.Intent.OLTRef == oltRef && e.State == Queued && e.ExpiresAt.After(now) {
+			if e.Intent.OLTRef == oltRef && e.State == Queued && e.ExpiresAt.After(now) && (e.Intent.QueryID != TestQueryID || testOK) {
 				cand = append(cand, e)
 			}
 		}
@@ -314,6 +362,9 @@ func (s *Store) Claim(oltRef, sessionID string) (Entry, error) {
 		e := cand[0]
 		e.State, e.ClaimedAt, e.SessionID = Claimed, now, sessionID
 		f.Claims[oltRef] = append(f.Claims[oltRef], now)
+		if e.Intent.QueryID == TestQueryID {
+			f.Tests[oltRef] = append(f.Tests[oltRef], now)
+		}
 		out = *e
 		return nil
 	})

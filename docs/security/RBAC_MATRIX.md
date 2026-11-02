@@ -172,6 +172,8 @@
 | POST | `/v1/fleet/olts` | `fleet:manage` |
 | GET | `/v1/fleet/olts/{olt_id}` | `fleet:read` |
 | PATCH | `/v1/fleet/olts/{olt_id}` | `fleet:manage` |
+| POST | `/v1/fleet/olts/{olt_id}/connection-test` | `fleet:test` |
+| GET | `/v1/fleet/olts/{olt_id}/connection-tests` | `fleet:read` |
 | GET | `/v1/incidents` | `incidents:read` |
 | GET | `/v1/incidents/{incident_id}` | `incidents:read` |
 | POST | `/v1/incidents/{incident_id}/ack` | `incidents:ack` |

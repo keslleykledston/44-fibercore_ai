@@ -7,10 +7,10 @@ while the tenant flag `fleet_manager` is off.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from uuid import UUID
+from datetime import UTC, datetime, timedelta
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import Connection, text
 
@@ -202,3 +202,86 @@ def update_olt(olt_id: UUID, body: OltPatch, p: Principal = Depends(require("fle
     conn.execute(text(f"UPDATE olts SET {', '.join(sets)} WHERE id = :i"), args)
     audit(conn, p, "fleet.olt.updated", "olt", str(olt_id), {"fields": sorted(sent)})
     return _olt_view(conn.execute(text(_OLT_SQL + "WHERE o.id = :i"), {"i": olt_id}).one())
+
+
+# ---- PR2 part B: the connection test. It is NOT a channel of its own: it is the closed read `olt.connection` (the same `display version` already validated) asked through the existing
+# `olt_query` job engine, so it keeps every gate, the Edge lease/queue and the cache-first rule. On top, the budget the owner approved (ADR-0041 §4.1): ONE test per OLT every 15 minutes and
+# FOUR per hour, counted here (and again at the Edge). A fresh stored identity answers without touching the equipment and spends nothing.
+TEST_QUERY = "olt.connection"
+TEST_GAP = timedelta(minutes=15)
+TEST_PER_HOUR = 4
+
+
+def _norm(v: str | None) -> str:
+    return "".join(ch for ch in (v or "").lower() if ch.isalnum())
+
+
+def _identity(olt, data: dict) -> dict:
+    """What the OLT said about itself (typed, from the read) next to what the registration/collection already knew. `vendor` is the registered one: `display version` does not name it."""
+    known = olt.model is not None and olt.firmware is not None
+    return {"vendor": olt.vendor, "model": data["product"], "firmware": data["version"], "patch": data["patch"], "uptime_seconds": data["uptime_seconds"],
+            "matches_collected": (_norm(olt.model) == _norm(data["product"]) and _norm(olt.firmware) == _norm(data["version"])) if known else None}
+
+
+def _budget(conn: Connection, olt_id: UUID) -> dict:
+    now = conn.execute(text("SELECT now()")).scalar()
+    ts = [r[0] for r in conn.execute(text("SELECT requested_at FROM olt_connection_tests WHERE olt_id = :o AND outcome = 'submitted' AND requested_at > now() - interval '1 hour' "
+                                          "ORDER BY requested_at DESC"), {"o": olt_id}).all()]
+    wait = 0.0
+    if ts and now - ts[0] < TEST_GAP:
+        wait = max(wait, (ts[0] + TEST_GAP - now).total_seconds())
+    if len(ts) >= TEST_PER_HOUR:
+        wait = max(wait, (ts[TEST_PER_HOUR - 1] + timedelta(hours=1) - now).total_seconds())
+    return {"used_last_hour": len(ts), "max_per_hour": TEST_PER_HOUR, "gap_minutes": int(TEST_GAP.total_seconds() // 60), "wait_seconds": int(wait) + (1 if wait > 0 else 0)}
+
+
+@router.post("/v1/fleet/olts/{olt_id}/connection-test")
+def connection_test(olt_id: UUID, idempotency_key: str | None = Header(None, alias="Idempotency-Key", min_length=8, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$"),
+                    p: Principal = Depends(require("fleet:test")), conn: Connection = TENANT_CONN) -> dict:
+    from app.api import jobs
+    from app.core import olt_cache, olt_query
+    _flag(conn, p)
+    if not (p.can("jobs:request") and p.can("jobs:read")):
+        raise HTTPException(403, "forbidden")
+    olt = conn.execute(text("SELECT id, vendor, model, firmware FROM olts WHERE id = :i"), {"i": olt_id}).first()
+    if olt is None:
+        raise HTTPException(404, "olt not found")
+    reason = jobs._query_gate(conn, p.tenant_id, {"query_id": TEST_QUERY})   # the very gates of any olt_query: flag, rollout, Edge channel
+    if reason is not None:
+        raise HTTPException(409, reason)
+    hit = olt_cache.latest(conn, olt_id, TEST_QUERY, "")
+    if hit is not None and not hit["stale"] and hit.get("source") == "job" and olt_query.check_result(TEST_QUERY, hit["data"]):
+        conn.execute(text("INSERT INTO olt_connection_tests (tenant_id, olt_id, outcome, requested_by) VALUES (:t,:o,'cached',:by)"), {"t": p.tenant_id, "o": olt_id, "by": p.id})
+        return {"outcome": "cached", "identity": _identity(olt, hit["data"]), "asked_at": hit["asked_at"], "age_seconds": hit["age_seconds"]}
+    conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": f"fleet-test:{olt_id}"})   # the count below and the row that spends the budget are one step
+    if idempotency_key is not None and conn.execute(text("SELECT 1 FROM jobs WHERE idempotency_key = :k"), {"k": idempotency_key}).first() is not None:
+        # a retry of a request already accepted: answered from the job it created BEFORE the budget (which that very request raised), and refused if the key was used for another intent
+        view = jobs.create_preview(jobs.PreviewIn(operation="olt_query", target_id=olt_id, params={"query_id": TEST_QUERY}), idempotency_key, p, conn, fleet_test=True)
+        return {"outcome": "existing", "job_id": view["id"], "job_status": view["status"], "budget": _budget(conn, olt_id)}
+    b = _budget(conn, olt_id)
+    if b["wait_seconds"] > 0:
+        raise HTTPException(429, "test_budget", headers={"Retry-After": str(b["wait_seconds"])})
+    view = jobs.create_preview(jobs.PreviewIn(operation="olt_query", target_id=olt_id, params={"query_id": TEST_QUERY}), idempotency_key or f"fleet-{uuid4().hex}", p, conn, fleet_test=True)
+    if view["status"] != "PREVIEWED":   # the same key again: nothing new is created and nothing is spent
+        return {"outcome": "existing", "job_status": view["status"], "budget": b}
+    view = jobs.submit(UUID(view["id"]), p, conn)
+    conn.execute(text("INSERT INTO olt_connection_tests (tenant_id, olt_id, job_id, outcome, requested_by) VALUES (:t,:o,:j,'submitted',:by)"),
+                 {"t": p.tenant_id, "o": olt_id, "j": view["id"], "by": p.id})
+    audit(conn, p, "fleet.olt.connection_test", "olt", str(olt_id), {"job_id": view["id"]})
+    return {"outcome": "submitted", "job_status": view["status"], "budget": _budget(conn, olt_id)}
+
+
+@router.get("/v1/fleet/olts/{olt_id}/connection-tests")
+def connection_tests(olt_id: UUID, p: Principal = Depends(require("fleet:read")), conn: Connection = TENANT_CONN) -> dict:
+    from app.core import olt_cache, olt_query
+    _flag(conn, p)
+    olt = conn.execute(text("SELECT id, vendor, model, firmware FROM olts WHERE id = :i"), {"i": olt_id}).first()
+    if olt is None:
+        raise HTTPException(404, "olt not found")
+    rows = conn.execute(text("SELECT t.id, t.outcome, t.requested_at, j.status AS job_status FROM olt_connection_tests t LEFT JOIN jobs j ON j.id = t.job_id "
+                             "WHERE t.olt_id = :o ORDER BY t.requested_at DESC LIMIT 10"), {"o": olt_id}).all()
+    hit = olt_cache.latest(conn, olt_id, TEST_QUERY, "")
+    latest = None
+    if hit is not None and hit.get("source") == "job" and olt_query.check_result(TEST_QUERY, hit["data"]):
+        latest = {"identity": _identity(olt, hit["data"]), "asked_at": hit["asked_at"], "age_seconds": hit["age_seconds"], "stale": hit["stale"]}
+    return {"items": [{"id": str(r.id), "outcome": r.outcome, "requested_at": r.requested_at.isoformat(), "job_status": r.job_status} for r in rows], "latest": latest, "budget": _budget(conn, olt_id)}

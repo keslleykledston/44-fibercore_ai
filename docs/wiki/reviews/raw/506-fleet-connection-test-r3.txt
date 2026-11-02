@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19e60-40b6-7f12-805a-fedd7ef8d5a3).
+[codex] Turn started (01a19e60-40ed-7042-8f43-bb2433dd6938).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir especialmente o fluxo de chave idempotente vers...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/fleet.py a...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/api/fleet.py a... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- apps/api/app/api/fleet.py'
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- apps/api/app/api/fleet.py' (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"def create_preview|idempotency_key|def submit|def _query_gate\" apps/a...
+[codex] Command completed: /bin/bash -lc "rg -n \"def create_preview|idempotency_key|def submit|def _query_gate\" apps/a... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '90,180p' apps/api/app/api/jobs.py; rg -n \"olt.connection|connection\"...
+[codex] Command completed: /bin/bash -lc "sed -n '90,180p' apps/api/app/api/jobs.py; rg -n \"olt.connection|connection\"... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a rota genérica de jobs permite cr...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a rota genérica de jobs permite criar `olt.connection` sem passar pelo orçamento do teste; isso pode enfileirar pedidos fora do limite e deixar o histórico e o orçamento da Frota inconsistentes.
+
+Findings:
+- [high] `olt.connection` pode contornar o orçamento da Frota pela API genérica de jobs (apps/api/app/api/fleet.py:261-269)
+  `olt.connection` está no catálogo de consultas e `create_preview` aceita `olt_query` pelo endpoint genérico `/v1/jobs/preview`. Esse caminho aplica as cotas gerais de `olt_query`, mas não registra em `olt_connection_tests` nem aplica o limite específico de 1 a cada 15 minutos e 4 por hora. Um cliente com as permissões necessárias pode, portanto, criar pedidos dessa consulta fora de `connection_test`; o Edge ainda aplica seu próprio limite ao executar, mas os jobs excedentes podem permanecer na fila enquanto o histórico e o orçamento exibidos pela Frota deixam de refletir esses pedidos.`,
+  Recommendation: Aplicar o orçamento específico a toda criação de job `olt.connection`, incluindo `/v1/jobs/preview`, ou rejeitar essa consulta no endpoint genérico e exigir a rota de teste. Garantir que o registro e a criação do job ocorram sob a mesma trava/transação.

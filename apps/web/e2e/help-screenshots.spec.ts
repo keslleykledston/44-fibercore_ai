@@ -48,6 +48,11 @@ const painelRoute = async (request: APIRequestContext) => {
   const olt = ((await (await request.get(`${API_URL}/v1/olts?limit=200`, { headers: { Authorization: `Bearer ${tok}` } })).json()) as { id: string; name: string }[]).find((o) => o.name === "OLT-DEMO-PAINEL")!;
   return `/rede?olt=${olt.id}`;
 };
+const frotaTesteRoute = async (request: APIRequestContext) => {
+  const tok = (await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json()).access_token as string;
+  const olt = ((await (await request.get(`${API_URL}/v1/fleet/olts`, { headers: { Authorization: `Bearer ${tok}` } })).json()) as { items: { id: string; name: string }[] }).items.find((o) => o.name === "OLT-DEMO-02")!;
+  return `/rede/frota/${olt.id}`;
+};
 const perfisRoute = async (request: APIRequestContext) => {
   const tok = (await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json()).access_token as string;
   const h = { Authorization: `Bearer ${tok}` };
@@ -68,6 +73,12 @@ const screens: { slug: string; route: string; ready: string; prepare?: (r: APIRe
   { slug: "rede/painel-da-olt", route: "/rede", ready: "olt-popover", dynamicRoute: painelRoute,
     steps: async (page: Page) => { await page.locator('[data-testid="olt-pon"][data-port-key="0/0/1"]').click(); await expect(page.getByTestId("olt-popover")).toBeVisible(); } },
   { slug: "rede/frota-de-olts", route: "/rede/frota", ready: "frota-lista" },
+  { slug: "rede/frota-de-olts/teste", route: "/rede/frota", ready: "frota-testes", dynamicRoute: frotaTesteRoute,
+    steps: async (page: Page) => {   // a captura desktop já gastou o pedido (o orçamento desliga o botão): a mobile só confere o resultado
+      const b = page.getByTestId("frota-testar");
+      if (await b.isEnabled()) await b.click();
+      await expect(page.getByTestId("frota-testes")).toContainText("Aguardando o Edge");
+    } },
   { slug: "rede/catalogo-de-equipamentos", route: "/rede/catalogo", ready: "catalogo-grade",
     steps: async (page: Page) => {   // as miniaturas são lazy: a captura só vale com todas carregadas
       await page.evaluate(async () => { for (const i of Array.from(document.images)) i.loading = "eager"; await Promise.all(Array.from(document.images).map((i) => (i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r; })))); });

@@ -15,3 +15,21 @@ export const FLEET_FLASH: Record<string, string> = {
   falha: "Não foi possível concluir. Tente novamente.",
 };
 export const CRED_HELP = "O NOME do segredo guardado no Edge (letras minúsculas, números, . _ -). Nunca digite senha, chave ou endereço aqui.";
+
+/** Teste de conexão (parte B): leitura somente leitura da identidade da OLT pelo Edge, com orçamento de 1 por 15 min e 4 por hora por OLT. */
+export type ConnectionTests = {
+  items: { id: string; outcome: "submitted" | "cached"; requested_at: string; job_status: string | null }[];
+  latest: { identity: { vendor: string; model: string; firmware: string; patch: string; uptime_seconds: number; matches_collected: boolean | null }; asked_at: string; age_seconds: number; stale: boolean } | null;
+  budget: { used_last_hour: number; max_per_hour: number; gap_minutes: number; wait_seconds: number };
+};
+export const JOB_LABEL: Record<string, string> = {
+  SUCCEEDED: "Concluído", FAILED: "Falhou", EXPIRED: "Expirou sem resposta", UNKNOWN: "Resultado incerto", CANCELLED: "Cancelado",
+  APPROVED: "Aguardando o Edge", DISPATCHED: "Aguardando o Edge", ACCEPTED: "Aguardando o Edge", SUBMITTED: "Aguardando o Edge", PENDING_APPROVAL: "Aguardando o Edge",
+};
+export const uptimeText = (s: number) => `${Math.floor(s / 86400)} d ${Math.floor((s % 86400) / 3600)} h ${Math.floor((s % 3600) / 60)} min`;
+Object.assign(FLEET_FLASH, {
+  testepedido: "Teste pedido ao Edge. A leitura roda na próxima janela de coleta (pode levar alguns minutos): atualize a página para ver o resultado.",
+  testecache: "Já há uma identidade recente guardada: nenhuma consulta foi feita à OLT.",
+  orcamento: "Limite de testes atingido: no máximo 1 teste a cada 15 minutos e 4 por hora por OLT. Veja quando o próximo é permitido no cartão do teste.",
+  consulta: "O teste não está disponível agora (recurso desligado, canal do Edge ausente ou consulta retirada da liberação).",
+});

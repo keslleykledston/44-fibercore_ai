@@ -518,3 +518,152 @@ func TestTheAggregateCapIsPerSessionAcrossOLTs(t *testing.T) {
 		t.Fatalf("session total %d passes the cap %d", PerSession+CapturesPerSession+n, MaxPerSession)
 	}
 }
+
+// ---- ADR-0041 §4.1: the connection test has its own class budget (1 per 15 min, 4 per hour, per OLT), persisted and counted at the Edge.
+
+func enqTest(t *testing.T, s *Store, c *clock, id, ref string) {
+	t.Helper()
+	if err := s.Enqueue(id, Intent{QueryID: TestQueryID, OLTRef: ref, Epoch: 1}, c.t.Add(2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	c.t = c.t.Add(time.Second)
+}
+
+func TestConnectionTestIsHandedOutOncePer15MinutesAndFourPerHourPerOLT(t *testing.T) {
+	s, c := newStore(t)
+	for i := 0; i < 6; i++ {
+		enqTest(t, s, c, "t"+string(rune('a'+i)), olt1)
+	}
+	got := 0
+	handed := []time.Time{}
+	for step := 0; step < 24*4 && got < 6; step++ { // every minute for a day: only the budget decides
+		c.t = c.t.Add(time.Minute)
+		if e, err := s.Claim(olt1, "sess-"+c.t.Format("150405")); err == nil {
+			if e.Intent.QueryID != TestQueryID {
+				t.Fatalf("unexpected query %+v", e)
+			}
+			got++
+			handed = append(handed, c.t)
+			if err := s.Complete(e.JobID, json.RawMessage(`{}`)); err != nil {
+				t.Fatal(err)
+			}
+		} else if !errors.Is(err, ErrNothingToDo) {
+			t.Fatal(err)
+		}
+	}
+	if got < 4 {
+		t.Fatalf("at least four tests must run once the budget allows: %d", got)
+	}
+	for i := 1; i < len(handed); i++ {
+		if handed[i].Sub(handed[i-1]) < TestMinGap {
+			t.Fatalf("two tests %v apart: the minimum gap is %v", handed[i].Sub(handed[i-1]), TestMinGap)
+		}
+	}
+	for i := range handed { // never more than four inside any rolling hour
+		n := 0
+		for _, h := range handed {
+			if h.After(handed[i].Add(-time.Hour)) && !h.After(handed[i]) {
+				n++
+			}
+		}
+		if n > TestPerHour {
+			t.Fatalf("%d tests inside one hour at %v", n, handed[i])
+		}
+	}
+}
+
+func TestAConnectionTestOverBudgetDoesNotBlockTheOrdinaryQueueNorOtherOLTs(t *testing.T) {
+	s, c := newStore(t)
+	enqTest(t, s, c, "t1", olt1)
+	enqTest(t, s, c, "t2", olt1)
+	enq(t, s, c, "q1", olt1)
+	enqTest(t, s, c, "u1", olt2)
+	e, err := s.Claim(olt1, "s1")
+	if err != nil || e.JobID != "t1" {
+		t.Fatalf("the first test goes: %+v %v", e, err)
+	}
+	if err := s.Complete("t1", json.RawMessage(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+	c.t = c.t.Add(time.Minute) // inside the 15 minutes: t2 waits, the ordinary query behind it is handed out, the other OLT has its own budget
+	e, err = s.Claim(olt1, "s1")
+	if err != nil || e.JobID != "q1" {
+		t.Fatalf("the ordinary query must not wait behind a test over budget: %+v %v", e, err)
+	}
+	e, err = s.Claim(olt2, "s2")
+	if err != nil || e.JobID != "u1" {
+		t.Fatalf("another OLT has its own budget: %+v %v", e, err)
+	}
+	if _, err := s.Claim(olt1, "s1"); !errors.Is(err, ErrNothingToDo) {
+		t.Fatalf("t2 is still over budget: %v", err)
+	}
+	c.t = c.t.Add(TestMinGap)
+	if e, err := s.Claim(olt1, "s3"); err != nil || e.JobID != "t2" {
+		t.Fatalf("after the gap the waiting test goes: %+v %v", e, err)
+	}
+}
+
+func TestTheTestBudgetSurvivesARestartAndAnUnreadableFileSpendsIt(t *testing.T) {
+	s, c := newStore(t)
+	enqTest(t, s, c, "t1", olt1)
+	enqTest(t, s, c, "t2", olt1)
+	if _, err := s.Claim(olt1, "s1"); err != nil {
+		t.Fatal(err)
+	}
+	s2 := &Store{Path: s.Path, Now: c.now} // a restart does not hand out a fresh budget
+	c.t = c.t.Add(time.Minute)
+	if _, err := s2.Claim(olt1, "s2"); !errors.Is(err, ErrNothingToDo) {
+		t.Fatalf("the persisted budget must hold after a restart: %v", err)
+	}
+	if err := os.WriteFile(s.Path, []byte("not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c.t = c.t.Add(time.Hour)
+	if _, err := s2.Claim(olt1, "s3"); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("an unreadable file means the budget is spent: %v", err)
+	}
+}
+
+func TestAnOldQueueFileWithoutTheTestHistoryStillLoads(t *testing.T) {
+	s, c := newStore(t)
+	enq(t, s, c, "q1", olt1)
+	b, _ := os.ReadFile(s.Path)
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	delete(m, "tests") // a file written before this class existed
+	b, _ = json.Marshal(m)
+	if err := os.WriteFile(s.Path, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	enqTest(t, s, c, "t1", olt1)
+	if e, err := s.Claim(olt1, "s1"); err != nil || e.JobID != "q1" {
+		t.Fatalf("old file: %+v %v", e, err)
+	}
+}
+
+func TestAnEditedOrDamagedTestHistoryIsCorruptNotAFreshBudget(t *testing.T) {
+	for name, hist := range map[string]string{
+		"zero instant":   `{"` + olt1 + `":["0001-01-01T00:00:00Z"]}`,
+		"future instant": `{"` + olt1 + `":["2099-01-01T00:00:00Z"]}`,
+		"out of order":   `{"` + olt1 + `":["2026-10-30T12:03:00Z","2026-10-30T12:01:00Z"]}`,
+		"no OLT":         `{"":["2026-10-30T12:01:00Z"]}`,
+	} {
+		s, c := newStore(t)
+		enqTest(t, s, c, "t1", olt1)
+		b, _ := os.ReadFile(s.Path)
+		var m map[string]json.RawMessage
+		if err := json.Unmarshal(b, &m); err != nil {
+			t.Fatal(err)
+		}
+		m["tests"] = json.RawMessage(hist)
+		b, _ = json.Marshal(m)
+		if err := os.WriteFile(s.Path, b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.Claim(olt1, "s1"); !errors.Is(err, ErrCorrupt) {
+			t.Fatalf("%s: an untrusted history means the budget is spent: %v", name, err)
+		}
+	}
+}

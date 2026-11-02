@@ -30,7 +30,7 @@ var (
 // HasParser says whether a query can return a typed result.
 func HasParser(queryID string) bool {
 	switch queryID {
-	case "olt.version", "olt.board", "olt.time", "olt.sync", "olt.temperature", "slot.cpu", "slot.mem", "olt.profile.line", "olt.profile.srv", "olt.profile.dba", "olt.profile.traffic", "olt.autofind":
+	case "olt.version", "olt.connection", "olt.board", "olt.time", "olt.sync", "olt.temperature", "slot.cpu", "slot.mem", "olt.profile.line", "olt.profile.srv", "olt.profile.dba", "olt.profile.traffic", "olt.autofind":
 		return true
 	}
 	return false
@@ -39,7 +39,7 @@ func HasParser(queryID string) bool {
 // ParseResult turns the device output of a validated query into its typed result (compact JSON).
 func ParseResult(queryID, out string) (json.RawMessage, error) {
 	switch queryID {
-	case "olt.version":
+	case "olt.version", "olt.connection":   // o teste de conexão devolve a mesma identidade tipada que `olt.version`
 		return parseVersion(out)
 	case "olt.board":
 		return parseBoard(out)

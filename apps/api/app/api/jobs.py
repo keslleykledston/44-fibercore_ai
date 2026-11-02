@@ -163,11 +163,13 @@ def preview(
     return create_preview(body, idempotency_key, p, conn)
 
 
-def create_preview(body: PreviewIn, idempotency_key: str, p: Principal, conn: Connection) -> dict:
+def create_preview(body: PreviewIn, idempotency_key: str, p: Principal, conn: Connection, *, fleet_test: bool = False) -> dict:
     """The preview itself, for the HTTP route above and for the endpoints that own an operation's extra rules (device actions, OLT queries, speed tests)."""
     op = OPERATIONS.get(body.operation)
     if op is None:
         raise HTTPException(422, "unknown operation")
+    if body.operation == "olt_query" and body.params.get("query_id") == "olt.connection" and not fleet_test:
+        raise HTTPException(409, "use_fleet_api")   # ADR-0041 §4.1: the connection test has its own entry (per-OLT budget, run record); never the generic job or query routes
     params = body.params
     if body.operation in bench.BENCH_OPS:  # ADR-0030: exactly the catalog's parameters, each with its fixed shape
         if not bench.params_valid(body.operation, body.params):

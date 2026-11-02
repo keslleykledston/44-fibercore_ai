@@ -14,7 +14,7 @@ from sqlalchemy import Connection, text
 DEFAULT_TTL = timedelta(minutes=15)
 # how long a cached value answers a request without asking the equipment again (ADR-0032 item 2); what changes little lives longer
 TTL: dict[str, timedelta] = {
-    "olt.version": timedelta(hours=1), "olt.board": timedelta(hours=1), "olt.time": timedelta(minutes=2),
+    "olt.version": timedelta(hours=1), "olt.connection": timedelta(minutes=15), "olt.board": timedelta(hours=1), "olt.time": timedelta(minutes=2),
     "olt.sync": timedelta(minutes=15), "olt.temperature": timedelta(minutes=15),
 }
 REFRESH_PER_HOUR = 3   # forcing the equipment to be asked again has its own quota, per OLT
