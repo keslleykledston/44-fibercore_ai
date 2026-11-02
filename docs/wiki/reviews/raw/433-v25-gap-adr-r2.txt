@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19ae9-693c-7750-9905-9c8dcb4538d6).
+[codex] Turn started (01a19ae9-6976-7f92-8e5f-89294d60bbc3).
+[codex] Assistant message captured: Vou comparar o diff com `main` e conferir de perto os trechos do GAP/ADR e do backlog que tra...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/addenda/v2.5/GAP_ANALY...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/addenda/v2.5/GAP_ANALY... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=12 main...HEAD -- docs/addenda/v2.5/GAP_ANALY...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=12 main...HEAD -- docs/addenda/v2.5/GAP_ANALY... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n -C 3 'FC22-014|AC-010|HOMOLOGATED_WRITES|BENCH_OPS|bench' docs/addenda/v...
+[codex] Command completed: /bin/bash -lc "rg -n -C 3 'FC22-014|AC-010|HOMOLOGATED_WRITES|BENCH_OPS|bench' docs/addenda/v... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o FC22-014 é tratado como parcialm...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o FC22-014 é tratado como parcialmente coberto antes de a cobertura de dry-run/diff existir; isso pode fazer o backlog parecer mais concluído do que está.
+
+Findings:
+- [medium] A cobertura atribuída ao FC22-014 ainda é futura (docs/addenda/v2.5/GAP_ANALYSIS.md:6)
+  O GAP afirma que a lacuna de dry-run/diff «é coberta» por FC25-07 e FC251-06/08, e usa essa cobertura para justificar a prioridade. Mas esses itens estão marcados como não implementados no backlog, e o próprio plano os coloca em PRs futuros. Como resultado, leitores podem entender que essa parte do FC22-014 já foi atendida e deixar de cobrar sua entrega e aceite. A distinção do catálogo de workflows aberto ajuda, mas não deixa explícito que a fatia de dry-run também segue pendente até esses itens serem implementados e aceitos.
+  Recommendation: Descrever FC25-07 e FC251-06/08 como cobertura planejada; manter a lacuna de dry-run/diff aberta até implementação e aceite conforme AC-010, e então atualizar o estado do backlog.
+
+Next steps:
+- Corrigir a descrição do estado atual versus a cobertura planejada do dry-run/diff em GAP, ADR-0040 e backlog.
