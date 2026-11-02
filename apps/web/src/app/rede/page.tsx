@@ -5,11 +5,13 @@ import { DevicesTabs } from "@/components/DevicesTabs";
 import { OltQueries } from "@/components/OltQueries";
 import { OnuTable } from "@/components/OnuTable";
 import { OnuWorkspace } from "@/components/OnuWorkspace";
+import { OltPanel } from "@/components/OltPanel";
 import { PonMatrix } from "@/components/PonMatrix";
 import { PonTree } from "@/components/PonTree";
 import { apiSafe } from "@/lib/api";
 import { featuresOn } from "@/lib/features";
 import { summarizePons } from "@/lib/faceplates";
+import { buildPanel, isMa5608t, type BoardsResult } from "@/lib/oltPanel";
 import type { Olt, Onu } from "@/lib/types";
 
 const READ_LIMIT = 1000;   // teto da API por consulta; acima disso a tela avisa que a lista é parcial (nunca finge ser completa)
@@ -83,6 +85,13 @@ export default async function Rede({ searchParams }: { searchParams: Promise<{ s
   const onus = await apiSafe<Onu[]>(bySerial ? `/v1/onus?limit=${READ_LIMIT}${serialQ}` : olt ? `/v1/onus?limit=${READ_LIMIT}&olt_id=${olt.id}` : "/v1/onus?limit=1");
   if (onus.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver o inventário." /></AppShell>;
   const all = onus.data ?? [];
+  // Painel da MA5608T (v1.0 do pacote SVG): inventário de placas do CACHE (`olt.board`, leitura somente-leitura já existente); sem leitura => "desconhecido", nunca "vazio"
+  let panel: ReturnType<typeof buildPanel> | null = null;
+  if (!bySerial && olt && isMa5608t(olt) && onus.data !== null) {
+    const b = await apiSafe<{ data: { boards?: { slot: number; name: string; status: string }[]; empty_slots?: number[] }; observed_at: string; stale: boolean; source?: string }>(`/v1/olts/${olt.id}/queries/olt.board/latest`);
+    const boards: BoardsResult | null = b.data ? { boards: b.data.data.boards ?? [], empty_slots: b.data.data.empty_slots ?? [], observedAt: b.data.observed_at, stale: b.data.stale, demo: b.data.source === "mock" } : null;
+    panel = buildPanel(olt, all, boards, { truncated: all.length >= READ_LIMIT });
+  }
   const pons = bySerial ? [] : summarizePons(all);
   const pon = ponValid && pons.some((p) => p.path === ponParam) ? ponParam : undefined;   // PON inexistente nesta OLT: mostra a OLT inteira e AVISA
   const ponMissing = ponAsked && !pon && olts.data !== null && onus.data !== null;
@@ -119,6 +128,7 @@ export default async function Rede({ searchParams }: { searchParams: Promise<{ s
           : onus.data === null ? <ErrorState title="Falha ao carregar ONUs" />
           : (
             <>
+              {panel && olt && <OltPanel oltId={olt.id} oltName={olt.name} model="MA5608T" panel={panel} />}
               {olt && !bySerial && <PonMatrix oltId={olt.id} oltName={olt.name} model={olt.model} pons={pons} {...(pon ? { activePon: pon } : {})} truncated={truncated} />}
               {truncated && <p role="status" className="mb-3 rounded-btn bg-warn-soft px-4 py-3 text-sm text-warn" data-testid="onu-truncated">Mostrando as primeiras {READ_LIMIT} ONUs: há mais ONUs do que o limite de leitura. Use a busca por serial para as demais.</p>}
               {rows.length === 0 && bySerial ? <EmptyState title="Nenhuma ONU encontrada" hint="Confira o serial informado." /> : (

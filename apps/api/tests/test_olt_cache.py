@@ -187,3 +187,82 @@ def test_a_value_of_a_previous_ownership_generation_is_not_served_after_a_transf
         c.execute(text("UPDATE olts SET owner_epoch = owner_epoch + 1 WHERE id = :o"), {"o": olt})      # the OLT changed owner
     assert client.get(f"/v1/olts/{olt}/queries/olt.version/latest", headers=h).json()["detail"] == "no_cached_value"
     assert _ask(client, h, olt, "olt.version").json()["outcome"] == "submitted"      # asked again, to the new owner
+
+
+def test_a_demo_board_inventory_can_be_stored_as_mock_and_the_screens_can_tell(client, seed, inv, olt, on, migrated):
+    """Migration 0043: `mock` is a legal source (written only by the owner CLI for OLT-DEMO*); the API reports it so a screen can label it a demonstration."""
+    from app.core.db import get_engine, scoped_connection
+    h = hdr(client, "alice", seed, "A")
+    with scoped_connection(get_engine(), tenant_id=seed["A"]) as c:
+        epoch = c.execute(text("SELECT owner_epoch FROM olts WHERE id = :i"), {"i": olt}).scalar()
+        assert olt_cache.store_latest(c, seed["A"], UUID(str(olt)), "olt.board", "", BOARD, epoch, datetime.now(UTC), source="mock")
+    got = client.get(f"/v1/olts/{olt}/queries/olt.board/latest", headers=h).json()
+    assert got["source"] == "mock" and got["data"] == BOARD
+    with pytest.raises(Exception):  # noqa: B017, PT011 - a source outside the list is still refused by the database
+        with scoped_connection(get_engine(), tenant_id=seed["A"]) as c:
+            olt_cache.store_latest(c, seed["A"], UUID(str(olt)), "olt.board", "", BOARD, epoch, datetime.now(UTC), source="invented")
+
+
+def test_the_board_mock_is_only_for_a_demo_tenant_created_as_such_and_never_overwrites_a_real_read(client, seed, inv, olt, on, migrated):
+    """Codex r1/r3 (painel SVG): neither an OLT name nor a tenant name proves a demo. The guard is `tenants.demo`, fixed at creation and immutable; a read from the equipment is never replaced."""
+    from sqlalchemy.exc import DBAPIError
+
+    from app.core import olt_board_mock
+    from app.core.db import get_engine, scoped_connection
+    with migrated.begin() as c:
+        c.execute(text("UPDATE tenants SET name = 'ISP Demo (dados fictícios)' WHERE id = :t"), {"t": seed["A"]})   # a REAL tenant renamed to look like the demo one
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE olts SET name = 'OLT-DEMO-X' WHERE id = :i"), {"i": olt})
+    with pytest.raises(ValueError, match="demonstration tenant"), migrated.begin() as c:
+        olt_board_mock.store(c, seed["A"], "OLT-DEMO-X")                                          # neither name makes it a demo
+    with pytest.raises(DBAPIError), migrated.begin() as c:
+        c.execute(text("UPDATE tenants SET demo = true WHERE id = :t"), {"t": seed["A"]})          # and the flag cannot be turned on later
+    with migrated.begin() as c:   # a tenant CREATED as demo (what `create-tenant --demo` does)
+        demo_t = c.execute(text("INSERT INTO tenants(name, demo) VALUES ('Demo test', true) RETURNING id")).scalar()
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(demo_t)})
+        edge = c.execute(text("INSERT INTO edges(tenant_id,name) VALUES (:t,'edge-demo') RETURNING id"), {"t": demo_t}).scalar()
+        demo_olt = c.execute(text("INSERT INTO olts (tenant_id, edge_id, name, vendor, model, firmware) VALUES (:t, :e, 'OLT-DEMO-Y', 'huawei', 'MA5608T', 'R015') RETURNING id"), {"t": demo_t, "e": edge}).scalar()
+    with pytest.raises(DBAPIError), migrated.begin() as c:
+        c.execute(text("UPDATE tenants SET demo = false WHERE id = :t"), {"t": demo_t})            # and the flag cannot be turned off either
+    with migrated.begin() as c:
+        assert olt_board_mock.store(c, demo_t, "OLT-DEMO-Y") == [0, 1]
+    with scoped_connection(get_engine(), tenant_id=demo_t) as c:   # an inventory read from the equipment exists -> never overwritten
+        epoch = c.execute(text("SELECT owner_epoch FROM olts WHERE id = :i"), {"i": demo_olt}).scalar()
+        olt_cache.store_latest(c, demo_t, UUID(str(demo_olt)), "olt.board", "", BOARD, epoch, datetime.now(UTC), source="job")
+    with pytest.raises(ValueError, match="never overwritten"), migrated.begin() as c:
+        olt_board_mock.store(c, demo_t, "OLT-DEMO-Y")
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(demo_t)})
+        c.execute(text("DELETE FROM olt_query_latest WHERE olt_id = :i"), {"i": demo_olt})
+        c.execute(text("DELETE FROM olts WHERE id = :i"), {"i": demo_olt})
+        c.execute(text("DELETE FROM edges WHERE tenant_id = :t"), {"t": demo_t})
+        c.execute(text("DELETE FROM tenants WHERE id = :t"), {"t": demo_t})
+        c.execute(text("UPDATE tenants SET name = 'Tenant A' WHERE id = :t"), {"t": seed["A"]})
+
+
+def test_a_read_from_the_equipment_always_beats_a_mock_and_a_mock_never_beats_a_read(migrated, seed, inv, olt, on):
+    """Codex r2 (painel SVG): a real result whose question is OLDER than a mock written meanwhile still wins; the other way round never happens."""
+    from datetime import timedelta
+
+    from app.core.db import get_engine, scoped_connection
+    with scoped_connection(get_engine(), tenant_id=seed["A"]) as c:
+        epoch = c.execute(text("SELECT owner_epoch FROM olts WHERE id = :i"), {"i": olt}).scalar()
+        o = UUID(str(olt))
+        now = datetime.now(UTC)
+        assert olt_cache.store_latest(c, seed["A"], o, "olt.board", "", BOARD, epoch, now, source="mock")
+        assert olt_cache.store_latest(c, seed["A"], o, "olt.board", "", BOARD, epoch, now - timedelta(minutes=5), source="job")   # older question, real: wins over the mock
+        assert olt_cache.latest(c, o, "olt.board", "")["source"] == "job"
+        assert not olt_cache.store_latest(c, seed["A"], o, "olt.board", "", BOARD, epoch, now + timedelta(minutes=5), source="mock")   # a mock never replaces a real read
+        assert olt_cache.latest(c, o, "olt.board", "")["source"] == "job"
+
+
+def test_a_real_read_of_an_older_ownership_generation_never_replaces_the_current_mock(migrated, seed, inv, olt, on):
+    """Codex r4 (painel SVG): the precedence real-over-mock still respects the ownership generation (owner_epoch)."""
+    from app.core.db import get_engine, scoped_connection
+    with scoped_connection(get_engine(), tenant_id=seed["A"]) as c:
+        epoch = c.execute(text("SELECT owner_epoch FROM olts WHERE id = :i"), {"i": olt}).scalar()
+        o, now = UUID(str(olt)), datetime.now(UTC)
+        assert olt_cache.store_latest(c, seed["A"], o, "olt.board", "", BOARD, epoch + 1, now, source="mock")
+        assert not olt_cache.store_latest(c, seed["A"], o, "olt.board", "", BOARD, epoch, now, source="job")     # an old Edge's late result
+        assert c.execute(text("SELECT source, owner_epoch FROM olt_query_latest WHERE olt_id = :i AND query_id = 'olt.board'"), {"i": olt}).one() == ("mock", epoch + 1)
+        assert olt_cache.store_latest(c, seed["A"], o, "olt.board", "", BOARD, epoch + 1, now, source="job")      # the current generation's read replaces it

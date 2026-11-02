@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19d2e-c03a-77c1-8d85-c02f70187577).
+[codex] Turn started (01a19d2e-c295-78f0-976e-9d674209ffed).
+[codex] Assistant message captured: Vou examinar o diff contra `main` e seguir o fluxo do cache da OLT e seus chamadores para pro...
+[codex] Running command: /bin/bash -lc 'git diff --find-renames --find-copies --stat main...HEAD && git diff --find-re...
+[codex] Command completed: /bin/bash -lc 'git diff --find-renames --find-copies --stat main...HEAD && git diff --find-re... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff main...HEAD -- apps/api/app/core/olt_cache.py apps/api/app/core/olt_b...
+[codex] Command completed: /bin/bash -lc 'git diff main...HEAD -- apps/api/app/core/olt_cache.py apps/api/app/core/olt_b... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff main...HEAD -- apps/web/src/lib/oltPanel.ts apps/web/src/components/O...
+[codex] Command failed: /bin/bash -lc "git diff main...HEAD -- apps/web/src/lib/oltPanel.ts apps/web/src/components/O... (exit 2)
+[codex] Running command: /bin/bash -lc "git diff main...HEAD -- apps/web/src/lib/oltPanel.ts apps/web/src/components/O...
+[codex] Command completed: /bin/bash -lc "git diff main...HEAD -- apps/web/src/lib/oltPanel.ts apps/web/src/components/O... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar: a proteção do mock depende de um nome de ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar: a proteção do mock depende de um nome de tenant mutável e aceita um tenant real renomeado como demonstração.
+
+Findings:
+- [high] Nome mutável permite gravar mocks em tenant real (apps/api/app/core/olt_board_mock.py:22-23)
+  A única verificação de escopo é `name.startswith("ISP Demo")`. O próprio teste renomeia o tenant real A para `ISP Demo (dados fictícios)` e então confirma que `olt_board_mock.store` aceita gravar o mock. Assim, qualquer tenant cujo nome possa ser alterado para esse prefixo passa pela proteção, e a leitura sintética pode aparecer como inventário da OLT real. A regra de prioridade no cache não evita esse caso: ela impede substituir uma leitura real já armazenada, mas não impede inserir o mock antes dela.
+  Recommendation: Identifique o tenant de demonstração por um ID ou atributo imutável e validado no banco, não pelo nome; acrescente um teste que tente gravar o mock em um tenant real renomeado.
