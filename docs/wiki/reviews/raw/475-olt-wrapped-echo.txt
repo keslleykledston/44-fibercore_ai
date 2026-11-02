@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19dc3-608c-7992-9f99-4ca5fd8a6bcb).
+[codex] Turn started (01a19dc3-62f6-78f3-968c-8bcc8494b349).
+[codex] Assistant message captured: Vou verificar o diff contra o contexto local, com foco no algoritmo de normalização e nas gar...
+[codex] Running command: /bin/bash -lc "git diff main...HEAD -- agents/edge/internal/olt/shell.go agents/edge/internal...
+[codex] Command completed: /bin/bash -lc "git diff main...HEAD -- agents/edge/internal/olt/shell.go agents/edge/internal... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '270,370p' agents/edge/internal/olt/shell.go"
+[codex] Command completed: /bin/bash -lc "sed -n '270,370p' agents/edge/internal/olt/shell.go" (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviaria ainda: a nova regra apaga texto de saída...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviaria ainda: a nova regra apaga texto de saída sempre que encontra espaços seguidos de cursor-left, sem exigir que isso seja o ponto de quebra de linha do eco. Isso enfraquece a checagem de eco exato de `finished()` e pode transformar uma resposta incompleta ou forjada em comando concluído.
+
+Findings:
+- [high] A normalização pode fabricar o eco exato a partir de saída do dispositivo (agents/edge/internal/olt/shell.go:54-66)
+  `wrapOverwriteRe` casa qualquer sequência de espaços seguida de `ESC[nD` em todo o buffer, e o código remove os últimos `n` espaços sem validar que o trecho está na linha de eco nem que corresponde a uma quebra na coluna 80. Assim, uma saída contendo, por exemplo, `ont add ...<espaços>ESC[1D5` pode ser reescrita para começar exatamente com `cmd`; `finished()` então aceita esse eco fabricado se a saída terminar com um prompt válido. O comentário afirma que a normalização é para o eco longo, mas `eraseMarkers` não recebe nem usa `cmd`, e a proteção contra pager só verifica se o byte anterior termina em outro cursor-left. Isso compromete o fail-closed e a garantia de que o dispositivo não forja um eco/prompt diferente. Limite a transformação à primeira linha não vazia do eco e valide o contexto da quebra (ou passe `cmd` e compare o resultado normalizado antes de aceitar).
+  Recommendation: Restringir a remoção de espaços/cursor-left à linha de eco do comando e exigir evidência da quebra de coluna esperada; acrescentar teste em que a saída, não o eco, contém essa sequência e não pode fazer `finished()` retornar `done=true`.
+
+Next steps:
+- Adicionar um teste de regressão para sequência de cursor-left em payload e confirmar que `finished()` continua aguardando ou falha fechado.
