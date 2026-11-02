@@ -395,3 +395,92 @@ def test_nothing_but_the_sync_can_write_an_edge_read_snapshot(client, seed, inv,
     olt = _olt(client, inv, h, "OLT-PS-SYNC3")
     r = _import(client, h, olt, source="edge_read")
     assert r.status_code == 422
+
+
+# ---- publish an immutable revision (FC251-08) ----------------------------------------------------------------------------------------------
+def _second_admin(migrated, seed):
+    """carol is an auditor in tenant A: make her a second isp_admin there for the maker-checker cases (undone by the fixture)."""
+    with migrated.begin() as c:
+        c.execute(text("UPDATE tenant_memberships SET role = 'isp_admin' WHERE tenant_id = :t AND user_id = :u"), {"t": seed["A"], "u": seed["carol"]})
+
+
+def _publish(client, h, draft, version, changelog="Primeira revisão aprovada"):
+    return client.post(f"/v1/profile-drafts/{draft}/publish", headers={**h, "If-Match": f'"{version}"'}, json={"changelog": changelog})
+
+
+@pytest.fixture
+def _restore_carol(migrated, seed):
+    yield
+    with migrated.begin() as c:
+        c.execute(text("UPDATE tenant_memberships SET role = 'auditor' WHERE tenant_id = :t AND user_id = :u"), {"t": seed["A"], "u": seed["carol"]})
+        c.execute(text("DELETE FROM profile_revisions"))
+
+
+def test_publish_is_maker_checker_simulated_numbered_immutable_and_writes_nothing(client, seed, inv, migrated, _restore_carol):
+    _on(migrated, seed["A"])
+    _second_admin(migrated, seed)
+    alice, carol = hdr(client, "alice", seed, "A"), hdr(client, "carol", seed, "A")
+    olt = _olt(client, inv, alice, "OLT-PS-PUB")
+    src = _import(client, alice, olt).json()
+    d = _draft(client, alice, src["id"], name="Internet bridge", target_olt_ids=[olt]).json()
+    v = d["row_version"]
+    assert _publish(client, alice, d["id"], v).status_code == 403                                  # the maker cannot approve their own draft
+    r = _publish(client, carol, d["id"], v)
+    assert r.status_code == 409 and "not_simulated" in r.text                                       # impact must have been seen at THIS version
+    assert client.post(f"/v1/profile-drafts/{d['id']}/dry-run", headers=alice, json={}).status_code == 201
+    assert client.post(f"/v1/profile-drafts/{d['id']}/publish", headers=carol, json={"changelog": "x" * 5}).status_code == 428   # If-Match is mandatory
+    assert _publish(client, carol, d["id"], v + 5).status_code == 412                              # stale version
+    with migrated.begin() as cn:
+        before = cn.execute(text("SELECT (SELECT count(*) FROM jobs), (SELECT count(*) FROM events_outbox), (SELECT count(*) FROM incidents)")).one()
+    r = _publish(client, carol, d["id"], v)
+    assert r.status_code == 201, r.text
+    rev = r.json()
+    assert rev["revision_no"] == 1 and rev["approved_by"] != rev["prepared_by"] and rev["writes_to_olt"] == 0 and len(rev["content_hash"]) == 64 and rev["desired"]["customer_vlan"] == 200
+    with migrated.begin() as cn:
+        after = cn.execute(text("SELECT (SELECT count(*) FROM jobs), (SELECT count(*) FROM events_outbox), (SELECT count(*) FROM incidents)")).one()
+    assert after == before                                                                         # no job, no event, no incident: nothing reaches any OLT
+    again = _publish(client, carol, d["id"], v)
+    assert again.status_code == 200 and again.json()["id"] == rev["id"] and again.json()["already_published"] is True   # idempotent per draft version
+    # the draft changes: the old approval no longer applies; a new version needs its own dry run and gets revision 2 with a NEW hash
+    e = client.patch(f"/v1/profile-drafts/{d['id']}", headers={**alice, "If-Match": f'"{v}"'}, json={"desired": {**d["desired"], "customer_vlan": 300}})
+    assert e.status_code == 200
+    v2 = e.json()["row_version"]
+    assert _publish(client, carol, d["id"], v2).status_code == 409                                 # not simulated at v2
+    client.post(f"/v1/profile-drafts/{d['id']}/dry-run", headers=alice, json={})
+    r2 = _publish(client, carol, d["id"], v2, "Troca a VLAN do cliente").json()
+    assert r2["revision_no"] == 2 and r2["content_hash"] != rev["content_hash"]
+    items = client.get("/v1/profile-revisions", headers=alice).json()["items"]
+    assert [i["revision_no"] for i in items] == [2, 1]
+    assert client.get(f"/v1/profile-revisions/{rev['id']}", headers=alice).json()["content_hash"] == rev["content_hash"]
+    from app.core.db import get_engine, scoped_connection
+    for stmt in ("UPDATE profile_revisions SET changelog = 'x'", "DELETE FROM profile_revisions"):
+        with pytest.raises(DBAPIError), scoped_connection(get_engine(), tenant_id=seed["A"]) as c:
+            c.execute(text(stmt))
+    with migrated.begin() as c:
+        assert tuple(c.execute(text("SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = 'profile_revisions'")).one()) == (True, True)
+
+
+def test_no_editor_ever_can_approve_and_publishing_needs_the_permission_and_flag(client, seed, inv, migrated, _restore_carol):
+    alice, carol, dave = hdr(client, "alice", seed, "A"), hdr(client, "carol", seed, "A"), hdr(client, "dave", seed, "A")
+    olt = _olt(client, inv, alice, "OLT-PS-PUB2")
+    _on(migrated, seed["A"])
+    _second_admin(migrated, seed)
+    src = _import(client, alice, olt).json()
+    d = _draft(client, alice, src["id"], name="Perfil B", target_olt_ids=[olt]).json()
+    e = client.patch(f"/v1/profile-drafts/{d['id']}", headers={**carol, "If-Match": f'"{d["row_version"]}"'}, json={"reason": "ajuste feito pela carol"})
+    assert e.status_code == 200
+    v = e.json()["row_version"]
+    client.post(f"/v1/profile-drafts/{d['id']}/dry-run", headers=alice, json={})
+    assert _publish(client, carol, d["id"], v).status_code == 403                                  # carol edited it
+    # a later no-op save by the owner must not make carol (a real editor) look like a checker (Codex r1): every editor ever counts
+    noop = client.patch(f"/v1/profile-drafts/{d['id']}", headers={**alice, "If-Match": f'"{v}"'}, json={"reason": "ajuste feito pela carol"})
+    assert noop.status_code == 200
+    v = noop.json()["row_version"]
+    client.post(f"/v1/profile-drafts/{d['id']}/dry-run", headers=alice, json={})
+    assert _publish(client, carol, d["id"], v).status_code == 403                                  # still excluded: every editor ever counts
+    assert _publish(client, dave, d["id"], v).status_code == 403                                   # noc_n1 has no profiles:publish
+    assert _publish(client, alice, d["id"], v).status_code == 403                                  # alice is the owner (maker)
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE tenant_features SET enabled = false WHERE feature = 'profile_studio'"))
+    assert _publish(client, carol, d["id"], v).status_code == 403                                  # flag off

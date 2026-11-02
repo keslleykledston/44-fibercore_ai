@@ -22,7 +22,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
         "members:mfa_reset", "diagnostics:run", "members:manage", "roles:read", "platform:delegate",
         "devices:act:reboot_cpe", "devices:act:set_wifi_ssid", "bench:authorize", "olt_query:run", "erp:manage", "erp:test",
         "ont_config:request", "ont_config:request_high", "diagnostics:speed_run", "diagnostics:ping_run",
-        "diagnostics:quality_read", "diagnostics:quality_run", "diagnostics:quality_run_full", "profiles:read", "profiles:import", "profiles:edit",
+        "diagnostics:quality_read", "diagnostics:quality_run", "diagnostics:quality_run_full", "profiles:read", "profiles:import", "profiles:edit", "profiles:publish",
         "discovery:read", "discovery:import",
     }),
     # ADR-0031: grants roles, has NO operational power at all (cannot see customers, jobs, incidents or the network)

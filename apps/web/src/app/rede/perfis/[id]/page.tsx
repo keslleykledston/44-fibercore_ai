@@ -6,13 +6,16 @@ import { apiPost, apiSafe } from "@/lib/api";
 import { featuresOn } from "@/lib/features";
 import {
   BLOCKER_LABEL, DIFF_LABEL, FIELD_LABEL, FRESH_LABEL, issueText, LIST_FIELDS, REASON_LABEL, SCALAR_NUM, SHAPING, STRATEGY_LABEL, TAGGING, UUID,
-  type Compare, type Draft, type DryRun, type ProfileList, type Snapshot,
+  type Compare, type Draft, type DryRun, type ProfileList, type RevisionList, type Snapshot,
 } from "@/lib/profiles";
 import type { Olt } from "@/lib/types";
 
 const FLASH: Record<string, string> = {
   salvo: "Rascunho salvo.", invalido: "Não salvei: algum campo não cabe no modelo tipado (ou o JSON está inválido).", permissao: "Seu papel não permite esta ação.",
   versao: "Outra pessoa salvou este rascunho antes. Recarregue e refaça a edição: nada foi sobrescrito.", semalvo: "Defina ao menos uma OLT alvo antes de simular.", falha: "Não foi possível concluir. Tente novamente.",
+  publicado: "Revisão publicada. Ela é imutável e nada foi enviado à OLT.", changelog: "Escreva o que mudou (ao menos 3 caracteres) para publicar.",
+  maker: "Quem preparou ou editou por último este rascunho não pode aprová-lo: peça a outra pessoa com permissão de publicar.",
+  semsimulacao: "Simule nas OLTs alvo esta versão do rascunho antes de publicar.",
 };
 const field = "min-h-touch rounded-btn border border-line bg-bg px-3";
 const DIFF_CLS: Record<string, string> = { EQUAL: "text-ok", CHANGE: "text-warn", ADD: "text-warn", REMOVE: "text-warn", NOT_OBSERVABLE: "text-muted", UNSUPPORTED: "text-muted", CONFLICT: "text-danger" };
@@ -38,6 +41,8 @@ export default async function Rascunho({ params, searchParams }: { params: Promi
   const chosen = comparar && UUID.test(comparar) ? snaps.find((s) => s.id === comparar) : undefined;
   const cmp = chosen ? await apiPost(`/v1/profile-drafts/${id}/compare`, JSON.stringify({ snapshot_id: chosen.id }), { "Content-Type": "application/json" }) : null;   // leitura pura (POST só carrega o corpo)
   const compare = cmp?.status === 200 ? (cmp.json as Compare) : null;
+  const revs = await apiSafe<RevisionList>("/v1/profile-revisions");
+  const mine = (revs.data?.items ?? []).filter((r) => r.draft_id === id);
   const dr = run && UUID.test(run) ? await apiSafe<DryRun>(`/v1/profile-dry-runs/${run}`) : null;
 
   const expert = aba === "especialista";
@@ -129,6 +134,26 @@ export default async function Rascunho({ params, searchParams }: { params: Promi
                 </li>))}</ul>
               {dr.data.issues.length > 0 && <ul className="mt-2 list-disc pl-5 text-xs text-muted">{dr.data.issues.map((i) => <li key={`${i.field}-${i.code}`}>{issueText(i)}</li>)}</ul>}
             </div>
+          )}
+        </section>
+
+        <section aria-label="Publicação" className="panel p-4" data-testid="perfis-publicacao">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">Publicar revisão</h2>
+          <p className="mb-3 text-sm text-muted">Congela esta versão do rascunho como uma revisão numerada e <strong>imutável</strong>. Exige simulação desta versão e a aprovação de uma pessoa diferente de quem preparou ou editou por último. Publicar <strong>não envia nada à OLT</strong>.</p>
+          <form method="post" action={`/bff/perfis/rascunhos/${id}/publicar`} className="grid gap-2">
+            <input type="hidden" name="version" value={draft.row_version} />
+            <label className="grid gap-1 text-sm">O que mudou nesta revisão
+              <textarea name="changelog" required minLength={3} maxLength={2000} rows={2} data-testid="perfis-changelog" className={`${field} py-2`} />
+            </label>
+            <div><button type="submit" data-testid="perfis-publicar" className="min-h-touch rounded-btn border border-accent bg-accent-soft px-4 font-medium">Publicar revisão</button></div>
+          </form>
+          {mine.length > 0 && (
+            <ul className="mt-4 grid gap-2" data-testid="perfis-revisoes">{mine.map((r) => (
+              <li key={r.id} className="rounded-btn border border-line p-3 text-sm" data-testid="perfis-revisao">
+                <p className="font-semibold">Revisão {r.revision_no} · imutável</p>
+                <p className="text-xs text-muted">{r.changelog}</p>
+                <p data-testid="volatile" className="mt-1 font-mono text-[11px] text-muted">conteúdo {r.content_hash.slice(0, 16)}… · escritas na OLT: {r.writes_to_olt}</p>
+              </li>))}</ul>
           )}
         </section>
       </div>

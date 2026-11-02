@@ -18,7 +18,7 @@ EXPECTED = {
                   "jobs:approve", "inventory:read", "tenant:read", "audit:read", "members:read", "edge:read", "members:mfa_reset", "diagnostics:run",
                   "members:manage", "roles:read", "platform:delegate", "devices:act:reboot_cpe", "devices:act:set_wifi_ssid", "bench:authorize", "olt_query:run", "erp:manage", "erp:test",
                   "ont_config:request", "ont_config:request_high", "diagnostics:speed_run", "diagnostics:ping_run",
-                  "diagnostics:quality_read", "diagnostics:quality_run", "diagnostics:quality_run_full", "profiles:read", "profiles:import", "profiles:edit", "discovery:read", "discovery:import"},
+                  "diagnostics:quality_read", "diagnostics:quality_run", "diagnostics:quality_run_full", "profiles:read", "profiles:import", "profiles:edit", "profiles:publish", "discovery:read", "discovery:import"},
     "access_manager": {"tenant:read", "members:read", "members:manage", "roles:read", "audit:read"},
     "engineer": {"customers:read", "associations:review", "incidents:read", "incidents:ack", "jobs:read", "jobs:request", "inventory:read",
                  "tenant:read", "edge:read", "diagnostics:run", "devices:act:reboot_cpe", "devices:act:set_wifi_ssid", "bench:authorize", "olt_query:run",

@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19ccb-851d-70e1-b6d9-a4d054f12bfb).
+[codex] Turn started (01a19ccb-8557-7402-9bec-74bbd4fdf21a).
+[codex] Assistant message captured: Vou ler o diff contra `main` e rastrear os caminhos de publicação, autorização, migração e id...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=35 main...HEAD -- apps/api/app/api/profile_st...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=35 main...HEAD -- apps/api/app/api/profile_st... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"profile_drafts|profile_dry_runs|fibercore_app|profiles:publish|mfa_rec...
+[codex] Command completed: /bin/bash -lc "rg -n \"profile_drafts|profile_dry_runs|fibercore_app|profiles:publish|mfa_rec... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não publicar ainda: um patch sem alteração pode conto...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não publicar ainda: um patch sem alteração pode contornar o maker-checker e permitir que o autor do conteúdo aprove a própria revisão.
+
+Findings:
+- [high] Patch sem mudança contorna o maker-checker (apps/api/app/api/profile_studio.py:384-389)
+  Qualquer PATCH aceito atualiza `last_editor_id`, incrementa `row_version` e não verifica se os valores enviados realmente mudaram. Assim, após B editar o conteúdo, C pode enviar um PATCH com valores idênticos e passar a constar como último editor; B então aprova a nova versão, embora tenha preparado o conteúdo que será publicado. Isso enfraquece a separação de funções exigida pelo maker-checker. Só atualize o editor quando houver mudança efetiva no conteúdo, ou registre o preparador por versão e impeça a aprovação por qualquer pessoa que tenha preparado aquela versão.
+  Recommendation: Compare os campos persistidos com os valores solicitados antes de alterar `last_editor_id`; associe a autoria à versão publicada e valide essa autoria no endpoint de publicação.

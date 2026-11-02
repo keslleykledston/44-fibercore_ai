@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { login } from "./helpers";
+import { login, REVIEWER_EMAIL } from "./helpers";
 
 // Profile Studio (ADR-0040) na stack real com o seed SINTÉTICO: importa à mão, cria rascunho, edita (Assistido e Especialista), compara e simula. Nada chega à OLT.
 test("perfis: do instantâneo ao dry-run, sem escrita e sem violações de acessibilidade", async ({ page }) => {
@@ -73,8 +73,27 @@ test("perfis: do instantâneo ao dry-run, sem escrita e sem violações de acess
   await expect(page.getByTestId("perfis-sem-escrita")).toContainText("não executável");
   await expect(page.getByTestId("perfis-sem-escrita")).toContainText("reproduzível");
   await expect(page.getByTestId("perfis-plano")).toHaveCount(1);
+
+  // publicar revisão: quem preparou o rascunho NÃO pode aprová-lo; outra pessoa (isp_admin) publica e a revisão fica imutável
+  await page.getByTestId("perfis-changelog").fill("Sobe a banda máxima para 750 Mbps");
+  await page.getByTestId("perfis-publicar").click();
+  await expect(page.getByTestId("perfis-flash")).toContainText("não pode aprová-lo");
+  await expect(page.getByTestId("perfis-revisao")).toHaveCount(0);
+  const rascunho = page.url().split("?")[0];
   const a11y = await new AxeBuilder({ page: page as never }).analyze();
   expect(a11y.violations.filter((v) => ["serious", "critical"].includes(v.impact ?? ""))).toEqual([]);
+
+  const ctx = await page.context().browser()!.newContext();
+  const outra = await ctx.newPage();
+  await login(outra, REVIEWER_EMAIL);
+  await outra.goto(rascunho);
+  await outra.getByTestId("perfis-changelog").fill("Sobe a banda máxima para 750 Mbps");
+  await outra.getByTestId("perfis-publicar").click();
+  await expect(outra.getByTestId("perfis-flash")).toContainText("Revisão publicada");
+  await expect(outra.getByTestId("perfis-revisao")).toHaveCount(1);
+  await expect(outra.getByTestId("perfis-revisao")).toContainText("Revisão 1 · imutável");
+  await expect(outra.getByTestId("perfis-revisao")).toContainText("escritas na OLT: 0");
+  await ctx.close();
 });
 
 test("perfis: duas abas editando o mesmo rascunho — a segunda é recusada (If-Match), nada é sobrescrito", async ({ browser }) => {
