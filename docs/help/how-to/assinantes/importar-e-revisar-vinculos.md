@@ -4,7 +4,7 @@ slug: "assinantes/importar-e-revisar-vinculos"
 role: [isp_admin, engineer]
 status: published
 product_version: "0.1.0"
-last_verified: "2026-10-28"
+last_verified: "2026-11-02"
 help_owner: "Plataforma FiberCore"
 ui_route: "/assinantes"
 ---

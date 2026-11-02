@@ -4,7 +4,7 @@ slug: "rede/qualidade-do-servico"
 role: [isp_admin, engineer, noc_n1, noc_n2]
 status: published
 product_version: "0.1.0"
-last_verified: "2026-10-31"
+last_verified: "2026-11-02"
 help_owner: "Plataforma FiberCore"
 ui_route: "/rede"
 ---

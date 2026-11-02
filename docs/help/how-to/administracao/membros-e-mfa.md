@@ -4,7 +4,7 @@ slug: "administracao/membros-e-mfa"
 role: [isp_admin, auditor]
 status: published
 product_version: "0.1.0"
-last_verified: "2026-10-29"
+last_verified: "2026-11-02"
 help_owner: "Plataforma FiberCore"
 ui_route: "/administracao/equipe"
 ---

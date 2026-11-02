@@ -4,7 +4,7 @@ slug: "operacoes/acompanhar-operacoes"
 role: [isp_admin, engineer, noc_n2]
 status: published
 product_version: "0.1.0"
-last_verified: "2026-10-28"
+last_verified: "2026-11-02"
 help_owner: "Plataforma FiberCore"
 ui_route: "/operacoes"
 ---
