@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19ac7-1a6f-7ff0-a8ad-048a6030175a).
+[codex] Turn started (01a19ac7-1aaa-7b60-89fb-3c794d4fbe7f).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e conferir o contexto dos documentos alterados, com foco...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- .agent-context/NEXT_ACTIONS...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- .agent-context/NEXT_ACTIONS... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=12 main...HEAD -- docs/operations/DEPLOY_LAB_...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=12 main...HEAD -- docs/operations/DEPLOY_LAB_... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Ainda há metadados operacionais do backup no changelo...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Ainda há metadados operacionais do backup no changelog versionado; mantenha também esses detalhes apenas no host restrito.
+
+Findings:
+- [medium] O changelog ainda revela localização e proteção do backup (docs/wiki/CHANGELOG.md:4)
+  Embora o relatório de deploy remova nome, caminho, tamanho e hash específicos, o changelog ainda informa que o dump está em `build/backups` e sem cifra. Como esse texto é versionado, expõe a localização provável e a proteção de uma cópia operacional, contrariando o objetivo de manter os metadados só no host. Remova esses detalhes do changelog e deixe apenas uma referência ao relatório redigido.
+  Recommendation: Retire `build/backups` e a indicação de ausência de cifra do changelog versionado; registre-os somente no host restrito.
