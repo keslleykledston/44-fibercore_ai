@@ -328,7 +328,7 @@ def _store_dba_read(migrated, tenant, olt, rows, age=timedelta(0)):
         olt_cache.store_latest(c, tenant, __import__("uuid").UUID(str(olt)), "olt.profile.dba", "", {"profiles": rows}, epoch, datetime.now(UTC))
     if age:
         with migrated.begin() as c:
-            c.execute(text("UPDATE olt_query_latest SET observed_at = observed_at - make_interval(secs => :s) WHERE olt_id = :i"), {"s": age.total_seconds(), "i": olt})
+            c.execute(text("UPDATE olt_query_latest SET asked_at = asked_at - make_interval(secs => :s) WHERE olt_id = :i"), {"s": age.total_seconds(), "i": olt})
 
 
 def test_sync_turns_the_dba_read_into_authoritative_snapshots_and_is_idempotent(client, seed, inv, migrated):
@@ -369,3 +369,8 @@ def test_sync_refuses_an_old_read_a_missing_permission_and_the_flag_off(client, 
     assert r.status_code == 409 and "read_too_old" in r.text
     assert client.post(f"/v1/olts/{olt}/profiles/sync", headers=hn).status_code == 403            # no profiles:import
     assert client.get(f"/v1/olts/{olt}/profiles", headers=h).json()["items"] == []
+    # a LATE delivery (Codex r2): the answer reached the Cloud just now (observed_at = now) but the QUESTION is 25 h old -> still refused, nothing stored
+    with migrated.begin() as c:
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        assert c.execute(text("SELECT observed_at > now() - interval '1 minute' AND asked_at < now() - interval '24 hours' FROM olt_query_latest WHERE olt_id = :i"), {"i": olt}).scalar() is True
+    assert client.post(f"/v1/olts/{olt}/profiles/sync", headers=h).status_code == 409

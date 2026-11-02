@@ -179,10 +179,11 @@ def sync_from_reads(olt_id: UUID, p: Principal = Depends(require("profiles:impor
     got = olt_cache.latest(conn, olt_id, "olt.profile.dba", "")
     if got is None:
         raise HTTPException(409, "no_read: ask the OLT for its DBA profiles first (query olt.profile.dba)")
-    if got["age_seconds"] > SYNC_MAX_AGE.total_seconds():
-        raise HTTPException(409, "read_too_old: ask the OLT again")
-    observed = datetime.fromisoformat(got["observed_at"])
+    # the age that counts is the age of the QUESTION (asked_at): `observed_at` is when the Cloud received the answer, which a late delivery would make look new
     now = datetime.now(UTC)
+    observed = datetime.fromisoformat(got["asked_at"])
+    if now - observed > SYNC_MAX_AGE:
+        raise HTTPException(409, "read_too_old: ask the OLT again")
     created = unchanged = 0
     skipped: list[dict] = []
     for row in got["data"]["profiles"]:
@@ -207,7 +208,7 @@ def sync_from_reads(olt_id: UUID, p: Principal = Depends(require("profiles:impor
              "fp": fp, "s": json.dumps(ps.normalize(settings)), "u": unknown, "by": p.id})
         created += 1
     audit(conn, p, "profile.snapshot.synced", "olt", str(olt_id), {"created": created, "unchanged": unchanged, "skipped": len(skipped), "source": "edge_read"})
-    return {"created": created, "unchanged": unchanged, "skipped": skipped, "observed_at": got["observed_at"], "age_seconds": got["age_seconds"],
+    return {"created": created, "unchanged": unchanged, "skipped": skipped, "observed_at": observed.isoformat(), "age_seconds": int((now - observed).total_seconds()),
             "read_certified": _read_certified(conn, p.tenant_id, olt), "at": now.isoformat()}
 
 
