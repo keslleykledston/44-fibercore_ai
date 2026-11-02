@@ -210,10 +210,11 @@ func TestParseDBAAndTrafficFromTheCaptureLayout(t *testing.T) {
 	// a rate the type does not use must be zero; duplicates and a missing header are refused
 	g := string(b)
 	for name, out := range map[string]string{
-		"fixed type with a maximum": strings.Replace(g, "1      1           No       5120          0             0", "1      1           No       5120          0           100", 1),
-		"duplicate id":              strings.Replace(g, "           5      4", "           1      4", 1),
-		"no headers":                "           5      4           No          0          0         51200        12\n",
-		"unknown type":              strings.Replace(g, "9      5", "9      7", 1),
+		"fixed type with a maximum":   strings.Replace(g, "1      1           No       5120          0             0", "1      1           No       5120          0           100", 1),
+		"duplicate id":                strings.Replace(g, "           5      4", "           1      4", 1),
+		"no headers":                  "           5      4           No          0          0         51200        12\n",
+		"unknown type":                strings.Replace(g, "9      5", "9      7", 1),
+		"cut before the closing rule": g[:strings.LastIndex(strings.TrimRight(g, "\n"), "\n")+1],
 	} {
 		if _, err := ParseResult("olt.profile.dba", out); err == nil {
 			t.Errorf("%s must be refused", name)

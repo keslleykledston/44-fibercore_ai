@@ -356,6 +356,14 @@ def test_sync_turns_the_dba_read_into_authoritative_snapshots_and_is_idempotent(
     _store_dba_read(migrated, seed["A"], olt, rows)
     again = client.post(f"/v1/olts/{olt}/profiles/sync", headers=h).json()
     assert (again["created"], again["unchanged"]) == (1, 1)
+    # profile 1 disappears from the next complete read: it is not kept as current -> a newer snapshot that states nothing (unknown, no settings)
+    _store_dba_read(migrated, seed["A"], olt, rows[:1])
+    gone = client.post(f"/v1/olts/{olt}/profiles/sync", headers=h).json()
+    assert (gone["created"], gone["unchanged"], gone["absent"]) == (0, 1, 1)
+    items = {x["native_key"]: x for x in client.get(f"/v1/olts/{olt}/profiles", headers=h).json()["items"]}
+    assert items["1"]["completeness"] == "unknown" and items["1"]["freshness"] == "unknown" and items["0"]["completeness"] == "partial"
+    assert client.get(f"/v1/profile-snapshots/{items['1']['id']}", headers=h).json()["settings"] == {}
+    assert client.post(f"/v1/olts/{olt}/profiles/sync", headers=h).json()["absent"] == 0      # idempotent: the absence is recorded once
 
 
 def test_sync_refuses_an_old_read_a_missing_permission_and_the_flag_off(client, seed, inv, migrated):

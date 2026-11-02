@@ -1,0 +1,34 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19cbb-4fb9-7652-9695-4dc4d9c3ec4b).
+[codex] Turn started (01a19cbb-5227-7b93-aaee-3c8a8876409c).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir a cadeia `asked_at` → cache/snapshot → API, dan...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- apps/api/app/core/olt_cache...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- apps/api/app/core/olt_cache... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/profile_st...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/profile_st... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"asked_at|observed_at|check_result|ROLLOUT|profile-drafts|snapshot\" ap...
+[codex] Command completed: /bin/bash -lc "rg -n \"asked_at|observed_at|check_result|ROLLOUT|profile-drafts|snapshot\" ap... (exit 0)
+[codex] Assistant message captured: O cache já bloqueia respostas atrasadas por `(owner_epoch, asked_at)`, mas a sincronização do...
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/profile_studio.py | sed -n '150,220p'; nl -ba apps/api...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/profile_studio.py | sed -n '150,220p'; nl -ba apps/api... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"def .*result|store_latest|asked_at|ROLLOUT\" apps/api/app/api/jobs.py ...
+[codex] Command completed: /bin/bash -lc "rg -n \"def .*result|store_latest|asked_at|ROLLOUT\" apps/api/app/api/jobs.py ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: `asked_at` fecha o caso de entrega ta...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: `asked_at` fecha o caso de entrega tardia, mas a sync pode transformar um inventário DBA incompleto em snapshots autoritativos e manter perfis removidos como se ainda existissem.
+
+Findings:
+- [high] Snapshot parcial pode omitir perfis válidos sem invalidar a leitura (apps/api/app/api/profile_studio.py:179-189)
+  A sync confia que `got.data.profiles` representa a lista completa e cria snapshots para cada linha, mas não exige `stale == false`, nem prova completude além da validação estrutural do resultado. Em particular, `check_result` permite uma lista DBA vazia? Não — exige pelo menos uma linha — porém uma saída truncada semanticamente ou uma captura parcial ainda pode passar se os cabeçalhos/contagem refletirem somente o subconjunto retornado. O loop apenas cria/atualiza linhas presentes; não reconcilia ausências nem marca snapshots anteriores como removidos. O sistema pode assim exibir perfis obsoletos junto dos atuais, e consumidores podem tratar o conjunto como inventário autoritativo. Exija evidência de listagem completa do equipamento (p.ex. total/contagem confiável) e reconcilie ausências apenas após uma leitura completa; rejeite leituras stale.
+  Recommendation: Validar completude e frescor do resultado antes de sincronizar e registrar/reconciliar o conjunto de IDs numa operação transacional, sem preservar como atuais perfis ausentes de uma leitura completa.
+- [medium] Ordenação de snapshots usa timestamp do job, mas empate permite sobrescrita/replay (apps/api/app/core/olt_cache.py:40)
+  A proteção contra entrega fora de ordem está no cache por `(owner_epoch, asked_at)`, porém `store_latest` aceita igualdade (`>=`). Um replay com mesmo `asked_at` e epoch pode substituir o payload mais novo desse timestamp; em seguida a sync escolhe snapshots por `observed_at, created_at`, também sem vínculo com `asked_at` ou `owner_epoch`. Se jobs/retries com o mesmo horário de pergunta carregarem resultados diferentes, uma resposta antiga pode substituir o cache e alimentar snapshot, ou um snapshot mais velho pode vencer a seleção por empate. O teste cobre apenas uma resposta antiga com `asked_at` estritamente anterior.
+  Recommendation: Tornar a ordem estrita para timestamps iguais ou garantir idempotência por job; persistir a identidade/ordem da leitura no snapshot e usar essa ordem ao decidir qual snapshot é o mais recente.
+- [medium] Rollout habilita as quatro consultas de perfil sem gate de rollout específico (apps/api/app/core/olt_query.py:69)
+  As quatro consultas são adicionadas diretamente a `ROLLOUT`, que libera a criação de jobs no Cloud. O caminho depende de flags por tenant e Edge, mas não há gate por firmware/OLT nem sinal de que a validação das fixtures cubra outros modelos além do MA5608T/R015. Como `validated=True` também entra no catálogo compartilhado, OLTs com versões/modelos incompatíveis podem receber as novas consultas; falhas de parser abortam o lote e podem adiar outras consultas daquela sessão.
+  Recommendation: Liberar essas consultas por capability/combinação certificada de vendor-model-firmware e rollout gradual, mantendo-as fora do conjunto global até a compatibilidade em campo estar comprovada.

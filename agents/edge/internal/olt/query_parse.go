@@ -340,11 +340,15 @@ type dbaRow struct {
 func parseDBAProfiles(out string) (json.RawMessage, error) {
 	rows := []dbaRow{}
 	seen := map[int]bool{}
-	stage := 0 // 0 nothing, 1 first header, 2 both headers
+	stage := 0      // 0 nothing, 1 first header, 2 both headers
+	closed := false // the table ends with its closing rule: without it the output may have been cut after a few rows
 	for _, line := range strings.Split(out, "\n") {
 		l := strings.TrimSpace(strings.TrimRight(line, "\r"))
 		switch {
-		case isEcho(l), reProfileRule.MatchString(l):
+		case isEcho(l):
+			continue
+		case reProfileRule.MatchString(l):
+			closed = stage == 2 && len(rows) > 0
 			continue
 		case reDBAHeader1.MatchString(l):
 			if stage != 0 {
@@ -358,7 +362,7 @@ func parseDBAProfiles(out string) (json.RawMessage, error) {
 			stage = 2
 		default:
 			m := reDBARow.FindStringSubmatch(l)
-			if m == nil || stage != 2 {
+			if m == nil || stage != 2 || closed {
 				return nil, ErrBadOutput
 			}
 			a := func(i int) int { v, _ := strconv.Atoi(m[i]); return v }
@@ -371,7 +375,7 @@ func parseDBAProfiles(out string) (json.RawMessage, error) {
 			rows = append(rows, r)
 		}
 	}
-	if stage != 2 || len(rows) == 0 {
+	if stage != 2 || len(rows) == 0 || !closed {
 		return nil, ErrBadOutput
 	}
 	return json.Marshal(map[string]any{"profiles": rows})

@@ -207,8 +207,24 @@ def sync_from_reads(olt_id: UUID, p: Principal = Depends(require("profiles:impor
             {"t": p.tenant_id, "o": olt_id, "nk": key, "v": olt.vendor.strip(), "m": olt.model.strip(), "f": olt.firmware.strip(), "oa": observed, "rc": row["binding_times"],
              "fp": fp, "s": json.dumps(ps.normalize(settings)), "u": unknown, "by": p.id})
         created += 1
-    audit(conn, p, "profile.snapshot.synced", "olt", str(olt_id), {"created": created, "unchanged": unchanged, "skipped": len(skipped), "source": "edge_read"})
-    return {"created": created, "unchanged": unchanged, "skipped": skipped, "observed_at": observed.isoformat(), "age_seconds": int((now - observed).total_seconds()),
+    # A profile that an earlier read had and this complete read no longer lists is gone (or at least not confirmed): snapshots are immutable, so say it with a NEWER one that
+    # states nothing (completeness `unknown`, no settings). Nothing may reuse or plan from it, and a later read that lists the profile again supersedes it.
+    present = {str(r["id"]) for r in got["data"]["profiles"]}
+    gone = 0
+    for last in conn.execute(text("SELECT DISTINCT ON (native_key) native_key, completeness, pon_card FROM olt_profile_snapshots WHERE olt_id = :o AND native_type = 'dba-profile' "
+                                  "AND source = 'edge_read' ORDER BY native_key, observed_at DESC, created_at DESC"), {"o": olt_id}).all():
+        if last.native_key in present or last.completeness == "unknown":
+            continue
+        fp = _fingerprint("dba-profile", last.native_key, olt.firmware, "all", {}, sorted(ALL_FIELDS) + ["absent_from_read"])
+        conn.execute(
+            text("INSERT INTO olt_profile_snapshots (tenant_id, olt_id, native_type, native_key, technology, vendor, model, firmware, pon_card, observed_at, freshness, completeness, "
+                 "reference_count, fingerprint, settings, unknown_fields, evidence, source, created_by) "
+                 "VALUES (:t,:o,'dba-profile',:nk,'gpon',:v,:m,:f,'all',:oa,'unknown','unknown',NULL,:fp,'{}'::jsonb,:u,:ev,'edge_read',:by)"),
+            {"t": p.tenant_id, "o": olt_id, "nk": last.native_key, "v": olt.vendor.strip(), "m": olt.model.strip(), "f": olt.firmware.strip(), "oa": observed, "fp": fp,
+             "u": sorted(ALL_FIELDS), "ev": "ausente da leitura completa mais recente das DBA da OLT", "by": p.id})
+        gone += 1
+    audit(conn, p, "profile.snapshot.synced", "olt", str(olt_id), {"created": created, "unchanged": unchanged, "absent": gone, "skipped": len(skipped), "source": "edge_read"})
+    return {"created": created, "unchanged": unchanged, "absent": gone, "skipped": skipped, "observed_at": observed.isoformat(), "age_seconds": int((now - observed).total_seconds()),
             "read_certified": _read_certified(conn, p.tenant_id, olt), "at": now.isoformat()}
 
 
