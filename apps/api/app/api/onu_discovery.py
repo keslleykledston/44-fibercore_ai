@@ -23,7 +23,8 @@ router = APIRouter()
 
 MAX_FUTURE_SKEW = timedelta(minutes=5)
 MAX_ITEMS = 200
-LIST_LIMIT = 500
+LIST_LIMIT = 200      # default page size (max 500)
+SCAN_CAP = 20_000     # most de-duplicated sightings examined per request; beyond it the answer says so (`scan_capped`)
 
 
 def _flag(conn: Connection, p: Principal) -> None:
@@ -82,14 +83,14 @@ def import_observations(olt_id: UUID, body: ImportIn, p: Principal = Depends(req
     return {"olt_id": str(olt_id), "source": body.source, "created": created, "updated": updated}
 
 
-def _queue(conn: Connection, olt_id: UUID | None, cond: str | None) -> dict:
+def _queue(conn: Connection, olt_id: UUID | None, cond: str | None, limit: int, offset: int) -> dict:
     now = datetime.now(UTC)
     rows = conn.execute(
         text("SELECT DISTINCT ON (d.olt_id, d.pon_path, d.serial) d.id, d.olt_id, o.name AS olt_name, d.pon_path, d.serial, d.vendor_hint, d.source, d.first_seen_at, d.last_seen_at, d.seen_count "
              "FROM onu_discovery_observations d JOIN olts o ON o.tenant_id = d.tenant_id AND o.id = d.olt_id "
              "WHERE (CAST(:o AS uuid) IS NULL OR d.olt_id = CAST(:o AS uuid)) "
              "ORDER BY d.olt_id, d.pon_path, d.serial, (d.source = 'edge_read') DESC, d.last_seen_at DESC LIMIT :lim"),
-        {"o": olt_id, "lim": LIST_LIMIT}).all()
+        {"o": olt_id, "lim": SCAN_CAP}).all()
     registered = frozenset(r.serial.upper() for r in conn.execute(text("SELECT serial FROM onus")).all())
     places: dict[str, set[tuple[str, str]]] = {}
     for r in conn.execute(text("SELECT DISTINCT olt_id, pon_path, serial FROM onu_discovery_observations")).all():
@@ -106,20 +107,24 @@ def _queue(conn: Connection, olt_id: UUID | None, cond: str | None) -> dict:
             "authoritative": od.authoritative(r.source), "first_seen_at": r.first_seen_at.isoformat(), "last_seen_at": r.last_seen_at.isoformat(), "seen_count": r.seen_count,
             "condition": c, "reasons": why, "erp_association": "unavailable", "customer": None, "authorization": "not_available",
         })
-    return {"items": items, "truncated": len(rows) >= LIST_LIMIT, "fresh_window_minutes": int(od.FRESH_FOR.total_seconds() // 60)}
+    page = items[offset:offset + limit]   # the condition filter is applied BEFORE paging, so a page never hides a match that sits later in the scan
+    return {"items": page, "total": len(items), "offset": offset, "limit": limit, "truncated": offset + limit < len(items), "scan_capped": len(rows) >= SCAN_CAP,
+            "fresh_window_minutes": int(od.FRESH_FOR.total_seconds() // 60)}
 
 
 @router.get("/v1/olts/{olt_id}/onus/unregistered")
-def list_for_olt(olt_id: UUID, condition: Literal["new", "waiting", "stale", "conflict"] | None = Query(None), p: Principal = Depends(require("discovery:read")),
+def list_for_olt(olt_id: UUID, condition: Literal["new", "waiting", "stale", "conflict"] | None = Query(None), limit: int = Query(LIST_LIMIT, ge=1, le=500),
+                 offset: int = Query(0, ge=0, le=100_000), p: Principal = Depends(require("discovery:read")),
                  conn: Connection = TENANT_CONN) -> dict:
     _flag(conn, p)
     _olt(conn, olt_id)
-    return _queue(conn, olt_id, condition)
+    return _queue(conn, olt_id, condition, limit, offset)
 
 
 @router.get("/v1/discovery/onus")
-def list_all(condition: Literal["new", "waiting", "stale", "conflict"] | None = Query(None), p: Principal = Depends(require("discovery:read")),
+def list_all(condition: Literal["new", "waiting", "stale", "conflict"] | None = Query(None), limit: int = Query(LIST_LIMIT, ge=1, le=500),
+             offset: int = Query(0, ge=0, le=100_000), p: Principal = Depends(require("discovery:read")),
              conn: Connection = TENANT_CONN) -> dict:
     """The queue across all of this tenant's OLTs (RLS)."""
     _flag(conn, p)
-    return _queue(conn, None, condition)
+    return _queue(conn, None, condition, limit, offset)

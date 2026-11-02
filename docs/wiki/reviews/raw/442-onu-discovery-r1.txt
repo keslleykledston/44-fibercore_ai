@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19b1c-feba-7401-9e7a-4e60b46f2d5a).
+[codex] Turn started (01a19b1c-fef5-7ec2-aaa2-75f736bc4b84).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir especialmente os caminhos de importação, isolam...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/app/core/features....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/app/core/features.... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "CREATE POLICY tenant_isolation|ALTER TABLE onus|GRANT SELECT.*onus|def ...
+[codex] Command completed: /bin/bash -lc 'rg -n "CREATE POLICY tenant_isolation|ALTER TABLE onus|GRANT SELECT.*onus|def ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a fila pode ocultar registros váli...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a fila pode ocultar registros válidos e filtros podem retornar resultados incompletos sem sinalizar isso.
+
+Findings:
+- [medium] Limite aplicado antes do filtro pode esconder conflitos (apps/api/app/api/onu_discovery.py:88-109)
+  `_queue` limita as linhas em 500 antes de `condition` ser aplicado em Python. Quando a fila excede o limite, `/v1/discovery/onus?condition=conflict` pode retornar poucos ou nenhum conflito mesmo que existam conflitos depois das primeiras 500 linhas. `truncated` só indica que o resultado bruto atingiu o limite; a tela não informa que o filtro pode estar incompleto. A ordenação por OLT/PON/serial também não oferece paginação, podendo deixar OLTs posteriores permanentemente fora da listagem global.
+  Recommendation: Aplicar a condição no SQL antes do limite e adicionar paginação com ordenação estável; faça `truncated` refletir resultados restantes após a filtragem e exponha isso claramente na tela.
+
+Next steps:
+- Corrigir limite, filtragem e paginação da fila e cobrir o caso com mais de 500 registros em múltiplas OLTs.
+finished

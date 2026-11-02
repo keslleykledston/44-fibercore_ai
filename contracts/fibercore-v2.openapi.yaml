@@ -832,8 +832,8 @@ paths:
     get:
       tags: [Discovery]
       operationId: listUnregisteredOnus
-      summary: 'Fila de ONUs aguardando autorização desta OLT, com condição (new|waiting|stale|conflict), motivos, origem e se é autoritativa. Associação ERP sempre `unavailable` e autorização `not_available` nesta versão. discovery:read; flag onu_discovery'
-      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: oltId, in: path, required: true, schema: {type: string, format: uuid}}, {name: condition, in: query, required: false, schema: {type: string, enum: [new, waiting, stale, conflict]}}]
+      summary: 'Fila de ONUs aguardando autorização desta OLT, com condição (new|waiting|stale|conflict), motivos, origem e se é autoritativa. O filtro vale ANTES da paginação (total/truncated/scan_capped). Associação ERP sempre `unavailable` e autorização `not_available` nesta versão. discovery:read; flag onu_discovery'
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: oltId, in: path, required: true, schema: {type: string, format: uuid}}, {name: condition, in: query, required: false, schema: {type: string, enum: [new, waiting, stale, conflict]}}, {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 500, default: 200}}, {name: offset, in: query, required: false, schema: {type: integer, minimum: 0, default: 0}}]
       responses:
         '200': {description: OK}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -844,7 +844,7 @@ paths:
       tags: [Discovery]
       operationId: listUnregisteredOnusAll
       summary: 'A mesma fila, de todas as OLTs do provedor. discovery:read; flag onu_discovery'
-      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: condition, in: query, required: false, schema: {type: string, enum: [new, waiting, stale, conflict]}}]
+      parameters: [{$ref: '#/components/parameters/TenantId'}, {name: condition, in: query, required: false, schema: {type: string, enum: [new, waiting, stale, conflict]}}, {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 500, default: 200}}, {name: offset, in: query, required: false, schema: {type: integer, minimum: 0, default: 0}}]
       responses:
         '200': {description: OK}
         '401': {$ref: '#/components/responses/Unauthorized'}

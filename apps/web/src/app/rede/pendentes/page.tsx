@@ -14,18 +14,19 @@ const FLASH: Record<string, string> = {
 };
 const field = "min-h-touch rounded-btn border border-line bg-bg px-3";
 
-export default async function Pendentes({ searchParams }: { searchParams: Promise<{ olt?: string; condicao?: string; ok?: string; erro?: string }> }) {
+export default async function Pendentes({ searchParams }: { searchParams: Promise<{ olt?: string; condicao?: string; de?: string; ok?: string; erro?: string }> }) {
   if (!(await featuresOn("onu_discovery"))) notFound();   // recurso desligado: a tela não existe
-  const { olt: oltParam, condicao, ok, erro } = await searchParams;
+  const { olt: oltParam, condicao, de, ok, erro } = await searchParams;
+  const offset = /^[0-9]{1,6}$/.test(de ?? "") ? Number(de) : 0;
   const cond = (FILTERS as readonly string[]).includes(condicao ?? "") ? condicao : undefined;
   const olts = await apiSafe<Olt[]>("/v1/olts?limit=200");
   const list = olts.data ?? [];
   const sel = list.find((o) => o.id === oltParam && UUID.test(o.id));
-  const q = new URLSearchParams(); if (cond) q.set("condition", cond);
+  const q = new URLSearchParams(); if (cond) q.set("condition", cond); if (offset) q.set("offset", String(offset));
   const queue = await apiSafe<PendingList>(sel ? `/v1/olts/${sel.id}/onus/unregistered${q.size ? `?${q}` : ""}` : `/v1/discovery/onus${q.size ? `?${q}` : ""}`);
   if (queue.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver as ONUs aguardando autorização." /></AppShell>;
   const msg = ok ? FLASH[ok] : erro ? FLASH[erro] : null;
-  const href = (o?: string, c?: string) => `/rede/pendentes${o || c ? "?" : ""}${[o ? `olt=${o}` : "", c ? `condicao=${c}` : ""].filter(Boolean).join("&")}`;
+  const href = (o?: string, c?: string, d?: number) => `/rede/pendentes${o || c || d ? "?" : ""}${[o ? `olt=${o}` : "", c ? `condicao=${c}` : "", d ? `de=${d}` : ""].filter(Boolean).join("&")}`;
   const chip = (on: boolean) => `inline-flex min-h-touch items-center rounded-btn border px-3 text-sm ${on ? "border-accent bg-accent-soft font-semibold" : "border-line hover:bg-bg"}`;
   const items = queue.data?.items ?? [];
   return (
@@ -64,7 +65,12 @@ export default async function Pendentes({ searchParams }: { searchParams: Promis
                 </tr>))}</tbody>
             </table></div>
           )}
-          {queue.data?.truncated && <p className="mt-2 text-xs text-warn">Lista parcial: há mais avistamentos que o limite da tela.</p>}
+          {queue.data && queue.data.total > 0 && <p data-testid="pend-contagem" className="mt-2 text-xs text-muted">Mostrando {queue.data.offset + 1}–{queue.data.offset + items.length} de {queue.data.total}.</p>}
+          {queue.data?.scan_capped && <p className="mt-2 text-xs text-warn">Lista parcial: há mais avistamentos que o limite de leitura; o total pode estar incompleto.</p>}
+          <div className="mt-2 flex gap-3 text-sm">
+            {offset > 0 && <Link href={href(sel?.id, cond, Math.max(0, offset - (queue.data?.limit ?? 200)))} className="text-accent hover:underline" data-testid="pend-anterior">← Anteriores</Link>}
+            {queue.data?.truncated && <Link href={href(sel?.id, cond, offset + (queue.data.limit))} className="text-accent hover:underline" data-testid="pend-proximas">Próximas →</Link>}
+          </div>
         </section>
         {sel && (
           <details className="panel p-4" data-testid="pend-registrar">
