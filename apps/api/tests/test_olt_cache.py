@@ -201,3 +201,32 @@ def test_a_demo_board_inventory_can_be_stored_as_mock_and_the_screens_can_tell(c
     with pytest.raises(Exception):  # noqa: B017, PT011 - a source outside the list is still refused by the database
         with scoped_connection(get_engine(), tenant_id=seed["A"]) as c:
             olt_cache.store_latest(c, seed["A"], UUID(str(olt)), "olt.board", "", BOARD, epoch, datetime.now(UTC), source="invented")
+
+
+def test_the_board_mock_is_only_for_the_demo_tenant_and_never_overwrites_a_real_read(client, seed, inv, olt, on, migrated):
+    """Codex r1 (painel SVG): a NAME is not proof of a demo OLT. The guard is the tenant, and a read that came from the equipment is never replaced."""
+    from app.core import olt_board_mock
+    from app.core.db import get_engine, scoped_connection
+    with migrated.begin() as c:
+        name = c.execute(text("SELECT name FROM olts WHERE id = :i"), {"i": olt}).scalar()
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("UPDATE olts SET name = :n WHERE id = :i"), {"n": "OLT-DEMO-" + name[-6:], "i": olt})   # a REAL OLT whose name starts like a demo one
+    real_name = "OLT-DEMO-" + name[-6:]
+    with pytest.raises(ValueError, match="demonstration tenant"), migrated.begin() as c:
+        olt_board_mock.store(c, seed["A"], real_name)                                              # tenant A is not the demo tenant: refused whatever the name says
+    with migrated.begin() as c:
+        c.execute(text("UPDATE tenants SET name = 'ISP Demo (dados fictícios)' WHERE id = :t"), {"t": seed["A"]})
+    with scoped_connection(get_engine(), tenant_id=seed["A"]) as c:   # an inventory read from the equipment exists -> never overwritten
+        epoch = c.execute(text("SELECT owner_epoch FROM olts WHERE id = :i"), {"i": olt}).scalar()
+        olt_cache.store_latest(c, seed["A"], UUID(str(olt)), "olt.board", "", BOARD, epoch, datetime.now(UTC), source="job")
+    with pytest.raises(ValueError, match="never overwritten"), migrated.begin() as c:
+        olt_board_mock.store(c, seed["A"], real_name)
+    with migrated.begin() as c:   # no real read: the demo tenant may get the mock, and the API labels it
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["A"])})
+        c.execute(text("DELETE FROM olt_query_latest WHERE olt_id = :i"), {"i": olt})
+    with migrated.begin() as c:
+        assert olt_board_mock.store(c, seed["A"], real_name) == [0, 1]
+    h = hdr(client, "alice", seed, "A")
+    assert client.get(f"/v1/olts/{olt}/queries/olt.board/latest", headers=h).json()["source"] == "mock"
+    with migrated.begin() as c:
+        c.execute(text("UPDATE tenants SET name = 'Tenant A' WHERE id = :t"), {"t": seed["A"]})
