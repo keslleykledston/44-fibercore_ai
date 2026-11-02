@@ -13,8 +13,9 @@ export async function POST(req: Request) {
   const r = await apiPost(`/v1/olts/${olt}/profiles/sync`, JSON.stringify({}), { "Content-Type": "application/json" });
   const to = (q: string) => `/rede/perfis?olt=${olt}&${q}`;
   if (r.status === 200) {
-    const j = r.json as { created?: number; unchanged?: number; absent?: number } | null;
-    return back(req, to(`ok=sincronizado&n=${Math.min(999, Number(j?.created ?? 0))}&u=${Math.min(999, Number(j?.unchanged ?? 0))}&a=${Math.min(999, Number(j?.absent ?? 0))}`));
+    const j = r.json as { created?: number; unchanged?: number; absent?: number; skipped?: unknown[] } | null;
+    const skipped = Array.isArray(j?.skipped) ? j!.skipped!.length : 0;
+    return back(req, to(`ok=sincronizado&n=${Math.min(999, Number(j?.created ?? 0))}&u=${Math.min(999, Number(j?.unchanged ?? 0))}&a=${Math.min(999, Number(j?.absent ?? 0))}&s=${Math.min(999, skipped)}`));
   }
   const text = JSON.stringify(r.json ?? {});
   if (r.status === 403) return back(req, to("erro=permissao"));

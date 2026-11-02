@@ -16,9 +16,9 @@ const FLASH: Record<string, string> = {
 };
 const field = "min-h-touch rounded-btn border border-line bg-bg px-3";
 
-export default async function Perfis({ searchParams }: { searchParams: Promise<{ olt?: string; ok?: string; erro?: string; n?: string; u?: string; a?: string }> }) {
+export default async function Perfis({ searchParams }: { searchParams: Promise<{ olt?: string; ok?: string; erro?: string; n?: string; u?: string; a?: string; s?: string }> }) {
   if (!(await featuresOn("profile_studio"))) notFound();   // recurso desligado: a tela não existe (ADR-0040)
-  const { olt: oltParam, ok, erro, n, u, a } = await searchParams;
+  const { olt: oltParam, ok, erro, n, u, a, s: sk } = await searchParams;
   const olts = await apiSafe<Olt[]>("/v1/olts?limit=200");
   if (olts.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver o inventário." /></AppShell>;
   const list = olts.data ?? [];
@@ -26,7 +26,7 @@ export default async function Perfis({ searchParams }: { searchParams: Promise<{
   const [profiles, drafts] = await Promise.all([sel ? apiSafe<ProfileList>(`/v1/olts/${sel.id}/profiles`) : null, apiSafe<{ items: Draft[] }>("/v1/profile-drafts")]);
   if (profiles?.status === 403 || drafts.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver os perfis da OLT." /></AppShell>;
   const num = (v?: string) => (v && /^[0-9]{1,3}$/.test(v) ? Number(v) : 0);
-  const msg = ok === "sincronizado" ? `Perfis DBA atualizados a partir da última leitura: ${num(n)} novo(s), ${num(u)} sem mudança, ${num(a)} ausente(s) da leitura.` : ok ? FLASH[ok] : erro ? FLASH[erro] : null;
+  const msg = ok === "sincronizado" ? `Perfis DBA atualizados a partir da última leitura: ${num(n)} novo(s), ${num(u)} sem mudança, ${num(a)} ausente(s) da leitura.${num(sk) > 0 ? ` ATENÇÃO: ${num(sk)} perfil(is) da leitura NÃO foram importados porque não cabem no modelo tipado.` : ""}` : ok ? FLASH[ok] : erro ? FLASH[erro] : null;
   return (
     <AppShell active="/rede" user="1">
       <PageHeader title="Perfis da OLT" subtitle="Inventário, rascunhos e simulação. Nada aqui altera a OLT." helpSlug="rede/perfis-olt">
