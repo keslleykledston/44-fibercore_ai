@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19dee-31e3-72c3-ada4-3fdff0f44080).
+[codex] Turn started (01a19dee-34f0-7dc3-b595-02acce82268e).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os ramos com flag ligada/desligada, incluindo os d...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- 'apps/web/src/app/rede/onu/...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=80 main...HEAD -- 'apps/web/src/app/rede/onu/... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "onu_quick_inspector|onu360-identity|DataFreshness|function DataFreshnes...
+[codex] Command completed: /bin/bash -lc 'rg -n "onu_quick_inspector|onu360-identity|DataFreshness|function DataFreshnes... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba 'apps/web/src/app/rede/onu/[id]/page.tsx' | sed -n '48,91p'; nl -ba app...
+[codex] Command completed: /bin/bash -lc "nl -ba 'apps/web/src/app/rede/onu/[id]/page.tsx' | sed -n '48,91p'; nl -ba app... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não shipar ainda: o e2e alterado não prova que Rx, id...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não shipar ainda: o e2e alterado não prova que Rx, idade do dado e PON continuam visíveis no alto, nem cobre a tela com a flag desligada.
+
+Findings:
+- [medium] O e2e não protege contra perda dos dados que deveriam substituir as linhas (apps/web/e2e/app.spec.ts:120-123)
+  O teste só confirma a presença do nome da OLT no bloco de identificação e a ausência dos rótulos Status e OLT nos cartões. Uma regressão que removesse Rx, idade do dado ou PON da identificação ainda passaria; também não há verificação com ONU sem PON ou dado defasado. Como a alteração remove essas informações dos cartões, esse teste não detecta que elas desapareceram da tela nos casos indicados pelo requisito.
+  Recommendation: Verifique no bloco de identificação os valores ou estados acessíveis de Status, Rx, frescor/idade e PON; cubra dado defasado e PON ausente. Inclua uma execução com a flag desligada que confirme que as linhas anteriores continuam presentes.
