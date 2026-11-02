@@ -18,7 +18,7 @@ ui_route: "/rede/onu/[id]"
 ## Passo a passo
 
 1. Em **Rede**, clique no serial da ONU e abra a aba **Aparelho** do painel de detalhes (ela só existe se a ONU tem roteador com vínculo confirmado). Na **ONU 360°** o mesmo conteúdo abre pelo botão **Configuração do aparelho**, no cartão **Roteador (CPE)**.
-2. Em **Resumo** veja a miniatura do aparelho, o fabricante/modelo/firmware, a **óptica** (potência recebida e transmitida, sempre somente leitura) e quando foi a última leitura.
+2. No topo do painel, com o catálogo de equipamentos ligado, aparece a **ilustração esquemática do modelo** (ou o desenho neutro, “Sem arte catalogada”, quando o modelo não está no catálogo). Ela é só para reconhecer o aparelho: não é foto, não mostra portas nem luzes, e o estado da leitura vem sempre do texto ao lado. Em **Resumo** veja o fabricante/modelo/firmware, a **óptica** (potência recebida e transmitida, sempre somente leitura) e quando foi a última leitura.
 3. Use as abas **Wi-Fi**, **LAN** e **WAN**. Elas só aparecem se o aparelho informou aquela parte. Em Wi-Fi, quando há mais de uma rede, escolha a rede em **Rede**: o painel mostra a banda que o **próprio aparelho** informou (se ele não informou, diz “banda não informada”).
 4. Para fechar, clique em **Recolher** ou tecle **Esc**. O foco volta ao botão.
 

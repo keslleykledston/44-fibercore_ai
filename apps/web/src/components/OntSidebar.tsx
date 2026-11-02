@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { DeviceThumb } from "@/components/DeviceThumb";
 import { DeviceThumbnail, type Tone } from "@/components/DeviceThumbnail";
 import { OntFormBody, ago, useOntForm } from "@/components/OntConfigView";
 import { STATE_TEXT } from "@/lib/ont-config";
 
 /** Sidebar direito recolhível com a configuração do aparelho (SOMENTE LEITURA), na ONU 360°. Não é modal: a página por trás continua navegável. Só mostra o que a API disse que foi observado.
  *  Os formulários são os mesmos do painel de gestão da lista (`OntFormBody`). */
-export function OntSidebar({ cpeId, identity }: { cpeId: string; identity: string }) {
+export function OntSidebar({ cpeId, identity, model }: { cpeId: string; identity: string; model?: { vendor: string | null; model: string | null } }) {   // `model` só vem com a flag device_assets ligada (ADR-0041 PR4)
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLElement>(null);
@@ -23,7 +24,9 @@ export function OntSidebar({ cpeId, identity }: { cpeId: string; identity: strin
         <aside id="ont-sidebar" ref={panel} tabIndex={-1} role="complementary" aria-labelledby="ont-sidebar-title" data-testid="ont-sidebar" onKeyDown={(e) => { if (e.key === "Escape") close(); }}
           className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-line bg-surface text-text shadow-card md:w-[420px]">
           <div className="flex items-start gap-3 border-b border-line p-4">
-            <div className="shrink-0 text-muted"><DeviceThumbnail height={56} acs={form ? ((form.state === "fresh" ? "ok" : form.state === "no_data" ? "neutral" : "warn") as Tone) : "neutral"} /></div>
+            {model
+              ? <div className="shrink-0" data-testid="ont-sidebar-model-thumb"><DeviceThumb category="onu_ont" vendor={model.vendor} model={model.model} width={64} label /></div>   // arte esquemática do modelo: o estado fica no texto ao lado, nunca na imagem
+              : <div className="shrink-0 text-muted"><DeviceThumbnail height={56} acs={form ? ((form.state === "fresh" ? "ok" : form.state === "no_data" ? "neutral" : "warn") as Tone) : "neutral"} /></div>}
             <div className="min-w-0 flex-1">
               <h2 id="ont-sidebar-title" className="text-lg font-semibold">Configuração do aparelho</h2>
               <p className="truncate text-sm text-muted">{identity}</p>

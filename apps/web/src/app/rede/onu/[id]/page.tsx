@@ -152,7 +152,7 @@ export default async function Onu360Page({ params, searchParams }: { params: Pro
                   {o.cpe.provenance && <Row k="Origem do dado"><SourceChip p={o.cpe.provenance} /></Row>}
                 </dl>
                 {ontCfg?.data?.enabled && (
-                  <OntSidebar key={o.cpe.device.id} cpeId={o.cpe.device.id} identity={`${o.cpe.device.vendor ?? ""} ${o.cpe.device.model ?? ""}${o.cpe.device.firmware ? ` · ${o.cpe.device.firmware}` : ""}`.trim() || "Aparelho"} />
+                  <OntSidebar key={o.cpe.device.id} cpeId={o.cpe.device.id} identity={`${o.cpe.device.vendor ?? ""} ${o.cpe.device.model ?? ""}${o.cpe.device.firmware ? ` · ${o.cpe.device.firmware}` : ""}`.trim() || "Aparelho"} model={assets ? { vendor: o.cpe.device.vendor, model: o.cpe.device.model } : undefined} />
                 )}
               </>
             ) : o.cpe.link === "suggested" ? (
