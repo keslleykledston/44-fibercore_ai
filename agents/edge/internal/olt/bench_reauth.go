@@ -217,6 +217,10 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 		}
 		return ParseServicePorts(o)
 	}
+	// the WHOLE baseline of the ONU: identity (position, serial, online, normal, match, active), both profiles and the description
+	matches := func(i ONTInfo, p ONTProfiles) bool {
+		return onu.identityOK(i) && p.Line == spec.LineProfileID && p.Srv == spec.SrvProfileID && p.Description == spec.Description
+	}
 	// ---- baseline: nothing changes until every one of these reads agrees with the configuration
 	out, err := s.Run(ctx, c.Enable)
 	if err != nil || refusedRe.MatchString(out) {
@@ -239,7 +243,7 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 		return ManeuverOutcome{}, ErrReauthBaseline
 	}
 	info, prof, err := readONU()
-	if err != nil || !onu.identityOK(info) || info.LastUp != before.LastUp || prof.Line != spec.LineProfileID || prof.Srv != spec.SrvProfileID || prof.Description != spec.Description {
+	if err != nil || !matches(info, prof) || info.LastUp != before.LastUp {
 		return ManeuverOutcome{}, ErrReauthBaseline
 	}
 	if !now().Before(notAfter) {
@@ -292,8 +296,7 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 			return err
 		}
 		if ok { // the ONU is there (for instance `ont delete` was refused or its outcome is unknown): it must be the BASELINE ONU, not just any ONU at this position
-			i, p, e := readONU()
-			if e != nil || !onu.identityOK(i) || p.Line != spec.LineProfileID || p.Srv != spec.SrvProfileID || p.Description != spec.Description {
+			if i, p, e := readONU(); e != nil || !matches(i, p) {
 				return ErrReauthBaseline
 			}
 		}
@@ -398,6 +401,9 @@ func RunBenchReauthorize(ctx context.Context, raw Session, onu BenchONU, spec Re
 	det, err = step(c.DetailSP)
 	if err != nil || !spDetailOK(det, onu, spec) {
 		return fail(true, "the service port detail differs from the baseline after the cycle", ErrReauthBaseline)
+	}
+	if i, p, e := readONU(); e != nil || !matches(i, p) {
+		return fail(true, "the ONU is not the baseline one after the cycle", ErrReauthBaseline)
 	}
 	res.Done, res.Detail = true, "service port removed, ONU deleted, seen in autofind, authorized again with the baseline profiles, service port restored and equal"
 	if mode == "iface" {

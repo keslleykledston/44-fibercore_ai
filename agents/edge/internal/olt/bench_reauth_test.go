@@ -23,6 +23,7 @@ type fakeAuthOLT struct {
 	extraSP                       bool
 	addCount                      int
 	onInfo                        func()
+	onAdd                         func()
 }
 
 func newAuth() *fakeAuthOLT {
@@ -77,6 +78,9 @@ func (f *fakeAuthOLT) Run(_ context.Context, cmd string) (string, error) {
 			return "  % Parameter error, the error locates at '^'", nil
 		}
 		f.ontPresent, f.inAuto, f.lastUp = true, false, "2026-11-02 10:30:00-04:00"
+		if f.onAdd != nil {
+			f.onAdd()
+		}
 		if !strings.Contains(cmd, "ont-lineprofile-id 179") {
 			f.line = 1
 		}
@@ -241,6 +245,17 @@ func TestReauthorizeDoesNotClaimARestoreWhileTheONUStillHasOtherProfiles(t *test
 	}
 	out, err := runAuth(f, spec14, nil, far())
 	if err == nil || out.Done || !out.Sent || strings.Contains(out.Detail, "baseline was restored") || !strings.Contains(err.Error(), "restore it by hand") {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+}
+
+func TestReauthorizeRestoreChecksTheDescriptionToo(t *testing.T) {
+	// the ONU comes back with the right profiles but ANOTHER description (e.g. a partial failure): never reported as restored (Codex r2)
+	f := newAuth()
+	f.refuse["service-port 1708"] = true // the last step fails, so the restore runs after the ONU was re-added
+	f.onAdd = func() { f.desc = "OUTRA" }
+	out, err := runAuth(f, spec14, nil, far())
+	if err == nil || out.Done || strings.Contains(out.Detail, "baseline was restored") {
 		t.Fatalf("out=%+v err=%v", out, err)
 	}
 }
