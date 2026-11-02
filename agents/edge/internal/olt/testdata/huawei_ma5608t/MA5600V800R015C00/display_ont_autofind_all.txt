@@ -1,0 +1,14 @@
+   ----------------------------------------------------------------------------
+   Number              : 1
+   F/S/P               : 0/1/3
+   Ont SN              : 48575443AABB0001 (HWTC-AABB0001)
+   Password            : 0x00000000000000000000(SYNTHETIC)
+   Loid                : 
+   Checkcode           : 
+   VendorID            : HWTC
+   Ont Version         : 100D.A
+   Ont SoftwareVersion : V5R019C00S100
+   Ont EquipmentID     : EG8145V5
+   Ont autofind time   : 2026-01-15 10:20:30-04:00
+   ----------------------------------------------------------------------------
+   The number of GPON autofind ONT is 1

@@ -1,0 +1,24 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19dd3-8e78-7ad0-bc39-d1b101623956).
+[codex] Turn started (01a19dd3-8eb2-72a3-a4c1-6c6ae98fcb5a).
+[codex] Assistant message captured: Vou comparar o branch com `main` e seguir o fluxo do autofind ponta a ponta; vou focar em reg...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/jobs/q...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/jobs/q... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=8 main...HEAD -- agents/edge/internal/olt/que...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=8 main...HEAD -- agents/edge/internal/olt/que... (exit 0)
+[codex] Assistant message captured: O parser do Edge depende do rodapé para aceitar listas com entradas; estou verificando os cas...
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/query_parse.go | sed -n '500,650p'; nl -ba app...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/query_parse.go | sed -n '500,650p'; nl -ba app... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não shippar ainda: o Edge aceita datas fora do interv...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não shippar ainda: o Edge aceita datas fora do intervalo que a nuvem exige, transformando uma resposta parseável em falha do job e descartando o resultado.
+
+Findings:
+- [medium] Edge aceita anos que a nuvem rejeita (agents/edge/internal/olt/query_parse.go:614-615)
+  `autofindFromFields` valida `Ont autofind time` com `time.Parse`, mas não restringe o ano. Assim, uma data calendariamente válida fora de 2000–2100 passa pelo parser do Edge; a nuvem rejeita o resultado em `check_result` e marca o job como inválido, mesmo que as entradas fossem úteis. Isso diverge da validação estrita adicionada na nuvem e pode tornar a consulta inutilizável se o relógio da OLT estiver configurado fora desse intervalo.
+  Recommendation: Após o parse, aplicar no Edge o mesmo intervalo de anos 2000–2100 exigido pela nuvem e cobrir datas válidas fora do intervalo com teste.

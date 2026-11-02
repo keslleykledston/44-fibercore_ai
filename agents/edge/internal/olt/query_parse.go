@@ -1,6 +1,7 @@
 package olt
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"regexp"
@@ -29,7 +30,7 @@ var (
 // HasParser says whether a query can return a typed result.
 func HasParser(queryID string) bool {
 	switch queryID {
-	case "olt.version", "olt.board", "olt.time", "olt.sync", "olt.temperature", "slot.cpu", "slot.mem", "olt.profile.line", "olt.profile.srv", "olt.profile.dba", "olt.profile.traffic":
+	case "olt.version", "olt.board", "olt.time", "olt.sync", "olt.temperature", "slot.cpu", "slot.mem", "olt.profile.line", "olt.profile.srv", "olt.profile.dba", "olt.profile.traffic", "olt.autofind":
 		return true
 	}
 	return false
@@ -58,6 +59,8 @@ func ParseResult(queryID, out string) (json.RawMessage, error) {
 		return parseDBAProfiles(out)
 	case "olt.profile.traffic":
 		return parseTrafficTables(out)
+	case "olt.autofind":
+		return parseAutofind(out)
 	}
 	return nil, ErrNoParser
 }
@@ -472,4 +475,146 @@ func ScrubProfileNames(queryID string, typed json.RawMessage, keepNames bool) (j
 		}
 	}
 	return json.Marshal(map[string]any{"profiles": v.Profiles})
+}
+
+// ---- olt.autofind (ADR-0040, onu_discovery): the ONTs the OLT has detected and nobody has authorised. Shapes seen on the real MA5608T (MA5600V800R015C00): an empty list
+// ("Failure: The automatically found ONTs do not exist") and ONE entry (a dashed rule, eleven `label : value` lines, a dashed rule and "The number of GPON autofind ONT is N").
+// How several entries are laid out has NOT been observed: the parser takes a dashed rule as the boundary and insists that the footer count equals the entries it found, so a
+// different layout fails (`bad_output`) instead of being guessed. Password, Loid and Checkcode are registration credentials of the ONT: their labels are recognised and
+// their values are never read, kept or forwarded.
+
+var (
+	reAutofindNone   = regexp.MustCompile(`^Failure: The automatically found ONTs do not exist$`)
+	reAutofindRule   = regexp.MustCompile(`^-{10,}$`)
+	reAutofindCount  = regexp.MustCompile(`^The number of GPON autofind ONT is (\d{1,3})$`)
+	reAutofindLabel  = regexp.MustCompile(`^(Number|F/S/P|Ont SN|Password|Loid|Checkcode|VendorID|Ont Version|Ont SoftwareVersion|Ont EquipmentID|Ont autofind time)\s*:\s*(.*)$`)
+	reAutofindNum    = regexp.MustCompile(`^\d{1,3}$`)
+	reAutofindFSP    = regexp.MustCompile(`^(\d{1,2})/(\d{1,2})/(\d{1,2})$`)
+	reAutofindSN     = regexp.MustCompile(`^([0-9A-F]{16}) \(([A-Z0-9]{4})-([0-9A-F]{8})\)$`)
+	reAutofindVendor = regexp.MustCompile(`^[A-Z0-9]{4}$`)
+	reAutofindEquip  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,31}$`)
+	reAutofindTime   = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})([+-]\d{2}):(\d{2})$`)
+)
+
+const maxAutofind = 128
+
+type autofindEntry struct {
+	PonPath   string `json:"pon_path"`
+	Serial    string `json:"serial"`
+	Vendor    string `json:"vendor"`
+	Equipment string `json:"equipment"`
+	FoundAt   string `json:"found_at"`
+}
+
+func parseAutofind(out string) (json.RawMessage, error) {
+	entries := []autofindEntry{}
+	var cur map[string]string
+	seenSerial := map[string]bool{}
+	count, sawNone, sawRule := -1, false, false
+	flush := func() error {
+		if cur == nil {
+			return nil
+		}
+		e, err := autofindFromFields(cur)
+		if err != nil || seenSerial[e.Serial] || len(entries) >= maxAutofind {
+			return ErrBadOutput
+		}
+		seenSerial[e.Serial] = true
+		entries = append(entries, e)
+		cur = nil
+		return nil
+	}
+	for _, line := range strings.Split(out, "\n") {
+		l := strings.TrimSpace(strings.TrimRight(line, "\r"))
+		switch {
+		case l == "":
+			continue
+		case reAutofindNone.MatchString(l):
+			sawNone = true
+		case reAutofindRule.MatchString(l):
+			if err := flush(); err != nil {
+				return nil, err
+			}
+			sawRule = true
+		case reAutofindCount.MatchString(l):
+			if count >= 0 {
+				return nil, ErrBadOutput
+			}
+			if err := flush(); err != nil {
+				return nil, err
+			}
+			count, _ = strconv.Atoi(reAutofindCount.FindStringSubmatch(l)[1])
+		case reAutofindLabel.MatchString(l):
+			m := reAutofindLabel.FindStringSubmatch(l)
+			if !sawRule || count >= 0 || len(m[2]) > 64 {
+				return nil, ErrBadOutput
+			}
+			if cur == nil {
+				cur = map[string]string{}
+			}
+			if _, dup := cur[m[1]]; dup {
+				return nil, ErrBadOutput
+			}
+			switch m[1] {
+			case "Password", "Loid", "Checkcode", "Ont Version", "Ont SoftwareVersion":
+				cur[m[1]] = "" // recognised, never read
+			default:
+				cur[m[1]] = m[2]
+			}
+		case strings.HasSuffix(l, "#") || strings.HasSuffix(l, ">"): // the prompt ends the listing
+			goto done
+		default:
+			return nil, ErrBadOutput
+		}
+	}
+done:
+	if err := flush(); err != nil {
+		return nil, err
+	}
+	switch {
+	case sawNone:
+		if len(entries) != 0 || sawRule || count >= 0 {
+			return nil, ErrBadOutput
+		}
+	case count < 1 || count != len(entries):
+		return nil, ErrBadOutput // an entry list needs its footer, and the footer must agree with what was parsed
+	}
+	return json.Marshal(map[string]any{"entries": entries})
+}
+
+func autofindFromFields(f map[string]string) (autofindEntry, error) {
+	var e autofindEntry
+	for _, k := range []string{"Number", "F/S/P", "Ont SN", "VendorID", "Ont autofind time"} {
+		if _, ok := f[k]; !ok {
+			return e, ErrBadOutput
+		}
+	}
+	m := reAutofindSN.FindStringSubmatch(f["Ont SN"])
+	fsp := reAutofindFSP.FindStringSubmatch(f["F/S/P"])
+	tm := reAutofindTime.FindStringSubmatch(f["Ont autofind time"])
+	if m == nil || fsp == nil || tm == nil || !reAutofindNum.MatchString(f["Number"]) || !reAutofindVendor.MatchString(f["VendorID"]) {
+		return e, ErrBadOutput
+	}
+	// the bracket repeats the serial: vendor = the first four bytes as text, then the last eight hexadecimal digits. Anything else is not what the device showed.
+	vb, err := hex.DecodeString(m[1][:8])
+	if err != nil || string(vb) != m[2] || m[2] != f["VendorID"] || m[1][8:] != m[3] {
+		return e, ErrBadOutput
+	}
+	frame, _ := strconv.Atoi(fsp[1])
+	slot, _ := strconv.Atoi(fsp[2])
+	port, _ := strconv.Atoi(fsp[3])
+	if frame > 7 || slot > maxSlot || port > maxPort {
+		return e, ErrBadOutput
+	}
+	if eq := f["Ont EquipmentID"]; eq != "" && !reAutofindEquip.MatchString(eq) {
+		return e, ErrBadOutput
+	} else {
+		e.Equipment = eq
+	}
+	if at, err := time.Parse("2006-01-02 15:04:05-07:00", f["Ont autofind time"]); err != nil || at.Year() < 2000 || at.Year() > 2100 { // the Cloud checks the same range
+		return e, ErrBadOutput
+	}
+	e.PonPath, e.Serial, e.Vendor = f["F/S/P"], m[1], m[2]
+	e.FoundAt = tm[1] + "T" + tm[2] + tm[3] + ":" + tm[4]
+	return e, nil
 }

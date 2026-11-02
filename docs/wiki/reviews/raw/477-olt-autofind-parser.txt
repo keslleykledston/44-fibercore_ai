@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19dd2-c0bb-7fa1-9b6a-5997caa3e431).
+[codex] Turn started (01a19dd2-c3cf-7063-9c1f-498caa4ae7ee).
+[codex] Assistant message captured: Vou comparar a branch com `main` e rastrear o parser, a validação na nuvem, os pins e os fixt...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/qu...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/olt/qu... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- agents/edge/internal/olt/qu...
+[codex] Command failed: /bin/bash -lc 'git diff --no-ext-diff --unified=15 main...HEAD -- agents/edge/internal/olt/qu... (exit 2)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/query_parse.go | sed -n '505,630p'; nl -ba app...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/query_parse.go | sed -n '505,630p'; nl -ba app... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a validação de `olt.autofind` na n...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a validação de `olt.autofind` na nuvem aceita posições e timestamps que o Edge rejeita, enfraquecendo a revalidação no limite de confiança.
+
+Findings:
+- [medium] A nuvem aceita posição e data inválidas em resultados autofind (apps/api/app/core/olt_query.py:207-209)
+  `check_result` só testa formato para `pon_path` e `found_at`. Assim, resultados como `99/99/99` e `2026-99-99T99:99:99+99:99` passam na nuvem, embora o parser do Edge imponha limites aos componentes da posição e valide a data com `time.Parse`. Se um Edge desatualizado, defeituoso ou comprometido enviar esses dados, a API aceita e pode armazenar uma observação inválida, apesar de se apresentar como segunda validação do formato fechado. Valide os limites numéricos de frame/slot/porta e faça parsing calendárico do timestamp e do offset antes de aceitar o resultado.
+  Recommendation: Reutilize validação equivalente à do Edge: decomponha `pon_path`, aplique os limites de cada componente e faça parsing estrito de `found_at`, incluindo a validade da data e do offset.

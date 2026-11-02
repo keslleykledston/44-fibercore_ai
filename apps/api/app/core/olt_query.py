@@ -38,7 +38,7 @@ CATALOG: tuple[Query, ...] = (
     Query("olt.alarm.active", "Alarmes ativos", "global", False),
     Query("olt.alarm.history", "Histórico de alarmes (lista)", "global", False),
     Query("olt.event.history", "Histórico de eventos (lista)", "global", False),
-    Query("olt.autofind", "ONTs detectadas e não confirmadas", "global", False),
+    Query("olt.autofind", "ONTs detectadas e não confirmadas", "global", True),
     Query("olt.temperature", "Temperatura", "global", True),
     Query("olt.sync", "Sincronismo de controladoras", "global", True),
     Query("olt.profile.dba", "Perfis DBA (lista)", "global", True),
@@ -66,7 +66,7 @@ BY_ID = {q.id: q for q in CATALOG}
 
 # ADR-0029 item 7: the rollout is by steps. Only these are offered by the cloud now (the global, already validated ones); the PON ones come after a
 # supervised rehearsal in the LAB. Being in the catalog is not being offered.
-ROLLOUT: frozenset[str] = frozenset({"olt.version", "olt.board", "olt.time", "olt.sync", "olt.temperature", "olt.profile.line", "olt.profile.srv", "olt.profile.dba", "olt.profile.traffic"})
+ROLLOUT: frozenset[str] = frozenset({"olt.version", "olt.board", "olt.time", "olt.sync", "olt.temperature", "olt.profile.line", "olt.profile.srv", "olt.profile.dba", "olt.profile.traffic", "olt.autofind"})
 
 # the Edge side of the channel (queue, lease, parsers) exists; the tenant flag and the Edge's own configuration still decide whether anything runs
 EDGE_SUPPORT = True
@@ -122,6 +122,10 @@ _BOARD = re.compile(r"^[A-Za-z0-9]{3,20}$")
 _STATUS = re.compile(r"^[A-Za-z_]{3,24}$")
 _PROFILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _POLICY = re.compile(r"^(-|[a-z]+(-[a-z]+){0,2})$")
+_SERIAL16 = re.compile(r"^[0-9A-F]{16}$")
+_PON_PATH = re.compile(r"^\d{1,2}/\d{1,2}/\d{1,2}$")
+_VENDOR4 = re.compile(r"^[A-Z0-9]{4}$")
+_EQUIP = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,31}$")
 _TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$")
 
 
@@ -195,6 +199,24 @@ def check_result(query_id: str, data) -> bool:
                     and isinstance(x["pri_policy"], str) and _POLICY.match(x["pri_policy"])):
                 return False
         return len({x["id"] for x in rows}) == len(rows)
+    if query_id == "olt.autofind":   # ONTs the OLT detected and nobody authorised: position, serial, vendor, equipment id and when; never a registration credential
+        rows = data.get("entries")
+        if set(data) != {"entries"} or not isinstance(rows, list) or len(rows) > 128:
+            return False
+        for x in rows:
+            if not (isinstance(x, dict) and set(x) == {"pon_path", "serial", "vendor", "equipment", "found_at"} and isinstance(x["pon_path"], str) and _PON_PATH.match(x["pon_path"])
+                    and isinstance(x["serial"], str) and _SERIAL16.match(x["serial"]) and isinstance(x["vendor"], str) and _VENDOR4.match(x["vendor"])
+                    and isinstance(x["equipment"], str) and (x["equipment"] == "" or _EQUIP.match(x["equipment"])) and isinstance(x["found_at"], str) and _TIME.match(x["found_at"])):
+                return False
+            frame, slot, port = (int(v) for v in x["pon_path"].split("/"))   # the same bounds the Edge enforces
+            if frame > 7 or slot > LIMITS["slot"] or port > LIMITS["port"]:
+                return False
+            try:
+                if not 2000 <= datetime.fromisoformat(x["found_at"]).year <= 2100:   # a real calendar date and a real UTC offset
+                    return False
+            except ValueError:
+                return False
+        return len({x["serial"] for x in rows}) == len(rows)
     if query_id == "olt.temperature":
         rows = data.get("boards")
         if set(data) != {"boards"} or not isinstance(rows, list) or not 1 <= len(rows) <= LIMITS["slot"] + 1:

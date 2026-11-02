@@ -12,7 +12,7 @@ Legenda: **V** = já executado na OLT real e coberto por fixture (aceito por pad
 | `olt.alarm.active` | `display alarm active all` | global | N | 2 |
 | `olt.alarm.history` | `display alarm history all list` | global | N | 2 |
 | `olt.event.history` | `display event history all list` | global | N | 3 |
-| `olt.autofind` | `display ont autofind all` | global | N | 2 |
+| `olt.autofind` | `display ont autofind all` | global | V (lista vazia e UMA entrada observadas em 02/11/2026; layout de várias entradas NÃO observado, falha fechada se o rodapé não bater) | 2 |
 | `olt.temperature` | `display temperature 0` | global | V | 3 |
 | `olt.sync` | `display data sync state` | global | V | 3 |
 | `olt.profile.dba` | `display dba-profile all` | global | V (capturada e validada em 02/11/2026) | 11 |
