@@ -2,7 +2,7 @@
 
 ## Unreleased — fila de ONUs aguardando autorização (v2.5, FC25-01/02/03, 2026-11-02)
 - API (flag **`onu_discovery`**, desligada por padrão; permissões `discovery:read` (administrador, engenheiro, NOC N2) e `discovery:import` (administrador, engenheiro)): migração **0041** `onu_discovery_observations` (RLS forçada; o app só faz SELECT/INSERT e UPDATE de `last_seen_at`/`seen_count`/`vendor_hint`; sem DELETE; a origem faz parte da chave, então importação manual ou fixture **nunca renova** o que o Edge leu da OLT). `POST /v1/olts/{id}/onus/unregistered/import` (idempotente; `edge_read` reservado ao Edge), `GET /v1/olts/{id}/onus/unregistered` e `GET /v1/discovery/onus`. Condições: `new`, `waiting`, `stale` (dado antigo, nunca "offline") e `conflict` (serial já registrado ou visto em outra OLT/PON). Associação ERP sempre `unavailable` e autorização `not_available`. Nenhum job, evento ou incidente é criado.
-- Web: `/rede/pendentes` (filtros, origem, motivos, registro à mão) e atalho **ONUs pendentes** na Rede; some com a flag desligada (404). Seed sintético, e2e `pendentes.spec.ts` + recuo, capturas reais e how-to `rede/onus-pendentes`. Suíte da API: 991 passam.
+- Web: `/rede/pendentes` (filtros, origem, motivos, registro à mão) e atalho **ONUs pendentes** na Rede; some com a flag desligada (404). Seed sintético, e2e `pendentes.spec.ts` + recuo, capturas reais e how-to `rede/onus-pendentes`. Suíte da API: 993 passam.
 - Pendente (depende de ordem/supervisão): leitura real `olt.autofind` e associação ERP por serial.
 
 ## Unreleased — Profile Studio: telas, seed e ajuda (v2.5, ADR-0040, 2026-11-02)
