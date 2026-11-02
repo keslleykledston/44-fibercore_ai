@@ -3,6 +3,7 @@ package olt
 import (
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -356,5 +357,26 @@ func TestReauthorizeRestoreNeverAddsWhenTheAnswerBySerialNamesAnotherONU(t *test
 	}
 	if f.addCount > 1 {
 		t.Fatalf("the restore must not send another ont add: %d", f.addCount)
+	}
+}
+
+func TestReauthorizeParsersReadTheRealDeviceLayout(t *testing.T) {
+	// fixtures with the REAL layout of the OLT (two-space indent, pager line in the middle) and synthetic values; the first real run failed on this (H5)
+	sp := ReauthSpec{LineProfileID: 179, SrvProfileID: 179, ServicePortIndex: 1234, VLAN: 1400, Gem: 1, Description: "5"}
+	list, err := os.ReadFile(r015Dir + "display_service_port_port_ont.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := ParseServicePorts(string(list))
+	if err != nil || !spOK(rows, onu14, sp) {
+		t.Fatalf("list: %v %+v", err, rows)
+	}
+	det, _ := os.ReadFile(r015Dir + "display_service_port_index.txt")
+	if w := spDetailWhy(string(det), onu14, sp); w != "" || !spDetailOK(string(det), onu14, sp) {
+		t.Fatalf("detail differs at %q", w)
+	}
+	bad := strings.Replace(string(det), "Tag transform       : translate", "Tag transform       : transparent", 1)
+	if spDetailOK(bad, onu14, sp) || spDetailWhy(bad, onu14, sp) != "Tag transform" {
+		t.Fatal("another tag transform must be refused and named")
 	}
 }

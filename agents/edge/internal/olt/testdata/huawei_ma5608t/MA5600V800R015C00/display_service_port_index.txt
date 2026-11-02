@@ -1,0 +1,32 @@
+display service-port 1234
+  -------------------------------------------------------------
+  Index               : 1234
+  VLAN ID             : 1400
+  VLAN attr           : common
+  Port type           : gpon
+  F/S/P               : 0/0/14
+  ONT ID              : 10
+  GEM port index      : 1
+  Flow type           : vlan
+  Flow para           : 1400
+  TX                  : -
+  Inbound table name  : -
+  RX                  : -
+  Outbound table name : -
+  Admin status        : enable
+  State               : up
+  Label               : -
+  Priority            : -
+  PVC bundle          : no
+  Max MAC count       : 1023
+  Tag transform       : translate
+  Description         :
+  Remote description  :
+---- More ( Press 'Q' to break ) ----                                       Service-port bundle : -
+  Cos                 : -
+  Car-Group           : -
+  Static MAC          :
+  IP address          :
+  Stat. performance   : disable
+  HQoS subscriber ID  : -
+  -------------------------------------------------------------
