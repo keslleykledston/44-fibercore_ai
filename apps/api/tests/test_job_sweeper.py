@@ -92,6 +92,9 @@ def test_a_read_job_in_flight_is_never_touched_and_the_other_tenant_is_not_confu
     try:
         assert sweeper.sweep_once(worker) == {"expired": 0, "unknown": 0, "locked": 0}          # a read is held by no one and is not a gated write
         assert _status(migrated, other) == "ACCEPTED" and _status(migrated, jid) == "DISPATCHED"
+        with worker.begin() as c:                                                               # a worker that NAMES the read as gated still moves nothing: the allowlist is inside the function
+            assert tuple(c.execute(text("SELECT expired, unknown, locked FROM app_sweep_jobs(CAST(:g AS text[]), 1800)"), {"g": ["refresh_cpe", "olt_query"]}).one()) == (0, 0, 0)
+        assert _status(migrated, other) == "ACCEPTED"
     finally:
         with migrated.begin() as c:
             c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(seed["B"])})
@@ -103,3 +106,16 @@ def test_the_gated_list_is_exactly_the_bench_writes_whose_global_gate_is_closed(
     from app.api import jobs
     from app.core import bench
     assert sweeper.gated_ops() == sorted(o for o in bench.BENCH_OPS if jobs._blocked_reason(o)) and sweeper.gated_ops()   # not empty: every bench write is gated today
+
+
+def test_the_allowlist_inside_the_function_is_the_bench_catalog():
+    """The function's own list (it never trusts the caller's) must equal the bench writes the application knows; a new bench write needs a migration that replaces the function."""
+    import importlib.util
+    from pathlib import Path
+
+    from app.core import bench
+    path = Path(__file__).resolve().parents[1] / "alembic" / "versions" / "0047_job_sweeper.py"
+    spec = importlib.util.spec_from_file_location("mig0047", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert set(mod.BENCH_WRITE_OPS) == set(bench.BENCH_OPS)

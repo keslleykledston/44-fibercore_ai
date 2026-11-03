@@ -5,6 +5,7 @@ Until now the two reconciliations of a job the Edge went quiet about ran only in
 never polled again, both stayed unwritten. This function does the same two steps for every tenant and every Edge, so a worker can run them on a clock.
 
 * It is SECURITY DEFINER and only `fibercore_worker` may EXECUTE it: the worker role gets NO grant on `jobs` or `bench_targets`, only this one entry point.
+* The operations it may touch are fixed INSIDE it (`BENCH_WRITE_OPS`); the caller's list can only narrow them, never widen them.
 * It can only move a job in the directions the opportunistic sweep already moves it (`DISPATCHED`→`EXPIRED`, a gated write in flight→`UNKNOWN`) and write-lock a bench target (the
   fail-safe direction). It never releases a lock: `bench-unlock` stays a person's act. The stale window cannot be shortened by the caller (floor of 30 minutes inside).
 * To find the tenants with something in flight the owner needs to read the live rows across tenants: one SELECT policy for the OWNER role, limited to the in-flight states. The updates themselves
@@ -18,10 +19,15 @@ down_revision = "0046"
 branch_labels = None
 depends_on = None
 
+# The bench writes (app.core.bench.BENCH_OPS) are the ONLY operations this function may ever move to UNKNOWN or lock a target for. The caller's list can only NARROW this one (a
+# test keeps the two equal): a worker that passes anything else changes nothing. Adding a bench write means a new migration that replaces the function.
+BENCH_WRITE_OPS = ("onu_deactivate", "onu_reauthorize", "onu_reset", "ping_test", "reboot_cpe", "set_wifi_ssid", "speed_test_download", "speed_test_upload")
+
 
 def upgrade() -> None:
+    ops = ", ".join(f"'{o}'" for o in BENCH_WRITE_OPS)
     op.execute(
-        """
+        f"""
         DO $$ BEGIN
           EXECUTE format($p$CREATE POLICY sweeper_scan ON jobs FOR SELECT TO %I
                               USING (status IN ('DISPATCHED','ACCEPTED','DEVICE_PENDING','VERIFYING'))$p$, current_user);
@@ -30,6 +36,7 @@ def upgrade() -> None:
         CREATE FUNCTION app_sweep_jobs(p_gated text[], p_stale_secs integer) RETURNS TABLE (expired integer, unknown integer, locked integer)
         LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
         DECLARE t uuid; a integer; b integer; c integer; d integer; stale integer := GREATEST(COALESCE(p_stale_secs, 0), 1800);
+               gated text[] := ARRAY(SELECT g FROM unnest(COALESCE(p_gated, ARRAY[]::text[])) AS g WHERE g = ANY (ARRAY[{ops}]::text[]));
         BEGIN
           expired := 0; unknown := 0; locked := 0;
           FOR t IN SELECT DISTINCT tenant_id FROM jobs WHERE status IN ('DISPATCHED','ACCEPTED','DEVICE_PENDING','VERIFYING') LOOP
@@ -38,11 +45,11 @@ def upgrade() -> None:
             WITH s AS (UPDATE jobs SET status = 'EXPIRED', updated_at = now()
                         WHERE status = 'DISPATCHED' AND expires_at < now() - interval '5 minutes' RETURNING operation, target_id),
                  l AS (UPDATE bench_targets bt SET write_locked = true, lock_reason = 'bench write dispatched and never reported'
-                        FROM s WHERE bt.cpe_id = s.target_id AND s.operation = ANY(COALESCE(p_gated, ARRAY[]::text[])) AND NOT bt.write_locked RETURNING 1)
+                        FROM s WHERE bt.cpe_id = s.target_id AND s.operation = ANY(gated) AND NOT bt.write_locked RETURNING 1)
             SELECT (SELECT count(*) FROM s), (SELECT count(*) FROM l) INTO a, b;
             -- a gated write the Edge accepted and went quiet about: UNKNOWN (terminal) and its target locked until a person reconciles it
             WITH s AS (UPDATE jobs SET status = 'UNKNOWN', updated_at = now()
-                        WHERE status IN ('ACCEPTED','DEVICE_PENDING','VERIFYING') AND operation = ANY(COALESCE(p_gated, ARRAY[]::text[]))
+                        WHERE status IN ('ACCEPTED','DEVICE_PENDING','VERIFYING') AND operation = ANY(gated)
                           AND updated_at < now() - make_interval(secs => stale) RETURNING operation, target_id),
                  l AS (UPDATE bench_targets bt SET write_locked = true, lock_reason = 'bench write accepted and never finished'
                         FROM s WHERE bt.cpe_id = s.target_id AND NOT bt.write_locked RETURNING 1)
