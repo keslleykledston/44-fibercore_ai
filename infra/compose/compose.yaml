@@ -110,6 +110,27 @@ services:
       timeout: 5s
       retries: 3
       start_period: 40s
+  job-sweeper:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    command: ["python", "-m", "app.workers.sweeper"]
+    environment:
+      WORKER_DATABASE_URL: postgresql://fibercore_worker:${FIBERCORE_WORKER_DB_PASSWORD}@postgres:5432/fibercore
+      HEARTBEAT_FILE: /tmp/hb
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    networks: [control]
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.core.heartbeat", "/tmp/hb", "180"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
   event-consumer:
     build:
       context: ../..
