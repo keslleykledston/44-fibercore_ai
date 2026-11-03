@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — Homologação das OLTs (ADR-0041, PR6, 2026-11-02)
+- API: `GET /v1/fleet/homologation` (`fleet:read` + flag `fleet_manager`). O nível L0..L4 de cada modelo+firmware é CALCULADO por `app/core/homologation.py` a partir do livro-razão (`knowledge_data/ledger.json`, gerado por `scripts/gen_homologation_ledger.py`): L1 só com identidade e firmware de captura REAL; L2 exige driver `observed` e captura real dos 5 casos do equipamento (placa, PON sem ONU, ONU online, offline, pager) mais a reação à saída truncada; L3/L4 só com certificação registrada com evidência e aprovador; fixture sintética não conta; firmware exato, sem herança. Livro inválido = recusado inteiro (503).
+- Testes confirmam, contra o repositório, o SHA-256 de cada fixture, a existência de cada teste citado e que o `driver_level` do livro bate com o Registry do Edge.
+- Web: `/rede/homologacao` (cartões por modelo com o que falta, os 22 testes com o tipo de evidência, OLTs cadastradas com "em dia"/"desatualizada" a 60 min, testes de conexão em 24 h, aviso de lista truncada), atalho na Frota, ajuda `rede/homologacao-de-olts` com capturas reais.
+- Resultado real hoje: Huawei MA5608T `MA5600V800R015C00` = L1 (falta PON sem ONU e a promoção do driver); MA5800 R018 e ZTE C300 = L0 (só fixtures sintéticas); ninguém acima de L2.
+- Provas: API 1066 passed; e2e 15 + capturas 2 + recuo 1; ajuda 30 artigos. Codex: 5 rodadas, approve. Sem migração, sem Edge.
+
 ## Unreleased — Base de conhecimento de OLTs (ADR-0041, PR5, 2026-11-02)
 - API: `GET /v1/knowledge` e `/v1/knowledge/{sources|commands|runbooks|intents|recipes|homologation}` (`fleet:read` + flag `fleet_manager`). Dados do pacote importados como DADO em `apps/api/app/knowledge_data`; `app/core/knowledge.py` valida na carga e recusa a base inteira (503 `knowledge_base_invalid`): consultas só `display`/`show`/`cd` sem palavra de escrita, `can_execute_on_device=false`, `verification=not_tested_in_fibercore`, fontes https, receitas `deny_apply`, matriz `blocked_by_default`, e nenhum comando de escrita mostrado como código (exemplos, receitas, runbooks, roteiro).
 - Receitas: só as etapas de leitura/verificação/pré-visualização são servidas (lista fechada de verbos); as de alteração ficam fora e a tela diz quantas foram omitidas. 3 exemplos de escrita da receita Intelbras do pacote foram removidos (PACKAGE_AUDIT).

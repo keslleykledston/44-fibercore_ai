@@ -500,3 +500,7 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 - PR4 (sidebar da ONU/ONT com a arte do modelo): e2e aparelho + catalogo 6 passed, recuo com `device_assets` desligada 2 passed, Codex approve r1. Web da LAB atualizado em `a3ef52d`.
 - PR5 (base de conhecimento somente leitura): API 1051 passed (suite completa, sem o flake de envelope, corrigido antes em `762ae4d`); `test_knowledge.py` 24 (validador parametrizado: escrita em consulta, exemplo, passo, runbook, roteiro, em qualquer posição de um trecho em código); e2e conhecimento/frota/aparelho/catalogo 12 + recuo 1; ajuda 29 artigos; Codex approve na 5ª rodada. Deploy LAB (`main` = `0c70134`, backup antes, sem migração, head 0046): leitura real pela API com conta descartável = 25 fontes, 19 consultas (todas `executable=false`), 8 receitas com etapas de alteração omitidas; conta desativada.
 - Achado de conteúdo: o pacote trazia 3 exemplos de ESCRITA na receita Intelbras; removidos e registrados em `PACKAGE_AUDIT.md`.
+
+## ADR-0041 PR6 — homologação das OLTs (2026-11-02)
+- API 1066 passed (suite completa); `test_homologation.py` 15 (níveis calculados, unit-only não passa de L0/L1, sintético não conta, ledger inválido recusado, hash das fixtures e nomes de teste conferidos contra o repositório, `driver_level` igual ao Registry do Edge, isolamento entre tenants, 59/61 min, lista truncada).
+- e2e conhecimento/homologação/frota/aparelho/catálogo 15 passed + capturas 2 + recuo `fleet_manager` desligada 1; ajuda 30 artigos. Codex approve na 5ª rodada.
