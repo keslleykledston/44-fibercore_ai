@@ -1,13 +1,13 @@
 # Ensaio de restauração completo — 2026-11-03 (LAB)
 
-**Resultado: PASS.** Estado do sistema: LAB (não é produção). Roteiro repetível: `scripts/restore-rehearsal.sh <dump>` (ADR-0041 não depende dele; é gate do piloto interno).
+**Resultado: PASS.** Estado do sistema: LAB (não é produção). Roteiro repetível (os segredos de ensaio não vão em argv: `--env-file`/stdin/arquivo 0600 no temporário): `scripts/restore-rehearsal.sh <dump>` (ADR-0041 não depende dele; é gate do piloto interno).
 
 ## O que o roteiro faz (tudo num PostgreSQL 17 descartável, porta só em loopback, senhas de ensaio; nada toca o banco do Compose)
 1. Confere o SHA-256 do dump (ou decifra o `.gpg` e confere o do claro). Checksum adulterado ⇒ recusa antes de subir qualquer coisa (testado).
 2. Cria o container e os papéis `fibercore_app/worker/rbac` (eles não vão no dump) e restaura com `--exit-on-error`.
 3. Confere RLS: nenhuma tabela com RLS ligado e não forçado, nenhum papel da aplicação com bypass/superuser, e o papel da aplicação SEM contexto de tenant enxerga 0 linhas de tenants/memberships.
 4. Roda `alembic upgrade head` sobre o restaurado e compara com o head do código (no-op se o dump já está no head; senão é ensaio real do upgrade).
-5. **Sobe a API sobre o banco restaurado**, cria um usuário de ensaio SÓ nesse banco, faz login, lê `/v1/olts` (contagem igual à do banco) e prova que um workspace alheio dá 404.
+5. **Sobe a API sobre o banco restaurado**, cria SÓ nesse banco um usuário de ensaio (membro do tenant real) e um segundo tenant com uma OLT própria, faz login, lê `/v1/olts` (contagem igual à do tenant no banco, menor que a de todos os tenants, e nenhuma linha do outro tenant na resposta) e pede o outro tenant, que existe e a que o usuário não pertence (esperado 403/404, nenhuma linha dele).
 6. Roda a varredura do sweeper com o papel do worker.
 7. Remove o container e os temporários (também em caso de falha).
 
@@ -18,7 +18,7 @@
 | Upgrade `alembic` | **0046 → 0047 aplicado sobre dados reais**, sem erro | no-op |
 | RLS | 49 forçadas, 0 ligadas sem forçar, 0 papéis com bypass | idem |
 | Papel da app sem contexto | 0 linhas | 0 linhas |
-| API sobre o restaurado | `/readyz` 200; login; OLTs pela API = 1 = banco; workspace alheio 404 | idem |
+| API sobre o restaurado | `/readyz` 200; login; OLTs pela API = 1 = as do tenant no banco (2 no total); 0 linhas do outro tenant; o outro tenant (existente) → 404 | idem (segunda versão do roteiro) |
 | Sweeper (papel do worker) | `0/0/0` | `0/0/0` |
 | Volume restaurado | 775 ONUs, 9 CPEs, 53 jobs, 896 auditorias, 631 eventos | idem |
 
