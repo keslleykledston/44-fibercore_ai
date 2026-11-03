@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased — Ensaio de restauração completo (2026-11-03)
+- Ops: `scripts/restore-rehearsal.sh <dump>` restaura o backup num PostgreSQL descartável (loopback, segredos fora do argv), confere RLS, aplica `alembic upgrade head`, sobe a API sobre a cópia (login de ensaio, leitura, isolamento contra um segundo tenant real) e roda o sweeper com o papel do worker; remove tudo ao fim, também em falha ou sinal. Evidência: `docs/operations/RESTORE_REHEARSAL_2026-11-03.md` (dump 0046 → upgrade 0047 sobre dados reais sem erro; dump 0047 → no-op). Limites mantidos no doc (banco pequeno, chaves reais fora do ensaio). Sem mudança de API, Edge ou banco. Codex: 6 rodadas, approve.
+
 ## Unreleased — Job sweeper periódico (2026-11-02)
 - API/infra: migração 0047 (`app_sweep_jobs`, função SECURITY DEFINER; só `fibercore_worker` executa; o role do worker não ganha grant em `jobs` nem `bench_targets`) e worker `job-sweeper` (`app/workers/sweeper.py`, a cada 60 s, serviço no compose com healthcheck por heartbeat). Faz para todo tenant e Edge as duas varreduras que antes só rodavam no `GET /v1/edge/jobs/next` do próprio Edge: job `DISPATCHED` sem relato 5 min depois da validade → `EXPIRED`; escrita de bancada `ACCEPTED/DEVICE_PENDING/VERIFYING` sem notícia há 30 min → `UNKNOWN` e alvo travado.
 - Garantias: nunca solta trava (`bench-unlock` segue ato de pessoa); a lista de operações que podem virar `UNKNOWN` ou travar alvo fica fixa dentro da função (a do chamador só estreita); a janela de 30 min não encurta; o tenant é fixado por iteração; a varredura oportunista do `next` continua e é idempotente com a nova.

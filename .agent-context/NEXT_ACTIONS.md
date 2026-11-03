@@ -318,3 +318,6 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 ## Atualização 2026-11-02 (noite 5): job sweeper periódico no ar
 - Feito: migração 0047 (`app_sweep_jobs`, SECURITY DEFINER, EXECUTE só `fibercore_worker`) + worker `job-sweeper` (60 s) no compose; API 1072 passed; Codex approve em 2 rodadas. LAB em `main` = `580171e`, head 0047. A lacuna "sem sweeper periódico" do KNOWN_ISSUES está fechada. Nova escrita de bancada ⇒ migração nova que substitui a função (a allowlist é interna; um teste mantém igual a `bench.BENCH_OPS`).
 - Ainda possível sem o usuário: CSP com nonces no Next (hoje o nginx manda CSP com `'unsafe-inline'` e HSTS sem `includeSubDomains`; mudar exige tocar o nginx do host, que pede root), limite por agente na ingestão (hoje só `limit_req` por IP no nginx).
+
+## Atualização 2026-11-03: ensaio de restauração completo feito
+- `scripts/restore-rehearsal.sh <dump>` + `docs/operations/RESTORE_REHEARSAL_2026-11-03.md`. Fecha o limite "sem subir a API sobre o banco restaurado". Antes de toda migração relevante: backup + este ensaio. Continuam com o responsável: guarda fora do host da chave `MFA_ENCRYPTION_KEY`/`.env.prod`, cifra do backup (`BACKUP_GPG_RECIPIENT`), cópia fora do host.

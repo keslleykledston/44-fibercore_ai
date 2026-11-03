@@ -1,0 +1,18 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19faa-32af-7c02-ad1f-7c0edc44a19d).
+[codex] Turn started (01a19faa-32e5-73b1-ad33-ceb1ce6801e5).
+[codex] Assistant message captured: Vou comparar o diff novo com o pai imediato e seguir o fluxo de cleanup/confirmação para proc...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 HEAD''^ HEAD -- scripts/restore-rehearsal....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 HEAD''^ HEAD -- scripts/restore-rehearsal.... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=5 main...HEAD -- scripts/restore-rehearsal.sh...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=5 main...HEAD -- scripts/restore-rehearsal.sh... (exit 0)
+[codex] Assistant message captured: {"verdict":"approve","summary":"A alteração faz o cleanup continuar após falha de `rm -rf` e ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: approve
+
+A alteração faz o cleanup continuar após falha de `rm -rf` e verifica se o diretório de trabalho ainda existe antes de anunciar sucesso. Não encontrei risco material novo nesse diff.
+
+No material findings.

@@ -509,3 +509,6 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 ## Job sweeper periódico (2026-11-02)
 - API 1072 passed (suite completa); `test_job_sweeper.py` 7: expira e trava sem o Edge consultar, `UNKNOWN` só depois de 30 min, o chamador não encurta a janela nem alarga a lista, o role do worker não lê `jobs`/`bench_targets` e o role da aplicação não executa a função, leitura em voo e outro tenant intocados, allowlist da função = `bench.BENCH_OPS`. Codex approve na 2ª rodada.
 - Deploy LAB (`main` = `580171e`, backup antes, migração 0047 aplicada, head 0047): serviço `job-sweeper` `Up (healthy)`; uma varredura real contra a LAB devolveu `expired 0, unknown 0, locked 0` (nada em voo) e os logs não têm falha. API, relay, consumer, web e Edge (`0.1.0-lab-851be52`) não foram tocados.
+
+## Ensaio de restauração completo (2026-11-03)
+- `scripts/restore-rehearsal.sh` sobre os dois dumps reais da LAB (0046 e 0047): PASS; restauração 1,9 s; RLS 49 forçadas/0 sem forçar/0 papéis com bypass; papel da app sem contexto vê 0; API `/readyz` 200, leitura isolada (1 OLT do tenant de 2 no total, 0 linhas do outro tenant, tenant alheio existente → 404); sweeper `0/0/0`. Checksum adulterado ⇒ recusa (rc 1); SIGTERM no meio ⇒ rc 143 e 0 containers/0 uvicorn. Codex approve na 6ª rodada.
