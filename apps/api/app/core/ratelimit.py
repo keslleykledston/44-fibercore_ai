@@ -1,7 +1,7 @@
 """Per-agent rate limit for the Edge intake routes (known gap: "ingestão sem rate-limit por agente").
 
 A token bucket per (tenant, Edge) held IN THIS PROCESS: the API runs as one uvicorn process (compose), so the bucket is the whole truth; with more processes each would allow its own
-budget (the limit would multiply by the process count: a bound, not a bypass). A restart refills every bucket, which is the safe side for a data intake the Edge redelivers
+budget (the limit would multiply by the process count: a bound, not a bypass). A restart refills every bucket (the Edge redelivers what it was told to wait for)
 (429 is `Retry` to the Edge: the spool keeps the batch and sends it again later). The proxy's per-IP `limit_req` stays in front; this one is about a single agent that is authenticated but
 misbehaves (loop, clock jump, replay storm) and would otherwise monopolise the database for everyone else.
 """
@@ -12,7 +12,8 @@ import threading
 import time
 from collections.abc import Callable
 
-MAX_KEYS = 10_000   # a bucket per (tenant, Edge): thousands of agents are already far beyond what one API process serves; past this, idle buckets are dropped first
+# One bucket per (tenant, Edge): the keys are authenticated Edges, so thousands are already far beyond what one API process serves. Full-again buckets are dropped, ACTIVE ones never.
+MAX_KEYS = 10_000
 
 
 class TokenBucketLimiter:
@@ -29,26 +30,23 @@ class TokenBucketLimiter:
         """0.0 if the call may proceed (one token spent); otherwise the seconds until a token exists. Never raises."""
         now = self._clock()
         with self._lock:
+            if key not in self._buckets and len(self._buckets) >= MAX_KEYS:
+                self._drop_idle(now)
+                if len(self._buckets) >= MAX_KEYS:
+                    return 1.0   # table full of agents that are all still inside their window: a NEW identity waits; an active bucket is never evicted (that would hand out a free burst)
             tokens, seen = self._buckets.get(key, (self.burst, now))
             tokens = min(self.burst, tokens + (now - seen) * self.rate)
             if tokens >= 1.0:
                 self._buckets[key] = (tokens - 1.0, now)
-                self._trim(now)
                 return 0.0
             self._buckets[key] = (tokens, now)
-            self._trim(now)
             return (1.0 - tokens) / self.rate
 
-    def _trim(self, now: float) -> None:
-        if len(self._buckets) <= MAX_KEYS:
-            return
-        # a bucket idle long enough to be full again carries no information: dropping it changes nothing
+    def _drop_idle(self, now: float) -> None:
+        # a bucket idle long enough to be full again carries no information: dropping it changes nothing for that agent
         full_after = self.burst / self.rate
         for k in [k for k, (_, seen) in self._buckets.items() if now - seen >= full_after]:
             del self._buckets[k]
-        if len(self._buckets) > MAX_KEYS:   # still too many, all recently active: forget the least recently seen (they refill for free: the safe side)
-            for k, _ in sorted(self._buckets.items(), key=lambda kv: kv[1][1])[: len(self._buckets) - MAX_KEYS]:
-                del self._buckets[k]
 
     def retry_after(self, wait: float) -> int:
         return max(1, math.ceil(wait))

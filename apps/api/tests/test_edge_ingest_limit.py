@@ -34,13 +34,17 @@ def test_the_bucket_allows_the_burst_then_refills_at_the_rate():
     assert lim.take("b") == 0.0                                            # another agent has its own bucket
 
 
-def test_the_table_of_buckets_is_bounded():
+def test_the_table_is_bounded_and_an_active_bucket_is_never_evicted_for_a_free_burst():
     c = Clock()
     lim = TokenBucketLimiter(burst=2, per_minute=60, clock=c)
+    assert [lim.take("victim"), lim.take("victim")] == [0.0, 0.0] and lim.take("victim") > 0      # the victim spent its burst
     for i in range(MAX_KEYS + 50):
         lim.take(f"k{i}")
-        c.t += 0.001
     assert len(lim._buckets) <= MAX_KEYS
+    assert lim.take("victim") > 0                                                                  # still empty: filling the table never gave it a fresh bucket
+    assert lim.take("brand-new") > 0                                                               # a NEW identity waits while the table is full of active ones...
+    c.t += 10                                                                                      # ...and gets in once the idle ones are full again and dropped
+    assert lim.take("brand-new") == 0.0 and len(lim._buckets) <= MAX_KEYS
     with pytest.raises(ValueError):
         TokenBucketLimiter(burst=0, per_minute=10)
 
