@@ -350,8 +350,8 @@ def next_job(
     # FC22-015: a BENCH write the Edge accepted and then went quiet about holds its target; after STALE_AFTER it becomes UNKNOWN (terminal; a late report is refused as
     # a conflict) and the target is write-locked like any other bench write that ended UNKNOWN (ADR-0030 item 6): it is released only when a person reconciles it
     # (`bench-unlock`), never by the clock. Any other write (none is homologated today) is NOT released by time: it keeps holding its target (fail closed).
-    # NOTE: opportunistic, like the DISPATCHED sweep above: it runs when THIS Edge polls. If the Edge never polls again the job stays ACCEPTED and keeps holding the
-    # target (the safe side); a periodic sweeper is a known gap (docs/wiki/KNOWN_ISSUES.md).
+    # NOTE: this runs when THIS Edge polls; the `job-sweeper` worker (app/workers/sweeper.py, migration 0047) does the same two steps for every Edge on a clock, so a silent
+    # Edge no longer leaves the job ACCEPTED/DISPATCHED forever. Both are idempotent and move a job in the same directions only.
     gated = [o for o in bench.BENCH_OPS if _blocked_reason(o)]
     stale = conn.execute(
         text("UPDATE jobs SET status = 'UNKNOWN', updated_at = now() WHERE edge_id = :e AND status IN ('ACCEPTED', 'DEVICE_PENDING', 'VERIFYING') "

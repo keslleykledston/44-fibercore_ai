@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19f03-4c39-7f53-8d4f-30ee1619b795).
+[codex] Turn started (01a19f03-4fe4-77c3-b584-b1e892e30f09).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e rastrear permissões, transições de estado e execução c...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "tenant_isolation|CREATE POLICY|fibercore_worker|ALTER TABLE jobs|bench_...
+[codex] Command completed: /bin/bash -lc 'rg -n "tenant_isolation|CREATE POLICY|fibercore_worker|ALTER TABLE jobs|bench_... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '1,110p' apps/api/alembic/versions/0008_jobs.py && sed -n '1,100p' apps...
+[codex] Command completed: /bin/bash -lc "sed -n '1,110p' apps/api/alembic/versions/0008_jobs.py && sed -n '1,100p' apps... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não deve subir ainda: o worker pode escolher operaçõe...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não deve subir ainda: o worker pode escolher operações fora da lista de writes homologados e forçar jobs aceitos a UNKNOWN, além do comportamento permitido pelo sweeper oportunista.
+
+Findings:
+- [high] A função confia na lista de operações enviada pelo worker (apps/api/alembic/versions/0047_job_sweeper.py:44-48)
+  `p_gated` é controlado por quem chama a função. Um caller com EXECUTE pode passar, por exemplo, `ARRAY['refresh_cpe']`; então o UPDATE marca como `UNKNOWN` qualquer job aceito dessa operação com `updated_at` antigo e bloqueia seu alvo. Isso amplia a transição destrutiva além das gated bench writes selecionadas por `GET /v1/edge/jobs/next` e permite ao worker causar reconciliações falsas. A lista calculada em Python não limita chamadas SQL diretas ao entry point.
+  Recommendation: Fixe a allowlist dentro da função ou derive-a de dados confiáveis no banco; não aceite do caller operações que determinam quais jobs podem virar `UNKNOWN` ou quais alvos podem ser bloqueados.
+
+Next steps:
+- Restringir a allowlist na função e adicionar uma verificação que tente chamar o entry point com uma operação não gated, confirmando que nenhum job ou alvo é alterado.

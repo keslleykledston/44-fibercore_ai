@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased — Job sweeper periódico (2026-11-02)
+- API/infra: migração 0047 (`app_sweep_jobs`, função SECURITY DEFINER; só `fibercore_worker` executa; o role do worker não ganha grant em `jobs` nem `bench_targets`) e worker `job-sweeper` (`app/workers/sweeper.py`, a cada 60 s, serviço no compose com healthcheck por heartbeat). Faz para todo tenant e Edge as duas varreduras que antes só rodavam no `GET /v1/edge/jobs/next` do próprio Edge: job `DISPATCHED` sem relato 5 min depois da validade → `EXPIRED`; escrita de bancada `ACCEPTED/DEVICE_PENDING/VERIFYING` sem notícia há 30 min → `UNKNOWN` e alvo travado.
+- Garantias: nunca solta trava (`bench-unlock` segue ato de pessoa); a lista de operações que podem virar `UNKNOWN` ou travar alvo fica fixa dentro da função (a do chamador só estreita); a janela de 30 min não encurta; o tenant é fixado por iteração; a varredura oportunista do `next` continua e é idempotente com a nova.
+- Provas: API 1072 passed (6 testes novos); Codex 2 rodadas, approve.
+
 ## Unreleased — Homologação das OLTs (ADR-0041, PR6, 2026-11-02)
 - API: `GET /v1/fleet/homologation` (`fleet:read` + flag `fleet_manager`). O nível L0..L4 de cada modelo+firmware é CALCULADO por `app/core/homologation.py` a partir do livro-razão (`knowledge_data/ledger.json`, gerado por `scripts/gen_homologation_ledger.py`): L1 só com identidade e firmware de captura REAL; L2 exige driver `observed` e captura real dos 5 casos do equipamento (placa, PON sem ONU, ONU online, offline, pager) mais a reação à saída truncada; L3/L4 só com certificação registrada com evidência e aprovador; fixture sintética não conta; firmware exato, sem herança. Livro inválido = recusado inteiro (503).
 - Testes confirmam, contra o repositório, o SHA-256 de cada fixture, a existência de cada teste citado e que o `driver_level` do livro bate com o Registry do Edge.
