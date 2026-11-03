@@ -13,7 +13,12 @@ PY="${PYTHON:-$PWD/.venv/bin/python}"
 [[ -x "$PY" ]] || { echo "python não encontrado: $PY (defina PYTHON=)" >&2; exit 1; }
 WORK="$(mktemp -d)"; CLEAR=""; NAME="fc-restore-rehearsal-$(openssl rand -hex 4)"; UVI_PID=""
 cleanup() {
-  [[ -z "$UVI_PID" ]] || { kill "$UVI_PID" 2>/dev/null || true; wait "$UVI_PID" 2>/dev/null || true; }
+  if [[ -n "$UVI_PID" ]]; then   # espera limitada (5 s): se a API não sair, SIGKILL; o container e os temporários SEMPRE são removidos
+    kill "$UVI_PID" 2>/dev/null || true
+    for _ in $(seq 1 25); do kill -0 "$UVI_PID" 2>/dev/null || break; sleep 0.2; done
+    kill -9 "$UVI_PID" 2>/dev/null || true
+    wait "$UVI_PID" 2>/dev/null || true
+  fi
   docker rm -f "$NAME" >/dev/null 2>&1 || true
   rm -rf "$WORK"
   echo "container e temporários de ensaio removidos"
