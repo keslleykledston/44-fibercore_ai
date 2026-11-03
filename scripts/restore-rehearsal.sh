@@ -13,12 +13,13 @@ PY="${PYTHON:-$PWD/.venv/bin/python}"
 [[ -x "$PY" ]] || { echo "python não encontrado: $PY (defina PYTHON=)" >&2; exit 1; }
 WORK="$(mktemp -d)"; CLEAR=""; NAME="fc-restore-rehearsal-$(openssl rand -hex 4)"; UVI_PID=""
 cleanup() {
-  [[ -z "$UVI_PID" ]] || kill "$UVI_PID" 2>/dev/null || true
+  [[ -z "$UVI_PID" ]] || { kill "$UVI_PID" 2>/dev/null || true; wait "$UVI_PID" 2>/dev/null || true; }
   docker rm -f "$NAME" >/dev/null 2>&1 || true
   rm -rf "$WORK"
   echo "container e temporários de ensaio removidos"
 }
 trap cleanup EXIT
+trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP   # sinais também passam pelo cleanup (o EXIT roda no exit); o servidor da API é recolhido antes de apagar o resto
 step() { echo; echo "== $*"; }
 fail() { echo "FALHOU: $*" >&2; exit 1; }
 
