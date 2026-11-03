@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import Connection, text
 
-from app.api.deps import TENANT_CONN, Principal, mfa_is_recent, require
+from app.api.deps import TENANT_CONN, Principal, edge_ingest_limit, mfa_is_recent, require
 from app.api.inventory import CpeBinding, _bound_edge, _capabilities, _check_observed
 from app.api.routes import audit
 from app.core import features, ont_config
@@ -65,7 +65,7 @@ class ConfigSnapshot(BaseModel):
 
 
 @router.post("/v1/edge/cpe-config", status_code=202)
-def ingest_cpe_config(body: ConfigSnapshot, p: Principal = Depends(require("inventory:write")), conn: Connection = TENANT_CONN) -> dict:
+def ingest_cpe_config(body: ConfigSnapshot, p: Principal = Depends(require("inventory:write")), _rl: None = Depends(edge_ingest_limit), conn: Connection = TENANT_CONN) -> dict:
     _bound_edge(p, body.edge_id)
     _gate(conn, p)   # a tenant with the module off collects nothing: turning it off stops the intake too
     if not body.configs:

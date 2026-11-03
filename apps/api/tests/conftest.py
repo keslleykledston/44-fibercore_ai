@@ -64,7 +64,7 @@ def migrated(admin_url: str, app_url: str, rbac_url: str):
     env = {**os.environ, "ADMIN_DATABASE_URL": admin_url, "APP_DB_PASSWORD": APP_PW, "WORKER_DB_PASSWORD": WORKER_PW, "RBAC_DB_PASSWORD": RBAC_PW}
     subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], cwd=API_DIR, env=env, check=True)
     os.environ.update(
-        DATABASE_URL=app_url, RBAC_DATABASE_URL=rbac_url, JWT_SECRET=JWT_SECRET, MFA_ENCRYPTION_KEY=MFA_KEY, PII_HMAC_KEY=PII_KEY, JOB_SIGNING_KEY=JOB_SEED_B64, MODULE_MANIFEST=str(MANIFEST), NATS_MONITOR_URL="", MFA_RECENT_ENFORCE="false"  # the default is ON; the older suites predate it, test_rbac_delegation_mfa turns it on
+        DATABASE_URL=app_url, RBAC_DATABASE_URL=rbac_url, JWT_SECRET=JWT_SECRET, MFA_ENCRYPTION_KEY=MFA_KEY, PII_HMAC_KEY=PII_KEY, JOB_SIGNING_KEY=JOB_SEED_B64, MODULE_MANIFEST=str(MANIFEST), NATS_MONITOR_URL="", MFA_RECENT_ENFORCE="false", EDGE_INGEST_BURST="1000", EDGE_INGEST_PER_MINUTE="6000"  # the older suites hammer one Edge from one process, so the per-agent intake limit is wide open here and has its own suite (test_edge_ingest_limit.py); MFA default is ON; the older suites predate it, test_rbac_delegation_mfa turns it on
     )
     from app.core import db, settings
     settings.get_settings.cache_clear(); db.get_engine.cache_clear(); db.get_rbac_engine.cache_clear()

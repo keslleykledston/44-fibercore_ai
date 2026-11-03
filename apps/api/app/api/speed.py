@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Connection, text
 
 from app.api import jobs
-from app.api.deps import TENANT_CONN, Principal, require
+from app.api.deps import TENANT_CONN, Principal, edge_ingest_limit, require
 from app.api.inventory import _capabilities
 from app.api.routes import audit
 from app.core import bench, features, speed
@@ -242,7 +242,7 @@ class HealthIn(BaseModel):
 
 
 @router.post("/v1/edge/speed-health")
-def edge_speed_health(body: HealthIn, p: Principal = Depends(require("inventory:write")), conn: Connection = TENANT_CONN) -> dict:
+def edge_speed_health(body: HealthIn, p: Principal = Depends(require("inventory:write")), _rl: None = Depends(edge_ingest_limit), conn: Connection = TENANT_CONN) -> dict:
     """The Edge tells which of its test nodes answered its probe. It can only update endpoints the owner bound to THIS Edge; an id that is unknown or belongs
     to another Edge is counted and ignored. It says `ok` or `down`, nothing else, and no address."""
     if p.edge_id is None:

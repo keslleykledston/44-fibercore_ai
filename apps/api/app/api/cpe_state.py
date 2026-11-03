@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, field_validator, model_validator
 from sqlalchemy import Connection, text
 
-from app.api.deps import TENANT_CONN, Principal, require
+from app.api.deps import TENANT_CONN, Principal, edge_ingest_limit, require
 from app.api.inventory import CpeBinding, _bound_edge, _check_observed
 
 router = APIRouter()
@@ -86,7 +86,7 @@ class CpeStateSnapshot(BaseModel):
 
 @router.post("/v1/edge/cpe-state", status_code=202)
 def ingest_cpe_state(
-    body: CpeStateSnapshot, p: Principal = Depends(require("inventory:write")), conn: Connection = TENANT_CONN
+    body: CpeStateSnapshot, p: Principal = Depends(require("inventory:write")), _rl: None = Depends(edge_ingest_limit), conn: Connection = TENANT_CONN
 ) -> dict:
     _bound_edge(p, body.edge_id)
     if not body.states:
