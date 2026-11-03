@@ -26,3 +26,9 @@ Estado: **dev/lab**. Nada aqui autoriza produção; ver gates em `CLAUDE.md`/PRD
 ## Backups: proteção e retenção
 - Dumps contêm PII e todos os tenants: gerados `0600` em diretório `0700`; `BACKUP_GPG_RECIPIENT` cifra e remove o claro. Fora do host controlado, só cifrado. Retenção a definir com o ISP (LGPD) — pendente de decisão de campo; `build/` é ignorado pelo Git e nunca deve virar artefato de CI.
 - `restore-verify.sh` usa banco aleatório próprio e só remove o que criou.
+
+
+## Limite de ingestão por agente (2026-11-03)
+- Padrão `FIBERCORE_EDGE_INGEST_LIMIT=capable`: só é limitado o Edge que anuncia (`X-Edge-Backoff: retry-after`) que trata 429 como "esperar, o item não falhou". Protege contra loop/bug de um Edge atual, sem risco de version skew; **não** protege contra um agente autenticado hostil (ele pode omitir o cabeçalho).
+- Passo de transição (um por provedor): (1) trocar TODOS os Edges para a versão com `Throttled` (`/v1/edge/heartbeat` registra a versão); (2) confirmar nos logs do Edge que a coleta fecha; (3) definir `FIBERCORE_EDGE_INGEST_LIMIT=all` no `.env` e recriar o `api-core`. Reverter: voltar a `capable` ou `off`.
+- Orçamento por (tenant, Edge): rajada 30, 120/min (`EDGE_INGEST_BURST`, `EDGE_INGEST_PER_MINUTE`). Estado em memória de UM processo da API.

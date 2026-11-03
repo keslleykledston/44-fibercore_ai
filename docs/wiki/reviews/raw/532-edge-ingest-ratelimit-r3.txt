@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19fb9-412b-7530-b8b5-6d73c491ccfc).
+[codex] Turn started (01a19fb9-4415-7061-a3c3-bbfb18bd8169).
+[codex] Assistant message captured: Vou inspecionar o diff completo contra `main`, seguindo em especial o contrato do cabeçalho, ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/agent/...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/agent/... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- apps/api/app/api/deps.py ap...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=35 main...HEAD -- apps/api/app/api/deps.py ap... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"edge_ingest_limit|edge_ingest_burst|uvicorn|workers|include_router|edg...
+[codex] Command failed: /bin/bash -lc "rg -n \"edge_ingest_limit|edge_ingest_burst|uvicorn|workers|include_router|edg... (exit 2)
+[codex] Running command: /bin/bash -lc "rg -n \"api:|replicas:|uvicorn\" -g 'compose*.yml' -g '*.yaml' -g '*.yml' . | ...
+[codex] Command completed: /bin/bash -lc "rg -n \"api:|replicas:|uvicorn\" -g 'compose*.yml' -g '*.yaml' -g '*.yml' . | ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não embarcaria ainda: o modo `capable` deixa um Edge ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não embarcaria ainda: o modo `capable` deixa um Edge autenticado contornar o limite removendo um cabeçalho que ele controla; `all` fecha esse bypass, mas o modo padrão só é proteção contra falhas acidentais.
+
+Findings:
+- [high] O limite padrão é contornável pelo próprio agente (apps/api/app/api/deps.py:156-164)
+  Em `capable`, a decisão de limitar depende apenas de `X-Edge-Backoff: retry-after` enviado pelo cliente. Um Edge autenticado malicioso pode omitir o cabeçalho e enviar ingestões sem consumir o bucket; isso preserva o risco de monopolizar o banco que o rate limit deveria mitigar. O código reconhece que `all` cobre esse caso, então o modo padrão não oferece proteção contra agente hostil. Recomendação: habilitar `all` após atualizar e verificar todos os Edges, ou vincular a capacidade de backoff a uma declaração confiável do servidor, em vez de aceitar um cabeçalho opcional por requisição.
+  Recommendation: Planejar e operar a transição para `EDGE_INGEST_LIMIT=all` após confirmar suporte em todos os Edges; se agentes hostis estiverem no escopo antes disso, usar um sinal de capacidade autenticado e persistente.
