@@ -398,3 +398,38 @@ func TestRefreshJobThatNamesADeviceRunsTheRefresherFirstAndFailsClosed(t *testin
 		t.Fatalf("%+v", o)
 	}
 }
+
+// A sustained 429 (the Cloud's per-agent intake budget) must never consume an item's attempts nor dead-letter it, and the queue must drain in order once the Cloud lets it.
+func TestSustainedThrottlingNeverDeadLettersAndTheQueueDrainsInOrderAfterwards(t *testing.T) {
+	ctx := context.Background()
+	cl := &cloud{status: 429}
+	a := setup(t, cl, fixedCollector{[]string{`{"n":1}`, `{"n":2}`, `{"n":3}`}})
+	_ = a.CollectOnce(ctx)
+	for i := 0; i < a.Q.MaxAttempts*3; i++ { // far more refusals than the dead-letter threshold
+		a.GW.ResetThrottleForTest()
+		a.Flush(ctx)
+	}
+	if p, d, _ := a.Q.Counts(ctx); p != 3 || d != 0 {
+		t.Fatalf("pending=%d dead=%d (a 429 must not cost attempts)", p, d)
+	}
+	items, _ := a.Q.Next(ctx, 5)
+	for _, it := range items {
+		if it.Attempts != 0 {
+			t.Fatalf("item %d has %d attempts after only 429s", it.ID, it.Attempts)
+		}
+	}
+	// while the Cloud's wait is running, nothing is even sent
+	cl.mu.Lock()
+	cl.status = 202
+	cl.mu.Unlock()
+	a.GW.ThrottleForTest(time.Hour)
+	a.Flush(ctx)
+	if len(cl.received) != 0 {
+		t.Fatalf("sent %d during the Retry-After window", len(cl.received))
+	}
+	a.GW.ResetThrottleForTest()
+	a.Flush(ctx)
+	if p, _, _ := a.Q.Counts(ctx); p != 0 || len(cl.received) != 3 || cl.received[0] != `{"n":1}` || cl.received[2] != `{"n":3}` {
+		t.Fatalf("after recovery: pending=%d received=%v", p, cl.received)
+	}
+}

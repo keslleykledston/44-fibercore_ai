@@ -62,6 +62,7 @@ services:
       PII_HMAC_KEY: ${FIBERCORE_PII_HMAC_KEY:?Set FIBERCORE_PII_HMAC_KEY (>=32 chars)}
       TRUSTED_PROXY: ${FIBERCORE_TRUSTED_PROXY:-true}  # api-core is reachable only via web/Caddy (internal network); client IP comes from X-Forwarded-For
       JOB_SIGNING_KEY: ${FIBERCORE_JOB_SIGNING_KEY:-}  # empty => job dispatch disabled (fail closed)
+      EDGE_INGEST_LIMIT: ${FIBERCORE_EDGE_INGEST_LIMIT:-capable}  # per-agent intake limit: capable (only Edges that announce they understand 429) | all (set once EVERY Edge is updated) | off
       MFA_ENCRYPTION_KEY: ${FIBERCORE_MFA_ENCRYPTION_KEY:-}  # Fernet key; empty => MFA enrolment disabled (fail closed)
       MFA_RECENT_ENFORCE: ${FIBERCORE_MFA_RECENT_ENFORCE:-false}  # ADR-0031 (owner decision 2026-10-30: MFA at login only; true = permissions marked `mfa_recent` need a second factor from the last MFA_RECENT_SECONDS (10 min)
       MFA_RECENT_SECONDS: ${FIBERCORE_MFA_RECENT_SECONDS:-600}

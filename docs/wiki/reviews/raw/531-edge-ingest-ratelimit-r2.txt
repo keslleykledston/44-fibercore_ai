@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19fb4-82f8-7ce3-8382-a6823de3e676).
+[codex] Turn started (01a19fb4-8637-7733-a839-6c80d9b05167).
+[codex] Assistant message captured: Vou comparar a branch com `main` e seguir em especial a propagação de 429, o estado da fila e...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/agent/...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge/internal/agent/... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"\\.Deliver\\(|\\.Heartbeat\\(|\\.Report|gateway\\.(Retry|Throttled|Out...
+[codex] Command completed: /bin/bash -lc "rg -n \"\\.Deliver\\(|\\.Heartbeat\\(|\\.Report|gateway\\.(Retry|Throttled|Out... (exit 0)
+[codex] Assistant message captured: O caminho principal está isolado em `Agent.Flush`; vou conferir agora se os outros envios com...
+[codex] Running command: /bin/bash -lc "sed -n '130,180p' apps/api/app/api/deps.py && sed -n '135,235p' agents/edge/in...
+[codex] Command completed: /bin/bash -lc "sed -n '130,180p' apps/api/app/api/deps.py && sed -n '135,235p' agents/edge/in... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"func \\(.*\\) (Next|Retry|Ack)|CREATE TABLE.*queue|attempts|in_flight|...
+[codex] Command completed: /bin/bash -lc "rg -n \"func \\(.*\\) (Next|Retry|Ack)|CREATE TABLE.*queue|attempts|in_flight|... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"uvicorn|workers:|api-core|EDGE_INGEST\" compose* docker-compose* apps/...
+[codex] Command completed: /bin/bash -lc "rg -n \"uvicorn|workers:|api-core|EDGE_INGEST\" compose* docker-compose* apps/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar a API antes de atualizar todos os Edges: ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar a API antes de atualizar todos os Edges: durante esse intervalo, 429 ainda pode consumir tentativas e mandar dados válidos para dead-letter.
+
+Findings:
+- [high] Deploy da API primeiro ainda pode dead-letter dados válidos (agents/edge/internal/gateway/gateway.go:133-138)
+  A API passa a devolver 429 nas rotas de ingestão, mas Edges anteriores à mudança classificam 429 como `Retry` e chamam `Q.Retry`; após `MaxAttempts`, o item vai para dead-letter. Como API e Edge podem ser atualizados em momentos diferentes, um rollout da API antes dos agentes pode perder ingestões válidas. A nota de rollout em `KNOWN_ISSUES.md` documenta a ordem segura, mas não a impõe.
+  Recommendation: Torne o rollout seguro sob version skew: por exemplo, habilite o rate limit somente após confirmar que os agentes estão compatíveis, ou faça versões antigas receberem uma resposta que não consuma tentativas. Se a ordem for operacional, bloqueie a ativação da API até concluir e verificar a atualização de todos os Edges.

@@ -512,3 +512,6 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 
 ## Ensaio de restauração completo (2026-11-03)
 - `scripts/restore-rehearsal.sh` sobre os dois dumps reais da LAB (0046 e 0047): PASS; restauração 1,9 s; RLS 49 forçadas/0 sem forçar/0 papéis com bypass; papel da app sem contexto vê 0; API `/readyz` 200, leitura isolada (1 OLT do tenant de 2 no total, 0 linhas do outro tenant, tenant alheio existente → 404); sweeper `0/0/0`. Checksum adulterado ⇒ recusa (rc 1); SIGTERM no meio ⇒ rc 143 e 0 containers/0 uvicorn. Codex approve na 6ª rodada.
+
+## Limite de ingestão por agente (2026-11-03)
+- API 1081 passed (`test_edge_ingest_limit.py` 8: bucket/refill, tabela limitada sem rajada grátis, chamadores esparsos, 429 + Retry-After em todas as rotas de coleta com orçamento comum, outro Edge e outro tenant intocados, nada gasto sem autenticação, padrão deixa 25 envios passarem, `capable` não limita quem não anuncia, `all`/`off`, modo inválido derruba o startup). Edge: `go test ./...` ok e `-race` em gateway/agent; teste de 3×`MaxAttempts` de 429 seguido de recuperação em ordem: 0 na dead-letter, 0 tentativas gastas. Codex approve na 6ª rodada.

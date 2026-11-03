@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased — Limite de ingestão por agente (2026-11-03)
+- API: token bucket por (tenant, Edge) nas rotas de coleta `olt-snapshots`, `cpe-snapshots`, `cpe-state`, `cpe-config`, `speed-health` (rajada 30, 120/min; `EDGE_INGEST_BURST`, `EDGE_INGEST_PER_MINUTE`). Acima do orçamento: 429 `edge_rate_limited` + `Retry-After`. Nada é gasto antes da autenticação. Estado em memória de um processo. Modo `EDGE_INGEST_LIMIT` (`FIBERCORE_EDGE_INGEST_LIMIT` no compose): `capable` (padrão; só limita o Edge que manda `X-Edge-Backoff: retry-after`, seguro sob version skew), `all`, `off`.
+- Edge: 429 é `Throttled` (não conta tentativa, não vai para a dead-letter, espera o `Retry-After` limitado a 1 s–15 min, ordem preservada) e todo POST anuncia `X-Edge-Backoff`. Heartbeat, `jobs/next` e resultados de job não são limitados.
+- Provas: API 1081 passed (11 novos), Go `./...` ok, `-race` em gateway/agent; Codex 6 rodadas, approve.
+
 ## Unreleased — Ensaio de restauração completo (2026-11-03)
 - Ops: `scripts/restore-rehearsal.sh <dump>` restaura o backup num PostgreSQL descartável (loopback, segredos fora do argv), confere RLS, aplica `alembic upgrade head`, sobe a API sobre a cópia (login de ensaio, leitura, isolamento contra um segundo tenant real) e roda o sweeper com o papel do worker; remove tudo ao fim, também em falha ou sinal. Evidência: `docs/operations/RESTORE_REHEARSAL_2026-11-03.md` (dump 0046 → upgrade 0047 sobre dados reais sem erro; dump 0047 → no-op). Limites mantidos no doc (banco pequeno, chaves reais fora do ensaio). Sem mudança de API, Edge ou banco. Codex: 6 rodadas, approve.
 

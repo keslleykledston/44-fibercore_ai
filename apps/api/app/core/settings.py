@@ -48,6 +48,13 @@ class Settings(BaseSettings):
     erp_secrets_dir: str = ""
     erp_allowed_hosts: str = ""   # comma-separated: exact hosts or *.suffix
     erp_auth_per_minute: int = Field(default=10, ge=1, le=25)   # HubSoft authentications per minute for the WHOLE deployment (the vendor's limit, 30/min, is per egress IP)
+    # Per-agent intake limit (app/core/ratelimit.py): a token bucket per (tenant, Edge) on the data-intake routes. The defaults sit far above a healthy Edge (a handful of batches a minute).
+    edge_ingest_burst: int = Field(default=30, ge=1, le=1000)
+    edge_ingest_per_minute: int = Field(default=120, ge=1, le=6000)
+    # Who the limit applies to. "capable" (default, safe under version skew): only an Edge that announces it understands a 429 (header X-Edge-Backoff: retry-after, sent by Edges that treat 429 as
+    # "wait, do not count an attempt"); an older Edge would count the 429 as a failed attempt and could dead-letter good data, so it is never limited. "all": every agent (set it once every Edge is
+    # updated and verified). "off": no limit.
+    edge_ingest_limit: str = Field(default="capable", pattern="^(off|capable|all)$")
     pii_hmac_key: str = Field(default="", repr=False)  # HMAC key for customer documents; import fails closed without it
 
     @field_validator("jwt_secret", "jwt_secret_previous", "pii_hmac_key")
