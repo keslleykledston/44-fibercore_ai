@@ -115,6 +115,7 @@ func (c *Client) post(ctx context.Context, path string, payload []byte) (Outcome
 		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, c.base+path, bytes.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+tok)
+		req.Header.Set("X-Edge-Backoff", "retry-after") // this Edge treats a 429 as "wait Retry-After, the item did not fail": the Cloud may apply its per-agent intake budget to it
 		resp, err := c.http.Do(req)
 		if err != nil {
 			return Retry, 0, err

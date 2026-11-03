@@ -114,6 +114,18 @@ func TestEveryKindGoesToItsOwnEndpointAndUnknownKindsAreRejected(t *testing.T) {
 	}
 }
 
+func TestEveryPostAnnouncesThatThisEdgeUnderstandsA429(t *testing.T) {
+	var got string
+	srv, _ := fake(t, func(w http.ResponseWriter, r *http.Request, _ int32) {
+		got = r.Header.Get("X-Edge-Backoff")
+		w.WriteHeader(202)
+	})
+	c := New(srv.URL, "cid", "sec", srv.Client())
+	if o, _ := c.Deliver(context.Background(), "olt_snapshot", []byte(`{}`)); o != Delivered || got != "retry-after" {
+		t.Fatalf("o=%v header=%q", o, got)
+	}
+}
+
 func TestA429RecordsTheRetryAfterWithinBounds(t *testing.T) {
 	for header, want := range map[string]time.Duration{"7": 7 * time.Second, "": time.Second, "0": time.Second, "junk": time.Second, "86400": maxThrottle} {
 		h := header

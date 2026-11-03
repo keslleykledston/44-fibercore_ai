@@ -147,9 +147,16 @@ TENANT_CONN = Depends(tenant_conn, scope="function")
 _INGEST_LIMITERS: dict[tuple[int, int], TokenBucketLimiter] = {}
 
 
-def edge_ingest_limit(p: Principal = Depends(get_principal), settings: Settings = Depends(get_settings)) -> None:
+EDGE_BACKOFF_HEADER = "X-Edge-Backoff"   # value "retry-after": this agent treats 429 as "wait for Retry-After; the item is not failed"
+
+
+def edge_ingest_limit(request: Request, p: Principal = Depends(get_principal), settings: Settings = Depends(get_settings)) -> None:
     """Per-agent budget for the Edge intake routes: 429 `edge_rate_limited` + Retry-After (the Edge treats 429 as "keep it and send again", so no data is lost). Declare it AFTER
     `require(...)` in the route so an unauthenticated or unauthorised caller never spends (or learns about) an agent's budget."""
+    if settings.edge_ingest_limit == "off":
+        return
+    if settings.edge_ingest_limit == "capable" and request.headers.get(EDGE_BACKOFF_HEADER, "").lower() != "retry-after":
+        return   # an Edge that does not say it understands 429 would count it as a failed attempt: never limit it (version skew)
     key = (settings.edge_ingest_burst, settings.edge_ingest_per_minute)
     lim = _INGEST_LIMITERS.get(key)
     if lim is None:
