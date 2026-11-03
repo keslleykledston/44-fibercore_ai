@@ -321,3 +321,7 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 
 ## Atualização 2026-11-03: ensaio de restauração completo feito
 - `scripts/restore-rehearsal.sh <dump>` + `docs/operations/RESTORE_REHEARSAL_2026-11-03.md`. Fecha o limite "sem subir a API sobre o banco restaurado". Antes de toda migração relevante: backup + este ensaio. Continuam com o responsável: guarda fora do host da chave `MFA_ENCRYPTION_KEY`/`.env.prod`, cifra do backup (`BACKUP_GPG_RECIPIENT`), cópia fora do host.
+
+## Atualização 2026-11-03 (2): limite de ingestão por agente no ar
+- LAB: `main` = `56e98ca`; Edge `0.1.0-lab-56e98ca`; `FIBERCORE_EDGE_INGEST_LIMIT=all` no `.env.prod`. Binário anterior do Edge segue no host como `fibercore-edge.prev`. Reverter o limite: trocar para `capable`/`off` e recriar `api-core`. Qualquer Edge novo/antigo ligado a um provedor em modo `all` precisa ser desta versão ou mais nova.
+- Restam sem o usuário (todos maiores/arriscados): CSP com nonces no Next (+ nginx do host), rotação de chave de assinatura (`kid`) e cofre de segredos, imagens por digest, NATS com TLS/ACL, observabilidade Prometheus/Grafana.
