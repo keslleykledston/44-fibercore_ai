@@ -49,6 +49,19 @@ def test_the_table_is_bounded_and_an_active_bucket_is_never_evicted_for_a_free_b
         TokenBucketLimiter(burst=0, per_minute=10)
 
 
+def test_sparse_callers_cannot_pin_their_slots_and_lock_new_identities_out():
+    c = Clock()
+    lim = TokenBucketLimiter(burst=2, per_minute=60, clock=c)                  # a token a second; refills in at most 2 s
+    for i in range(MAX_KEYS):
+        assert lim.take(f"k{i}") == 0.0
+    assert lim.take("newcomer") > 0                                             # the table is full of agents that all just called: the newcomer waits
+    c.t += 3.0                                                                   # everybody is full again...
+    for i in range(0, MAX_KEYS, 2):
+        assert lim.take(f"k{i}") == 0.0                                          # ...and half of them call again (still sparse: one call per 3 s)
+    assert lim.take("newcomer") == 0.0                                           # the untouched half had refilled, so their slots were free: the newcomer is in
+    assert len(lim._buckets) <= MAX_KEYS
+
+
 @pytest.fixture(autouse=True)
 def _clean_up(migrated):
     yield

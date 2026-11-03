@@ -43,9 +43,9 @@ class TokenBucketLimiter:
             return (1.0 - tokens) / self.rate
 
     def _drop_idle(self, now: float) -> None:
-        # a bucket idle long enough to be full again carries no information: dropping it changes nothing for that agent
-        full_after = self.burst / self.rate
-        for k in [k for k, (_, seen) in self._buckets.items() if now - seen >= full_after]:
+        # a bucket that has REFILLED to the burst by now carries no information: dropping it changes nothing for that agent. Judged by the tokens it would hold now, not by when it was last
+        # touched (a call that spends a token leaves it below the burst; a refused one cannot happen on a full bucket), so a sparse caller cannot pin its slot forever
+        for k in [k for k, (tokens, seen) in self._buckets.items() if tokens + (now - seen) * self.rate >= self.burst]:
             del self._buckets[k]
 
     def retry_after(self, wait: float) -> int:
