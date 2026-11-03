@@ -504,3 +504,4 @@ Ambiente: Linux, Python 3.12.3, Go 1.22.2, Node 22.22.3, Docker 29.2.1, Postgres
 ## ADR-0041 PR6 — homologação das OLTs (2026-11-02)
 - API 1066 passed (suite completa); `test_homologation.py` 15 (níveis calculados, unit-only não passa de L0/L1, sintético não conta, ledger inválido recusado, hash das fixtures e nomes de teste conferidos contra o repositório, `driver_level` igual ao Registry do Edge, isolamento entre tenants, 59/61 min, lista truncada).
 - e2e conhecimento/homologação/frota/aparelho/catálogo 15 passed + capturas 2 + recuo `fleet_manager` desligada 1; ajuda 30 artigos. Codex approve na 5ª rodada.
+- Deploy LAB (`main` = `033f162`, backup antes, sem migração, head 0046): leitura real da API com conta descartável (desativada ao fim) = MA5608T `L1`, MA5800 `L0`, C300 `L0`; a OLT real `OLT-MA5608T-LAB` aparece como `L1`, leitura em dia, 1 teste de conexão nas últimas 24 h, lista não truncada.
