@@ -22,7 +22,7 @@ cleanup() {
     wait "$UVI_PID" 2>/dev/null || true
   fi
   docker rm -f "$NAME" >/dev/null 2>&1 || true
-  rm -rf "$WORK"
+  rm -rf "$WORK" || true   # a confirmação abaixo diz se sobrou algo
   # só anuncia a limpeza depois de CONFIRMAR: o container (com o dump restaurado) não pode ficar para trás sem que o operador saiba
   if [[ -n "$(docker ps -a -q -f "name=^${NAME}\$" 2>/dev/null)" ]] || ! docker info >/dev/null 2>&1; then
     echo "ATENÇÃO: não consegui confirmar a remoção do container $NAME (PII do dump): remova à mão com 'docker rm -f $NAME'" >&2

@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19fa9-e284-7b11-a56a-6c7c7a774601).
+[codex] Turn started (01a19fa9-e2bf-79a2-bf5b-41cd1a79d449).
+[codex] Assistant message captured: Vou comparar o diff mais recente com o pai e seguir o cleanup em cenários de falha, focando n...
+[codex] Running command: /bin/bash -lc 'git diff --unified=80 HEAD''^ HEAD -- scripts/restore-rehearsal.sh && git stat...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=80 HEAD''^ HEAD -- scripts/restore-rehearsal.sh && git stat... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba scripts/restore-rehearsal.sh | sed -n '17,48p'; git diff --unified=5 HE...
+[codex] Command completed: /bin/bash -lc "nl -ba scripts/restore-rehearsal.sh | sed -n '17,48p'; git diff --unified=5 HE... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Ainda não aprovar: uma falha ao apagar os temporários...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Ainda não aprovar: uma falha ao apagar os temporários encerra o cleanup antes da confirmação e do aviso ao operador.
+
+Findings:
+- [medium] Falha ao remover temporários interrompe a confirmação (scripts/restore-rehearsal.sh:25-31)
+  Com `set -e`, se `rm -rf "$WORK"` falhar, o shell sai do cleanup antes de verificar se o diretório ainda existe ou de informar seu caminho. Isso pode deixar o dump decifrado ou outros temporários no disco sem o aviso explícito previsto para falhas de limpeza. A verificação posterior só é alcançada se `rm` retornar sucesso.
+  Recommendation: Trate o status de `rm` explicitamente e, em qualquer falha, verifique/report o diretório restante e saia com status 1 sem anunciar sucesso.
