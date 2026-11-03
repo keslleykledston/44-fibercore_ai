@@ -305,3 +305,7 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 ## Atualização 2026-11-02 (noite 8): PR3 avaliado — bloqueado por hardware (sem código)
 - ADR-0041 §4.0 e `OLT_CAPTURE_REQUEST.md` ("Prioridade atual") registram: sem OLT real de outro fabricante e sem PON vazia na MA5608T, o PR3 não pode avançar sem inventar fixture. Registry inalterado (tudo `identified`). Desbloqueio = responsável (acesso/captura).
 - Próximo executável sem hardware: PR4 (sidebar da ONU/ONT com miniatura por modelo; demais OLT = miniatura + tabela), PR5 (base de conhecimento), PR6 (matriz L0–L4 e observabilidade).
+
+## Atualização 2026-11-02 (noite 9): PR4 e PR5 no ar (`main` = `0c70134`)
+- PR4 (sidebar da ONU/ONT com arte esquemática do modelo) e PR5 (base de conhecimento somente leitura: `/rede/conhecimento`, `GET /v1/knowledge`) entregues e na LAB (API/web; Edge `0.1.0-lab-851be52` sem mudança). Flake de envelope (`test_ping`/`test_speed`) corrigido.
+- PR3 segue bloqueado por hardware (ADR-0041 §4.0). Próximo: PR6 (matriz de homologação L0–L4 por modelo+firmware e observabilidade).

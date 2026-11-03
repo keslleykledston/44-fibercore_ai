@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19eaf-c345-7081-ae88-df9491b37221).
+[codex] Turn started (01a19eaf-c37d-79c0-94db-b2d9021d07a8).
+[codex] Assistant message captured: Vou conferir o diff completo contra `main` e seguir principalmente o caminho de tenant/RLS e ...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/app/api/knowledge....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/app/api/knowledge.... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/knowledge....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 main...HEAD -- apps/api/app/api/knowledge.... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"observed_at|olt_connection_tests|support_level\" apps/api/app | head -...
+[codex] Command completed: /bin/bash -lc "rg -n \"observed_at|olt_connection_tests|support_level\" apps/api/app | head -... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '25,45p' apps/api/app/api/inventory.py; sed -n '110,155p' apps/api/app/...
+[codex] Command failed: /bin/bash -lc "sed -n '25,45p' apps/api/app/api/inventory.py; sed -n '110,155p' apps/api/app/... (exit 2)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o cálculo pode conceder L2 com evi...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o cálculo pode conceder L2 com evidência que não demonstra comportamento em OLT real.
+
+Findings:
+- [medium] Testes unitários podem elevar o nível a L2 (apps/api/app/core/homologation.py:15-16)
+  `REAL` inclui `unit_test`, e `level_of` aceita qualquer cobertura desses tipos nos casos L2. Assim, basta registrar testes unitários para os seis casos e marcar o driver como `observed` para conceder L2, embora esses testes não comprovem comportamento em equipamento real. Isso contradiz a descrição do nível como monitoramento validado por evidência real e pode apresentar uma homologação mais forte do que os dados sustentam. Exija fixtures reais para os casos que precisam provar comportamento no equipamento, ou defina explicitamente quais testes unitários são suficientes e ajuste o significado exibido para L2.
+  Recommendation: Separe os tipos de evidência aceitos por nível e não trate `unit_test` como evidência de comportamento real de OLT para L2.
+
+Next steps:
+- Ajustar a regra de evidência para L2 e acrescentar um caso que confirme que cobertura apenas por testes unitários não concede esse nível.

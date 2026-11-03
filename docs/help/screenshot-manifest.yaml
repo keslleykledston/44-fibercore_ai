@@ -203,6 +203,14 @@ articles:
   - assets/rede/base-de-conhecimento/mobile.png
   e2e_test: help-screenshots.spec.ts › rede/base-de-conhecimento; fluxo em conhecimento.spec.ts (conhecimento)
   last_verified: '2026-11-02'
+- slug: rede/homologacao-de-olts
+  ui_route: /rede/homologacao
+  status: published
+  images:
+  - assets/rede/homologacao-de-olts/desktop.png
+  - assets/rede/homologacao-de-olts/mobile.png
+  e2e_test: help-screenshots.spec.ts › rede/homologacao-de-olts; fluxo em homologacao.spec.ts (conhecimento)
+  last_verified: '2026-11-02'
 - slug: rede/onus-pendentes
   ui_route: /rede/pendentes
   status: published

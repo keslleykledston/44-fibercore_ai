@@ -33,7 +33,7 @@ export default defineConfig({
     { name: "frota", testMatch: /frota\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
     // Recuo da Frota de OLTs com a flag `fleet_manager` DESLIGADA: FLEET_FLAG_OFF=1 npx playwright test --project=recuo-frota
     { name: "recuo-frota", testMatch: /frota-flag\.spec\.ts/, use: { browserName: "chromium" } },
-    { name: "conhecimento", testMatch: /conhecimento\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
+    { name: "conhecimento", testMatch: /(conhecimento|homologacao)\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
     { name: "perfis", testMatch: /perfis\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
     // Recuo com a flag `profile_studio` DESLIGADA: PERFIS_FLAG_OFF=1 npx playwright test --project=recuo-perfis
     { name: "recuo-perfis", testMatch: /perfis-flag\.spec\.ts/, use: { browserName: "chromium" } },

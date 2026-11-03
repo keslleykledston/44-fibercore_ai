@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19eb0-d65a-7cd3-90bc-6f08e6a780e5).
+[codex] Turn started (01a19eb0-d697-7f63-8167-e7247eda33de).
+[codex] Assistant message captured: Vou comparar a branch com `main`, seguindo a trilha do resumo por cartão e a validação e2e do...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/app/core/homologat...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- apps/api/app/core/homologat... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- apps/web/src/lib/knowledge....
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=30 main...HEAD -- apps/web/src/lib/knowledge.... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship ainda: a matriz omite silenciosamente OLTs a...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship ainda: a matriz omite silenciosamente OLTs após as primeiras 500, embora a tela apresente a lista como completa.
+
+Findings:
+- [medium] A resposta trunca a lista de OLTs sem sinalizar (apps/api/app/api/knowledge.py:46)
+  A consulta limita os resultados a 500 e não pagina nem informa truncamento. Em um tenant com mais de 500 OLTs, as restantes desaparecem da tela de homologação, que se identifica como lista de OLTs cadastradas; isso pode ocultar equipamentos e seu estado de leitura sem aviso.
+  Recommendation: Retorne todos os registros por paginação com indicação de continuação, ou informe explicitamente o total e que a lista foi truncada.

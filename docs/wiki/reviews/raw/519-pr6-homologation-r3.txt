@@ -1,0 +1,29 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19eb0-6870-7113-8408-aeaa10f22a10).
+[codex] Turn started (01a19eb0-68ad-72f2-8805-964c209d6b62).
+[codex] Assistant message captured: Vou ler as instruções locais e o diff completo contra `main`, depois rastrear em especial a r...
+[codex] Running command: /bin/bash -lc "pwd && rg --files -g 'AGENTS.md' -g '"'!node_modules'"' -g '"'!vendor'"' && gi...
+[codex] Command failed: /bin/bash -lc "pwd && rg --files -g 'AGENTS.md' -g '"'!node_modules'"' -g '"'!vendor'"' && gi... (exit 1)
+[codex] Running command: /bin/bash -lc 'rg --files -g AGENTS.md; git status --short; git diff --stat main...HEAD; git ...
+[codex] Command completed: /bin/bash -lc 'rg --files -g AGENTS.md; git status --short; git diff --stat main...HEAD; git ... (exit 0)
+[codex] Assistant message captured: A regra central de promoção aparenta refletir o ajuste da rodada 2. Estou conferindo agora se...
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/app/rede/homologacao/page.tsx | sed -n '32,44p'; nl -ba ap...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/app/rede/homologacao/page.tsx | sed -n '32,44p'; nl -ba ap... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/app/rede/homologacao/page.tsx | sed -n '25,35p'; git diff ...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/app/rede/homologacao/page.tsx | sed -n '25,35p'; git diff ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não ship: L2 exige as evidências corretas, mas a tela...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não ship: L2 exige as evidências corretas, mas a tela ainda conta testes unitários como “evidência real”, podendo exagerar a cobertura real do equipamento.
+
+Findings:
+- [medium] Contagem mistura testes unitários com evidência real (apps/web/src/app/rede/homologacao/page.tsx:31)
+  O resumo inclui `unit_test` na contagem exibida como “com evidência real”. Para MA5608T, isso conta como evidência real um teste que a própria tela descreve como prova do código, não do equipamento. Isso pode levar operadores a interpretar a cobertura de hardware como maior do que é, apesar da regra de promoção L2 estar correta.
+  Recommendation: Conte apenas `real_fixture` nesse número, ou renomeie o resumo para distinguir capturas reais de testes automatizados.
+
+Next steps:
+- Corrigir a contagem ou o rótulo antes do merge.
