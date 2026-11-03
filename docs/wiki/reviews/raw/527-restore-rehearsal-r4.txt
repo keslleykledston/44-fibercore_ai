@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19fa9-4152-7e41-909c-9b994aa6d24f).
+[codex] Turn started (01a19fa9-4190-7c81-a844-78bbcbd9bb77).
+[codex] Assistant message captured: Vou comparar o diff com `main`, priorizando o cleanup novo do ensaio e os riscos restantes nele.
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- scripts/restore-rehearsal.s...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- scripts/restore-rehearsal.s... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=30 HEAD''^ HEAD -- scripts/restore-rehearsal....
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=30 HEAD''^ HEAD -- scripts/restore-rehearsal.... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Ainda não aprovar: se `docker rm` falhar, o cleanup o...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Ainda não aprovar: se `docker rm` falhar, o cleanup oculta a falha e declara sucesso, podendo deixar o banco restaurado com PII no host Docker.
+
+Findings:
+- [medium] Falha ao remover o container é mascarada (scripts/restore-rehearsal.sh:22-24)
+  O cleanup ignora qualquer erro de `docker rm -f` e depois imprime que o container foi removido. Se o daemon Docker estiver indisponível ou a remoção falhar, o container com o dump restaurado pode permanecer indefinidamente, enquanto o operador recebe uma confirmação falsa de limpeza. Isso contradiz a garantia de remoção enfatizada nesta rodada.
+  Recommendation: Verifique o resultado de `docker rm` e só anuncie sucesso após confirmar a remoção; se falhar, reporte o container pelo nome e retorne status de erro.

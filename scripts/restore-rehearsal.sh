@@ -13,6 +13,8 @@ PY="${PYTHON:-$PWD/.venv/bin/python}"
 [[ -x "$PY" ]] || { echo "python não encontrado: $PY (defina PYTHON=)" >&2; exit 1; }
 WORK="$(mktemp -d)"; CLEAR=""; NAME="fc-restore-rehearsal-$(openssl rand -hex 4)"; UVI_PID=""
 cleanup() {
+  local rc=$?
+  trap - EXIT
   if [[ -n "$UVI_PID" ]]; then   # espera limitada (5 s): se a API não sair, SIGKILL; o container e os temporários SEMPRE são removidos
     kill "$UVI_PID" 2>/dev/null || true
     for _ in $(seq 1 25); do kill -0 "$UVI_PID" 2>/dev/null || break; sleep 0.2; done
@@ -21,7 +23,14 @@ cleanup() {
   fi
   docker rm -f "$NAME" >/dev/null 2>&1 || true
   rm -rf "$WORK"
+  # só anuncia a limpeza depois de CONFIRMAR: o container (com o dump restaurado) não pode ficar para trás sem que o operador saiba
+  if [[ -n "$(docker ps -a -q -f "name=^${NAME}\$" 2>/dev/null)" ]] || ! docker info >/dev/null 2>&1; then
+    echo "ATENÇÃO: não consegui confirmar a remoção do container $NAME (PII do dump): remova à mão com 'docker rm -f $NAME'" >&2
+    exit 1
+  fi
+  [[ -d "$WORK" ]] && { echo "ATENÇÃO: temporários $WORK não foram removidos" >&2; exit 1; }
   echo "container e temporários de ensaio removidos"
+  exit "$rc"
 }
 trap cleanup EXIT
 trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP   # sinais também passam pelo cleanup (o EXIT roda no exit); o servidor da API é recolhido antes de apagar o resto
