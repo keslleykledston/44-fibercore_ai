@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func fake(t *testing.T, post func(w http.ResponseWriter, r *http.Request, logins int32)) (*httptest.Server, *int32) {
@@ -61,7 +62,7 @@ func TestExpiredTokenTriggersSingleRelogin(t *testing.T) {
 }
 
 func TestOutcomeClassification(t *testing.T) {
-	for status, want := range map[int]Outcome{202: Delivered, 500: Retry, 429: Retry, 408: Retry, 400: Rejected, 403: Rejected, 409: Rejected, 422: Rejected} {
+	for status, want := range map[int]Outcome{202: Delivered, 500: Retry, 429: Throttled, 408: Retry, 400: Rejected, 403: Rejected, 409: Rejected, 422: Rejected} {
 		st := status
 		srv, _ := fake(t, func(w http.ResponseWriter, r *http.Request, _ int32) { w.WriteHeader(st) })
 		c := New(srv.URL, "cid", "sec", srv.Client())
@@ -110,5 +111,26 @@ func TestEveryKindGoesToItsOwnEndpointAndUnknownKindsAreRejected(t *testing.T) {
 	got = nil
 	if o, _ := c.Deliver(context.Background(), "cpe_state_extra", []byte(`{}`)); o != Rejected || len(got) != 0 {
 		t.Fatalf("an unknown kind must be rejected before any request: o=%v paths=%v", o, got)
+	}
+}
+
+func TestA429RecordsTheRetryAfterWithinBounds(t *testing.T) {
+	for header, want := range map[string]time.Duration{"7": 7 * time.Second, "": time.Second, "0": time.Second, "junk": time.Second, "86400": maxThrottle} {
+		h := header
+		srv, _ := fake(t, func(w http.ResponseWriter, r *http.Request, _ int32) {
+			if h != "" {
+				w.Header().Set("Retry-After", h)
+			}
+			w.WriteHeader(429)
+		})
+		c := New(srv.URL, "cid", "sec", srv.Client())
+		before := time.Now()
+		if o, _ := c.Deliver(context.Background(), "olt_snapshot", []byte(`{}`)); o != Throttled {
+			t.Fatalf("Retry-After %q: outcome %v", h, o)
+		}
+		got := c.ThrottledUntil().Sub(before)
+		if got < want || got > want+2*time.Second {
+			t.Errorf("Retry-After %q: waits %v, want about %v", h, got, want)
+		}
 	}
 }

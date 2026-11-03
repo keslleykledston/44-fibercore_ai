@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,8 +24,17 @@ type Outcome int
 
 const (
 	Delivered Outcome = iota // 2xx
-	Retry                    // network error, 5xx, 408, 429, auth refresh failure
+	Retry                    // network error, 5xx, 408, auth refresh failure
 	Rejected                 // other 4xx: the Cloud will never accept this payload
+	// Throttled is a 429: the Cloud's per-agent intake budget is spent. The payload is fine and the Cloud is up, so it is NOT a failed attempt (it must never count toward the dead-letter
+	// threshold): the caller keeps the item and waits for ThrottledUntil.
+	Throttled
+)
+
+// Bounds for the Retry-After a 429 may ask for: never a busy loop, never a silence long enough to hide a stuck queue.
+const (
+	minThrottle = time.Second
+	maxThrottle = 15 * time.Minute
 )
 
 type Client struct {
@@ -34,6 +44,30 @@ type Client struct {
 	http     *http.Client
 	mu       sync.Mutex
 	token    string
+	until    time.Time // the Cloud asked us to wait until then (a 429); zero when not throttled
+}
+
+// ThrottledUntil is when the Cloud's last 429 says a new send may go out (zero or past: now).
+func (c *Client) ThrottledUntil() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.until
+}
+
+func (c *Client) throttle(h string) {
+	d := minThrottle
+	if n, err := strconv.Atoi(strings.TrimSpace(h)); err == nil && n > 0 {
+		d = time.Duration(n) * time.Second
+	}
+	if d < minThrottle {
+		d = minThrottle
+	}
+	if d > maxThrottle {
+		d = maxThrottle
+	}
+	c.mu.Lock()
+	c.until = time.Now().Add(d)
+	c.mu.Unlock()
 }
 
 func New(base, clientID, secret string, hc *http.Client) *Client {
@@ -96,8 +130,11 @@ func (c *Client) post(ctx context.Context, path string, payload []byte) (Outcome
 			c.token = ""
 			c.mu.Unlock()
 			continue // token expired: log in again once
+		case resp.StatusCode == http.StatusTooManyRequests:
+			c.throttle(resp.Header.Get("Retry-After"))
+			return Throttled, resp.StatusCode, fmt.Errorf("status %d", resp.StatusCode)
 		case resp.StatusCode == http.StatusUnauthorized, resp.StatusCode == http.StatusRequestTimeout,
-			resp.StatusCode == http.StatusTooManyRequests, resp.StatusCode >= 500:
+			resp.StatusCode >= 500:
 			return Retry, resp.StatusCode, fmt.Errorf("status %d", resp.StatusCode)
 		default:
 			return Rejected, resp.StatusCode, fmt.Errorf("rejected: status %d", resp.StatusCode)
@@ -196,4 +233,17 @@ func (c *Client) NextJob(ctx context.Context) ([]byte, Leases, error) {
 		}
 	}
 	return nil, Leases{}, errors.New("next job: auth retry exhausted")
+}
+
+// ThrottleForTest and ResetThrottleForTest let tests open and close the Cloud's wait window without sleeping.
+func (c *Client) ThrottleForTest(d time.Duration) {
+	c.mu.Lock()
+	c.until = time.Now().Add(d)
+	c.mu.Unlock()
+}
+
+func (c *Client) ResetThrottleForTest() {
+	c.mu.Lock()
+	c.until = time.Time{}
+	c.mu.Unlock()
 }

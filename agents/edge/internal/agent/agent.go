@@ -85,6 +85,9 @@ func (a *Agent) CollectOnce(ctx context.Context) error {
 
 // Flush delivers queued items oldest-first. It stops at the first transient failure to preserve order.
 func (a *Agent) Flush(ctx context.Context) {
+	if until := a.GW.ThrottledUntil(); time.Now().Before(until) {
+		return // the Cloud asked us to wait (429 + Retry-After): nothing is sent, nothing is counted against any item
+	}
 	for {
 		items, err := a.Q.Next(ctx, 20)
 		if err != nil || len(items) == 0 {
@@ -108,6 +111,11 @@ func (a *Agent) Flush(ctx context.Context) {
 					return
 				}
 				a.resultSettled(it.Kind, it.Payload, true) // the Cloud refused it for good (the sent copy is in the dead-letter table): resending would only loop; marked as refused, not as acknowledged
+			case gateway.Throttled:
+				// The Cloud's per-agent intake budget is spent: the item is fine, so it is neither retried-with-a-count nor ever dead-lettered for this. It stays at the head of the queue (order
+				// preserved) and goes out after the Retry-After the gateway recorded.
+				a.Log.Warn("cloud intake budget spent; waiting", "id", it.ID, "until", a.GW.ThrottledUntil().UTC().Format(time.RFC3339))
+				return
 			default:
 				dead, _ := a.Q.Retry(ctx, it, errString(derr))
 				a.Log.Warn("delivery deferred", "id", it.ID, "err", derr, "dead_lettered", dead)

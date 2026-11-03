@@ -1,0 +1,27 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a19fb2-af73-7ca0-a71f-7bd491fe225f).
+[codex] Turn started (01a19fb2-afad-7540-bd92-38cbc8bacb12).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de autenticação, retry e configuraç...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/ratelimit...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/app/core/ratelimit... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"429|Retry|edge_rate_limited|jobs/next|heartbeat|result|speed-health|ed...
+[codex] Command completed: /bin/bash -lc "rg -n \"429|Retry|edge_rate_limited|jobs/next|heartbeat|result|speed-health|ed... (exit 0)
+[codex] Running command: /bin/bash -lc "sed -n '110,165p' agents/edge/internal/gateway/gateway.go; sed -n '120,190p' a...
+[codex] Command completed: /bin/bash -lc "sed -n '110,165p' agents/edge/internal/gateway/gateway.go; sed -n '120,190p' a... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"Retry\\(|Outcome.*Retry|Retry:\" agents/edge/internal/agent agents/edg...
+[codex] Command completed: /bin/bash -lc "rg -n \"Retry\\(|Outcome.*Retry|Retry:\" agents/edge/internal/agent agents/edg... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/agent/agent.go | sed -n '80,125p'; rg -n \"edge_in...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/agent/agent.go | sed -n '80,125p'; rg -n \"edge_in... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não deve ser enviado ainda: um Edge acima do limite p...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não deve ser enviado ainda: um Edge acima do limite pode acabar com snapshots legítimos na dead-letter, apesar de receber 429 como sinal de retry.
+
+Findings:
+- [high] 429 repetido pode levar dados de ingestão à dead-letter (apps/api/app/api/deps.py:158-160)
+  O limite responde 429 e define `Retry-After`, mas o Edge classifica 429 como retry sem ler esse header. `Flush` para no primeiro erro transitório e incrementa a tentativa; após 20 tentativas, a fila move o item para dead-letter. Se a coleta legítima exceder o limite configurado — ou vários itens acumularem durante a indisponibilidade — reenvios sem respeitar o tempo indicado podem esgotar as tentativas e retirar snapshots da fila normal. Isso contradiz a garantia de que o retry preserva os dados. Faça o Edge respeitar `Retry-After` e garanta que limitação transitória não descarte itens após um número fixo de tentativas; calibre o orçamento para a cadência real de ingestão.
+  Recommendation: Propague `Retry-After` ao mecanismo de entrega do Edge e evite dead-letter por 429 transitório; valide o comportamento com uma sequência sustentada de 429 seguida de recuperação.
