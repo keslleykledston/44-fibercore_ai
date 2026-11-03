@@ -8,7 +8,7 @@ Estado: **dev/lab**. Nada aqui autoriza produção; ver gates em `CLAUDE.md`/PRD
 3. `scripts/sbom.sh` (SBOM CycloneDX + pip-audit) e `scripts/secrets-scan.sh` (gitleaks) limpos; scan de imagem (trivy) sem HIGH/CRITICAL corrigível.
 
 ## Sequência
-1. `scripts/backup.sh` → `scripts/restore-verify.sh <dump>` (prova de restore em banco descartável).
+1. `scripts/backup.sh` → `scripts/restore-verify.sh <dump>` (prova de restore em banco descartável) e, antes de migração relevante, `scripts/restore-rehearsal.sh <dump>` (ensaio completo: restaura, confere RLS, aplica o upgrade e sobe a API sobre a cópia).
 2. `docker compose up -d --build` — `migrate` roda `alembic upgrade head` (one-shot) antes de `api-core`, `outbox-relay`, `event-consumer`.
 3. Verificar: `/livez`, `/readyz`, `/v1/platform/modules` (autenticado), logs do relay.
 4. Smoke funcional: login, `/v1/tenant`, heartbeat de Edge de teste.
