@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { login } from "./helpers";
 
-// Recuo das credenciais da OLT com a flag `fleet_secrets` DESLIGADA (a `fleet_manager` segue ligada): FLEET_SECRETS_FLAG_OFF=1 npx playwright test --project=recuo-credenciais
+// Recuo das credenciais da OLT com a flag `fleet_secrets` DESLIGADA (a `fleet_manager` segue ligada): FLEET_SECRETS_FLAG_OFF=1 npx playwright test --project=recuo-credenciais (com `fleet_secrets` e `fleet_provision` desligadas)
+// ADR-0046: a chave do Edge também serve à `fleet_provision`; por isso este recuo exige as DUAS flags desligadas (com só a `fleet_provision` ligada o cartão aparece, mas só com a chave, e a rota da chave responde 200).
 // Sem a flag o cartão não existe, o atalho do cadastro some e as rotas do BFF respondem 404 (como se não existissem).
 test("flag fleet_secrets desligada: sem cartão, sem atalho no cadastro e BFF 404", async ({ page }) => {
   test.skip(!process.env.FLEET_SECRETS_FLAG_OFF, "rodar com FLEET_SECRETS_FLAG_OFF=1 e a flag fleet_secrets desligada no provedor");

@@ -6,8 +6,12 @@ import { DataFreshness, ErrorState, PageHeader, StatusPill } from "@/components/
 import { apiSafe } from "@/lib/api";
 import { featuresOn } from "@/lib/features";
 import { PopCombobox } from "@/components/PopCombobox";
+import { ConnectionFields } from "@/components/ConnectionFields";
 import { OltCredentialsCard } from "@/components/OltCredentialsCard";
+import { OltReadiness } from "@/components/OltReadiness";
+import { OltSteps } from "@/components/OltSteps";
 import { ADDRESS_HELP, CRED_HELP, FLEET_FLASH, JOB_LABEL, SNMP_VERSIONS, UUID, uptimeText, type ConnectionTests, type FleetOlt, type Pop } from "@/lib/fleet";
+import type { Delivery, SealKey } from "@/lib/oltSecrets";
 
 const field = "min-h-touch rounded-btn border border-line bg-bg px-3";
 
@@ -18,12 +22,14 @@ export default async function FrotaOlt({ params, searchParams }: { params: Promi
   const sp = await searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
   const ok = one(sp.ok), erro = one(sp.erro);
-  const [r, pops, assets, tests] = await Promise.all([apiSafe<FleetOlt>(`/v1/fleet/olts/${id}`), apiSafe<{ items: Pop[] }>("/v1/pops"), featuresOn("device_assets"), apiSafe<ConnectionTests>(`/v1/fleet/olts/${id}/connection-tests`)]);
+  const [r, pops, assets, tests, secretsOn, provisionOn] = await Promise.all([apiSafe<FleetOlt>(`/v1/fleet/olts/${id}`), apiSafe<{ items: Pop[] }>("/v1/pops"), featuresOn("device_assets"), apiSafe<ConnectionTests>(`/v1/fleet/olts/${id}/connection-tests`), featuresOn("fleet_secrets"), featuresOn("fleet_provision")]);
   if (r.status === 404) notFound();
   const shell = (c: React.ReactNode) => <AppShell active="/rede" user="1">{c}</AppShell>;
   if (r.status === 403) return shell(<ErrorState title="Sem permissão" hint="Seu papel não permite ver esta OLT." />);
   if (!r.data) return shell(<ErrorState title="Não foi possível carregar a OLT" hint="Recarregue a página." />);
   const o = r.data;
+  // ADR-0046: o assistente de cadastro precisa da chave do Edge e das entregas (a API só responde com a permissão e uma das duas flags; senão o assistente não aparece)
+  const [sealKey, deliveries] = provisionOn ? await Promise.all([apiSafe<SealKey>(`/v1/fleet/edges/${o.edge.id}/seal-key`), apiSafe<{ items: Delivery[] }>(`/v1/fleet/olts/${id}/secret-deliveries`)]) : [null, null];
   const msg = ok && FLEET_FLASH[ok] ? FLEET_FLASH[ok] : erro && FLEET_FLASH[erro] ? FLEET_FLASH[erro] : null;
   return shell(
     <>
@@ -32,6 +38,7 @@ export default async function FrotaOlt({ params, searchParams }: { params: Promi
       </PageHeader>
       {msg && <p role={erro ? "alert" : "status"} data-testid="frota-flash" className={`mb-4 rounded-btn border px-3 py-2 text-sm ${erro ? "border-danger text-danger" : "border-ok text-ok"}`}>{msg}</p>}
       <div className="grid gap-4 md:grid-cols-2" data-testid="frota-detalhe">
+        {provisionOn && sealKey?.data && <OltSteps olt={o} secretsOn={secretsOn} deliveries={deliveries?.data?.items ?? null} sealKey={sealKey.data} edgeOk />}
         <section className="panel flex gap-4 p-4" aria-label="Identificação">
           {assets && <DeviceThumb category="olt" vendor={o.vendor} model={o.model} width={120} label />}
           <dl className="grid gap-1 text-sm">
@@ -41,11 +48,12 @@ export default async function FrotaOlt({ params, searchParams }: { params: Promi
             <div><dt className="text-xs text-muted">Última coleta</dt><dd>{o.observed_at ? <DataFreshness freshness="fresh" observedAt={o.observed_at} /> : "Ainda não coletada"}</dd></div>
             <div><dt className="text-xs text-muted">Edge</dt><dd>{o.edge.name}</dd></div>
             <div><dt className="text-xs text-muted">Endereço de gerência · SNMP</dt><dd data-testid="frota-endereco">{o.mgmt_address_masked ?? "Não informado"} · {o.snmp_version ? `SNMP ${o.snmp_version}` : "versão do SNMP não informada"}</dd></div>
+            {o.connection.protocol && <div><dt className="text-xs text-muted">Acesso · prontidão</dt><dd data-testid="frota-acesso">{o.connection.protocol.toUpperCase()} · porta {o.connection.port ?? "—"}<div className="mt-1"><OltReadiness r={o.readiness} testId="frota-prontidao" /></div></dd></div>}
             <div><dt className="text-xs text-muted">Credencial</dt><dd data-testid="frota-credencial">{o.has_credential_ref ? "Informada (o nome não é mostrado)" : "Não informada"}</dd></div>
             {o.collected && <div><dt className="text-xs text-muted">ONUs</dt><dd><Link href={`/rede?olt=${o.id}`} className="inline-block py-1 text-accent underline underline-offset-2">Ver as ONUs desta OLT</Link></dd></div>}
           </dl>
         </section>
-        <section className="panel p-4" aria-label="Cadastro">
+        <section id="cadastro" className="panel p-4" aria-label="Cadastro">
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Cadastro</h2>
           <form method="post" action={`/bff/frota/olts/${o.id}`} className="grid gap-3">
             <PopCombobox pops={(pops.data?.items ?? []).map((p) => ({ id: p.id, name: p.name }))} defaultName={o.pop?.name ?? ""} />
@@ -53,6 +61,7 @@ export default async function FrotaOlt({ params, searchParams }: { params: Promi
               <span className="text-xs text-muted">{ADDRESS_HELP} O endereço já salvo não é mostrado por inteiro.</span></label>
             {o.mgmt_address_masked && <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="remover_endereco" value="1" /> Remover o endereço</label>}
             <label className="grid gap-1 text-sm">Versão do SNMP<select name="snmp_version" defaultValue={o.snmp_version ?? ""} className={field}><option value="">Não informar</option>{SNMP_VERSIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+            <ConnectionFields defaults={{ protocol: o.connection.protocol, port: o.connection.port, transport: o.connection.transport, snmp_port: o.connection.snmp_port, host_key_sha256: o.connection.host_key_sha256, ssh_mode: o.connection.ssh_mode, legacy_ssh: o.connection.legacy_ssh }} />
             <label className="grid gap-1 text-sm">Rótulo<input name="label" defaultValue={o.label ?? ""} maxLength={80} className={field} /></label>
             <label className="grid gap-1 text-sm">{o.has_credential_ref ? "Substituir o nome da credencial no Edge" : "Nome da credencial no Edge"}<input name="credential_ref" defaultValue="" maxLength={64} autoComplete="off" spellCheck={false} placeholder={o.has_credential_ref ? "deixe vazio para manter a atual" : "ex.: olt-centro-01"} className={`${field} font-mono`} />
               <span className="text-xs text-muted">{CRED_HELP} O nome já informado não é mostrado de volta.</span></label>
@@ -60,7 +69,7 @@ export default async function FrotaOlt({ params, searchParams }: { params: Promi
             <div><button type="submit" data-testid="frota-salvar" className="min-h-touch rounded-btn border border-line px-4 text-sm hover:bg-bg">Salvar</button></div>
           </form>
         </section>
-        <section className="panel p-4 md:col-span-2" aria-label="Teste de conexão" data-testid="frota-teste">
+        <section id="teste" className="panel p-4 md:col-span-2" aria-label="Teste de conexão" data-testid="frota-teste">
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Teste de conexão</h2>
           <p className="mb-3 text-sm text-muted">O Edge lê a identidade da OLT (modelo e firmware) na próxima janela de coleta, <strong>somente leitura</strong>: nada é configurado. Limite: 1 teste a cada 15 minutos e 4 por hora por OLT. Um resultado recente já guardado responde sem consultar a OLT.</p>
           {tests.data === null ? <p className="text-sm text-muted">O histórico de testes não está disponível agora.</p> : (
@@ -92,7 +101,7 @@ export default async function FrotaOlt({ params, searchParams }: { params: Promi
             </div>
           )}
         </section>
-        <OltCredentialsCard olt={o} />
+        <OltCredentialsCard olt={o} secretsOn={secretsOn} />
       </div>
     </>,
   );

@@ -7,8 +7,14 @@
 //   chave AES = HKDF-SHA256(ikm = ECDH(efêmera, edge), salt = vazio, info = "fibercore-seal-v1|" + key_id), 256 bits; nonce de 12 bytes aleatórios; AES-GCM com a AAD
 //   blob = 0x01 ‖ efêmera_pub(65) ‖ nonce(12) ‖ texto cifrado‖tag, em base64url sem preenchimento
 
-export type SecretKind = "ssh_login" | "snmp_community";
-export type Plain = { kind: "ssh_login"; username: string; password: string } | { kind: "snmp_community"; community: string };
+export type SecretKind = "ssh_login" | "snmp_community" | "olt_connection";
+/** ADR-0046 D4: a CONEXÃO da OLT (não secreta, mas cifrada pelo mesmo canal). `remove` só leva kind, action e cloud_id. A ordem dos campos é a do ADR. */
+export type ConnectionPlain =
+  | { kind: "olt_connection"; action: "set"; address: string; port: number; protocol: "ssh"; vendor: string; transport: "cli" | "snmp"; snmp_port: number; host_key_sha256: string; legacy_ssh: boolean; ssh_mode: "exec" | "shell"; cloud_id: string }
+  | { kind: "olt_connection"; action: "remove"; cloud_id: string };
+export type Plain = { kind: "ssh_login"; username: string; password: string } | { kind: "snmp_community"; community: string } | ConnectionPlain;
+
+import { hostKeyProblem, ipLiteralProblem, portProblem } from "./oltConnection";
 
 export const SEAL_PREFIX = "fibercore-seal-v1";
 export const MAX_BLOB_CHARS = 2048;
@@ -63,6 +69,7 @@ const clean = (s: string) => !/[\r\n\0]/.test(s);
 
 /** Valida o texto claro (ADR): obrigatórios, sem \r \n \0, limites em bytes. Devolve uma mensagem em português (sem repetir o valor) ou null. */
 export function plainProblem(p: Plain): string | null {
+  if (p.kind === "olt_connection") return connectionProblem(p);
   const fields: [string, string, number][] = p.kind === "ssh_login" ? [["O login", p.username, LIMITS.username], ["A senha", p.password, LIMITS.password]] : [["A community", p.community, LIMITS.community]];
   for (const [label, v, max] of fields) {
     if (v.length === 0) return `${label} é obrigatório.`;
@@ -72,9 +79,30 @@ export function plainProblem(p: Plain): string | null {
   return null;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** ADR-0046 D4: o que o Edge valida (IP literal, porta, protocolo ssh, fabricante, impressão digital no formato, cloud_id). Mensagem em português sem repetir o valor, ou null. */
+function connectionProblem(p: ConnectionPlain): string | null {
+  if (!UUID_RE.test(p.cloud_id)) return "Identificador da OLT inválido.";
+  if (p.action === "remove") return null;
+  const ip = ipLiteralProblem(p.address);
+  if (ip) return ip;
+  const port = portProblem(String(p.port));
+  if (port) return port;
+  if (!Number.isInteger(p.snmp_port) || p.snmp_port < 1 || p.snmp_port > 65535) return "A porta SNMP é um número de 1 a 65535.";
+  if (p.protocol !== "ssh") return "Só SSH recebe a conexão: Telnet é só cadastro.";
+  if (!/^[a-z]{2,20}$/.test(p.vendor)) return "Fabricante inválido.";
+  if (p.transport !== "cli" && p.transport !== "snmp") return "Transporte inválido.";
+  if (p.ssh_mode !== "exec" && p.ssh_mode !== "shell") return "Modo SSH inválido.";
+  return hostKeyProblem(p.host_key_sha256);
+}
+
 /** O JSON exato do ADR (ordem dos campos e sem espaços): é o que o Edge decifra e valida. */
 export function plainJson(p: Plain): string {
-  return JSON.stringify(p.kind === "ssh_login" ? { kind: p.kind, username: p.username, password: p.password } : { kind: p.kind, community: p.community });
+  if (p.kind === "ssh_login") return JSON.stringify({ kind: p.kind, username: p.username, password: p.password });
+  if (p.kind === "snmp_community") return JSON.stringify({ kind: p.kind, community: p.community });
+  if (p.action === "remove") return JSON.stringify({ kind: p.kind, action: p.action, cloud_id: p.cloud_id });
+  return JSON.stringify({ kind: p.kind, action: p.action, address: p.address, port: p.port, protocol: p.protocol, vendor: p.vendor, transport: p.transport, snmp_port: p.snmp_port,
+    host_key_sha256: p.host_key_sha256, legacy_ssh: p.legacy_ssh, ssh_mode: p.ssh_mode, cloud_id: p.cloud_id });
 }
 
 export type SealDeps = {

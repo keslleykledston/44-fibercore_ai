@@ -1,0 +1,36 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1d1af-0d5b-7ba1-b7c7-c7b4832d18ed).
+[codex] Turn started (01a1d1af-0d99-7583-809f-a51c8cf21066).
+[codex] Assistant message captured: Vou inspecionar o diff real contra `main`, concentrando a leitura em API, migração, testes e ...
+[codex] Running command: /bin/bash -lc 'git diff --unified=70 main...HEAD -- apps/api/alembic/versions/0051_olt_connec...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=70 main...HEAD -- apps/api/alembic/versions/0051_olt_connec... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --unified=10 main...HEAD -- apps/api/app/api/fleet.py apps/api/app/ap...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=10 main...HEAD -- apps/api/app/api/fleet.py apps/api/app/ap... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/olt_secrets.py | sed -n '1,285p'; nl -ba apps/api/app/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/olt_secrets.py | sed -n '1,285p'; nl -ba apps/api/app/... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "GRANT (INSERT|UPDATE).*olts|REVOKE .*olts|GRANT .* ON olts|ALTER TABLE ...
+[codex] Command completed: /bin/bash -lc 'rg -n "GRANT (INSERT|UPDATE).*olts|REVOKE .*olts|GRANT .* ON olts|ALTER TABLE ... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"ADR-0046|host_key_sha256|readiness|trust_state\" docs/architecture doc...
+[codex] Command completed: /bin/bash -lc "rg -n \"ADR-0046|host_key_sha256|readiness|trust_state\" docs/architecture doc... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/core/fleet.py | sed -n '64,135p'; nl -ba docs/wiki/adr/ADR...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/core/fleet.py | sed -n '64,135p'; nl -ba docs/wiki/adr/ADR... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/fleet.py | sed -n '417,510p';"
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/fleet.py | sed -n '417,510p';" (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/fleet.py | sed -n '225,255p';"
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/fleet.py | sed -n '225,255p';" (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: a prontidão pode marcar conexão de ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: a prontidão pode marcar conexão de Telnet como testável e testes antigos como atuais; a API também permite testar OLTs de inventário sem protocolo SSH.
+
+Findings:
+- [medium] Readiness reaproveita teste antigo quando a conexão nunca foi aplicada (apps/api/app/api/fleet.py:244-245)
+  Com `conn_applied_at IS NULL`, a condição `l.asked_at >= o.conn_applied_at` fica verdadeira para qualquer teste `olt.connection` anterior da mesma OLT e época. Assim, uma OLT recém-configurada ou ainda sem conexão aplicada pode retornar `readiness.steps.tested=true`, embora o teste não valide a configuração atual. Isso pode mostrar prontidão que o Edge ainda não alcançou.
+  Recommendation: Exija `o.conn_applied_at IS NOT NULL` para considerar um teste válido e associe a validade ao estado aplicado atual; mantenha `tested=false` enquanto não houver conexão aplicada.
+- [medium] O endpoint de teste não bloqueia protocolo Telnet ou ausente (apps/api/app/api/fleet.py:425-430)
+  `connection_test` busca apenas id e identidade da OLT e segue para criar ou reutilizar o job `olt.connection`, sem verificar `mgmt_protocol`. Logo, uma OLT Telnet — que a ADR define como inventário sem suporte operacional — ou sem protocolo registrado ainda pode iniciar o teste pela API. O resultado pode ser erro operacional ou uma indicação de teste que contradiz o estado de inventário e a prontidão Telnet.
+  Recommendation: Inclua `mgmt_protocol` na consulta e recuse o teste antes de consultar cache ou enfileirar o job quando o protocolo não for `ssh`.

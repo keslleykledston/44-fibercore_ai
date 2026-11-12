@@ -42,6 +42,7 @@
 | `fleet:manage` | R2 | não | sim | Cadastrar e editar OLTs e POPs (nome, POP, rótulo e NOME da credencial local do Edge; nunca o segredo; nada é enviado à OLT) |
 | `fleet:test` | R1 | não | sim | Pedir um teste de conexão de uma OLT (leitura somente leitura pelo Edge, com orçamento por OLT) |
 | `fleet:secrets` | R3 | sim | não | Confirmar a chave de um Edge e enviar login/senha/community de uma OLT, cifrados no navegador até o Edge (a nuvem nunca vê nem devolve o segredo) |
+| `fleet:provision` | R3 | sim | não | Entregar ao Edge a CONEXÃO de uma OLT (endereço, porta, protocolo, impressão digital do host), cifrada no navegador, dentro da política local do Edge; a confiança no host é dada no próprio Edge |
 | `members:read` | R1 | não | não | Ver os membros do provedor e o estado do MFA de cada um |
 | `members:manage` | R3 | sim | não | Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite) |
 | `platform:delegate` | R3 | sim | não | Conceder e revogar o acesso temporário (até 8 h, com motivo) do suporte da plataforma a este provedor |
@@ -91,6 +92,7 @@
 | `fleet:manage` | ✔ | ✔ |  |  |  |  |  |  |  |
 | `fleet:test` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `fleet:secrets` | ✔ |  |  |  |  |  |  |  |  |
+| `fleet:provision` | ✔ |  |  |  |  |  |  |  |  |
 | `members:read` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `members:manage` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `platform:delegate` | ✔ |  |  |  |  |  |  |  |  |
@@ -167,6 +169,7 @@
 | POST | `/v1/edge/heartbeat` | `edge:heartbeat` |
 | GET | `/v1/edge/jobs/next` | `jobs:execute` |
 | POST | `/v1/edge/jobs/{job_id}/result` | `jobs:execute` |
+| POST | `/v1/edge/managed-olts/state` | `jobs:execute` |
 | POST | `/v1/edge/olt-snapshots` | `inventory:write` |
 | POST | `/v1/edge/seal-key` | `jobs:execute` |
 | GET | `/v1/edge/secret-deliveries/next` | `jobs:execute` |
@@ -174,8 +177,8 @@
 | POST | `/v1/edge/speed-health` | `inventory:write` |
 | GET | `/v1/edges` | `edge:read` |
 | POST | `/v1/erp/import-csv` | `customers:import` |
-| GET | `/v1/fleet/edges/{edge_id}/seal-key` | `fleet:secrets` |
-| POST | `/v1/fleet/edges/{edge_id}/seal-key/confirm` | `fleet:secrets` |
+| GET | `/v1/fleet/edges/{edge_id}/seal-key` | `fleet:provision`, `fleet:secrets` |
+| POST | `/v1/fleet/edges/{edge_id}/seal-key/confirm` | `fleet:provision`, `fleet:secrets` |
 | GET | `/v1/fleet/homologation` | `fleet:read` |
 | GET | `/v1/fleet/olts` | `fleet:read` |
 | POST | `/v1/fleet/olts` | `fleet:manage` |
@@ -183,8 +186,8 @@
 | PATCH | `/v1/fleet/olts/{olt_id}` | `fleet:manage` |
 | POST | `/v1/fleet/olts/{olt_id}/connection-test` | `fleet:test` |
 | GET | `/v1/fleet/olts/{olt_id}/connection-tests` | `fleet:read` |
-| GET | `/v1/fleet/olts/{olt_id}/secret-deliveries` | `fleet:secrets` |
-| POST | `/v1/fleet/olts/{olt_id}/secret-deliveries` | `fleet:secrets` |
+| GET | `/v1/fleet/olts/{olt_id}/secret-deliveries` | `fleet:provision`, `fleet:secrets` |
+| POST | `/v1/fleet/olts/{olt_id}/secret-deliveries` | `fleet:provision`, `fleet:secrets` |
 | GET | `/v1/incidents` | `incidents:read` |
 | GET | `/v1/incidents/{incident_id}` | `incidents:read` |
 | POST | `/v1/incidents/{incident_id}/ack` | `incidents:ack` |

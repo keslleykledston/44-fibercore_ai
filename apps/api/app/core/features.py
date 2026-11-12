@@ -36,6 +36,8 @@ FEATURES: dict[str, bool] = {
     "device_assets": False,                   # ADR-0041 (PR1): catálogo de equipamentos e miniaturas esquemáticas por modelo; SOMENTE arte, nenhuma capacidade nem porta
     "fleet_manager": False,                   # ADR-0041 (PR2): cadastro de OLTs e POPs e teste de conexão (somente leitura; a credencial fica no Edge)
     "fleet_secrets": False,                   # ADR-0045: login/senha/community da OLT digitados na tela, cifrados no navegador até o Edge (a nuvem só guarda texto cifrado); separada de fleet_manager; o dono liga por provedor, depois de o Edge publicar a chave e uma pessoa confirmar a impressão digital
+    "fleet_provision": False,                 # ADR-0046: cadastro de OLT de ponta a ponta (a nuvem entrega ao Edge a CONEXÃO da OLT, cifrada, dentro da política local `managed_olts`
+                                              # e com confiança local do host); separada de fleet_secrets; o dono liga por provedor, depois de o Edge ter `managed_olts`
 }
 
 

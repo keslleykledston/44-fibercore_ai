@@ -20,7 +20,10 @@ from uuid import UUID
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-KINDS = ("ssh_login", "snmp_community")
+CREDENTIAL_KINDS = ("ssh_login", "snmp_community")   # ADR-0045: permission fleet:secrets, flag fleet_secrets
+CONNECTION_KIND = "olt_connection"                    # ADR-0046 D4: permission fleet:provision, flag fleet_provision; same channel, same sealing, same AAD (with this kind), same states and retention
+KINDS = (*CREDENTIAL_KINDS, CONNECTION_KIND)
+KIND_GATE = {"ssh_login": ("fleet:secrets", "fleet_secrets"), "snmp_community": ("fleet:secrets", "fleet_secrets"), CONNECTION_KIND: ("fleet:provision", "fleet_provision")}
 SEAL_PREFIX = "fibercore-seal-v1"
 DELIVERY_PREFIX = "fibercore-delivery-v1"
 BLOB_VERSION = 0x01
@@ -35,7 +38,11 @@ MAX_PENDING_PER_OLT = 5
 MAX_ATTEMPTS = 3
 LEASE_SECONDS = 300
 MAX_WINDOW_SECONDS = 3600
-RESULT_CODES = ("bad_key_id", "expired", "aad_mismatch", "bad_signature", "decrypt_failed", "invalid_payload", "stale", "target_not_configured", "write_failed", "state_unreadable")
+# the failure codes an Edge may report (ADR-0045 + ADR-0046 D5); `awaiting_local_trust` is NOT one: it rides on an `applied` result of an `olt_connection` (APPLIED_CODES)
+RESULT_CODES = ("bad_key_id", "expired", "aad_mismatch", "bad_signature", "decrypt_failed", "invalid_payload", "stale", "target_not_configured", "write_failed", "state_unreadable",
+                "protocol_not_supported", "vendor_not_supported", "vendor_not_allowed", "address_not_allowed", "port_not_allowed", "too_many_olts", "legacy_not_allowed", "name_conflict",
+                "managed_olts_disabled")
+APPLIED_CODES = ("awaiting_local_trust",)
 # What a person reads for each failure code (pt-BR): the web shows these; the API only ever returns the code.
 CODE_PT = {
     "bad_key_id": "A chave do Edge mudou desde a digitação. Confirme a nova impressão digital e envie de novo.",
@@ -49,6 +56,21 @@ CODE_PT = {
     "write_failed": "O Edge não conseguiu gravar o arquivo de credenciais (permissão ou disco).",
     "state_unreadable": "O Edge não conseguiu ler o próprio registro de entregas aplicadas.",
     "lease_exhausted": "O Edge não respondeu a tempo em várias tentativas.",
+    # ADR-0046 D5 (the Edge's answer about the OLT's connection)
+    "awaiting_local_trust": ("Conexão aplicada no Edge, mas ele só conecta depois da confirmação local: no servidor do Edge rode "
+                             "fibercore-edge managed-trust <nome da OLT> e redigite a impressão digital do host."),
+    "protocol_not_supported": "O Edge recusou: este protocolo não é suportado (Telnet é só cadastro por enquanto).",
+    "vendor_not_supported": "O Edge ainda não opera este fabricante (hoje só Huawei e ZTE). O cadastro continua como inventário.",
+    "vendor_not_allowed": "A política local do Edge não permite este fabricante (allowed_vendors).",
+    "address_not_allowed": "O endereço está fora das redes liberadas na política local do Edge (allowed_cidrs) ou é um endereço proibido.",
+    "port_not_allowed": "A porta não está liberada na política local do Edge (allowed_ports).",
+    "too_many_olts": "O Edge atingiu o máximo de OLTs gerenciadas pela nuvem (max_olts).",
+    "legacy_not_allowed": "A política local do Edge não permite SSH legado (allow_legacy_ssh).",
+    "name_conflict": "Já existe no Edge uma OLT estática com este nome: a estática manda e a nuvem não a sobrescreve.",
+    "managed_olts_disabled": "Este Edge não aceita OLT gerenciada pela nuvem: quem administra o Edge precisa criar a seção managed_olts no config.json.",
+    # cancellations made by the Cloud itself (never an Edge answer)
+    "connection_changed": "A conexão da OLT mudou depois do envio: a entrega foi cancelada e o conteúdo apagado. Envie de novo.",
+    "protocol_changed": "A OLT passou a Telnet (só cadastro): as entregas pendentes foram canceladas e o conteúdo apagado.",
 }
 
 _B64URL = re.compile(r"^[A-Za-z0-9_-]+$")

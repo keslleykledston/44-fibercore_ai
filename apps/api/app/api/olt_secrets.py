@@ -4,8 +4,14 @@ The Cloud NEVER sees a credential in clear: the browser seals it with the Edge's
 on this side), no response to a person ever returns a blob (not even sealed), and neither the audit log nor any log line carries a blob, a kind's content, an address or a name of a secret.
 
 Two audiences, one module:
-* the Edge (service account bound to one Edge): publish its seal key, take the next delivery (a lease: one in flight per Edge, serialised by an advisory lock and by a partial unique index), report the result;
-* the person (`fleet:secrets`, only `isp_admin`; tenant flag `fleet_secrets`, OFF by default): see and confirm the Edge's key fingerprint, post a sealed delivery, list the state of the last ones.
+* the Edge (service account bound to one Edge): publish its seal key, take the next delivery (a lease: one in flight per Edge, serialised by an advisory lock
+  and by a partial unique index), report the result,
+  report the local-trust state of the OLTs the Cloud handed it (ADR-0046 D6);
+* the person (`fleet:secrets` + flag `fleet_secrets` for the credential kinds, `fleet:provision` + flag `fleet_provision` for the connection of an OLT (ADR-0046);
+  only `isp_admin`; both flags OFF by default):
+  see and confirm the Edge's key fingerprint, post a sealed delivery, list the state of the last ones.
+ADR-0046: the kind `olt_connection` (address, port, protocol, fingerprint of the host...) travels the very same channel; Telnet is inventory only,
+so an OLT registered as Telnet gets NO delivery of any kind (422 `protocol_not_supported`).
 The blob is readable by the application role only through the SECURITY DEFINER function `app_secret_delivery_blob` (migration 0050) and only from `next_delivery` below; a test keeps it that way.
 """
 from __future__ import annotations
@@ -20,24 +26,28 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from sqlalchemy import Connection, text
 from sqlalchemy.exc import IntegrityError
 
-from app.api.deps import TENANT_CONN, Principal, edge_ingest_limit, require
+from app.api.deps import TENANT_CONN, Principal, edge_ingest_limit, ensure_permission, require, require_any
 from app.api.routes import audit
 from app.core import features, jobsign, olt_secrets
 from app.core.settings import Settings, get_settings
 
 log = logging.getLogger(__name__)
 router = APIRouter()
-FLAG = "fleet_secrets"
 HISTORY = 10
+PAIRS = (("fleet:secrets", "fleet_secrets"), ("fleet:provision", "fleet_provision"))   # (permission, tenant flag): what opens the credential kinds, and what opens the connection kind
 
 
-def _flag(conn: Connection, p: Principal) -> None:
-    features.ensure(conn, p.tenant_id, FLAG)
+def _active_kinds(conn: Connection, p: Principal) -> tuple[str, ...]:
+    """The delivery kinds this person may use right now: permission AND tenant flag, per kind."""
+    open_pairs = {(perm, flag) for perm, flag in PAIRS if p.can(perm) and features.enabled(conn, p.tenant_id, flag)}
+    return tuple(k for k in olt_secrets.KINDS if olt_secrets.KIND_GATE[k] in open_pairs)
 
 
-def _person(p: Principal = Depends(require("fleet:secrets")), conn: Connection = TENANT_CONN) -> Principal:
-    """Permission, THEN the tenant flag, before the body is even validated: with `fleet_secrets` off every person route answers 403 `feature_disabled`, whatever was sent (and an unauthorised caller learns nothing)."""
-    _flag(conn, p)
+def _person(p: Principal = Depends(require_any("fleet:secrets", "fleet:provision")), conn: Connection = TENANT_CONN) -> Principal:
+    """Permission, THEN the tenant flags, before the body is even validated: with both `fleet_secrets` and `fleet_provision` off (or not held) every person route
+    answers 403 `feature_disabled`, whatever was sent (and an unauthorised caller learns nothing). A route that depends on the KIND (posting a delivery) repeats the exact check for that kind."""
+    if not _active_kinds(conn, p):
+        raise HTTPException(403, "feature_disabled")
     return p
 
 
@@ -105,10 +115,21 @@ def _in_flight(conn: Connection, edge_id: UUID):
                              "WHERE edge_id = :e AND status = 'DISPATCHED' AND lease_until > now() AND expires_at > now() FOR UPDATE"), {"e": edge_id}).first()
 
 
-def _grant(conn: Connection, edge_id: UUID, key_id: str):
-    """The oldest PENDING delivery for the Edge's CURRENT key becomes DISPATCHED with a fresh lease token, in this transaction. SKIP LOCKED: a row someone else holds is not waited for."""
-    row = conn.execute(text("SELECT id FROM olt_secret_deliveries WHERE edge_id = :e AND status = 'PENDING' AND key_id = :k AND expires_at > now() ORDER BY created_at, id LIMIT 1 FOR UPDATE SKIP LOCKED"),
-                       {"e": edge_id, "k": key_id}).first()
+def _grant(conn: Connection, edge_id: UUID, key_id: str, kinds: tuple[str, ...]):
+    """The oldest PENDING delivery (of a kind whose flag is on) for the Edge's CURRENT key becomes DISPATCHED with a fresh lease token, in this transaction.
+    SKIP LOCKED: a row someone else holds is not waited for.
+    ADR-0046 (Codex r1): the OLT row is locked FOR SHARE BEFORE its delivery row (the order `PATCH /v1/fleet/olts/{id}` and `create_delivery` use: OLT, then deliveries), so a change of how
+    the OLT is reached (which holds the OLT row FOR UPDATE and cancels what waits) and the dispatch of one of its deliveries never interleave: either the dispatch happened first (and the change
+    is then refused while it is in flight) or the change committed first (and the delivery is no longer PENDING here)."""
+    cands = conn.execute(text("SELECT id, olt_id FROM olt_secret_deliveries WHERE edge_id = :e AND status = 'PENDING' AND key_id = :k AND kind = ANY(:kinds) "
+                              "AND expires_at > now() ORDER BY created_at, id LIMIT 20"), {"e": edge_id, "k": key_id, "kinds": list(kinds)}).all()
+    row = None
+    for cand in cands:
+        conn.execute(text("SELECT 1 FROM olts WHERE id = :o FOR SHARE"), {"o": cand.olt_id})   # waits while a PATCH of this OLT holds it
+        row = conn.execute(text("SELECT id FROM olt_secret_deliveries WHERE id = :i AND status = 'PENDING' AND expires_at > now() FOR UPDATE SKIP LOCKED"),
+                           {"i": cand.id}).first()   # re-read under the lock
+        if row is not None:
+            break
     if row is None:
         return None
     return conn.execute(text("UPDATE olt_secret_deliveries SET status = 'DISPATCHED', lease_token = :t, lease_until = now() + make_interval(secs => :s), updated_at = now() WHERE id = :i "
@@ -133,7 +154,8 @@ def next_delivery(response: Response, p: Principal = Depends(require("jobs:execu
     edge_id = _edge(p)
     if not settings.job_signing_key:
         raise HTTPException(503, "job signing key not configured")   # fail closed: nothing is dispatched unsigned
-    if not features.enabled(conn, p.tenant_id, FLAG):   # flag off: nothing is dispatched (the sweeper still erases what was waiting)
+    kinds = tuple(k for k in olt_secrets.KINDS if features.enabled(conn, p.tenant_id, olt_secrets.KIND_GATE[k][1]))   # kinds whose flag is on (ADR-0046: fleet_provision opens `olt_connection`)
+    if not kinds:   # every flag off: nothing is dispatched (the sweeper still erases what was waiting)
         response.status_code = 204
         return None
     jobsign.load_private(settings.job_signing_key)   # a malformed key is a 5xx before anything is leased
@@ -143,6 +165,9 @@ def next_delivery(response: Response, p: Principal = Depends(require("jobs:execu
         raise HTTPException(404, "edge not found")
     conn.execute(text("UPDATE olt_secret_deliveries SET status = 'EXPIRED', sealed = NULL, updated_at = now() WHERE edge_id = :e AND status IN ('PENDING', 'DISPATCHED') AND expires_at <= now()"), {"e": edge_id})
     row = _in_flight(conn, edge_id)
+    if row is not None and row.kind not in kinds:   # its flag was turned off while it was leased: nothing is handed out; the lease lapses and the delivery waits (or expires) like any other
+        response.status_code = 204
+        return None
     if row is None:
         _lapsed_leases(conn, edge_id)
         if edge.seal_key_state != "confirmed":   # an unconfirmed key is not trusted: nothing is handed out (and a key change already cancelled what waited)
@@ -150,7 +175,7 @@ def next_delivery(response: Response, p: Principal = Depends(require("jobs:execu
             return None
         try:
             with conn.begin_nested():
-                row = _grant(conn, edge_id, edge.seal_key_id)
+                row = _grant(conn, edge_id, edge.seal_key_id, kinds)
         except IntegrityError as exc:   # the partial unique index refused a second DISPATCHED: a defect, not the normal flow (the advisory lock prevents it)
             log.error("secret delivery dispatch refused by the one-in-flight index (edge %s)", edge_id)
             raise HTTPException(503, "dispatch_conflict", headers={"Retry-After": "5"}) from exc
@@ -168,8 +193,8 @@ class ResultIn(BaseModel):
 
     @model_validator(mode="after")
     def _code(self):
-        if self.outcome == "applied" and self.code is not None:
-            raise ValueError("code is only for outcome failed")
+        if self.outcome == "applied" and self.code is not None and self.code not in olt_secrets.APPLIED_CODES:
+            raise ValueError("code on an applied result can only be awaiting_local_trust")   # ADR-0046 D6
         if self.outcome == "failed" and self.code not in olt_secrets.RESULT_CODES:
             raise ValueError("code must be one of the documented failure codes")
         return self
@@ -179,15 +204,25 @@ class ResultIn(BaseModel):
 def delivery_result(delivery_id: UUID, body: ResultIn, p: Principal = Depends(require("jobs:execute")), conn: Connection = TENANT_CONN) -> Response:
     """Only the CURRENT, unexpired lease token of a DISPATCHED delivery moves it (409 `stale_lease` otherwise, nothing changed). The same result repeated in a terminal state is 204; a different one is 409. Every terminal state erases the blob."""
     edge_id = _edge(p)
+    pre = conn.execute(text("SELECT olt_id, kind FROM olt_secret_deliveries WHERE id = :i AND edge_id = :e"), {"i": delivery_id, "e": edge_id}).first()
+    if pre is not None and pre.kind == olt_secrets.CONNECTION_KIND:
+        # an applied connection writes the OLT row (narrow function): take the OLT BEFORE the delivery, the order `next`, PATCH and create_delivery use (Codex r2: no deadlock)
+        conn.execute(text("SELECT 1 FROM olts WHERE id = :o FOR UPDATE"), {"o": pre.olt_id})
     row = conn.execute(text("SELECT id, status, lease_token, code, kind, olt_id, (lease_until IS NOT NULL AND lease_until > now()) AS live FROM olt_secret_deliveries WHERE id = :i AND edge_id = :e FOR UPDATE"),
                        {"i": delivery_id, "e": edge_id}).first()
     if row is None:
         raise HTTPException(404, "delivery not found")
     status = "APPLIED" if body.outcome == "applied" else "FAILED"
+    if body.code in olt_secrets.APPLIED_CODES and row.kind != olt_secrets.CONNECTION_KIND:
+        raise HTTPException(422, "code_not_for_kind")   # awaiting_local_trust is about the OLT's connection only
     if row.status == "DISPATCHED":
         if row.lease_token != body.lease_token or not row.live:   # the CURRENT attempt only: a lease that ran out is not current even if no `next` has reconciled it yet (the redelivery is idempotent at the Edge: it reports `applied` again)
             raise HTTPException(409, "stale_lease")
         conn.execute(text("UPDATE olt_secret_deliveries SET status = :s, code = :c, sealed = NULL, updated_at = now() WHERE id = :i"), {"s": status, "c": body.code, "i": delivery_id})
+        if body.outcome == "applied" and row.kind == olt_secrets.CONNECTION_KIND:   # the record is at the Edge now; the trust state is the Edge's word (narrow function, migration 0051)
+            conn.execute(text("SELECT app_olt_edge_report(:o, :e, 'connection_applied')"), {"o": row.olt_id, "e": edge_id})
+            if body.code == "awaiting_local_trust":
+                conn.execute(text("SELECT app_olt_edge_report(:o, :e, 'awaiting_local_trust')"), {"o": row.olt_id, "e": edge_id})
         audit(conn, p, "fleet.secret_delivery.result", "olt", str(row.olt_id), {"delivery_id": str(delivery_id), "kind": row.kind, "outcome": body.outcome, "code": body.code})
         return Response(status_code=204)
     if row.status == "PENDING" or row.lease_token != body.lease_token:
@@ -195,6 +230,36 @@ def delivery_result(delivery_id: UUID, body: ResultIn, p: Principal = Depends(re
     if row.status == status and row.code == body.code:
         return Response(status_code=204)   # the same result again (a retry after a lost answer): nothing changes
     raise HTTPException(409, "result_conflict")
+
+
+class ManagedStateItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    cloud_id: UUID
+    state: Literal["awaiting_local_trust", "trusted", "removed"]
+
+
+class ManagedStateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    items: list[ManagedStateItem] = Field(max_length=64)
+
+
+@router.post("/v1/edge/managed-olts/state")
+def managed_olts_state(body: ManagedStateIn, p: Principal = Depends(require("jobs:execute")), _rl: None = Depends(edge_ingest_limit), conn: Connection = TENANT_CONN) -> dict:
+    """ADR-0046 D6: the Edge says, for the OLTs it manages on the Cloud's behalf, whether the local administrator confirmed the host (`trusted`), is still to confirm
+    (`awaiting_local_trust`) or the record is gone (`removed`). Only an OLT of THIS Edge (of this tenant, by RLS) is touched, and only through the narrow function of migration 0051;
+    anything else is counted in `ignored` and never answers differently, so a caller learns nothing about OLTs that are not its own (nor whether they exist).
+    The audit line is written only when a state really changed (the Edge repeats the report every cycle) and carries no content."""
+    edge_id = _edge(p)
+    updated = ignored = 0
+    for it in body.items:
+        res = conn.execute(text("SELECT app_olt_edge_report(:o, :e, :s)"), {"o": it.cloud_id, "e": edge_id, "s": it.state}).scalar()
+        if res == "ignored":
+            ignored += 1
+            continue
+        updated += 1
+        if res == "changed":
+            audit(conn, p, "fleet.olt.trust_state", "olt", str(it.cloud_id), {"state": it.state})
+    return {"updated": updated, "ignored": ignored}
 
 
 # ============================================================ the person side ==
@@ -249,7 +314,7 @@ def confirm_seal_key(edge_id: UUID, body: ConfirmIn, p: Principal = Depends(_per
 class DeliveryIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     delivery_id: UUID
-    kind: Literal["ssh_login", "snmp_community"]
+    kind: Literal["ssh_login", "snmp_community", "olt_connection"]
     key_id: str = Field(pattern=r"^[0-9a-f]{16}$")
     expires_at: int = Field(strict=True, gt=0, lt=10**11)   # unix seconds: the same integer that enters the AAD
     sealed: str = Field(min_length=100, max_length=olt_secrets.MAX_BLOB_CHARS)
@@ -270,10 +335,17 @@ def _delivery_row(r) -> dict:
 
 
 @router.post("/v1/fleet/olts/{olt_id}/secret-deliveries", status_code=202)
-def create_delivery(olt_id: UUID, body: DeliveryIn, p: Principal = Depends(_person), conn: Connection = TENANT_CONN) -> dict:
-    olt = conn.execute(text("SELECT id, name, edge_id, snmp_version FROM olts WHERE id = :i FOR UPDATE"), {"i": olt_id}).first()   # the lock also serialises the per-OLT cap below
+def create_delivery(olt_id: UUID, body: DeliveryIn, p: Principal = Depends(_person), conn: Connection = TENANT_CONN, settings: Settings = Depends(get_settings)) -> dict:
+    perm, flag = olt_secrets.KIND_GATE[body.kind]   # the kind decides: credentials need fleet:secrets + fleet_secrets; the connection of an OLT needs fleet:provision + fleet_provision (ADR-0046)
+    ensure_permission(p, settings, perm)
+    features.ensure(conn, p.tenant_id, flag)
+    olt = conn.execute(text("SELECT id, name, edge_id, snmp_version, mgmt_protocol FROM olts WHERE id = :i FOR UPDATE"), {"i": olt_id}).first()   # the lock also serialises the per-OLT cap below
     if olt is None:
         raise HTTPException(404, "olt not found")
+    if olt.mgmt_protocol == "telnet":   # ADR-0046 D3: Telnet is inventory, never a credential or a connection to hand to an Edge (plain text on the provider's network). Nothing is queued.
+        raise HTTPException(422, "protocol_not_supported")
+    if body.kind == olt_secrets.CONNECTION_KIND and olt.mgmt_protocol != "ssh":   # Codex r3: with no protocol registered the Edge could apply it while the Cloud could not follow it
+        raise HTTPException(422, "protocol_required")
     if body.kind == "snmp_community" and olt.snmp_version == "v3":
         raise HTTPException(422, "snmp_v3_unsupported")   # the Edge speaks v2c only: a community for a v3 OLT would be silently useless
     edge = conn.execute(text("SELECT seal_key_id, seal_key_state FROM edges WHERE id = :e FOR SHARE"), {"e": olt.edge_id}).first()
@@ -306,6 +378,7 @@ def list_deliveries(olt_id: UUID, p: Principal = Depends(_person), conn: Connect
     """The last ten deliveries of the OLT: state and code only. It does not clean up anything (the sweeper does) and it never reads the blob column (the application role cannot)."""
     if conn.execute(text("SELECT 1 FROM olts WHERE id = :i"), {"i": olt_id}).first() is None:
         raise HTTPException(404, "olt not found")
-    rows = conn.execute(text("SELECT id, kind, status, code, key_id, expires_at, created_at, updated_at, attempts FROM olt_secret_deliveries WHERE olt_id = :o ORDER BY created_at DESC, id LIMIT :n"),
-                        {"o": olt_id, "n": HISTORY}).all()
+    rows = conn.execute(text("SELECT id, kind, status, code, key_id, expires_at, created_at, updated_at, attempts FROM olt_secret_deliveries "
+                             "WHERE olt_id = :o AND kind = ANY(:kinds) ORDER BY created_at DESC, id LIMIT :n"),
+                        {"o": olt_id, "n": HISTORY, "kinds": list(_active_kinds(conn, p))}).all()
     return {"items": [_delivery_row(r) for r in rows]}

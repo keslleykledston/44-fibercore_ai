@@ -58,6 +58,8 @@ CAPABILITIES: list[tuple[str, str, tuple[str, ...]]] = [
     ("olt_query", "Consultar a OLT (somente leitura)", ("olt_query:run",)),
     ("fleet", "Ver, cadastrar e editar OLTs e POPs e pedir teste de conexão (somente leitura; a credencial fica no Edge, nunca na nuvem)", ("fleet:read", "fleet:manage", "fleet:test")),
     ("fleet_secrets", "Configurar login, senha e community das OLTs pela tela (cifrados no navegador até o Edge; a nuvem nunca os vê nem os devolve)", ("fleet:secrets",)),
+    ("fleet_provision", "Cadastrar a OLT de ponta a ponta: entregar ao Edge o endereço, a porta, o protocolo e a impressão digital do host "
+     "(cifrados no navegador; o Edge só conecta depois da confirmação local)", ("fleet:provision",)),
     ("discovery", "Ver e registrar avistamentos de ONUs aguardando autorização (somente leitura; nada é autorizado)", ("discovery:read", "discovery:import")),
     ("profiles", "Ver, importar e editar rascunhos de profiles da OLT, simular e publicar revisões (nada é enviado à OLT)", ("profiles:read", "profiles:import", "profiles:edit", "profiles:publish")),
     ("erp", "Conectar e testar o ERP do provedor (somente leitura)", ("erp:manage", "erp:test")),

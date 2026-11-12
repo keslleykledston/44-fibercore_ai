@@ -6,18 +6,20 @@ import type { FleetOlt } from "@/lib/fleet";
 /**
  * Cartão "Credenciais da OLT" (ADR-0045). Componente de servidor: mostra o estado e a impressão digital da chave do Edge, o formulário de confirmação (POST simples ao BFF, funciona sem JavaScript) e,
  * só com o recurso ligado e a chave confirmada, o formulário de envio cifrado (componente de cliente: exige JavaScript e WebCrypto).
- * Flag `fleet_secrets` desligada ou papel sem `fleet:secrets` ⇒ a API responde 403 e o cartão não existe (retorna null): nada é mostrado nem perguntado.
+ * Flags `fleet_secrets` e `fleet_provision` desligadas (ou papel sem as permissões) ⇒ a API responde 403 e o cartão não existe (retorna null): nada é mostrado nem perguntado.
+ * ADR-0046: com SÓ a `fleet_provision` ligada o cartão mostra apenas a chave do Edge (confirmar é necessário para entregar a conexão) e nenhum campo de credencial; Telnet nunca mostra campo de senha/community.
  */
-export async function OltCredentialsCard({ olt }: { olt: FleetOlt }) {
+export async function OltCredentialsCard({ olt, secretsOn = true }: { olt: FleetOlt; secretsOn?: boolean }) {
   const key = await apiSafe<SealKey>(`/v1/fleet/edges/${olt.edge.id}/seal-key`);
   if (!key.data) return null;   // 403 (flag desligada ou papel sem permissão), 404 ou falha: cartão ausente
   const k = key.data;
-  const list = await apiSafe<{ items: Delivery[] }>(`/v1/fleet/olts/${olt.id}/secret-deliveries`);
+  const telnet = olt.connection.protocol === "telnet";
+  const list = secretsOn && !telnet ? await apiSafe<{ items: Delivery[] }>(`/v1/fleet/olts/${olt.id}/secret-deliveries`) : { data: null };
   const confirmed = k.state === "confirmed";
   return (
-    <section id="credenciais" className="panel p-4 md:col-span-2" aria-label="Credenciais da OLT" data-testid="frota-credenciais">
-      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Credenciais da OLT</h2>
-      <div className="mb-4 grid gap-1 text-sm text-muted">
+    <section id="credenciais" className="panel p-4 md:col-span-2" aria-label="Credenciais da OLT" data-testid={secretsOn ? "frota-credenciais" : "frota-chave-edge"}>
+      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">{secretsOn ? "Credenciais da OLT" : "Chave do Edge"}</h2>
+      {secretsOn && !telnet && <div className="mb-4 grid gap-1 text-sm text-muted">
         <p>Login, senha e community SNMP são <strong>cifrados no seu navegador</strong> com a chave pública do Edge e só o Edge consegue abri-los: a nuvem, o servidor web e os backups guardam apenas texto cifrado, e nada devolve o segredo. A tela nunca mostra o que foi enviado.</p>
         <ul className="list-disc pl-5" data-testid="cred-avisos">
           <li>Depois que o Edge aplicar, use <strong>Testar conexão</strong> (acima) para conferir se o novo login funciona.</li>
@@ -25,7 +27,8 @@ export async function OltCredentialsCard({ olt }: { olt: FleetOlt }) {
           <li>{EDGE_ADMIN_NOTE}</li>
           <li>Isto não troca a senha na OLT: só atualiza a cópia que o Edge usa.</li>
         </ul>
-      </div>
+      </div>}
+      {telnet && <p role="note" className="mb-4 text-sm text-muted" data-testid="cred-telnet">Telnet é só cadastro: nenhuma senha nem community é pedida ou entregue ao Edge para esta OLT (aguardando suporte a Telnet).</p>}
       <div className="grid gap-4 md:grid-cols-2">
         <div data-testid="cred-chave" className="grid content-start gap-2">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Chave do Edge “{k.edge_name}”</h3>
@@ -50,11 +53,11 @@ export async function OltCredentialsCard({ olt }: { olt: FleetOlt }) {
             </>
           )}
         </div>
-        <div data-testid="cred-envio" className="grid content-start gap-2">
+        {secretsOn && !telnet && <div data-testid="cred-envio" className="grid content-start gap-2">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Enviar credenciais</h3>
           {confirmed ? <OltCredentials oltId={olt.id} oltName={olt.name} edgeId={olt.edge.id} snmpV3={olt.snmp_version === "v3"} initialItems={list.data?.items ?? []} keyConfirmed />
             : <p className="text-sm text-muted" data-testid="cred-bloqueado">Disponível depois que a chave do Edge for confirmada.</p>}
-        </div>
+        </div>}
       </div>
     </section>
   );
