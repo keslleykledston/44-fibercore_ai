@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1d1da-83e5-74b2-8d34-e62608164c58).
+[codex] Turn started (01a1d1da-843a-7e43-a1c4-86f966e3ef05).
+[codex] Assistant message captured: Vou revisar o diff contra `main` em modo somente leitura, priorizando a migração e os limites...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=25 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=25 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/alembic/versions/0053_platform_organizations.py | sed -n '225,...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/alembic/versions/0053_platform_organizations.py | sed -n '225,... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"CREATE TABLE tenants|lower\\(.*name|tenants.*name|CREATE POLICY.*tenan...
+[codex] Command completed: /bin/bash -lc "rg -n \"CREATE TABLE tenants|lower\\(.*name|tenants.*name|CREATE POLICY.*tenan... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberaria ainda: a listagem da plataforma trunca ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberaria ainda: a listagem da plataforma trunca silenciosamente em 500 organizações, ocultando todas as mais antigas das operadoras e da revisão de convites/auditoria.
+
+Findings:
+- [medium] A listagem omite silenciosamente organizações após as 500 mais recentes (apps/api/alembic/versions/0053_platform_organizations.py:227)
+  A função limita o conjunto a 500 linhas e devolve esse resultado como se fosse a lista completa; a rota e a tela não oferecem cursor, paginação nem indicação de truncamento. Quando a plataforma ultrapassar esse total, organizações antigas desaparecem da visão operacional, inclusive convites pendentes e alertas `api_trail` associados, dificultando detectar e resolver problemas de acesso ou auditoria.
+  Recommendation: Adicionar paginação com cursor/limite explícito e expor metadados de continuação; alternativamente, sinalizar claramente que a resposta está truncada e fornecer um caminho para consultar todas as organizações.
+CODEX_DONE

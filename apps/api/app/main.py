@@ -31,6 +31,7 @@ from app.api.fleet import router as fleet_router
 from app.api.knowledge import router as knowledge_router
 from app.api.onu_discovery import router as onu_discovery_router
 from app.api.ping import router as ping_router
+from app.api.platform_orgs import router as platform_orgs_router
 from app.api.profile_studio import router as profile_studio_router
 from app.api.quality import router as quality_router
 from app.api.routes import router
@@ -103,3 +104,4 @@ app.include_router(context_router)
 app.include_router(diagnostics_router)
 app.include_router(diagnostic_jobs_router)
 app.include_router(cpe_state_router)
+app.include_router(platform_orgs_router)

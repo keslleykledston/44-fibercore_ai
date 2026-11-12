@@ -55,6 +55,9 @@ articles:
 - slug: administracao/papeis-e-permissoes
   ui_route: /administracao/equipe?aba=funcoes
   status: draft
+- slug: administracao/organizacoes
+  ui_route: /plataforma/organizacoes
+  status: draft
 - slug: rede/onu-360
   ui_route: /rede/onu/[id]
   status: published

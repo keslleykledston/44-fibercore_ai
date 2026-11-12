@@ -36,7 +36,7 @@ Fechar o `/metrics` da API: esvaziar `FIBERCORE_METRICS_TOKEN` e recriar a `api-
 ## Métricas (todas sem identificador de tenant, usuário, Edge, OLT, serial, endereço ou segredo)
 API (`fibercore_http_*`): `requests_total{method,route,code}`, `request_duration_seconds` (histograma, `{method,route}`), `requests_in_flight`; `fibercore_api_build_info{version}`, `fibercore_api_start_time_seconds`. `route` é o template da rota; `unmatched` quando nada casou.
 
-Exportador: `fibercore_exporter_db_up`, `fibercore_edges_active`, `fibercore_edges_never_heartbeat`, `fibercore_edge_heartbeat_age_seconds_max`, `fibercore_olts_registered`, `fibercore_olts_never_collected`, `fibercore_olt_collection_age_seconds_max`, `fibercore_outbox_unpublished`, `fibercore_outbox_oldest_unpublished_age_seconds`, `fibercore_jobs{state}`, `fibercore_jobs_in_flight_oldest_age_seconds`, `fibercore_backup_dir_readable`, `fibercore_backup_files_found`, `fibercore_backup_last_success_timestamp_seconds`, `fibercore_disk_free_ratio{fs="docker|backup"}`. Séries "máximo/mais antigo" **somem** quando não há objeto (outbox drenado, nenhum Edge com heartbeat): ausência não é zero.
+Exportador: `fibercore_exporter_db_up`, `fibercore_edges_active`, `fibercore_edges_never_heartbeat`, `fibercore_edge_heartbeat_age_seconds_max`, `fibercore_olts_registered`, `fibercore_olts_never_collected`, `fibercore_olt_collection_age_seconds_max`, `fibercore_outbox_unpublished`, `fibercore_outbox_oldest_unpublished_age_seconds`, `fibercore_jobs{state}`, `fibercore_jobs_in_flight_oldest_age_seconds`, `fibercore_organizations_without_api_trail`, `fibercore_backup_dir_readable`, `fibercore_backup_files_found`, `fibercore_backup_last_success_timestamp_seconds`, `fibercore_disk_free_ratio{fs="docker|backup"}`. Séries "máximo/mais antigo" **somem** quando não há objeto (outbox drenado, nenhum Edge com heartbeat): ausência não é zero.
 
 NATS: `jetstream_consumer_num_pending`, `jetstream_consumer_num_ack_pending` (lag do `event-consumer`).
 
@@ -53,6 +53,7 @@ NATS: `jetstream_consumer_num_pending`, `jetstream_consumer_num_ack_pending` (la
 | FiberCoreOutboxBacklog | evento sem publicar > 300 s | critical |
 | FiberCoreConsumerLag | > 1000 pendentes por 10 min (limiar inicial) | warning |
 | FiberCoreJobStuck | job em andamento sem mudar > 30 min | warning |
+| FiberCoreOrganizationWithoutApiTrail | organização criada pela função de plataforma (30 dias) sem o par `platform.organization.requested` da rota: criação FORA da API (SQL direto). Não vê abuso feito PELA API (ADR-0046 D1, R-3); revisar também a lista do operador | critical |
 | FiberCoreDiskLow | espaço livre < 10 % (`fs`) | critical |
 | FiberCoreBackupStale | sem marcador, ou último > 26 h | critical |
 | FiberCoreBackupDirUnreadable | diretório de backup não configurado/montado/legível (10 min) | critical |

@@ -56,6 +56,9 @@ def db_families(snap: dict[str, Any]) -> list[Family]:
         _g("fibercore_outbox_oldest_unpublished_age_seconds", "Age of the oldest unpublished outbox event (absent when the outbox is drained).", snap["outbox_oldest_unpublished_age_seconds"]),
         ("fibercore_jobs", "Jobs by state: in-flight states always, terminal states over the last 24 h.", "gauge", [({"state": s}, n) for s, n in sorted(jobs.items())]),
         _g("fibercore_jobs_in_flight_oldest_age_seconds", "Seconds since the oldest in-flight job last changed (absent when none is in flight).", snap["jobs_in_flight_oldest_age_seconds"]),
+        _g("fibercore_organizations_without_api_trail",
+           "Organizations made by the platform function in the last 30 days with no `platform.organization.requested` from the API route (a creation OUTSIDE the route).",
+           snap.get("organizations_without_api_trail")),
     ]
 
 

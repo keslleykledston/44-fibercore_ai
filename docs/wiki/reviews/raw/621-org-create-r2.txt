@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1d1de-a327-7663-837b-0a612a92bcea).
+[codex] Turn started (01a1d1de-a36c-7e22-b0c0-2ec0241b1862).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os fluxos de autorização, criação/aceite do con...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/alembic/versions/0...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- apps/api/alembic/versions/0... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=8 main...HEAD -- apps/api/app/api/platform_or...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=8 main...HEAD -- apps/api/app/api/platform_or... (exit 0)
+[codex] Running command: /bin/bash -lc 'rg -n "platform_scan|ALTER FUNCTION|OWNER TO|CREATE POLICY.*tenant|ENABLE ROW ...
+[codex] Command failed: /bin/bash -lc 'rg -n "platform_scan|ALTER FUNCTION|OWNER TO|CREATE POLICY.*tenant|ENABLE ROW ... (exit 2)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/app/plataforma/organizacoes/page.tsx | sed -n '58,85p'; nl...
+[codex] Command failed: /bin/bash -lc "nl -ba apps/web/src/app/plataforma/organizacoes/page.tsx | sed -n '58,85p'; nl... (exit 2)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/app/plataforma/organizacoes/page.tsx | sed -n '48,60p'"
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/app/plataforma/organizacoes/page.tsx | sed -n '48,60p'" (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: a página monta o link de convite us...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: a página monta o link de convite usando cabeçalhos de host encaminhados pela requisição. Se esses cabeçalhos forem controláveis pelo cliente, um operador pode copiar e distribuir o token em um link para domínio do atacante, permitindo que quem o resgatar se torne isp_admin.
+
+Findings:
+- [high] Host controlável pode redirecionar o convite do primeiro administrador (apps/web/src/app/plataforma/organizacoes/page.tsx:49-50)
+  A página confia em `x-forwarded-host` e `x-forwarded-proto` para montar `inviteUrl`, que inclui o token de uso único do convite. Se o proxy não substituir esses cabeçalhos por valores confiáveis — ou se a aplicação for acessível diretamente — uma requisição com host forjado pode fazer a tela mostrar um link para domínio do atacante. Ao distribuir esse link, o operador entrega o token ao atacante, que pode aceitá-lo e obter o papel `isp_admin` na nova organização. A exploração depende da configuração do proxy, que não foi possível confirmar neste diff.
+  Recommendation: Monte o link com uma origem canônica configurada no servidor, ou valide o host contra uma lista explícita de origens confiáveis antes de incluí-lo no link.
+CODEX_DONE

@@ -127,6 +127,23 @@ tests:
               summary: "Nenhum backup concluído nas últimas 26 h"
               description: "Nenhum marcador *.dump.done recente no diretório de backup montado (FIBERCORE_BACKUP_DIR). Sem esse diretório configurado o alerta dispara de propósito."
 
+  - name: organizacao-sem-par-de-auditoria-da-api
+    interval: 1m
+    input_series:
+      - series: 'fibercore_organizations_without_api_trail'
+        values: '0 0 1 1 1'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: FiberCoreOrganizationWithoutApiTrail
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: FiberCoreOrganizationWithoutApiTrail
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "Organização criada FORA da rota da API (sem o par de auditoria)"
+              description: "Há organização criada pela função de plataforma nos últimos 30 dias sem `platform.organization.requested` da rota com o mesmo request_id: alguém chamou a função direto no banco (SQL ou script). Conferir session_user e application_name em `platform.organization.created` na auditoria da organização e na lista do operador. NÃO detecta abuso feito PELA API comprometida (produz o par completo): limite declarado, ADR-0046 D1."
+
   - name: olt-que-nunca-coletou
     interval: 1m
     input_series:
