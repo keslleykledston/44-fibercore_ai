@@ -40,6 +40,8 @@ type Agent struct {
 	HeartbeatEvery time.Duration
 	CollectEvery   time.Duration
 	Log            *slog.Logger
+
+	acsUnknownLogged atomic.Bool // the "Cloud does not know acs-status" line is written once per process
 }
 
 // SecretsLoop is one round of the ADR-0045 delivery loop (package oltsecrets).
@@ -118,6 +120,15 @@ func (a *Agent) Flush(ctx context.Context) {
 					return
 				}
 				a.resultSettled(it.Kind, it.Payload, true) // the Cloud refused it for good (the sent copy is in the dead-letter table): resending would only loop; marked as refused, not as acknowledged
+			case gateway.Unknown:
+				// ADR-0046 D2: the Cloud does not know this ACS report (old Cloud, feature off, or nbi_cloud_id not registered for this Edge). Not a failure and not worth a retry: drop it, say so ONCE.
+				if a.acsUnknownLogged.CompareAndSwap(false, true) {
+					a.Log.Warn("cloud does not know this ACS report (older cloud, acs_registry off, or nbi_cloud_id not registered for this edge); acs-status is dropped and this is logged once")
+				}
+				if err := a.Q.Ack(ctx, it.ID); err != nil {
+					a.Log.Error("ack failed; item will be redelivered (harmless)", "id", it.ID, "err", err)
+					return
+				}
 			case gateway.Throttled:
 				// The Cloud's per-agent intake budget is spent: the item is fine, so it is neither retried-with-a-count nor ever dead-lettered for this. It stays at the head of the queue (order
 				// preserved) and goes out after the Retry-After the gateway recorded.

@@ -29,6 +29,9 @@ const (
 	// Throttled is a 429: the Cloud's per-agent intake budget is spent. The payload is fine and the Cloud is up, so it is NOT a failed attempt (it must never count toward the dead-letter
 	// threshold): the caller keeps the item and waits for ThrottledUntil.
 	Throttled
+	// Unknown is a 404 on an `acs_status` report (ADR-0046 D2): an older Cloud without the route, the feature switched off, or an `nbi_cloud_id` the Cloud does not have. Nothing is wrong with the Edge and
+	// nothing is wrong with the payload that a retry would fix: the item is dropped (acknowledged), never retried, never dead-lettered. The caller logs it ONCE.
+	Unknown
 )
 
 // Bounds for the Retry-After a 429 may ask for: never a busy loop, never a silence long enough to hide a stuck queue.
@@ -175,11 +178,15 @@ func (c *Client) Deliver(ctx context.Context, kind string, payload []byte) (Outc
 		o, _, err := c.post(ctx, "/v1/edge/jobs/"+id+"/result", b)
 		return o, err
 	}
-	path, ok := map[string]string{"olt_snapshot": "/v1/edge/olt-snapshots", "cpe_snapshot": "/v1/edge/cpe-snapshots", "cpe_state": "/v1/edge/cpe-state", "speed_health": "/v1/edge/speed-health"}[kind]
+	path, ok := map[string]string{"olt_snapshot": "/v1/edge/olt-snapshots", "cpe_snapshot": "/v1/edge/cpe-snapshots", "cpe_state": "/v1/edge/cpe-state", "speed_health": "/v1/edge/speed-health",
+		"acs_status": "/v1/edge/acs-status"}[kind]
 	if !ok {
 		return Rejected, fmt.Errorf("unknown kind %q", kind)
 	}
-	o, _, err := c.post(ctx, path, payload)
+	o, code, err := c.post(ctx, path, payload)
+	if kind == "acs_status" && o == Rejected && code == http.StatusNotFound {
+		return Unknown, err // the one report that may meet a Cloud that does not know it: see Unknown
+	}
 	return o, err
 }
 

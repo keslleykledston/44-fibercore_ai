@@ -51,6 +51,9 @@ type Config struct {
 	// OLTProfileNamesToCloud: let the LABELS of the OLT's profiles (free text chosen by the operator) go to the Cloud. Off by default: the Cloud then gets only numbers and rates.
 	OLTProfileNamesToCloud bool `json:"olt_profile_names_to_cloud"`
 	RefreshTasks           bool `json:"refresh_tasks"` // ADR-SD-002 item 4: let signed refresh jobs ask the ACS to read ONE CPE (needs nbi_url + jobs_enabled)
+	// NBICloudID (ADR-0046 D2) is the id of this Edge's ACS in the Cloud registry (lower-case UUID, from the ACS screen). Optional: with it, each NBI collection round also tells the Cloud whether
+	// the ACS answered (`acs-status`: ok, device count, a closed error code; no URL, no secret, no device id). Without it nothing is sent. The URL and the secret of the NBI stay in this file.
+	NBICloudID string `json:"nbi_cloud_id"`
 	// OLTSecrets (ADR-0045): receive OLT credentials typed in the Cloud screen, sealed to a key of THIS host. nil = the whole feature is off (an Edge with an old config is unchanged).
 	OLTSecrets *OLTSecretsConfig `json:"olt_secrets"`
 	// ManagedOLTs (ADR-0046): OLTs the Cloud adds by signed delivery, inside THIS local policy (CIDRs, ports, vendors, maximum) and only after the administrator of this host
@@ -277,6 +280,14 @@ func (c *Config) Validate() error {
 		u, err := url.Parse(c.NBIURL)
 		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
 			errs = append(errs, errors.New("nbi_url invalid"))
+		}
+	}
+	if c.NBICloudID != "" {
+		if !cloudIDRe.MatchString(c.NBICloudID) {
+			errs = append(errs, errors.New("nbi_cloud_id must be a lower-case UUID (the id shown on the ACS screen of the Cloud)"))
+		}
+		if c.NBIURL == "" {
+			errs = append(errs, errors.New("nbi_cloud_id requires nbi_url (there is no ACS to report on)"))
 		}
 	}
 	if c.RefreshTasks && (c.NBIURL == "" || !c.JobsEnabled) {
