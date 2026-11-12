@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -76,6 +77,47 @@ func TestACSStatusNotKnownToTheCloudIsDroppedAndLoggedOnce(t *testing.T) {
 	}
 	if strings.Contains(logs.String(), "level=ERROR") {
 		t.Fatalf("not an error:\n%s", logs.String())
+	}
+}
+
+// A failing ACS during a Cloud outage must not pile up one failure report per round (nor replay stale ones, in order, afterwards): only the newest status stays queued,
+// even though the round that made it is incomplete (and an incomplete round never supersedes anything else).
+type failingACSCollector struct{ n int }
+
+func (f *failingACSCollector) Name() string { return "acs-failing" }
+func (f *failingACSCollector) Collect(context.Context) ([]collector.Item, error) {
+	f.n++
+	p := []byte(`{"acs_id":"x","n":` + string(rune('0'+f.n)) + `}`)
+	return []collector.Item{{Kind: "acs_status", Key: "acs_status:x", Payload: p, Gauge: true}}, io.ErrUnexpectedEOF
+}
+
+func TestAnOutageOfTheACSAndOfTheCloudKeepsOnlyTheNewestStatusQueued(t *testing.T) {
+	ctx := context.Background()
+	cl := &cloud{status: 503}
+	a := setup(t, cl, &failingACSCollector{}, fixedCollector{[]string{`{"keep":1}`}})
+	for i := 0; i < 4; i++ {
+		if err := a.CollectOnce(ctx); err == nil {
+			t.Fatal("the round is incomplete")
+		}
+	}
+	items, _ := a.Q.Next(ctx, 50)
+	acs, snaps := 0, 0
+	for _, it := range items {
+		switch it.Kind {
+		case "acs_status":
+			acs++
+			if !strings.Contains(string(it.Payload), `"n":4`) {
+				t.Fatalf("the survivor must be the newest: %s", it.Payload)
+			}
+		case "cpe_snapshot":
+			snaps++
+		}
+	}
+	if acs != 1 {
+		t.Fatalf("acs_status queued=%d, want exactly the newest", acs)
+	}
+	if snaps != 4 {
+		t.Fatalf("other items of an incomplete round are untouched by the gauge: snapshots=%d", snaps)
 	}
 }
 

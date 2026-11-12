@@ -16,6 +16,9 @@ type Item struct {
 	Kind    string
 	Key     string // logical stream; a newer complete round of the same Key supersedes older queued items
 	Payload []byte
+	// Gauge marks an item that is the CURRENT value of something (the ACS status): once it is persisted it supersedes the older queued items of its Key even when the round that made it was
+	// incomplete. Without it a long ACS outage would queue one failure report per round and replay stale ones, in order, when the Cloud came back.
+	Gauge bool
 }
 
 // Collector gathers one read-only observation round. Implementations MUST NOT write to devices.
@@ -70,7 +73,7 @@ func (g *GenieACS) statusItem(devices int, errCode string) Item {
 		st.ErrorCode = &errCode
 	}
 	b, _ := json.Marshal(st) // plain types: cannot fail
-	return Item{Kind: "acs_status", Key: "acs_status:" + g.ACSID, Payload: b}
+	return Item{Kind: "acs_status", Key: "acs_status:" + g.ACSID, Payload: b, Gauge: true}
 }
 
 func (g *GenieACS) Name() string { return "genieacs" }

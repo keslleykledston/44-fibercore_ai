@@ -65,6 +65,7 @@ func (a *Agent) CollectOnce(ctx context.Context) error {
 		}
 		round := time.Now().UnixNano()
 		keys := map[string]struct{}{}
+		gauges := map[string]struct{}{}
 		for i, it := range items {
 			if err := a.Q.Enqueue(ctx, it.Kind, it.Key, round, it.Payload); err != nil {
 				a.Log.Error("enqueue failed; round incomplete", "collector", c.Name(), "unsaved_items", len(items)-i, "err", err)
@@ -73,6 +74,17 @@ func (a *Agent) CollectOnce(ctx context.Context) error {
 				break // remaining items of this collector stay un-persisted => round marked incomplete
 			}
 			keys[it.Key] = struct{}{}
+			if it.Gauge {
+				gauges[it.Key] = struct{}{}
+			}
+		}
+		for k := range gauges { // a persisted gauge (the ACS status) is the current value: it supersedes the older ones whether or not the round was complete
+			if k == "" {
+				continue
+			}
+			if err := a.Q.PruneSuperseded(ctx, k, round); err != nil {
+				a.Log.Warn("prune superseded failed", "key", k, "err", err)
+			}
 		}
 		if complete { // only a fully persisted round may supersede the previous one
 			for k := range keys {

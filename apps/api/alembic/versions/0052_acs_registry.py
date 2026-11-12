@@ -12,6 +12,11 @@ A nuvem só guarda o CADASTRO do ACS (nome, tipo, qual Edge o alcança, rótulo,
   que só mexe no ACS DAQUELE Edge, do tenant da sessão (RLS forçada), com o `kind` cadastrado, e devolve `ignored` (sem revelar nada) para qualquer outro. Escolhi função em vez de GRANT de coluna porque o padrão do repo
   para o que só a rota do Edge toca (`app_olt_edge_report`, `app_secret_delivery_blob`) já é função estreita, e porque a regra "só o ACS do PRÓPRIO Edge, do kind certo" fica no banco, não em cada rota; um GRANT de coluna
   deixaria a role da aplicação gravar o estado de QUALQUER ACS do tenant.
+  Limite declarado (mesma fronteira de confiança de `app_olt_edge_report`, 0051, aceita nas rodadas 600-604, e do R-1 do ADR-0045): o banco NÃO consegue provar QUAL Edge chamou. O token (JWT) não é verificável
+  dentro do Postgres e a role da aplicação escolhe `p_edge` (e, igualmente, `app.tenant_id`, que a API define na conexão). Logo, quem controla a API ou a role da aplicação pode reportar estado de QUALQUER ACS do
+  tenant da sessão em nome do Edge dele. O que a função garante, e os testes provam, é o que o banco PODE garantir: que o estado só muda por ela, só para o ACS cujo `edge_id` e `kind` coincidem com os argumentos,
+  só no tenant da sessão, e que nenhum outro campo (identidade, cadastro, CPEs) é alcançável por ela. A rota é quem amarra `p_edge` ao Edge autenticado (`principal.edge_id`, da conta de serviço presa a um único Edge).
+  O dano máximo é um relato de saúde falso (informativo; nenhuma decisão automática depende dele) dentro do próprio tenant da sessão, nunca entre organizações.
 * `cpes.acs_id` (nulo): o ACS ativo do Edge dono do CPE quando o CPE foi lido. FK composta `(tenant_id, acs_id, edge_id)` -> `acs_connections(tenant_id, id, edge_id)`: o banco recusa um CPE ligado a um ACS de OUTRO Edge
   (nunca inferido entre Edges). Sem backfill. Sem DELETE para a role da aplicação: ACS não se apaga, desativa-se.
 
