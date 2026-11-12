@@ -1239,7 +1239,7 @@
     {
       "id": 25,
       "type": "stat",
-      "title": "Marcadores de backup encontrados",
+      "title": "Marcadores de backup",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -1247,7 +1247,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 3,
         "x": 6,
         "y": 43
       },
@@ -1297,6 +1297,77 @@
     },
     {
       "id": 26,
+      "type": "stat",
+      "title": "Diretório de backup",
+      "description": "0 = não configurado, não montado ou ilegível (alerta FiberCoreBackupDirUnreadable).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fibercore-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 9,
+        "y": 43
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "ILEGÍVEL"
+                },
+                "1": {
+                  "text": "OK"
+                }
+              }
+            }
+          ],
+          "noValue": "sem dado"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fibercore-prometheus"
+          },
+          "expr": "fibercore_backup_dir_readable",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 27,
       "type": "stat",
       "title": "Disco livre: Docker",
       "description": "",
@@ -1359,7 +1430,7 @@
       ]
     },
     {
-      "id": 27,
+      "id": 28,
       "type": "stat",
       "title": "Disco livre: backup",
       "description": "",
@@ -1422,7 +1493,7 @@
       ]
     },
     {
-      "id": 28,
+      "id": 29,
       "type": "timeseries",
       "title": "Disco livre",
       "description": "",
@@ -1488,7 +1559,7 @@
       ]
     },
     {
-      "id": 29,
+      "id": 30,
       "type": "timeseries",
       "title": "Idade do último backup",
       "description": "",

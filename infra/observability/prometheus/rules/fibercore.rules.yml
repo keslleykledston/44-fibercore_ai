@@ -93,6 +93,14 @@ groups:
           summary: "Nenhum backup concluído nas últimas 26 h"
           description: "Nenhum marcador *.dump.done recente no diretório de backup montado (FIBERCORE_BACKUP_DIR). Sem esse diretório configurado o alerta dispara de propósito."
 
+      - alert: FiberCoreBackupDirUnreadable
+        expr: fibercore_backup_dir_readable == 0
+        for: 10m
+        labels: {severity: critical}
+        annotations:
+          summary: "Diretório de backup não configurado, não montado ou ilegível"
+          description: "O exportador não consegue listar o diretório de backup (FIBERCORE_BACKUP_DIR). Com ele quebrado, 'sem marcador' e 'diretório ilegível' seriam indistinguíveis; este alerta separa os dois."
+
   - name: fibercore-observability
     rules:
       - alert: FiberCoreExporterDown

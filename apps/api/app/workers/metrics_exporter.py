@@ -61,7 +61,11 @@ def db_families(snap: dict[str, Any]) -> list[Family]:
 
 def backup_families(directory: str, pattern: str, now: float | None = None) -> list[Family]:
     now = time.time() if now is None else now
-    done = sorted(glob.glob(os.path.join(directory, pattern))) if directory else []
+    try:  # glob() swallows errors: an unreadable directory looks exactly like an empty one, so the listing is checked on its own (Codex r1)
+        readable = bool(directory) and os.path.isdir(directory) and len(os.listdir(directory)) >= 0
+    except OSError:
+        readable = False
+    done = sorted(glob.glob(os.path.join(directory, pattern))) if readable else []
     mtimes = []
     for p in done:
         try:
@@ -70,6 +74,7 @@ def backup_families(directory: str, pattern: str, now: float | None = None) -> l
             continue
     newest = max(mtimes) if mtimes else None
     return [
+        _g("fibercore_backup_dir_readable", "1 if the (read-only) backup directory could be listed; 0 if it is unset, missing or unreadable (distinguishes a broken mount from 'no backup yet').", 1.0 if readable else 0.0),
         _g("fibercore_backup_files_found", "Finished-backup marker files found in the (read-only) backup directory.", float(len(mtimes))),
         _g("fibercore_backup_last_success_timestamp_seconds", "Unix time of the newest finished-backup marker (absent when there is none).", newest),
     ]

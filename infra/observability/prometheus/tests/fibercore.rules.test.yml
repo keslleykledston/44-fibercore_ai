@@ -127,6 +127,25 @@ tests:
               summary: "Nenhum backup concluído nas últimas 26 h"
               description: "Nenhum marcador *.dump.done recente no diretório de backup montado (FIBERCORE_BACKUP_DIR). Sem esse diretório configurado o alerta dispara de propósito."
 
+  - name: diretorio-de-backup-ilegivel
+    interval: 1m
+    input_series:
+      - series: 'fibercore_backup_dir_readable'
+        values: '1 1 0x20'
+      - series: 'fibercore_backup_files_found'
+        values: '1 1 0x20'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FiberCoreBackupDirUnreadable
+        exp_alerts: []                   # ilegivel ha 3 min: ainda dentro do `for: 10m`
+      - eval_time: 15m
+        alertname: FiberCoreBackupDirUnreadable
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "Diretório de backup não configurado, não montado ou ilegível"
+              description: "O exportador não consegue listar o diretório de backup (FIBERCORE_BACKUP_DIR). Com ele quebrado, 'sem marcador' e 'diretório ilegível' seriam indistinguíveis; este alerta separa os dois."
+
   - name: frota-e-exportadores
     interval: 1m
     input_series:

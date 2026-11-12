@@ -240,6 +240,25 @@ def test_backup_age_reads_only_the_marker_mtime(tmp_path):
     assert "fibercore_backup_files_found 0" in empty and not has_series(empty, "fibercore_backup_last_success_timestamp_seconds")
 
 
+def test_an_unreadable_or_missing_backup_directory_is_told_apart_from_an_empty_one(tmp_path):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    (locked / "fibercore-prod-1.dump.done").write_text("")
+    locked.chmod(0o000)
+    try:
+        def get(d):
+            return m.render_families(ex.backup_families(str(d), "fibercore-prod-*.dump.done"))
+        assert "fibercore_backup_dir_readable 1" in get(empty) and "fibercore_backup_files_found 0" in get(empty)      # empty: readable, no marker
+        for bad in (tmp_path / "missing", "", locked):
+            body = get(bad)
+            assert "fibercore_backup_dir_readable 0" in body and "fibercore_backup_files_found 0" in body, bad
+            assert not has_series(body, "fibercore_backup_last_success_timestamp_seconds")
+    finally:
+        locked.chmod(0o700)
+
+
 def test_disk_ratio_is_between_zero_and_one_and_skips_a_missing_path(tmp_path):
     body = m.render_families(ex.disk_families({"docker": "/", "gone": str(tmp_path / "nope")}))
     v = float(re.search(r'fibercore_disk_free_ratio\{fs="docker"\} (\S+)', body).group(1))
