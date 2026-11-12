@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import Connection, text
 
+from app.api.acs import active_acs_id
 from app.api.deps import TENANT_CONN, Principal, edge_ingest_limit, require
 from app.api.noc import evaluate_pons
 from app.api.routes import audit
@@ -292,18 +293,19 @@ def ingest_cpe_snapshot(
     first_per_serial: dict[str, CpeIn] = {}
     for c in fresh:
         first_per_serial.setdefault(c.canonical_serial, c)
+    acs_id = active_acs_id(conn, p.tenant_id, body.edge_id)   # ADR-0046 D2: the ACTIVE ACS of THIS Edge (NULL = none); each read carries the one in force now, never inferred or backfilled
     conn.execute(
         text(
-            "INSERT INTO cpes (tenant_id, edge_id, canonical_serial, vendor, model, firmware, observed_at, last_inform_at, last_inform_observed_at) "
-            "VALUES (:t,:e,:s,:v,:m,:f,:o,:li,CASE WHEN CAST(:li AS timestamptz) IS NULL THEN NULL ELSE :o END) ON CONFLICT (tenant_id, canonical_serial) DO UPDATE SET vendor=EXCLUDED.vendor, "
-            "model=EXCLUDED.model, firmware=EXCLUDED.firmware, observed_at=EXCLUDED.observed_at, "
+            "INSERT INTO cpes (tenant_id, edge_id, canonical_serial, vendor, model, firmware, observed_at, last_inform_at, last_inform_observed_at, acs_id) "
+            "VALUES (:t,:e,:s,:v,:m,:f,:o,:li,CASE WHEN CAST(:li AS timestamptz) IS NULL THEN NULL ELSE :o END,:acs) ON CONFLICT (tenant_id, canonical_serial) DO UPDATE SET vendor=EXCLUDED.vendor, "
+            "model=EXCLUDED.model, firmware=EXCLUDED.firmware, observed_at=EXCLUDED.observed_at, acs_id=EXCLUDED.acs_id, "
             "last_inform_at=GREATEST(cpes.last_inform_at, EXCLUDED.last_inform_at), "
             "last_inform_observed_at=COALESCE(EXCLUDED.last_inform_observed_at, cpes.last_inform_observed_at) "
             "WHERE cpes.edge_id = EXCLUDED.edge_id AND (cpes.observed_at IS NULL OR cpes.observed_at <= EXCLUDED.observed_at)"
         ),
         # ONE row per serial (first claim wins): a device announced over several protocols/connectors still maps to a single cpes row;
         # its extra bindings are inserted below, one per claim key.
-        [{"t": p.tenant_id, "e": body.edge_id, "s": c.canonical_serial, "v": c.vendor, "m": c.model, "f": c.firmware, "o": body.observed_at, "li": c.last_inform_at}
+        [{"t": p.tenant_id, "e": body.edge_id, "s": c.canonical_serial, "v": c.vendor, "m": c.model, "f": c.firmware, "o": body.observed_at, "li": c.last_inform_at, "acs": acs_id}
          for c in first_per_serial.values()],
     )
     resolved = list(
@@ -690,7 +692,7 @@ def olt_capabilities(olt_id: UUID, p: Principal = Depends(require("inventory:rea
 
 
 _CPE_SELECT = (
-    "SELECT c.id, c.canonical_serial, c.vendor, c.model, c.firmware, c.observed_at, "
+    "SELECT c.id, c.canonical_serial, c.vendor, c.model, c.firmware, c.observed_at, c.acs_id, "
     "COALESCE(json_agg(json_build_object('protocol', b.protocol, 'connector_id', b.connector_id, "
     "'external_id', b.external_id)) FILTER (WHERE b.id IS NOT NULL), '[]') AS bindings "
     "FROM cpes c LEFT JOIN cpe_protocol_bindings b ON b.cpe_id = c.id AND b.tenant_id = c.tenant_id "
@@ -699,7 +701,7 @@ _CPE_SELECT = (
 
 def _cpe_view(r) -> dict:
     return {"id": str(r.id), "canonical_serial": r.canonical_serial, "vendor": r.vendor, "model": r.model,
-            "firmware": r.firmware, "bindings": r.bindings,
+            "firmware": r.firmware, "bindings": r.bindings, "acs_id": str(r.acs_id) if r.acs_id else None,
             "observed_at": r.observed_at.isoformat() if r.observed_at else None, "freshness": _fresh(r.observed_at)}
 
 

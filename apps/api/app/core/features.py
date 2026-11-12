@@ -38,6 +38,8 @@ FEATURES: dict[str, bool] = {
     "fleet_secrets": False,                   # ADR-0045: login/senha/community da OLT digitados na tela, cifrados no navegador até o Edge (a nuvem só guarda texto cifrado); separada de fleet_manager; o dono liga por provedor, depois de o Edge publicar a chave e uma pessoa confirmar a impressão digital
     "fleet_provision": False,                 # ADR-0046: cadastro de OLT de ponta a ponta (a nuvem entrega ao Edge a CONEXÃO da OLT, cifrada, dentro da política local `managed_olts`
                                               # e com confiança local do host); separada de fleet_secrets; o dono liga por provedor, depois de o Edge ter `managed_olts`
+    "acs_registry": False,                    # ADR-0046 D2: cadastro de ACS por organização (nome, tipo, Edge, ligado/desligado) e o estado que o Edge informa; a URL e o segredo do ACS
+                                              # continuam só no Edge; o dono liga por provedor, depois de o Edge ter `nbi_cloud_id`
 }
 
 
