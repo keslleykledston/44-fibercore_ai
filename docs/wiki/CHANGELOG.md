@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — CSP com nonce por requisição no web (ADR-0042, 2026-11-11)
+- Web: `middleware.ts` gera nonce de 128 bits por requisição e emite `Content-Security-Policy-Report-Only` (padrão) ou `Content-Security-Policy` (`FIBERCORE_CSP_MODE=enforce`; `off` desliga; lido em tempo de execução, sem rebuild). Política: `script-src 'self' 'nonce-…' 'strict-dynamic'` (sem `unsafe-inline`/`unsafe-eval`), `style-src 'self' 'nonce-…'`, `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'none'`, `form-action 'self'`, `img-src 'self' data:`, `connect-src 'self'`. Único `unsafe-inline` restante: `style-src-attr` (14 pontos de atributo `style=` em `OpticalRuler`/`Faceplate`/`OltPanel`).
+- O script inline do tema recebe o nonce (`x-nonce`); todas as páginas passam a ser dinâmicas (HTML por requisição; `/login` e `/login/mfa` agora também passam pelo middleware, sem renovação de sessão). `FIBERCORE_CSP_REPORT_URI` opcional.
+- Compose: `FIBERCORE_CSP_MODE` (padrão `report-only`) e `FIBERCORE_CSP_REPORT_URI` no serviço `web`. Nenhuma mudança no nginx do host (comentários nos templates); passo a passo para o dono do host em `docs/operations/CSP_HOST_NGINX.md`.
+- Testes: `e2e/csp-pure.spec.ts` (gerador) e `e2e/csp.spec.ts` (navegador real, report-only e enforce, provas de bloqueio).
+
 ## Unreleased — Limite de ingestão por agente (2026-11-03)
 - API: token bucket por (tenant, Edge) nas rotas de coleta `olt-snapshots`, `cpe-snapshots`, `cpe-state`, `cpe-config`, `speed-health` (rajada 30, 120/min; `EDGE_INGEST_BURST`, `EDGE_INGEST_PER_MINUTE`). Acima do orçamento: 429 `edge_rate_limited` + `Retry-After`. Nada é gasto antes da autenticação. Estado em memória de um processo. Modo `EDGE_INGEST_LIMIT` (`FIBERCORE_EDGE_INGEST_LIMIT` no compose): `capable` (padrão; só limita o Edge que manda `X-Edge-Backoff: retry-after`, seguro sob version skew), `all`, `off`.
 - Edge: 429 é `Throttled` (não conta tentativa, não vai para a dead-letter, espera o `Retry-After` limitado a 1 s–15 min, ordem preservada) e todo POST anuncia `X-Edge-Backoff`. Heartbeat, `jobs/next` e resultados de job não são limitados.
