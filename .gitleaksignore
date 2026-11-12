@@ -8,3 +8,11 @@ c0002b3ddc5be6bb1ab6ca58d46d069381b3cb26:scripts/perf-onu-events.sh:generic-api-
 # valores FALSOS dos testes da Frota de OLTs (apps/api/tests/test_fleet.py): um NOME de credencial de exemplo e uma cadeia hexadecimal sintética usada como valor RECUSADO pelo teste de forma; sem relação com qualquer credencial real
 a37635033a63dbb51349bd6ab22ddca63c56155d:apps/api/tests/test_fleet.py:generic-api-key:49
 a37635033a63dbb51349bd6ab22ddca63c56155d:apps/api/tests/test_fleet.py:generic-api-key:93
+# valores FALSOS dos testes de credenciais de OLT (ADR-0045): key_id de exemplo "0123456789abcdef" (identificador fictício de 16 hex, não é chave nem segredo; o key_id real é público por construção)
+b0d643220dfbda53c88c6c6bd0df38dc4c0cc412:apps/web/e2e/frota-credenciais-flag.spec.ts:generic-api-key:18
+b0d643220dfbda53c88c6c6bd0df38dc4c0cc412:apps/web/e2e/frota-credenciais.spec.ts:generic-api-key:208
+ef641c1a5d056a2e37af8c703517d4d345a2d87d:agents/edge/internal/gateway/secrets_test.go:generic-api-key:55
+ef641c1a5d056a2e37af8c703517d4d345a2d87d:agents/edge/internal/oltsecrets/worker_test.go:generic-api-key:268
+cb39a0d1b204b8c5acd3576698f63cbc7e20eb09:agents/edge/internal/oltsecrets/process_test.go:generic-api-key:122
+cb39a0d1b204b8c5acd3576698f63cbc7e20eb09:agents/edge/internal/oltsecrets/process_test.go:generic-api-key:198
+cb39a0d1b204b8c5acd3576698f63cbc7e20eb09:agents/edge/internal/oltsecrets/process_test.go:generic-api-key:505
