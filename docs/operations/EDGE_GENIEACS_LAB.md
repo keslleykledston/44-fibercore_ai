@@ -9,6 +9,9 @@ O Edge é **outbound-only e somente leitura** (README em `agents/edge`). Aqui el
 - Registro no LAB: edge `edge-genieacs-lab`, service account `edge-genieacs-lab-agent` (papel `edge_agent`: só heartbeat, inventário e execução de jobs assinados), conector `genieacs-lab`.
 - Resultado verificado: heartbeat chegando ao LAB; 6 CPEs ingeridos (37 identidades `DISCOVERYSERVICE` descartadas pelo Edge, só contagem no log).
 
+## Cadastro do ACS na nuvem (ADR-0046 D2, opcional)
+O ACS deste Edge pode ser cadastrado na nuvem (tela `Rede > ACS`, flag `acs_registry`) e o Edge passa a informar se ele responde, pondo o identificador do cadastro em `nbi_cloud_id` no `config.json`. A URL e a senha do NBI continuam só aqui. Passo a passo, formato do relato e códigos de erro: `docs/operations/EDGE_ACS_REGISTRY.md`.
+
 ## Operar
 - Ver estado: `ps` do processo `fibercore-edge`; `tail edge.log` (JSON, sem identificadores de CPE).
 - Atualizar: enviar o novo binário como `fibercore-edge.new` no mesmo diretório; o `run.sh` o troca na próxima partida (para trocar já, encerrar o processo; o cron o religa em ≤ 1 min).

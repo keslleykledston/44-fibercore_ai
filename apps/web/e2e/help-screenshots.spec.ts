@@ -2,6 +2,7 @@
  * Capturas REAIS da aplicação integrada (Next.js + API + Postgres) com seed sintético (scripts/seed_demo.py).
  * Gera docs/help/assets/<categoria>/<slug>/{desktop,mobile}.png. Dados de tempo relativo ficam mascarados.
  */
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, type APIRequestContext, type Page, test } from "@playwright/test";
 import { API_URL, EMAIL, login, PASSWORD } from "./helpers";
@@ -48,6 +49,27 @@ const painelRoute = async (request: APIRequestContext) => {
   const olt = ((await (await request.get(`${API_URL}/v1/olts?limit=200`, { headers: { Authorization: `Bearer ${tok}` } })).json()) as { id: string; name: string }[]).find((o) => o.name === "OLT-DEMO-PAINEL")!;
   return `/rede?olt=${olt.id}`;
 };
+/** ACS SINTÉTICO de exemplo no Edge do demo (idempotente), com um relato "ok" feito como o Edge faria (conta de serviço descartável do seed): a captura mostra o estado real, não uma tela vazia. */
+const acsPrepare = async (request: APIRequestContext) => {
+  const tok = (await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json()).access_token as string;
+  const h = { Authorization: `Bearer ${tok}` };
+  const edge = ((await (await request.get(`${API_URL}/v1/edges`, { headers: h })).json()) as { id: string }[])[0];
+  const list = ((await (await request.get(`${API_URL}/v1/acs`, { headers: h })).json()) as { items: { id: string; name: string; enabled: boolean }[] }).items;
+  for (const a of list) if (a.enabled && a.name !== "GenieACS do laboratório") await request.patch(`${API_URL}/v1/acs/${a.id}`, { headers: h, data: { enabled: false } });   // um ativo por Edge
+  let acs = list.find((a) => a.name === "GenieACS do laboratório");
+  if (!acs) {
+    const r = await request.post(`${API_URL}/v1/acs`, { headers: h, data: { name: "GenieACS do laboratório", kind: "genieacs", edge_id: edge.id, label: "Exemplo da ajuda (dados sintéticos)", enabled: true } });
+    expect(r.status()).toBe(201);
+    acs = (await r.json()) as { id: string; name: string; enabled: boolean };
+  } else if (!acs.enabled) {
+    expect((await request.patch(`${API_URL}/v1/acs/${acs.id}`, { headers: h, data: { enabled: true } })).status()).toBe(200);
+  }
+  if (process.env.E2E_EDGE_CREDS_FILE) {
+    const c = JSON.parse(readFileSync(process.env.E2E_EDGE_CREDS_FILE, "utf8")) as { client_id: string; client_secret: string };
+    const et = (await (await request.post(`${API_URL}/v1/auth/service-token`, { data: c })).json()).access_token as string;
+    expect((await request.post(`${API_URL}/v1/edge/acs-status`, { headers: { Authorization: `Bearer ${et}` }, data: { acs_id: acs.id, kind: "genieacs", ok: true, device_count: 6, error_code: null } })).status()).toBe(204);
+  }
+};
 const frotaTesteRoute = async (request: APIRequestContext) => {
   const tok = (await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: EMAIL, password: PASSWORD } })).json()).access_token as string;
   const olt = ((await (await request.get(`${API_URL}/v1/fleet/olts`, { headers: { Authorization: `Bearer ${tok}` } })).json()) as { items: { id: string; name: string }[] }).items.find((o) => o.name === "OLT-DEMO-02")!;
@@ -79,6 +101,7 @@ const screens: { slug: string; route: string; ready: string; prepare?: (r: APIRe
       if (await b.isEnabled()) await b.click();
       await expect(page.getByTestId("frota-testes")).toContainText("Aguardando o Edge");
     } },
+  { slug: "rede/acs", route: "/rede/acs", ready: "acs-lista", prepare: acsPrepare },
   { slug: "rede/catalogo-de-equipamentos", route: "/rede/catalogo", ready: "catalogo-grade",
     steps: async (page: Page) => {   // as miniaturas são lazy: a captura só vale com todas carregadas
       await page.evaluate(async () => { for (const i of Array.from(document.images)) i.loading = "eager"; await Promise.all(Array.from(document.images).map((i) => (i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r; })))); });
@@ -117,7 +140,7 @@ for (const vp of viewports) {
           path: path.join(ROOT, s.slug, `${vp.name}.png`),
           fullPage: true,
           animations: "disabled",
-          mask: [page.getByTestId("freshness"), page.getByTestId("volatile")],
+          mask: [page.getByTestId("freshness"), page.getByTestId("volatile"), page.getByTestId("acs-id"), page.getByTestId("acs-visto")],
           maskColor: "#C9D1DA",
         });
       });
