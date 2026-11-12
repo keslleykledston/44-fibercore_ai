@@ -1,0 +1,23 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1d194-36c4-72c3-aea4-ae1b9a8934ac).
+[codex] Turn started (01a1d194-3700-7000-8563-ca5b9973eaf8).
+[codex] Running command: /bin/bash -lc 'cat /home/suporte/.codex/skills/code-review/SKILL.md && git status --short && ...
+[codex] Command completed: /bin/bash -lc 'cat /home/suporte/.codex/skills/code-review/SKILL.md && git status --short && ... (exit 0)
+[codex] Running command: /bin/bash -lc 'cat docs/wiki/reviews/raw/579-adr-0046-r1.txt && cat docs/wiki/reviews/raw/580...
+[codex] Command completed: /bin/bash -lc 'cat docs/wiki/reviews/raw/579-adr-0046-r1.txt && cat docs/wiki/reviews/raw/580... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: três achados foram fechados no con...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: três achados foram fechados no contrato, mas a função de criação ainda permite que a role da aplicação alegue ser um operador sem provar que esse operador iniciou a chamada.
+
+Findings:
+- [high] A função aceita um ator operador escolhido pelo chamador (docs/wiki/adr/ADR-0046-organizacoes-isoladas-acs-por-organizacao-e-centro-de-olt.md:21)
+  A função recebe `p_actor` e confere apenas que essa conta está ativa e marcada como operadora. Como a role da aplicação pode executar a função e escolhe esse parâmetro, uma chamada direta pode usar o UUID de um operador legítimo sem que ele tenha iniciado ou autorizado a criação. Isso permite criar organizações sem operador e convites para administradores. O limite R-3 cobre API comprometida, mas não fecha esse caminho de chamada direta pela role da aplicação.
+  Recommendation: Vincule a execução da função a uma identidade de ator que o chamador não possa escolher ou falsificar, ou restrinja a execução a um serviço confiável que autentique e passe a autorização do operador. Exija teste direto usando o UUID de um operador real sem autorização dele.
+
+Next steps:
+- Fechar a prova de identidade/autorização do ator na fronteira da função antes da implementação.

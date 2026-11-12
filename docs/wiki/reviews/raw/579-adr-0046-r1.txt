@@ -1,0 +1,35 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1d192-b472-75b2-9d5b-35a9d647acad).
+[codex] Turn started (01a1d192-b519-73d0-b004-0b8035848e56).
+[codex] Assistant message captured: Vou conferir o ADR contra os ADRs e implementações que ele referencia, com foco em contratos ...
+[codex] Running command: /bin/bash -lc 'pwd && rg --files docs/wiki/adr | sort && rg --files | head -100'
+[codex] Command completed: /bin/bash -lc 'pwd && rg --files docs/wiki/adr | sort && rg --files | head -100' (exit 0)
+[codex] Running command: /bin/bash -lc 'cat docs/wiki/adr/ADR-0045-credenciais-de-olt-pela-tela-cifradas-ate-o-edge.md...
+[codex] Command completed: /bin/bash -lc 'cat docs/wiki/adr/ADR-0045-credenciais-de-olt-pela-tela-cifradas-ate-o-edge.md... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"secret-deliveries|lease_until|managed_olts|acs_connections|platform_op...
+[codex] Command completed: /bin/bash -lc "rg -n \"secret-deliveries|lease_until|managed_olts|acs_connections|platform_op... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"CREATE TABLE.*tenants|CREATE TABLE.*tenant_memberships|CREATE TABLE.*o...
+[codex] Command completed: /bin/bash -lc "rg -n \"CREATE TABLE.*tenants|CREATE TABLE.*tenant_memberships|CREATE TABLE.*o... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda. O ADR reconhece riscos de comprome...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda. O ADR reconhece riscos de comprometimento da nuvem, mas não fecha como a política local impede envio de credenciais a um host controlado pelo atacante; faltam também contratos verificáveis para criação de tenant, identidade de ACS e recusa de Telnet ponta a ponta.
+
+Findings:
+- [high] A impressão digital escolhida pela nuvem não impede credenciais de irem a um host do atacante (docs/wiki/adr/ADR-0046-organizacoes-isoladas-acs-por-organizacao-e-centro-de-olt.md:40-44)
+  O Edge aceita endereço dentro dos CIDRs e impressão digital informada na entrega; o ADR também admite que uma nuvem comprometida escolhe ambos. Assim, ela pode apontar para um host controlado dentro da rede permitida, fixar a chave desse host e depois entregar credenciais para essa OLT. A afirmação de que credenciais não serão enviadas a uma chave diferente da pinada não limita esse caso: a própria nuvem escolhe a chave pinada. Isso permite roubo de credenciais, não apenas SSRF ou indisponibilidade. O contrato precisa exigir uma impressão digital aprovada por uma pessoa fora da nuvem comprometida, ou restringir credenciais a destinos/pins provisionados localmente.
+  Recommendation: Não habilitar entrega de credenciais para OLTs gerenciadas até definir e impor vínculo independente entre destino, chave do host e aprovação humana; documentar esse vínculo no payload e nos estados de aprovação.
+- [high] A função de criação de organização não tem contrato de autorização nem de execução fechado (docs/wiki/adr/ADR-0046-organizacoes-isoladas-acs-por-organizacao-e-centro-de-olt.md:21)
+  A rota exige operador ativo, MFA recente e `platform:organizations`, mas a função `SECURITY DEFINER` é descrita apenas como “estreita”. Não se define quem pode executá-la, como recebe e valida a identidade do ator, nem como impede chamada direta que contorne os controles da rota. Como a função cria tenant e convite de administrador, uma concessão excessiva ou validação baseada em contexto forjável pode permitir escalada para criar organizações e conceder acesso inicial. O ADR-0031 já registra que variáveis de sessão são forjáveis pela role de execução, então esse detalhe não pode ficar implícito.
+  Recommendation: Especificar proprietário e GRANT EXECUTE da função, credencial/role dedicada, validação do ator e da MFA dentro da fronteira confiável, parâmetros autorizados e atomicidade entre tenant, convite e auditoria; exigir teste de chamada direta pela role da aplicação.
+- [medium] O reporte de ACS usa nome em vez de identidade estável e deixa a associação de CPE ambígua (docs/wiki/adr/ADR-0046-organizacoes-isoladas-acs-por-organizacao-e-centro-de-olt.md:25-27)
+  O Edge reporta `{acs_name, kind}` e o endpoint procura o ACS pelo próprio Edge, sem `acs_id` ou regra de unicidade de nome por Edge. O contrato não define o resultado para nomes duplicados nem como renomear um ACS sem perder ou atribuir estado incorretamente. Além disso, `cpes.acs_id` é preenchido quando houver um único ACS ativo no Edge, mas não define o comportamento quando há vários: a ingestão pode deixar CPEs sem origem atribuível ou associá-los incorretamente, afetando isolamento e contagens por ACS.
+  Recommendation: Use `acs_id` imutável no reporte autenticado do Edge, imponha FK composta e unicidade apropriada, e defina explicitamente a atribuição e a migração de CPEs quando houver múltiplos ACS ou renomeação.
+- [medium] A recusa de Telnet não está definida para todos os caminhos de cadastro e segredo (docs/wiki/adr/ADR-0046-organizacoes-isoladas-acs-por-organizacao-e-centro-de-olt.md:32-35)
+  O texto proíbe entrega de conexão Telnet no Edge e na nuvem, mas o fluxo de tela inclui protocolo Telnet e credenciais, enquanto a entrega de segredos do ADR-0045 é um caminho separado. Não há regra explícita de API/DB que recuse credenciais para um cadastro `mgmt_protocol='telnet'`, nem contrato de quais campos de credencial são aceitos no inventário sem suporte operacional. Um cliente pode armazenar ou enfileirar segredos para um dispositivo que o Edge nunca poderá usar, deixando segredo pendente e estado de prontidão enganoso.
+  Recommendation: Definir Telnet como inventário sem credenciais operacionais: rejeitar no servidor a criação de entregas de segredo para OLT Telnet, não solicitar senha na tela nesse estado e especificar status e retenção de qualquer entrega já enfileirada.
+done
