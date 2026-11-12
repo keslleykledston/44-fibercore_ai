@@ -25,7 +25,7 @@ ui_route: "/plataforma/organizacoes"
    - **Nome da organização:** de 2 a 60 caracteres. Não pode repetir o de outra organização (maiúsculas e espaços repetidos não contam como diferença).
    - **E-mail do primeiro administrador:** para onde vai o convite.
    - **Nome do primeiro administrador:** opcional.
-4. Clique em **Criar organização**. A tela mostra **Organização criada**, o estado do convite (**pendente**), a validade (**72 horas**) e o **link do convite**. **O link aparece uma única vez** (e some em 2 minutos ou quando você clica em **Ocultar o link**): copie-o agora e envie à pessoa por um canal seguro. **Nada é enviado por e-mail.**
+4. Clique em **Criar organização**. A tela mostra **Organização criada**, o estado do convite (**pendente**), a validade (**72 horas**) e o **link do convite**. **O link aparece uma única vez** (e some em 2 minutos ou quando você clica em **Ocultar o link**): copie-o agora (botão **Copiar link**) e envie à pessoa por um canal seguro. **Nada é enviado por e-mail.** O endereço do link é o que o **seu navegador** está usando; sem JavaScript a tela mostra só o caminho (`/convite/...`) e você junta o endereço da plataforma antes de enviar.
 5. A pessoa abre o link, escolhe o nome e uma senha (mínimo de 12 caracteres) e entra como **Administrador** da organização nova. A partir daí é ela quem convida a equipe.
 
 ## O que a lista mostra

@@ -68,11 +68,17 @@ class Org:
     flags: dict = field(default_factory=dict)
 
 
+_TABLES: list[str] = []
+
+
 def _tenant_tables(migrated) -> list[str]:
+    if _TABLES:
+        return _TABLES      # the schema does not change during the module: one catalog query, not one per digest
     with migrated.connect() as c:
-        return [r[0] for r in c.execute(text(
+        _TABLES.extend(r[0] for r in c.execute(text(
             "SELECT c.table_name FROM information_schema.columns c JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name "
-            "WHERE c.table_schema = 'public' AND c.column_name = 'tenant_id' AND t.table_type = 'BASE TABLE' ORDER BY 1"))]
+            "WHERE c.table_schema = 'public' AND c.column_name = 'tenant_id' AND t.table_type = 'BASE TABLE' ORDER BY 1")))
+    return _TABLES
 
 
 def _digest(migrated, tid) -> dict[str, tuple[int, str]]:
@@ -377,7 +383,8 @@ def test_writes_against_the_other_organization_answer_like_a_missing_object_and_
         assert not _leaks(resp.text, theirs), path
         after = _digest(m, theirs.tid)
         assert after == before, f"{method} {path}: {[t for t in before if before[t] != after[t]]} of {other} changed"
-        changed_mine = [t for t in mine_before if mine_before[t] != _digest(m, mine.tid)[t]]
+        mine_after = _digest(m, mine.tid)
+        changed_mine = [t for t in mine_before if mine_before[t] != mine_after[t]]
         assert set(changed_mine) <= {"audit_log"}, (method, path, changed_mine)     # at most the caller's own audit of a refusal
         probed += 1
     COVERAGE["write_attempts_per_direction"] = probed
