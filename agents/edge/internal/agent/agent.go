@@ -32,11 +32,18 @@ type Agent struct {
 	OLTLease                  *jobs.LeaseHolder // ownership lease of the OLTs (ADR-0029 item 3); nil => no olt_query can run
 	Queries                   *oltquery.Store   // nil => olt_query jobs are refused (ADR-0029); the queries run in the OLT collector's own session
 	Bench                     *bench.Runner     // nil => bench writes are refused (ADR-0030); its Lease is fed from every poll answer
-	JobPollEvery              time.Duration
-	HeartbeatEvery            time.Duration
-	CollectEvery              time.Duration
-	Log                       *slog.Logger
+	// Secrets (ADR-0045): the delivery loop of OLT credentials typed in the Cloud screen; nil = the feature is off. It runs OFF the main loop (its own goroutine, at most
+	// one round at a time), never touches an OLT and takes no lock of the collection, so it cannot delay a heartbeat, a collection or the OLT pacing guard.
+	Secrets        SecretsLoop
+	SecretsEvery   time.Duration
+	JobPollEvery   time.Duration
+	HeartbeatEvery time.Duration
+	CollectEvery   time.Duration
+	Log            *slog.Logger
 }
+
+// SecretsLoop is one round of the ADR-0045 delivery loop (package oltsecrets).
+type SecretsLoop interface{ Tick(ctx context.Context) }
 
 // queryResendAfter: a result handed to the delivery queue that is still not acknowledged after this long is handed over again (the delivery queue may have
 // dropped it under backpressure); repeats are harmless, the Cloud treats the same outcome as a no-op.
@@ -280,13 +287,40 @@ func (a *Agent) Run(ctx context.Context) {
 		}()
 	}
 	collect()
+	var secRunning atomic.Bool
+	secrets := func() {
+		if a.Secrets == nil || !secRunning.CompareAndSwap(false, true) {
+			return // off, or the previous round is still running
+		}
+		go func() {
+			defer secRunning.Store(false)
+			sctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+			defer cancel()
+			a.Secrets.Tick(sctx)
+		}()
+	}
+	var secC <-chan time.Time
+	if a.Secrets != nil {
+		every := a.SecretsEvery
+		if every <= 0 {
+			every = 30 * time.Second
+		}
+		st := time.NewTicker(every)
+		defer st.Stop()
+		secC = st.C
+		secrets() // publish the seal key at the start
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-secC:
+			secrets()
 		case <-hb.C:
 			if out, err := a.GW.Heartbeat(ctx, a.EdgeID, a.TenantID, a.Version); out != gateway.Delivered {
 				a.Log.Warn("heartbeat failed", "err", err)
+			} else {
+				secrets() // right after a good heartbeat the Cloud is reachable: ask for a delivery (the loop spaces its own calls)
 			}
 		case <-col.C:
 			collect()

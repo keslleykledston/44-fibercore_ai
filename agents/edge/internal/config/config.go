@@ -48,9 +48,11 @@ type Config struct {
 	// allowed_operations (explicit) and at least one huawei_ma56_r015 OLT with cloud_id. Off by default.
 	OLTQueryEnabled bool `json:"olt_query_enabled"`
 	// OLTProfileNamesToCloud: let the LABELS of the OLT's profiles (free text chosen by the operator) go to the Cloud. Off by default: the Cloud then gets only numbers and rates.
-	OLTProfileNamesToCloud bool   `json:"olt_profile_names_to_cloud"`
-	RefreshTasks           bool   `json:"refresh_tasks"` // ADR-SD-002 item 4: let signed refresh jobs ask the ACS to read ONE CPE (needs nbi_url + jobs_enabled)
-	Version                string `json:"-"`
+	OLTProfileNamesToCloud bool `json:"olt_profile_names_to_cloud"`
+	RefreshTasks           bool `json:"refresh_tasks"` // ADR-SD-002 item 4: let signed refresh jobs ask the ACS to read ONE CPE (needs nbi_url + jobs_enabled)
+	// OLTSecrets (ADR-0045): receive OLT credentials typed in the Cloud screen, sealed to a key of THIS host. nil = the whole feature is off (an Edge with an old config is unchanged).
+	OLTSecrets *OLTSecretsConfig `json:"olt_secrets"`
+	Version    string            `json:"-"`
 }
 
 // BenchConfig is the Edge's own, independent copy of the bench list (ADR-0030): the Cloud can name a device, never add one here.
@@ -125,11 +127,14 @@ func (d BenchDeviceConfig) ID() string { return d.OUI + "-" + d.ProductClass + "
 
 // OLTConfig describes one OLT the Edge may READ. Its address must also be listed in `allowlist`.
 type OLTConfig struct {
-	Name                    string   `json:"name"`
-	Vendor                  string   `json:"vendor"` // huawei | zte
-	Address                 string   `json:"address"`
-	Username                string   `json:"username"`
-	SecretFile              string   `json:"secret_file"`
+	Name       string `json:"name"`
+	Vendor     string `json:"vendor"` // huawei | zte
+	Address    string `json:"address"`
+	Username   string `json:"username"`
+	SecretFile string `json:"secret_file"`
+	// CredentialsFile (ADR-0045): this OLT accepts credentials delivered from the Cloud screen. Absolute path of a file (0600) in a directory (0700) that only this Edge
+	// writes. Its presence IS the permission (the Cloud cannot turn it on). Read at the start of every session: a field in it wins over username/secret_file/snmp_community_file.
+	CredentialsFile         string   `json:"credentials_file"`
 	HostKeySHA256           string   `json:"host_key_sha256"` // mandatory pinned SSH host key
 	PonPorts                []string `json:"pon_ports"`
 	AllowUnverifiedFirmware bool     `json:"allow_unverified_firmware"`
@@ -435,6 +440,7 @@ func (c *Config) Validate() error {
 	if len(c.OLTs) > 64 {
 		errs = append(errs, errors.New("too many olts (max 64)"))
 	}
+	errs = append(errs, c.validateOLTSecrets()...)
 	deviceSeen := map[string]bool{}
 	for i, o := range c.OLTs {
 		p := fmt.Sprintf("olts[%d]", i)
@@ -477,8 +483,9 @@ func (c *Config) Validate() error {
 		}
 		switch o.Transport {
 		case "", "cli":
-			if o.Username == "" || o.SecretFile == "" {
-				errs = append(errs, fmt.Errorf("%s: username and secret_file required", p))
+			// with a credentials_file the login may come from it (ADR-0045): the content is only required when a session starts
+			if o.CredentialsFile == "" && (o.Username == "" || o.SecretFile == "") {
+				errs = append(errs, fmt.Errorf("%s: username and secret_file required (or a credentials_file)", p))
 			}
 			if !strings.HasPrefix(o.HostKeySHA256, "SHA256:") {
 				errs = append(errs, fmt.Errorf("%s: host_key_sha256 (SHA256:...) is mandatory", p))
@@ -496,7 +503,7 @@ func (c *Config) Validate() error {
 			if o.Vendor != "huawei" {
 				errs = append(errs, fmt.Errorf("%s: snmp transport is implemented for huawei only", p))
 			}
-			if o.SNMPCommunityFile == "" || (o.SNMPPaceMillis != 0 && o.SNMPPaceMillis < 1000) || o.SNMPPaceMillis > 10000 || o.SNMPMaxRequests < 0 || o.SNMPMaxRequests > 1000 {
+			if (o.SNMPCommunityFile == "" && o.CredentialsFile == "") || (o.SNMPPaceMillis != 0 && o.SNMPPaceMillis < 1000) || o.SNMPPaceMillis > 10000 || o.SNMPMaxRequests < 0 || o.SNMPMaxRequests > 1000 {
 				errs = append(errs, fmt.Errorf("%s: snmp_community_file required, snmp_pace_ms 0 (=1000) or 1000..10000, snmp_max_requests 0..1000", p))
 			}
 			if o.Username != "" || o.SecretFile != "" || o.HostKeySHA256 != "" || o.SSHMode != "" || o.Profile != "" || o.LegacySSH || o.SSHPagerSpace {
@@ -515,7 +522,7 @@ func (c *Config) Validate() error {
 			case DeviceKey(l.SNMPAddress) != DeviceKey(o.Address):
 				errs = append(errs, fmt.Errorf("%s: last_down.snmp_address must be the same device as the entry's address", p))
 			}
-			if l.SNMPCommunityFile == "" || (l.PaceMillis != 0 && l.PaceMillis < 1000) || l.PaceMillis > 10000 || l.MaxRequests < 0 || l.MaxRequests > 1000 ||
+			if (l.SNMPCommunityFile == "" && o.CredentialsFile == "") || (l.PaceMillis != 0 && l.PaceMillis < 1000) || l.PaceMillis > 10000 || l.MaxRequests < 0 || l.MaxRequests > 1000 ||
 				(l.EverySeconds != 0 && (l.EverySeconds < 900 || l.EverySeconds > 86400)) ||
 				(l.SettleSeconds != 0 && (l.SettleSeconds < 60 || l.SettleSeconds > 600)) {
 				errs = append(errs, fmt.Errorf("%s: last_down needs snmp_community_file; snmp_pace_ms 0 or 1000..10000; snmp_max_requests 0..1000; every_seconds 0 or 900..86400; settle_seconds 0 or 60..600", p))
