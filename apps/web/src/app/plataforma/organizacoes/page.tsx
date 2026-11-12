@@ -5,12 +5,12 @@ import { AdminTabs } from "@/components/AdminTabs";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState, ErrorState, PageHeader } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
-import { FLASH_COOKIE, ORG_ERRORS, ORG_FLASH, ORG_STATUS, type PlatformOrg, decodeFlash, inviteLabel, inviteUrl } from "@/lib/platform";
+import { FLASH_COOKIE, ORG_ERRORS, ORG_FLASH, ORG_STATUS, type PlatformOrgList, cursorQuery, decodeFlash, inviteLabel, inviteUrl } from "@/lib/platform";
 import { platformStatus } from "@/lib/platformStatus";
 
 const field = "min-h-touch rounded-btn border border-line bg-bg px-3";
 const when = (iso: string) => new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" });
-type Search = { ok?: string | string[]; erro?: string | string[]; nome?: string | string[] };
+type Search = { ok?: string | string[]; erro?: string | string[]; nome?: string | string[]; antes?: string | string[] };
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
 /** Organizações da plataforma (ADR-0046 D1). Só a conta operadora: quem não é recebe 404, como se a tela não existisse. Sem JavaScript: formulários comuns → /bff/plataforma/*. */
@@ -42,7 +42,8 @@ export default async function Organizacoes({ searchParams }: { searchParams: Pro
       </section>,
     );
   }
-  const [list, jar, hdr] = await Promise.all([apiSafe<{ items: PlatformOrg[] }>("/v1/platform/organizations"), cookies(), headers()]);
+  const antes = cursorQuery(one(sp.antes));   // cursor da página (só um instante e um id no formato certo; qualquer outra coisa volta à primeira página)
+  const [list, jar, hdr] = await Promise.all([apiSafe<PlatformOrgList>(`/v1/platform/organizations${antes ? `?${antes}` : ""}`), cookies(), headers()]);
   if (list.status === 403 && list.detail !== "mfa_recent_required") notFound();
   const flash = ok === "criada" ? decodeFlash(jar.get(FLASH_COOKIE)?.value) : null;
   const host = hdr.get("x-forwarded-host") ?? hdr.get("host") ?? "";
@@ -68,7 +69,7 @@ export default async function Organizacoes({ searchParams }: { searchParams: Pro
         </section>
       )}
       <section aria-label="Organizações" data-testid="org-lista">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Organizações ({items.length})</h2>
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Organizações ({list.data ? list.data.total : items.length})</h2>
         {list.data === null ? <ErrorState title="Falha ao carregar as organizações" hint="Tente de novo em instantes." /> : items.length === 0 ? <EmptyState title="Nenhuma organização" /> : (
           <div className="panel overflow-x-auto">
             <table className="w-full min-w-[760px] text-sm">
@@ -93,6 +94,11 @@ export default async function Organizacoes({ searchParams }: { searchParams: Pro
             </table>
           </div>
         )}
+        {list.data?.next && (
+          <p className="mt-2"><Link href={`/plataforma/organizacoes?antes=${encodeURIComponent(`${list.data.next.before_at}~${list.data.next.before_id}`)}`} data-testid="org-mais-antigas"
+            className="inline-flex min-h-touch items-center rounded-btn border border-line px-3 text-sm hover:bg-bg">Ver organizações mais antigas</Link></p>
+        )}
+        {antes && <p className="mt-2"><Link href="/plataforma/organizacoes" className="inline-flex min-h-touch items-center rounded-btn px-3 text-sm text-accent hover:underline">← Voltar às mais recentes</Link></p>}
         <p className="mt-2 text-xs text-muted">Só contagens e rótulos: nenhum dado de assinante, de OLT ou de ONU aparece aqui. Suspender ou reativar uma organização é feito pelo dono do sistema.</p>
       </section>
       <section aria-label="Nova organização" className="panel p-4" data-testid="org-nova">

@@ -70,19 +70,21 @@ test("operador sem segundo fator recente: a tela pede o código (formulário com
 
 test("criar organização sem JavaScript: link do convite uma vez, lista com contagens, nome repetido e acessibilidade", async ({ browser, page }) => {
   await operatorLogin(page, recovery[1]);                      // entra de novo, agora com MFA (login em duas etapas)
+  await page.goto("/plataforma/organizacoes");                  // acessibilidade COM JavaScript (o axe precisa dele); a criação abaixo é SEM JavaScript
+  await expect(page.getByTestId("org-nova")).toBeVisible();
+  await expect(page.getByTestId("org-mfa")).toHaveCount(0);     // o login com MFA já conta como recente
+  const ax = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+  expect(ax.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(" || ")}`)).toEqual([]);
+  for (const el of await page.getByTestId("org-nova").locator("input, button").all()) {
+    const box = await el.boundingBox();
+    if (box) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(24);
+  }
   const state = await page.context().storageState();
   const noJs = await browser.newContext({ javaScriptEnabled: false, storageState: state, baseURL: BASE });
   const p = await noJs.newPage();
   await p.goto("/plataforma/organizacoes");
   await expect(p.getByTestId("org-nova")).toBeVisible();
-  await expect(p.getByTestId("org-mfa")).toHaveCount(0);       // o login com MFA já conta como recente
   await expect(p.getByTestId("org-lista")).toContainText("Só contagens e rótulos");
-  const ax = await new AxeBuilder({ page: p as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
-  expect(ax.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(" || ")}`)).toEqual([]);
-  for (const el of await p.getByTestId("org-nova").locator("input, button").all()) {
-    const box = await el.boundingBox();
-    if (box) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(24);
-  }
   await p.getByLabel("Nome da organização").fill(NAME);
   await p.getByLabel("E-mail do primeiro administrador").fill(`admin.${SUFFIX}@exemplo.com.br`);
   await p.getByLabel(/Nome do primeiro administrador/).fill("Ana Administradora");

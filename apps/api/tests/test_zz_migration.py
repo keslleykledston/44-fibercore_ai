@@ -87,7 +87,7 @@ def test_0053_downgrade_removes_the_platform_functions_closes_pending_first_admi
     r = run("downgrade", mod.down_revision)
     assert r.returncode == 0, r.stderr[-800:]
     with migrated.connect() as c:
-        for fn in ("platform_create_organization(uuid, text, text, text, uuid)", "platform_list_organizations(uuid)", "platform_assert_actor(uuid)"):
+        for fn in ("platform_create_organization(uuid, text, text, text, uuid)", "platform_list_organizations(uuid, timestamptz, uuid, integer)", "platform_assert_actor(uuid)"):
             assert c.execute(text("SELECT to_regprocedure(:f)"), {"f": f"public.{fn}"}).scalar() is None, fn
         assert not c.execute(text("SELECT 1 FROM information_schema.columns WHERE table_name = 'member_invites' AND column_name = 'platform_origin'")).first()
         assert not c.execute(text("SELECT 1 FROM pg_policies WHERE policyname = 'platform_scan'")).first()

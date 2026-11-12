@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { decodeFlash, encodeFlash, inviteLabel, inviteUrl, orgError, ORG_ERRORS, stepUpError } from "../src/lib/platform";
+import { cursorQuery, decodeFlash, encodeFlash, inviteLabel, inviteUrl, orgError, ORG_ERRORS, stepUpError } from "../src/lib/platform";
 
 // Organizações da plataforma (ADR-0046 D1): mapa de erros, cookie de aviso do link do convite e textos. Funções puras: sem navegador nem API.
 const TOKEN = "A".repeat(43);
@@ -48,4 +48,11 @@ test("o estado do convite tem rótulo para cada valor e um traço para nenhum", 
   expect(inviteLabel("expired")).toContain("Expirou");
   expect(inviteLabel("revoked")).toBe("Revogado");
   expect(inviteLabel(null)).toBe("—");
+});
+
+test("o cursor da lista só passa instante e id no formato certo", () => {
+  const id = "0b9d6e0c-3b5a-4c0e-8d57-1f3a5f6a7b8c";
+  expect(cursorQuery(`2026-11-12T10:00:00.123456+00:00~${id}`)).toBe(`before_at=2026-11-12T10%3A00%3A00.123456%2B00%3A00&before_id=${id}`);
+  expect(cursorQuery(`2026-11-12T10:00:00Z~${id}`)).toContain("before_at=2026-11-12T10%3A00%3A00Z");
+  for (const bad of ["", "lixo", `2026-11-12~${id}`, `2026-11-12T10:00:00Z~nao-e-uuid`, `2026-11-12T10:00:00Z&x=1~${id}`, `2026-11-12T10:00:00Z~${id}&y=2`]) expect(cursorQuery(bad)).toBe("");
 });

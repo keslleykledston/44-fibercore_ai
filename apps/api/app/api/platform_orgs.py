@@ -14,10 +14,11 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import datetime
 from uuid import UUID, uuid4
 
 import jwt
-from fastapi import APIRouter, Depends, Header, HTTPException, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
@@ -35,7 +36,7 @@ STATUS = {
     "platform_forbidden": (403, "forbidden"), "mfa_recent_required": (403, "mfa_recent_required"),
     "organization_name_taken": (409, "organization_name_taken"), "organization_rate_limited": (429, "organization_rate_limited"),
     "organization_name_invalid": (422, "organization_name_invalid"), "organization_email_invalid": (422, "organization_email_invalid"),
-    "organization_admin_name_invalid": (422, "organization_admin_name_invalid"),
+    "organization_admin_name_invalid": (422, "organization_admin_name_invalid"), "organization_cursor_invalid": (422, "organization_cursor_invalid"),
 }
 
 
@@ -104,18 +105,22 @@ def create_organization(body: OrganizationIn, response: Response, op: PlatformOp
 
 
 @router.get("/v1/platform/organizations")
-def list_organizations(response: Response, op: PlatformOperator = Depends(require_platform_operator(PERM))) -> dict:
-    """Counts and labels only: never a row of an end customer, a subscriber, an OLT, an ONU or an Edge."""
+def list_organizations(response: Response, limit: int = Query(100, ge=1, le=200), before_at: datetime | None = None, before_id: UUID | None = None,
+                       op: PlatformOperator = Depends(require_platform_operator(PERM))) -> dict:
+    """Counts and labels only: never a row of an end customer, a subscriber, an OLT, an ONU or an Edge. Newest first, in pages by cursor: `next` says where the next page starts
+    (null on the last) and `total` is every organization, so the list is never cut silently."""
     response.headers["Cache-Control"] = "no-store"
+    if (before_at is None) != (before_id is None):
+        raise HTTPException(422, "organization_cursor_invalid")
     try:
         with scoped_connection(get_engine(), user_id=op.id) as conn:
-            rows = conn.execute(text("SELECT public.platform_list_organizations(:a)"), {"a": op.id}).scalar_one()
+            res = conn.execute(text("SELECT public.platform_list_organizations(:a, :bt, :bi, :l)"), {"a": op.id, "bt": before_at, "bi": before_id, "l": limit}).scalar_one()
     except DBAPIError as exc:
         mapped = _map(exc)
         if mapped is None:
             raise
         raise mapped from exc
-    return {"items": [{
+    return {"total": res["total"], "next": res["next"], "items": [{
         "id": r["tenant_id"], "name": r["name"], "status": r["status"], "created_at": r["created_at"], "edges": r["edges"], "olts": r["olts"], "onus": r["onus"],
         "created_by": r["created_by_name"], "created_via": r["created_via"], "invite_state": r["invite_state"], "api_trail": r["api_trail"],
-    } for r in rows]}
+    } for r in res["items"]]}

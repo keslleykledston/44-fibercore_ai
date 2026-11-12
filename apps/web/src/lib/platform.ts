@@ -4,6 +4,7 @@ export type PlatformOrg = {
   id: string; name: string; status: string; created_at: string; edges: number; olts: number; onus: number;
   created_by: string | null; created_via: "screen" | "cli"; invite_state: "pending" | "accepted" | "expired" | "revoked" | null; api_trail: boolean | null;
 };
+export type PlatformOrgList = { total: number; next: { before_at: string; before_id: string } | null; items: PlatformOrg[] };
 export type CreatedOrg = { tenant_id: string; name: string; invite: { id: string; state: string; role: string; email: string; expires_at: string; token: string } };
 
 export const FLASH_COOKIE = "fc_org_flash";   // o link do convite aparece UMA vez, num cookie HttpOnly de 2 minutos preso a /plataforma (a URL nunca o carrega)
@@ -71,3 +72,12 @@ export function decodeFlash(raw: string | undefined): Flash | null {
   } catch { return null; }
 }
 export const inviteUrl = (base: string, token: string) => `${base.replace(/\/+$/, "")}/convite/${token}`;
+
+/** `?antes=<instante>~<id>` da tela → consulta da API. Só passa instante ISO e UUID no formato certo; qualquer outra coisa é ignorada (volta à primeira página). */
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function cursorQuery(raw: string): string {
+  const [at, id] = raw.split("~");
+  if (!at || !id || !ISO.test(at) || !UUID_RE.test(id)) return "";
+  return new URLSearchParams({ before_at: at, before_id: id }).toString();
+}

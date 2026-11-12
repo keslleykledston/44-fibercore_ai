@@ -19,7 +19,7 @@ role da aplicação continua SEM INSERT em `tenants`: o único caminho é a fun�
   e, nesse caso, o aceite confere que quem convidou ainda é conta ativa e operadora (fail-closed) em vez de papel no provedor. Os demais convites ficam idênticos.
 * devolve só `tenant_id` e os dados do convite (id, validade, token).
 
-`platform_list_organizations(p_actor)`: a lista do operador (nome, estado, nº de Edges/OLTs/ONUs, autor alegado e data, estado do convite, se há o par de auditoria da API). Mesma conferência do
+`platform_list_organizations(p_actor, p_before_at, p_before_id, p_limit)`: a lista do operador, em páginas por cursor (created_at, id), até 200, com `total` e `next` (nunca um corte silencioso; Codex r1) (nome, estado, nº de Edges/OLTs/ONUs, autor alegado e data, estado do convite, se há o par de auditoria da API). Mesma conferência do
 ator; só contagens e rótulos, NUNCA linha de cliente final, assinante, OLT, ONU ou Edge.
 
 Os dois leem entre provedores com a role dona: uma política SELECT só do dono (`platform_scan`) por tabela, como 0047/0049 (as escritas rodam com o `app.tenant_id` da nova organização,
@@ -202,13 +202,16 @@ END $$;
 """
 
 LIST_ORGS = r"""
-CREATE FUNCTION platform_list_organizations(p_actor uuid) RETURNS jsonb
+CREATE FUNCTION platform_list_organizations(p_actor uuid, p_before_at timestamptz DEFAULT NULL, p_before_id uuid DEFAULT NULL, p_limit integer DEFAULT 100) RETURNS jsonb
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
-DECLARE out jsonb;
+DECLARE lim integer := LEAST(GREATEST(COALESCE(p_limit, 100), 1), 200); out jsonb; total bigint; more boolean; last_at timestamptz; last_id uuid;
 BEGIN
   PERFORM public.platform_assert_actor(p_actor);
-  SELECT COALESCE(jsonb_agg(o ORDER BY (o ->> 'created_at') DESC), '[]'::jsonb) INTO out FROM (
-    SELECT jsonb_build_object(
+  IF (p_before_at IS NULL) <> (p_before_id IS NULL) THEN RAISE EXCEPTION 'organization_cursor_invalid'; END IF;
+  SELECT count(*) INTO total FROM public.tenants;
+  -- keyset page, newest first, by (created_at, id): lim + 1 rows are read to know whether there is more, and the caller is told (never a silent cut)
+  WITH page AS (
+    SELECT t.id, t.created_at, jsonb_build_object(
       'tenant_id', t.id, 'name', t.name, 'status', t.status, 'created_at', t.created_at,
       'edges', (SELECT count(*) FROM public.edges e WHERE e.tenant_id = t.id AND e.status <> 'revoked'),
       'olts', (SELECT count(*) FROM public.olts l WHERE l.tenant_id = t.id),
@@ -224,9 +227,14 @@ BEGIN
                                    WHEN i.expires_at <= now() THEN 'expired' ELSE 'pending' END
                          FROM public.member_invites i WHERE i.tenant_id = t.id AND i.platform_origin ORDER BY i.created_at DESC LIMIT 1)
     ) AS o
-    FROM public.tenants t ORDER BY t.created_at DESC LIMIT 500
-  ) s;
-  RETURN out;
+    FROM public.tenants t
+    WHERE p_before_at IS NULL OR (t.created_at, t.id) < (p_before_at, p_before_id)
+    ORDER BY t.created_at DESC, t.id DESC LIMIT lim + 1
+  ), shown AS (SELECT * FROM page ORDER BY created_at DESC, id DESC LIMIT lim)
+  SELECT COALESCE((SELECT jsonb_agg(o ORDER BY created_at DESC, id DESC) FROM shown), '[]'::jsonb), (SELECT count(*) > lim FROM page),
+         (SELECT created_at FROM shown ORDER BY created_at ASC, id ASC LIMIT 1), (SELECT id FROM shown ORDER BY created_at ASC, id ASC LIMIT 1)
+    INTO out, more, last_at, last_id;
+  RETURN jsonb_build_object('total', total, 'items', out, 'next', CASE WHEN more THEN jsonb_build_object('before_at', last_at, 'before_id', last_id) END);
 END $$;
 """
 
@@ -253,9 +261,9 @@ def upgrade() -> None:
         """
         REVOKE ALL ON FUNCTION platform_assert_actor(uuid) FROM PUBLIC;
         REVOKE ALL ON FUNCTION platform_create_organization(uuid, text, text, text, uuid) FROM PUBLIC;
-        REVOKE ALL ON FUNCTION platform_list_organizations(uuid) FROM PUBLIC;
+        REVOKE ALL ON FUNCTION platform_list_organizations(uuid, timestamptz, uuid, integer) FROM PUBLIC;
         GRANT EXECUTE ON FUNCTION platform_create_organization(uuid, text, text, text, uuid) TO fibercore_app;
-        GRANT EXECUTE ON FUNCTION platform_list_organizations(uuid) TO fibercore_app;
+        GRANT EXECUTE ON FUNCTION platform_list_organizations(uuid, timestamptz, uuid, integer) TO fibercore_app;
         """
     )
 
@@ -264,7 +272,7 @@ def downgrade() -> None:
     drops = " ".join(f"DROP POLICY IF EXISTS platform_scan ON {t};" for t in SCAN_TABLES)
     op.execute(_snapshot(False))
     op.execute(
-        "DROP FUNCTION IF EXISTS platform_list_organizations(uuid); "
+        "DROP FUNCTION IF EXISTS platform_list_organizations(uuid, timestamptz, uuid, integer); "
         "DROP FUNCTION IF EXISTS platform_create_organization(uuid, text, text, text, uuid); "
         "DROP FUNCTION IF EXISTS platform_assert_actor(uuid);"
     )

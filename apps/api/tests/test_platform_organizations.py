@@ -260,7 +260,7 @@ def test_the_list_has_counts_and_labels_only(client, operator, migrated, seed, i
     tid = r.json()["tenant_id"]
     with migrated.begin() as c:   # the invite of the first admin, a CLI-made organization and some inventory in the seeded tenant A
         c.execute(text("INSERT INTO tenants(name) VALUES (:n)"), {"n": f"Pelo CLI {uuid4().hex[:6]}"})
-    ls = client.get("/v1/platform/organizations", headers=_h(operator["token"]))
+    ls = client.get("/v1/platform/organizations?limit=200", headers=_h(operator["token"]))
     assert ls.status_code == 200 and ls.headers["cache-control"] == "no-store"
     items = ls.json()["items"]
     mine = next(i for i in items if i["id"] == tid)
@@ -290,6 +290,31 @@ def test_platform_status_tells_only_the_callers_own_standing(client, make, opera
     stale = issue_token(get_settings(), sub=operator["id"], kind="user", mfa_at=time.time() - 3600)
     assert client.get("/v1/platform/status", headers=_h(stale)).json() == {"operator": True, "mfa_recent": False}
     assert client.get("/v1/platform/status", headers=agent(client, inv, "a1")).json() == {"operator": False, "mfa_recent": False}
+
+
+def test_the_list_is_paged_by_cursor_and_never_cut_silently(client, operator, migrated):
+    for _ in range(3):
+        assert _post(client, operator["token"])[0].status_code == 201
+    with migrated.connect() as c:
+        everything = [str(r[0]) for r in c.execute(text("SELECT id FROM tenants ORDER BY created_at DESC, id DESC"))]
+    seen, cursor, pages = [], {}, 0
+    while True:
+        r = client.get("/v1/platform/organizations", params={"limit": 2, **cursor}, headers=_h(operator["token"]))
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["total"] == len(everything) and len(body["items"]) <= 2
+        seen += [i["id"] for i in body["items"]]
+        pages += 1
+        if body["next"] is None:
+            break
+        assert len(body["items"]) == 2
+        cursor = {"before_at": body["next"]["before_at"], "before_id": body["next"]["before_id"]}
+        assert pages < 500
+    assert seen == everything and pages >= 3                    # every organization exactly once, newest first, across the pages
+    one = client.get("/v1/platform/organizations?limit=200", headers=_h(operator["token"])).json()
+    assert [i["id"] for i in one["items"]] == everything[:200] and (one["next"] is None) == (len(everything) <= 200)
+    for bad in ("limit=0", "limit=201", "before_at=2026-01-01T00:00:00Z", f"before_id={uuid4()}", "before_at=lixo&before_id=x"):
+        assert client.get(f"/v1/platform/organizations?{bad}", headers=_h(operator["token"])).status_code == 422, bad
 
 
 def test_the_operator_never_becomes_a_member_nor_reads_the_organization(client, operator, migrated):
@@ -361,7 +386,7 @@ def test_the_application_role_cannot_insert_into_tenants_by_sql(app_engine, migr
 
 def test_the_function_is_owned_by_the_schema_owner_with_a_fixed_search_path_and_narrow_execute(migrated):
     with migrated.connect() as c:
-        for fn in ("platform_create_organization(uuid, text, text, text, uuid)", "platform_list_organizations(uuid)", "platform_assert_actor(uuid)"):
+        for fn in ("platform_create_organization(uuid, text, text, text, uuid)", "platform_list_organizations(uuid, timestamptz, uuid, integer)", "platform_assert_actor(uuid)"):
             r = c.execute(text("SELECT p.prosecdef, pg_get_userbyid(p.proowner) AS owner, p.proconfig, (SELECT pg_get_userbyid(relowner) FROM pg_class WHERE relname = 'tenants') AS table_owner "
                                "FROM pg_proc p WHERE p.oid = CAST(:f AS regprocedure)"), {"f": f"public.{fn}"}).one()
             assert r.prosecdef and r.owner == r.table_owner and r.owner not in ("fibercore_app", "fibercore_rbac", "fibercore_worker"), fn

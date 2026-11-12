@@ -576,7 +576,7 @@ def test_the_platform_list_is_the_only_cross_organization_view_and_has_labels_an
     # a member of an organization, even its isp_admin, is refused the cross-organization list
     assert client.get("/v1/platform/organizations", headers=a.admin).status_code == 403
     assert client.get("/v1/platform/organizations", headers=b.admin).status_code == 403
-    ls = client.get("/v1/platform/organizations", headers=_h(world["op_token"]))
+    ls = client.get("/v1/platform/organizations?limit=200", headers=_h(world["op_token"]))
     assert ls.status_code == 200
     mine = {i["id"]: i for i in ls.json()["items"]}
     for o in (a, b):
@@ -585,7 +585,7 @@ def test_the_platform_list_is_the_only_cross_organization_view_and_has_labels_an
         assert set(row) == {"id", "name", "status", "created_at", "edges", "olts", "onus", "created_by", "created_via", "invite_state", "api_trail"}
     blob = json.dumps(ls.json())
     for o in (a, b):       # no serial, e-mail, address, OLT name or id of the inside of an organization
-        assert "HWTC" not in blob and f"adm.{o.tag}" not in blob and o.snap_olt not in blob and o.fleet_olt not in blob and "10.7" not in blob
+        assert "HWTC" not in blob and f"adm.{o.tag}" not in blob and o.snap_olt not in blob and o.fleet_olt not in blob and "10.70.0.9" not in blob and "10.71.0.9" not in blob
 
 
 def test_negative_control_the_checks_above_do_detect_a_planted_leak(world, app_url):
