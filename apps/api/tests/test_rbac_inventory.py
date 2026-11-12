@@ -37,6 +37,7 @@ EXPECTED = {
 # Routes that carry NO `require(...)`, each with the reason. A new route that is not here and has no permission fails the test.
 PUBLIC = {  # no credentials at all
     ("GET", "/livez"), ("GET", "/readyz"), ("GET", "/version"),
+    ("GET", "/metrics"),  # ADR-0042: its own bearer token (METRICS_TOKEN, constant-time compare); 404 while the token is unset; never a user session; refused by the proxies too (/metrics and /api/metrics)
     ("POST", "/v1/auth/token"), ("POST", "/v1/auth/service-token"), ("POST", "/v1/auth/refresh"), ("POST", "/v1/auth/logout"),
     ("POST", "/v1/auth/mfa/verify"),  # takes the short-lived mfa_token it was handed at login
     ("GET", "/v1/invites/{token}"), ("POST", "/v1/invites/{token}/accept"),  # the link itself is the credential (SHA-256 looked up, throttled, single use)

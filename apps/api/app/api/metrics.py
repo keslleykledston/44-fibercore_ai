@@ -21,7 +21,7 @@ STARTED_AT = time.time()
 CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 
 
-@router.get("/metrics", include_in_schema=False)
+@router.get("/metrics")  # in the OpenAPI schema on purpose: the RBAC inventory test cross-checks the route tree against it
 def metrics(request: Request, settings: Settings = Depends(get_settings)) -> PlainTextResponse:
     token = settings.metrics_token
     if not token:
