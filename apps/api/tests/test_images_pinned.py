@@ -186,3 +186,12 @@ def test_update_restores_every_file_when_a_replace_fails_midway(tmp_path, monkey
         images.update(root, write=True)
     assert {p: p.read_bytes() for p in files} == before                         # TODOS os originais intactos, inclusive o já trocado
     assert not [p for p in root.rglob("*") if p.name.endswith((".tmp", ".bak"))]
+
+
+def test_continued_dockerfile_instructions_and_docker_image_pull_do_not_escape(tmp_path):
+    bad = {"Dockerfile": "FROM \\\n  busybox:1\n", "scripts/p.sh": "docker image pull vendor/tool:latest\ndocker image pull -q alpine:3.20\n"}
+    errs = "\n".join(images.check(tree(tmp_path, bad)))
+    assert "Dockerfile:1: imagem sem digest: busybox:1" in errs
+    assert "scripts/p.sh:1: imagem sem digest: vendor/tool:latest" in errs and "scripts/p.sh:2: imagem sem digest: alpine:3.20" in errs
+    ok = {"Dockerfile": f"FROM \\\n  alpine:3.20@{D1} AS b\nFROM alpine:3.20@{D1}\n", "scripts/p.sh": f"docker image pull -q alpine:3.20@{D1}\n"}
+    assert images.check(tree(tmp_path / "ok", ok)) == []

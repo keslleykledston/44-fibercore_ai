@@ -93,7 +93,7 @@ def check_ref(where: str, ref: str, lock: dict[str, str], errors: list[str]) -> 
 
 def check_dockerfile(p: Path, rel: str, lock: dict[str, str], errors: list[str]) -> None:
     stages: set[str] = set()
-    for n, raw in enumerate(p.read_text().splitlines(), 1):
+    for n, raw in logical_lines(p.read_text()):   # instrução continuada com `\` (ex.: `FROM \` + imagem na linha seguinte) vale como uma só
         for fm in re.finditer(r"(?:^\s*COPY\s+(?:--\S+\s+)*?--from=|^\s*RUN\s+.*--mount=\S*?\bfrom=)([^\s,]+)", raw, re.I):
             src = fm.group(1)
             if src.lower() not in stages and not src.isdigit():
@@ -147,7 +147,7 @@ VALUE_FLAGS = {
     "--platform", "--pull", "--log-driver", "--log-opt", "--device", "--group-add", "--ulimit", "--health-cmd", "--health-interval", "--health-retries", "--health-timeout", "--health-start-period",
     "--dns", "--ip", "--shm-size", "--stop-signal", "--stop-timeout", "--user-ns", "--pid", "--ipc", "--cgroupns", "--runtime", "--sysctl", "--annotation", "--expose", "--link", "--volumes-from",
 }
-DOCKER_CMD_RE = re.compile(r"\bdocker\s+(?:container\s+)?(run|create|pull)\b")
+DOCKER_CMD_RE = re.compile(r"\bdocker\s+(?:container\s+|image\s+)?(run|create|pull)\b")
 
 
 def logical_lines(text: str):
