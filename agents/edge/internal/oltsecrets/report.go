@@ -26,9 +26,10 @@ type StateCloud interface {
 	SecretsWaitUntil() time.Time
 }
 
-// StateReporter tells the Cloud, per managed OLT, whether it awaits the local trust or is trusted (and once, when one was removed), on every change and every ReportEvery
-// (ADR-0046 D6). It is best-effort and never a failure of a delivery: 5xx, 429 and network errors are retried at the next round; a 404 means "an older Cloud" and is logged
-// once; any other refusal waits a few minutes. It sends nothing at all while the registry is empty and nothing was removed.
+// StateReporter tells the Cloud, per managed OLT, whether it awaits the local trust or is trusted (and, once, that one was removed), on every change and every ReportEvery
+// (ADR-0046 D6). The "removed" states come from the durable tombstones of the store (removed.json), which are cleared only after the Cloud has accepted the report, so a
+// restart between a `remove` and the report loses nothing. It is best-effort and never a failure of a delivery: 5xx, 429 and network errors are retried at the next round;
+// a 404 means "an older Cloud" and is logged once; any other refusal waits a few minutes. It sends nothing at all while the registry is empty and nothing was removed.
 type StateReporter struct {
 	Store *managedolts.Store
 	Cloud StateCloud
@@ -36,12 +37,11 @@ type StateReporter struct {
 	Now   func() time.Time
 
 	mu           sync.Mutex
-	last         map[string]string   // cloud_id -> state of the last report that went through
-	lastAt       time.Time           // when that was
-	removed      map[string]struct{} // cloud ids removed and not yet reported as "removed"
+	last         map[string]string // cloud_id -> state of the last report that went through
+	lastAt       time.Time         // when that was
 	blockedUntil time.Time
 	oldCloud     bool // the 404 was already logged
-	badState     bool // the unreadable-registry warning was already logged
+	badState     bool // the unreadable-state warning was already logged
 }
 
 func (r *StateReporter) now() time.Time {
@@ -56,19 +56,6 @@ func (r *StateReporter) log() *slog.Logger {
 		return r.Log
 	}
 	return slog.New(slog.NewJSONHandler(discard{}, nil))
-}
-
-// NoteRemoved records that the managed OLT with this Cloud id was removed: the next report says "removed" for it (once).
-func (r *StateReporter) NoteRemoved(cloudID string) {
-	if cloudID == "" {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.removed == nil {
-		r.removed = map[string]struct{}{}
-	}
-	r.removed[cloudID] = struct{}{}
 }
 
 func sameStates(a, b map[string]string) bool {
@@ -99,20 +86,39 @@ func (r *StateReporter) Tick(ctx context.Context) {
 		}
 		return
 	}
-	r.badState = false
 	cur := make(map[string]string, len(list))
 	for _, it := range list {
 		cur[it.Entry.CloudID] = it.State()
-		delete(r.removed, it.Entry.CloudID) // added again: it is not "removed"
 	}
-	if len(cur) == 0 && len(r.removed) == 0 {
+	tomb, terr := r.Store.Tombstones()
+	if terr != nil { // a state that cannot be read cannot be reported; the live states still go out
+		if !r.badState {
+			r.badState = true
+			r.log().Warn("managed olts: the removal records cannot be read; \"removed\" is not reported until they can", "err", terr)
+		}
+		tomb = nil
+	} else {
+		r.badState = false
+	}
+	var removed, stale []string
+	for _, id := range tomb {
+		if _, back := cur[id]; back { // added again: it is not "removed"
+			stale = append(stale, id)
+			continue
+		}
+		removed = append(removed, id)
+	}
+	if len(stale) > 0 {
+		_ = r.Store.ClearTombstones(stale)
+	}
+	if len(cur) == 0 && len(removed) == 0 {
 		r.last = cur
 		return
 	}
-	if sameStates(cur, r.last) && len(r.removed) == 0 && now.Sub(r.lastAt) < ReportEvery {
+	if sameStates(cur, r.last) && len(removed) == 0 && now.Sub(r.lastAt) < ReportEvery {
 		return
 	}
-	items := make([]gateway.ManagedState, 0, len(cur)+len(r.removed))
+	items := make([]gateway.ManagedState, 0, len(cur)+len(removed))
 	ids := make([]string, 0, len(cur))
 	for id := range cur {
 		ids = append(ids, id)
@@ -121,12 +127,7 @@ func (r *StateReporter) Tick(ctx context.Context) {
 	for _, id := range ids {
 		items = append(items, gateway.ManagedState{CloudID: id, State: cur[id]})
 	}
-	rem := make([]string, 0, len(r.removed))
-	for id := range r.removed {
-		rem = append(rem, id)
-	}
-	sort.Strings(rem)
-	for _, id := range rem {
+	for _, id := range removed {
 		items = append(items, gateway.ManagedState{CloudID: id, State: managedolts.StateRemoved})
 	}
 	for start := 0; start < len(items); start += gateway.MaxManagedStateItems {
@@ -158,5 +159,8 @@ func (r *StateReporter) Tick(ctx context.Context) {
 		}
 	}
 	r.oldCloud = false
-	r.last, r.lastAt, r.removed = cur, now, nil
+	r.last, r.lastAt = cur, now
+	if err := r.Store.ClearTombstones(removed); err != nil { // reported again next round (idempotent in the Cloud)
+		r.log().Warn("managed olts: the removal records could not be cleared", "err", err)
+	}
 }

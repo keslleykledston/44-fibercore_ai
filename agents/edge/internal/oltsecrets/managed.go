@@ -24,8 +24,6 @@ type Managed struct {
 	Policy *managedolts.Policy
 	Store  *managedolts.Store
 	Static []StaticOLT
-	// OnRemoved, when set, is told the Cloud id of a managed OLT that a `remove` deleted (the state reporter sends it as "removed").
-	OnRemoved func(cloudID string)
 }
 
 func (p *Processor) isStatic(name string) bool {
@@ -225,20 +223,13 @@ func (p *Processor) checkConnection(c *connection) string {
 func (p *Processor) writeConnection(c *connection, log *slog.Logger) string {
 	st := p.Managed.Store
 	if c.Action == actionRemove {
-		cloudID, err := st.Remove(c.Entry.Name)
-		if err != nil {
+		if _, err := st.Remove(c.Entry.Name, c.CloudID); err != nil {
 			code := CodeWriteFailed
 			if errors.Is(err, managedolts.ErrState) {
 				code = CodeStateUnreadable
 			}
-			log.Error("olt secret delivery not applied: the managed OLT could not be removed", "code", code, "err", err)
+			log.Error("olt secret delivery not applied: the managed OLT could not be deleted", "code", code, "err", err)
 			return code
-		}
-		if cloudID == "" {
-			cloudID = c.CloudID
-		}
-		if p.Managed.OnRemoved != nil {
-			p.Managed.OnRemoved(cloudID)
 		}
 		return ""
 	}

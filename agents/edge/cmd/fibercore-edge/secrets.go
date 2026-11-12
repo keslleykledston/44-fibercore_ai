@@ -98,7 +98,7 @@ func setupSecrets(cfg *config.Config, gw *gateway.Client, log *slog.Logger) (*ol
 			}
 			static = append(static, oltsecrets.StaticOLT{Name: o.Name, DeviceKey: config.DeviceKey(addr), CloudID: o.CloudID})
 		}
-		proc.Managed = &oltsecrets.Managed{Policy: pol, Store: mstore, Static: static, OnRemoved: rep.NoteRemoved}
+		proc.Managed = &oltsecrets.Managed{Policy: pol, Store: mstore, Static: static}
 		w.State = rep
 		log.Info("managed olts enabled: the Cloud may add OLTs inside the local policy; each waits for managed-trust", "state_dir", cfg.ManagedOLTs.StateDir, "max_olts", pol.Max, "cidrs", len(pol.CIDRs))
 	}

@@ -51,9 +51,8 @@ func connBody(over map[string]any) string {
 // menv is the Edge fixture of the managed OLTs: the usual env plus a state directory, a policy and the static OLTs of the base fixture.
 type menv struct {
 	*env
-	st      *managedolts.Store
-	dir     string
-	removed []string
+	st  *managedolts.Store
+	dir string
 }
 
 func newManagedEnv(t *testing.T, mut func(*managedolts.Config)) *menv {
@@ -72,7 +71,7 @@ func newManagedEnv(t *testing.T, mut func(*managedolts.Config)) *menv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e.proc.Managed = &Managed{Policy: pol, Store: m.st, OnRemoved: func(id string) { m.removed = append(m.removed, id) },
+	e.proc.Managed = &Managed{Policy: pol, Store: m.st,
 		Static: []StaticOLT{{Name: tOLT, DeviceKey: "10.0.0.9", CloudID: "77777777-7777-4777-8777-777777777771"}, {Name: tOLT2, DeviceKey: "10.0.0.8"}, {Name: tSNMPOLT, DeviceKey: "10.0.0.7"}}}
 	return m
 }
@@ -615,8 +614,8 @@ func TestManagedRemoveDeletesRegistryTrustAndCredentials(t *testing.T) {
 	if tr := m.readFile(filepath.Join(m.dir, managedolts.TrustFile)); strings.Contains(tr, mName) {
 		t.Fatalf("trust not dropped: %s", tr)
 	}
-	if len(m.removed) != 1 || m.removed[0] != mCloudID {
-		t.Fatalf("OnRemoved: %v", m.removed)
+	if tomb, err := m.st.Tombstones(); err != nil || len(tomb) != 1 || tomb[0] != mCloudID {
+		t.Fatalf("tombstone: %v %v", tomb, err)
 	}
 	// a remove of something that is not there is applied (idempotent), and a set after a remove starts from nothing: untrusted, no old credentials
 	if r := m.send("44444444-4444-4444-8444-4444444444cc", mName, rm); r.Outcome != OutcomeApplied {

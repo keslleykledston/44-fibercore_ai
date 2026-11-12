@@ -20,6 +20,7 @@ import (
 const (
 	RegistryFile = "managed_olts.json"
 	TrustFile    = "trust.json"
+	RemovedFile  = "removed.json"
 	CredsDir     = "creds"
 	lockBase     = "managed-state" // the lock file is managed-state.lock
 	fileVersion  = 1
@@ -344,9 +345,11 @@ func (s *Store) Upsert(e Entry) (UpsertResult, error) {
 	return res, nil
 }
 
-// Remove deletes the registry entry, its trust and its credentials file. It is idempotent (a name that is not there is not an error) and always attempts all three, so a
-// redelivery after a crash finishes what the first attempt did not. It returns the Cloud id of the entry that was there ("" when none).
-func (s *Store) Remove(name string) (cloudID string, err error) {
+// Remove deletes the registry entry, its trust and its credentials file. It is idempotent (a name that is not there is not an error) and always attempts all of it, so a
+// redelivery after a crash finishes what the first attempt did not. BEFORE anything is deleted it records a durable tombstone (removed.json) for the Cloud id (the entry's,
+// or the one the `remove` carried when the name was not there), so the "removed" state is still reported after a restart; the reporter clears it once the Cloud has it.
+// It returns the Cloud id of the entry that was there ("" when none).
+func (s *Store) Remove(name, hintCloudID string) (cloudID string, err error) {
 	if err := credfile.CheckPrivateDir(s.Dir); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", nil
@@ -366,6 +369,10 @@ func (s *Store) Remove(name string) (cloudID string, err error) {
 	if err != nil {
 		return "", err
 	}
+	tomb, err := s.readTombstones()
+	if err != nil {
+		return "", err
+	}
 	kept := reg[:0:0]
 	for _, e := range reg {
 		if e.Name == name {
@@ -373,6 +380,15 @@ func (s *Store) Remove(name string) (cloudID string, err error) {
 			continue
 		}
 		kept = append(kept, e)
+	}
+	report := cloudID
+	if report == "" && ValidCloudID(hintCloudID) {
+		report = hintCloudID
+	}
+	if report != "" { // first the tombstone: a fall after this line and before the next ones is finished by the redelivery
+		if err := s.writeTombstones(addTombstone(tomb, report, s.now().Unix())); err != nil {
+			return cloudID, err
+		}
 	}
 	if len(kept) != len(reg) {
 		if err := s.writeRegistry(kept); err != nil {
@@ -386,6 +402,107 @@ func (s *Store) Remove(name string) (cloudID string, err error) {
 		}
 	}
 	return cloudID, s.removeCreds(name)
+}
+
+// MaxTombstones bounds removed.json (the oldest go first).
+const MaxTombstones = 256
+
+type tombstone struct {
+	CloudID string `json:"cloud_id"`
+	At      int64  `json:"at"`
+}
+
+type tombstoneFile struct {
+	V       int         `json:"v"`
+	Removed []tombstone `json:"removed"`
+}
+
+func addTombstone(l []tombstone, id string, at int64) []tombstone {
+	for _, t := range l {
+		if t.CloudID == id {
+			return l
+		}
+	}
+	l = append(l, tombstone{CloudID: id, At: at})
+	if len(l) > MaxTombstones {
+		l = l[len(l)-MaxTombstones:]
+	}
+	return l
+}
+
+func (s *Store) readTombstones() ([]tombstone, error) {
+	var f tombstoneFile
+	found, err := s.readState(filepath.Join(s.Dir, RemovedFile), &f)
+	if err != nil || !found {
+		return nil, err
+	}
+	if f.V != fileVersion || len(f.Removed) > MaxTombstones {
+		return nil, fmt.Errorf("%w: %s has an unknown version or too many entries", ErrState, RemovedFile)
+	}
+	for _, t := range f.Removed {
+		if !ValidCloudID(t.CloudID) {
+			return nil, fmt.Errorf("%w: %s has an invalid entry", ErrState, RemovedFile)
+		}
+	}
+	return f.Removed, nil
+}
+
+func (s *Store) writeTombstones(l []tombstone) error {
+	if l == nil {
+		l = []tombstone{}
+	}
+	b, err := json.Marshal(tombstoneFile{V: fileVersion, Removed: l})
+	if err != nil {
+		return err
+	}
+	return credfile.WriteAtomic(filepath.Join(s.Dir, RemovedFile), b)
+}
+
+// Tombstones lists the Cloud ids of the OLTs that were deleted and whose "removed" state the Cloud has not been told yet (durable: it survives a restart).
+func (s *Store) Tombstones() ([]string, error) {
+	l, err := s.readTombstones()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(l))
+	for _, t := range l {
+		out = append(out, t.CloudID)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// ClearTombstones drops the tombstones of these Cloud ids (the Cloud has been told, or the OLT came back).
+func (s *Store) ClearTombstones(ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	if err := credfile.CheckPrivateDir(s.Dir); err != nil {
+		return fmt.Errorf("%w: %v", ErrState, err)
+	}
+	unlock, err := credfile.Lock(s.lockPath())
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	l, err := s.readTombstones()
+	if err != nil {
+		return err
+	}
+	drop := map[string]bool{}
+	for _, id := range ids {
+		drop[id] = true
+	}
+	kept := l[:0:0]
+	for _, t := range l {
+		if !drop[t.CloudID] {
+			kept = append(kept, t)
+		}
+	}
+	if len(kept) == len(l) {
+		return nil
+	}
+	return s.writeTombstones(kept)
 }
 
 // removeCreds deletes the credentials file of a name and its lock file (missing files are fine).
