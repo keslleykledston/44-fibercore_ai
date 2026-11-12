@@ -56,8 +56,10 @@ class Settings(BaseSettings):
     # updated and verified). "off": no limit.
     edge_ingest_limit: str = Field(default="capable", pattern="^(off|capable|all)$")
     pii_hmac_key: str = Field(default="", repr=False)  # HMAC key for customer documents; import fails closed without it
+    # ADR-0043: bearer token that opens GET /metrics (Prometheus scrape). Empty (default) => the route answers 404 as if it did not exist (fail closed).
+    metrics_token: str = Field(default="", repr=False)
 
-    @field_validator("jwt_secret", "jwt_secret_previous", "pii_hmac_key")
+    @field_validator("jwt_secret", "jwt_secret_previous", "pii_hmac_key", "metrics_token")
     @classmethod
     def _strong_secret(cls, v: str) -> str:
         if v and len(v) < 32:

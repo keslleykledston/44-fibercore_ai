@@ -56,7 +56,7 @@ def _code_routes(routes):
 
 norm = lambda p: re.sub(r"\{[^}]+\}", "{}", p)  # noqa: E731
 CODE = {(m, norm(p)) for m, p in _code_routes(app.routes)}
-assert all(p.startswith("/v1/") or p in ("/livez", "/readyz", "/version") for _, p in CODE), "rota do core fora de /v1"
+assert all(p.startswith("/v1/") or p in ("/livez", "/readyz", "/version", "/metrics") for _, p in CODE), "rota do core fora de /v1"
 proxy = (ROOT / "infra" / "deploy" / "Caddyfile.upstream").read_text(encoding="utf-8")
 assert re.search(r"^\s*uri strip_prefix /api\s*$", proxy, re.M), "o proxy deveria remover exatamente o prefixo /api (ADR-0012)"
 
@@ -71,7 +71,7 @@ KNOWN_DOCUMENTED_NOT_IMPLEMENTED = {
     ("get", "/v1/integrations/erp"), ("post", "/v1/integrations/erp"),
     ("post", "/v1/integrations/erp/{}/sync"), ("post", "/v1/copilot/suggestions"),
 }
-HEALTH = {("get", "/livez"), ("get", "/readyz"), ("get", "/version")}
+HEALTH = {("get", "/livez"), ("get", "/readyz"), ("get", "/version"), ("get", "/metrics")}  # platform routes outside the public contract (/metrics: ADR-0043)
 assert SPEC - CODE == KNOWN_DOCUMENTED_NOT_IMPLEMENTED, f"deriva contrato->código mudou: {sorted(SPEC - CODE)}"
 assert CODE - SPEC - HEALTH == set(), f"rota no código sem contrato: {sorted(CODE - SPEC - HEALTH)}"
 GAP_NORM = norm((ADD / "GAP_ANALYSIS.md").read_text(encoding="utf-8"))

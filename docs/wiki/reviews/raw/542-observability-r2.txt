@@ -1,0 +1,31 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1cd89-77d6-77a1-8990-4d89dfa07ff7).
+[codex] Turn started (01a1cd89-781c-77d2-bc6c-c4f2bc2acacb).
+[codex] Assistant message captured: Vou conferir o diff completo contra `main`, seguindo principalmente os limites de acesso do `...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=80 main...HEA...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --find-renames --unified=80 main...HEA... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --unified=50 main...HEAD -- apps/api/app/workers/metrics_exporter.py ...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=50 main...HEAD -- apps/api/app/workers/metrics_exporter.py ... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba infra/compose/compose.yaml | sed -n '1,250p'; nl -ba apps/api/app/core/...
+[codex] Command completed: /bin/bash -lc "nl -ba infra/compose/compose.yaml | sed -n '1,250p'; nl -ba apps/api/app/core/... (exit 0)
+[codex] Assistant message captured: Já confirmei que os serviços novos usam o profile `observability` e que as portas publicadas ...
+[codex] Running command: /bin/bash -lc "rg -n 'CREATE ROLE|fibercore_worker|FORCE ROW|CREATE POLICY.*sweeper|current_u...
+[codex] Command completed: /bin/bash -lc "rg -n 'CREATE ROLE|fibercore_worker|FORCE ROW|CREATE POLICY.*sweeper|current_u... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0043-observabilidade-prometheus-grafana.md; git diff ...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0043-observabilidade-prometheus-grafana.md; git diff ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: OLTs nunca coletadas podem permane...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: OLTs nunca coletadas podem permanecer invisíveis para o alerta de coleta atrasada.
+
+Findings:
+- [medium] OLT sem primeira coleta não dispara alerta de coleta atrasada (infra/observability/prometheus/rules/fibercore.rules.yml:71-73)
+  `olt_collection_age_seconds_max` só considera OLTs com `observed_at IS NOT NULL` (migração 0049, linhas 41–42). Para OLTs ainda sem coleta, essa série fica ausente; a regra abaixo monitora apenas essa série e nunca consulta `fibercore_olts_never_collected`. Assim, uma OLT que nunca foi coletada não dispara `FiberCoreOltCollectionStale`, mesmo após permanecer nessa condição por tempo indeterminado. O impacto é uma lacuna de monitoramento justamente para a primeira coleta. Inclua um alerta para `fibercore_olts_never_collected > 0` ou exporte a idade desde o cadastro e aplique o limite de 60 minutos.
+  Recommendation: Crie uma regra para OLTs sem primeira coleta, com um limite adequado, ou exporte a idade desde o cadastro para aplicar o limite de 60 minutos também a elas.
+
+Next steps:
+- Adicionar teste de regra para OLT sem `observed_at` e validar o caso com `promtool test rules`.

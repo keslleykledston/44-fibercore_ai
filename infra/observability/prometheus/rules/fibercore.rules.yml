@@ -1,0 +1,127 @@
+# Alertas essenciais do FiberCore (ADR-0043). Limiares iniciais, NÃO calibrados com tráfego real: ajustar depois de alguns dias de dados.
+# Os limiares de tempo seguem os do watchdog (ops/watchdog/watchdog.py): Edge 5 min, outbox 5 min, backup 26 h, disco 10 %.
+# Sem Alertmanager: o estado fica em Prometheus /alerts e no painel "Alertas" do Grafana. Nenhum rótulo ou texto carrega dado de cliente, IP de OLT ou segredo.
+groups:
+  - name: fibercore-api
+    rules:
+      - alert: FiberCoreApiDown
+        expr: up{job="fibercore-api"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "API não responde ao scrape de /metrics"
+          description: "O alvo fibercore-api está fora há 2 min. Causas: API parada, METRICS_TOKEN vazio/diferente do arquivo do Prometheus (a rota responde 404/401), rede."
+      - alert: FiberCoreApi5xx
+        expr: |
+          sum(rate(fibercore_http_requests_total{code=~"5.."}[5m])) / sum(rate(fibercore_http_requests_total[5m])) > 0.05
+          and sum(rate(fibercore_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "Mais de 5% das respostas da API são 5xx"
+          description: "Taxa de 5xx acima de 5% por 5 min (com pelo menos 0,05 req/s). Ver o painel RED e `docker logs` da api-core; /readyz 503 conta aqui (banco fora)."
+      - alert: FiberCoreApiLatencyP95
+        expr: histogram_quantile(0.95, sum by (le) (rate(fibercore_http_request_duration_seconds_bucket[5m]))) > 2 and sum(rate(fibercore_http_requests_total[5m])) > 0.05
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "p95 de latência da API acima de 2 s"
+          description: "p95 geral acima de 2 s por 10 min. Ver o painel RED por rota."
+
+  - name: fibercore-pipeline
+    rules:
+      - alert: FiberCoreOutboxBacklog
+        expr: fibercore_outbox_oldest_unpublished_age_seconds > 300
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "Evento do outbox sem publicar há mais de 5 min"
+          description: "O relay não está publicando (relay parado, NATS fora ou evento envenenado). O watchdog reinicia o relay travado; se persistir, ver `docker logs` do outbox-relay."
+      - alert: FiberCoreConsumerLag
+        expr: max by (stream_name, consumer_name) (jetstream_consumer_num_pending) > 1000
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Consumidor do JetStream com mais de 1000 mensagens pendentes"
+          description: "Atraso do event-consumer (limiar inicial). Ver `docker logs` do event-consumer e o painel de pipeline."
+      - alert: FiberCoreJobStuck
+        expr: fibercore_jobs_in_flight_oldest_age_seconds > 1800
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Job em andamento sem mudar de estado há mais de 30 min"
+          description: "O job-sweeper só encerra escritas de bancada; uma leitura presa fica visível aqui. Conferir o Edge dono do job."
+
+  - name: fibercore-fleet
+    rules:
+      - alert: FiberCoreEdgeSilent
+        expr: fibercore_edge_heartbeat_age_seconds_max > 300
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "Edge sem heartbeat há mais de 5 min"
+          description: "Pelo menos um Edge ativo não envia heartbeat há mais de 5 min (mesmo limiar do watchdog). Sem dado novo, o NOC mostra estado desatualizado."
+      - alert: FiberCoreNoActiveEdge
+        expr: fibercore_edges_active == 0 or fibercore_edges_never_heartbeat > 0
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Nenhum Edge ativo, ou Edge ativo que nunca enviou heartbeat"
+          description: "Sem Edge a plataforma não recebe coleta. Um Edge recém-cadastrado pode disparar por até 10 min."
+      - alert: FiberCoreOltCollectionStale
+        expr: fibercore_olt_collection_age_seconds_max > 3600
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Há OLT sem coleta há mais de 60 min"
+          description: "A última coleta mais antiga entre as OLTs passou de 60 min (mesmo corte da tela de homologação). OLT desativada de propósito mantém o alerta até ser removida do cadastro."
+
+      - alert: FiberCoreOltNeverCollected
+        expr: fibercore_olts_never_collected > 0
+        for: 60m
+        labels: {severity: warning}
+        annotations:
+          summary: "Há OLT cadastrada sem nenhuma coleta há mais de 60 min"
+          description: "A série de idade da coleta só enxerga OLT que já coletou uma vez; este alerta cobre a que nunca coletou (Edge sem a OLT na config, credencial, acesso). Vale desde o primeiro scrape visto, não desde o cadastro."
+
+  - name: fibercore-host
+    rules:
+      - alert: FiberCoreDiskLow
+        expr: fibercore_disk_free_ratio < 0.10
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "Menos de 10% de disco livre ({{ $labels.fs }})"
+          description: "fs=docker é o sistema de arquivos dos dados do Docker (onde ficam os volumes do Postgres e do NATS); fs=backup é o diretório de backup."
+      - alert: FiberCoreBackupStale
+        expr: fibercore_backup_files_found == 0 or (time() - fibercore_backup_last_success_timestamp_seconds) > 26 * 3600
+        for: 10m
+        labels: {severity: critical}
+        annotations:
+          summary: "Nenhum backup concluído nas últimas 26 h"
+          description: "Nenhum marcador *.dump.done recente no diretório de backup montado (FIBERCORE_BACKUP_DIR). Sem esse diretório configurado o alerta dispara de propósito."
+
+      - alert: FiberCoreBackupDirUnreadable
+        expr: fibercore_backup_dir_readable == 0
+        for: 10m
+        labels: {severity: critical}
+        annotations:
+          summary: "Diretório de backup não configurado, não montado ou ilegível"
+          description: "O exportador não consegue listar o diretório de backup (FIBERCORE_BACKUP_DIR). Com ele quebrado, 'sem marcador' e 'diretório ilegível' seriam indistinguíveis; este alerta separa os dois."
+
+  - name: fibercore-observability
+    rules:
+      - alert: FiberCoreExporterDown
+        expr: up{job="fibercore-exporter"} == 0 or fibercore_exporter_db_up == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Exportador de métricas fora, ou sem acesso ao banco"
+          description: "Sem ele os alertas de Edge, outbox, jobs, backup e disco ficam cegos."
+      - alert: FiberCoreNatsExporterDown
+        expr: up{job="nats"} == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Exportador do NATS fora"
+          description: "Sem ele não há métrica de atraso do consumidor."

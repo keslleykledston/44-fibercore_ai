@@ -103,6 +103,7 @@
 | Método | Rota | Exige |
 |---|---|---|
 | GET | `/livez` | (pública ou usa credencial no corpo) |
+| GET | `/metrics` | (pública ou usa credencial no corpo) |
 | GET | `/readyz` | (pública ou usa credencial no corpo) |
 | GET | `/v1/associations` | `customers:read` |
 | POST | `/v1/associations/{assoc_id}/approve` | `associations:review` |

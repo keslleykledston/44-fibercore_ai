@@ -7,6 +7,12 @@
 :80 {
     encode zstd gzip
 
+    # /api/metrics NUNCA publico (ADR-0043): vem ANTES do /api/* porque os `handle` valem na ordem em que aparecem
+    @apimetrics path /api/metrics /api/metrics/*
+    handle @apimetrics {
+        respond "not found" 404
+    }
+
     # /api/v1/* -> api-core:8000/v1/*  (remove SOMENTE o prefixo /api)
     @api path /api /api/*
     handle @api {

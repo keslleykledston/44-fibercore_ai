@@ -1,0 +1,35 @@
+# Prometheus do FiberCore (ADR-0043). Só roda com `--profile observability`. Nenhum segredo aqui: o token do /metrics da API vem de arquivo (secret do compose).
+global:
+  scrape_interval: 30s
+  scrape_timeout: 10s
+  evaluation_interval: 30s
+  external_labels:
+    stack: fibercore
+
+# Sem Alertmanager de propósito (ADR-0043 §Decisão 5): os alertas aparecem em Prometheus /alerts e no Grafana; a notificação segue com o watchdog (webhook) até o responsável escolher o canal.
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # RED da API. Com METRICS_TOKEN vazio na API a rota responde 404 e este alvo fica `down` (o alerta FiberCoreApiDown acusa: é o sinal certo).
+  - job_name: fibercore-api
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/fibercore_metrics_token
+    static_configs:
+      - targets: ["api-core:8000"]
+
+  # Outbox, Edges/OLTs, jobs, backup e disco (agregados, sem identificadores).
+  - job_name: fibercore-exporter
+    static_configs:
+      - targets: ["fibercore-exporter:9101"]
+
+  # JetStream (lag do consumidor) e saúde do NATS.
+  - job_name: nats
+    static_configs:
+      - targets: ["nats-exporter:7777"]

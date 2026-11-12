@@ -1,0 +1,213 @@
+# Testes unitários das regras (promtool test rules). Rodar: scripts/observability-validate.sh
+rule_files:
+  - ../rules/fibercore.rules.yml
+evaluation_interval: 1m
+
+tests:
+  - name: api-down-e-5xx
+    interval: 1m
+    input_series:
+      - series: 'up{job="fibercore-api"}'
+        values: '1 1 0 0 0 0 0'
+      - series: 'fibercore_http_requests_total{method="GET",route="/v1/x",code="200"}'
+        values: '0+60x20'
+      - series: 'fibercore_http_requests_total{method="GET",route="/v1/x",code="500"}'
+        values: '0+30x20'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: FiberCoreApiDown
+        exp_alerts:
+          - exp_labels: {severity: critical, job: fibercore-api}
+            exp_annotations:
+              summary: "API não responde ao scrape de /metrics"
+              description: "O alvo fibercore-api está fora há 2 min. Causas: API parada, METRICS_TOKEN vazio/diferente do arquivo do Prometheus (a rota responde 404/401), rede."
+      - eval_time: 15m          # 1/3 das respostas são 5xx por mais de 5 min
+        alertname: FiberCoreApi5xx
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "Mais de 5% das respostas da API são 5xx"
+              description: "Taxa de 5xx acima de 5% por 5 min (com pelo menos 0,05 req/s). Ver o painel RED e `docker logs` da api-core; /readyz 503 conta aqui (banco fora)."
+
+  - name: api-5xx-nao-dispara-com-pouco-trafego
+    interval: 1m
+    input_series:
+      - series: 'fibercore_http_requests_total{method="GET",route="/v1/x",code="500"}'
+        values: '0+1x30'      # 100% de 5xx, mas 1 req/min (< 0,05 req/s)
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: FiberCoreApi5xx
+        exp_alerts: []
+
+  - name: edge-silencioso-outbox-e-job
+    interval: 1m
+    input_series:
+      - series: 'fibercore_edge_heartbeat_age_seconds_max'
+        values: '10 10 400 400 400 400'
+      - series: 'fibercore_outbox_oldest_unpublished_age_seconds'
+        values: '10 400 400 400 400 400'
+      - series: 'fibercore_jobs_in_flight_oldest_age_seconds'
+        values: '10 10 10 10 10 10 2000 2000 2000 2000 2000 2000'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: FiberCoreEdgeSilent
+        exp_alerts: []         # acima de 300 s só há 1 min: ainda dentro do `for: 2m`
+      - eval_time: 5m
+        alertname: FiberCoreEdgeSilent
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "Edge sem heartbeat há mais de 5 min"
+              description: "Pelo menos um Edge ativo não envia heartbeat há mais de 5 min (mesmo limiar do watchdog). Sem dado novo, o NOC mostra estado desatualizado."
+      - eval_time: 5m
+        alertname: FiberCoreOutboxBacklog
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "Evento do outbox sem publicar há mais de 5 min"
+              description: "O relay não está publicando (relay parado, NATS fora ou evento envenenado). O watchdog reinicia o relay travado; se persistir, ver `docker logs` do outbox-relay."
+      - eval_time: 11m
+        alertname: FiberCoreJobStuck
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "Job em andamento sem mudar de estado há mais de 30 min"
+              description: "O job-sweeper só encerra escritas de bancada; uma leitura presa fica visível aqui. Conferir o Edge dono do job."
+
+  - name: backup-e-disco
+    interval: 1m
+    input_series:
+      - series: 'fibercore_backup_files_found'
+        values: '1x40'
+      - series: 'fibercore_backup_last_success_timestamp_seconds'
+        values: '0x40'        # último backup em t=0: com 26 h de corte, só dispara depois disso (testado em outro caso)
+      - series: 'fibercore_disk_free_ratio{fs="docker"}'
+        values: '0.5 0.5 0.05 0.05 0.05 0.05 0.05 0.05 0.05'
+      - series: 'fibercore_disk_free_ratio{fs="backup"}'
+        values: '0.5x8'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: FiberCoreDiskLow
+        exp_alerts:
+          - exp_labels: {severity: critical, fs: docker}
+            exp_annotations:
+              summary: "Menos de 10% de disco livre (docker)"
+              description: "fs=docker é o sistema de arquivos dos dados do Docker (onde ficam os volumes do Postgres e do NATS); fs=backup é o diretório de backup."
+      - eval_time: 30m
+        alertname: FiberCoreBackupStale
+        exp_alerts: []
+
+  - name: backup-velho-e-sem-backup
+    interval: 1m
+    input_series:
+      - series: 'fibercore_backup_files_found'
+        values: '1x1900'
+      - series: 'fibercore_backup_last_success_timestamp_seconds'
+        values: '0x1900'
+    alert_rule_test:
+      - eval_time: 30h        # time() = 108000 s; último backup em 0 => 30 h
+        alertname: FiberCoreBackupStale
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "Nenhum backup concluído nas últimas 26 h"
+              description: "Nenhum marcador *.dump.done recente no diretório de backup montado (FIBERCORE_BACKUP_DIR). Sem esse diretório configurado o alerta dispara de propósito."
+
+  - name: sem-marcador-de-backup
+    interval: 1m
+    input_series:
+      - series: 'fibercore_backup_files_found'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: FiberCoreBackupStale
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "Nenhum backup concluído nas últimas 26 h"
+              description: "Nenhum marcador *.dump.done recente no diretório de backup montado (FIBERCORE_BACKUP_DIR). Sem esse diretório configurado o alerta dispara de propósito."
+
+  - name: olt-que-nunca-coletou
+    interval: 1m
+    input_series:
+      - series: 'fibercore_olts_never_collected'
+        values: '1x90'          # a série de idade da coleta nem existe (nenhuma OLT coletou)
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: FiberCoreOltNeverCollected
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: FiberCoreOltNeverCollected
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "Há OLT cadastrada sem nenhuma coleta há mais de 60 min"
+              description: "A série de idade da coleta só enxerga OLT que já coletou uma vez; este alerta cobre a que nunca coletou (Edge sem a OLT na config, credencial, acesso). Vale desde o primeiro scrape visto, não desde o cadastro."
+      - eval_time: 70m
+        alertname: FiberCoreOltCollectionStale
+        exp_alerts: []          # documenta o ponto cego que a regra nova cobre
+
+  - name: diretorio-de-backup-ilegivel
+    interval: 1m
+    input_series:
+      - series: 'fibercore_backup_dir_readable'
+        values: '1 1 0x20'
+      - series: 'fibercore_backup_files_found'
+        values: '1 1 0x20'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FiberCoreBackupDirUnreadable
+        exp_alerts: []                   # ilegivel ha 3 min: ainda dentro do `for: 10m`
+      - eval_time: 15m
+        alertname: FiberCoreBackupDirUnreadable
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "Diretório de backup não configurado, não montado ou ilegível"
+              description: "O exportador não consegue listar o diretório de backup (FIBERCORE_BACKUP_DIR). Com ele quebrado, 'sem marcador' e 'diretório ilegível' seriam indistinguíveis; este alerta separa os dois."
+
+  - name: frota-e-exportadores
+    interval: 1m
+    input_series:
+      - series: 'fibercore_olt_collection_age_seconds_max'
+        values: '100 100 4000 4000 4000 4000 4000 4000 4000 4000 4000 4000 4000 4000'
+      - series: 'fibercore_edges_active'
+        values: '0x20'
+      - series: 'up{job="fibercore-exporter"}'
+        values: '1 1 0 0 0 0 0 0 0 0'
+      - series: 'up{job="nats"}'
+        values: '1x10'
+      - series: 'jetstream_consumer_num_pending{stream_name="s",consumer_name="c"}'
+        values: '5000x30'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: FiberCoreOltCollectionStale
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "Há OLT sem coleta há mais de 60 min"
+              description: "A última coleta mais antiga entre as OLTs passou de 60 min (mesmo corte da tela de homologação). OLT desativada de propósito mantém o alerta até ser removida do cadastro."
+      - eval_time: 12m
+        alertname: FiberCoreNoActiveEdge
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "Nenhum Edge ativo, ou Edge ativo que nunca enviou heartbeat"
+              description: "Sem Edge a plataforma não recebe coleta. Um Edge recém-cadastrado pode disparar por até 10 min."
+      - eval_time: 9m
+        alertname: FiberCoreExporterDown
+        exp_alerts:
+          - exp_labels: {severity: warning, job: fibercore-exporter}
+            exp_annotations:
+              summary: "Exportador de métricas fora, ou sem acesso ao banco"
+              description: "Sem ele os alertas de Edge, outbox, jobs, backup e disco ficam cegos."
+      - eval_time: 15m
+        alertname: FiberCoreConsumerLag
+        exp_alerts:
+          - exp_labels: {severity: warning, stream_name: s, consumer_name: c}
+            exp_annotations:
+              summary: "Consumidor do JetStream com mais de 1000 mensagens pendentes"
+              description: "Atraso do event-consumer (limiar inicial). Ver `docker logs` do event-consumer e o painel de pipeline."
+      - eval_time: 9m
+        alertname: FiberCoreNatsExporterDown
+        exp_alerts: []

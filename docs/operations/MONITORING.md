@@ -39,4 +39,4 @@ Remover: apagar essa linha do `crontab`. Estado em `~/fibercore-watchdog/` (`sta
 ## O que NÃO cobre
 - O host do Edge só tem `cron`: se o host inteiro cair, o aviso vem pela ausência de heartbeat (acima), não de lá.
 - Não reinicia o host, não limpa disco, não mexe em OLT, ONT ou ACS.
-- Não substitui Prometheus/Alertmanager; é o mínimo para o LAB.
+- Não substitui Prometheus/Alertmanager; é o mínimo para o LAB. Tendência, RED da API, lag do relay/consumidor e painéis: `docs/operations/OBSERVABILITY.md` (opt-in, ADR-0043). O watchdog continua sendo quem recupera sozinho e quem avisa por webhook.
