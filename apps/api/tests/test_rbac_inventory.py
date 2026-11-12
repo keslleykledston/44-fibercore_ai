@@ -45,6 +45,7 @@ PUBLIC = {  # no credentials at all
 SELF_AUTH = {  # authenticate the caller's OWN account (token read inside the handler); they act on that account only, never on another member
     ("GET", "/v1/auth/workspaces"), ("GET", "/v1/auth/mfa/status"), ("POST", "/v1/auth/mfa/enroll"), ("POST", "/v1/auth/mfa/activate"),
     ("POST", "/v1/auth/mfa/disable"), ("POST", "/v1/auth/mfa/recovery-codes"), ("POST", "/v1/auth/mfa/step-up"), ("POST", "/v1/auth/password"),
+    ("GET", "/v1/platform/status"),   # ADR-0046 D1: the caller's OWN flag (operator? second factor recent?); decides nothing, the organization routes check again
 }
 SESSION_ONLY = {  # any valid session of the provider; no permission needed (the caller's own identity and platform metadata)
     ("GET", "/v1/auth/me"), ("GET", "/v1/platform/modules"), ("GET", "/v1/platform/versions"),

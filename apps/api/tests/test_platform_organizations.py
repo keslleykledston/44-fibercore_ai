@@ -277,6 +277,21 @@ def test_the_list_has_counts_and_labels_only(client, operator, migrated, seed, i
         assert all(k in {"id", "name", "status", "created_at", "edges", "olts", "onus", "created_by", "created_via", "invite_state", "api_trail"} for k in next(i for i in items if i["id"] == str(seed[tenant_key])))
 
 
+def test_platform_status_tells_only_the_callers_own_standing(client, make, operator, inv):
+    from tests.conftest import agent
+    assert client.get("/v1/platform/status").status_code == 401
+    assert client.get("/v1/platform/status", headers=_h("nope")).status_code == 401
+    ok = client.get("/v1/platform/status", headers=_h(operator["token"]))
+    assert ok.status_code == 200 and ok.json() == {"operator": True, "mfa_recent": True} and ok.headers["cache-control"] == "no-store"
+    no_mfa = _login(client, make(operator=True))["access_token"]
+    assert client.get("/v1/platform/status", headers=_h(no_mfa)).json() == {"operator": True, "mfa_recent": False}
+    plain = _login(client, make(operator=False))["access_token"]
+    assert client.get("/v1/platform/status", headers=_h(plain)).json() == {"operator": False, "mfa_recent": False}
+    stale = issue_token(get_settings(), sub=operator["id"], kind="user", mfa_at=time.time() - 3600)
+    assert client.get("/v1/platform/status", headers=_h(stale)).json() == {"operator": True, "mfa_recent": False}
+    assert client.get("/v1/platform/status", headers=agent(client, inv, "a1")).json() == {"operator": False, "mfa_recent": False}
+
+
 def test_the_operator_never_becomes_a_member_nor_reads_the_organization(client, operator, migrated):
     r, _ = _post(client, operator["token"])
     tid = r.json()["tenant_id"]

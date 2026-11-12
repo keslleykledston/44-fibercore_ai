@@ -13,15 +13,19 @@ The operator does NOT become a member of the organization created; the first adm
 from __future__ import annotations
 
 import json
+import time
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+import jwt
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from app.api.deps import PlatformOperator, require_platform_operator
+from app.api.deps import PLATFORM_MFA_MAX_SECONDS, PlatformOperator, assert_user_token_current, require_platform_operator
 from app.core.db import get_engine, scoped_connection
+from app.core.security import decode_token
+from app.core.settings import Settings, get_settings
 
 router = APIRouter()
 PERM = "platform:organizations"
@@ -42,6 +46,27 @@ def _map(exc: DBAPIError) -> HTTPException | None:
         status, detail = STATUS[code]
         return HTTPException(status, detail, headers={"Retry-After": "3600"} if status == 429 else None)
     return None
+
+
+@router.get("/v1/platform/status")
+def platform_status(response: Response, authorization: str | None = Header(default=None), settings: Settings = Depends(get_settings)) -> dict:
+    """The caller's OWN account, and nothing else: is it a platform operator, and did its session prove the second factor in the last 10 minutes? The screen uses it to show or hide the
+    menu item and to ask for the second factor BEFORE the form. It decides nothing: the routes above check again, every time, and answer 403 to everybody else."""
+    response.headers["Cache-Control"] = "no-store"
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(401, "invalid or missing credentials", headers={"WWW-Authenticate": "Bearer"})
+    try:
+        claims = decode_token(settings, authorization[7:].strip())
+    except (jwt.PyJWTError, ValueError) as exc:
+        raise HTTPException(401, "invalid or missing credentials", headers={"WWW-Authenticate": "Bearer"}) from exc
+    if claims.kind != "user":
+        return {"operator": False, "mfa_recent": False}
+    with scoped_connection(get_engine(), user_id=claims.sub) as conn:
+        assert_user_token_current(conn, claims)
+        operator = bool(conn.execute(text("SELECT is_platform_operator FROM users_global WHERE id = :u"), {"u": claims.sub}).scalar())
+    window = min(settings.mfa_recent_seconds, PLATFORM_MFA_MAX_SECONDS)
+    recent = operator and claims.mfa_at is not None and 0 <= time.time() - claims.mfa_at <= window
+    return {"operator": operator, "mfa_recent": bool(recent)}
 
 
 class OrganizationIn(BaseModel):
