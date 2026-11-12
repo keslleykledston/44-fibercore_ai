@@ -1,7 +1,7 @@
 name: fibercore-dev
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
     environment:
       POSTGRES_USER: fibercore
       POSTGRES_DB: fibercore
@@ -18,7 +18,7 @@ services:
     restart: unless-stopped
     security_opt: [no-new-privileges:true]
   nats:
-    image: nats:2.11-alpine
+    image: nats:2.11-alpine@sha256:e4bf19f15fd3218814a4e3c9e0064e1334bd8aa20d5984b9f1a0afd084f8cc00
     command: ["-js", "-sd", "/data", "-m", "8222"]
     volumes:
       - nats_data:/data
@@ -180,7 +180,7 @@ services:
   proxy:
     # Profile "public": reverse proxy do frontend/API (ADR-0012). NÃO sobe por padrão. Só o proxy é publicável.
     profiles: [public]
-    image: caddy:2.8-alpine
+    image: caddy:2.8-alpine@sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17
     volumes:
       - ../deploy/${FIBERCORE_CADDYFILE:-Caddyfile.dev}:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

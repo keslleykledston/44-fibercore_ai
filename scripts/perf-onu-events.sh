@@ -12,7 +12,7 @@ rnd() { head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24; }
 ADMIN_PW="$(rnd)"; APP_PW="$(rnd)"; WORKER_PW="$(rnd)"; RBAC_PW="$(rnd)"
 export PERF_APP_PW="$APP_PW" PERF_PG_PORT="$PORT"
 if ss -ltn 2>/dev/null | grep -q ":$PORT "; then echo "porta $PORT ocupada (PERF_PG_PORT para outra)" >&2; exit 1; fi
-CID="$(docker run -d --name "$NAME" --label "fibercore.perf=$TOKEN" -e POSTGRES_USER=fibercore -e POSTGRES_PASSWORD=$ADMIN_PW -e POSTGRES_DB=fibercore_perf -p 127.0.0.1:$PORT:5432 postgres:17-alpine)"
+CID="$(docker run -d --name "$NAME" --label "fibercore.perf=$TOKEN" -e POSTGRES_USER=fibercore -e POSTGRES_PASSWORD=$ADMIN_PW -e POSTGRES_DB=fibercore_perf -p 127.0.0.1:$PORT:5432 postgres:17-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0)"
 trap 'docker rm -fv "$CID" >/dev/null 2>&1 || true' EXIT   # armed only AFTER docker run succeeded (-v também remove o volume anônimo da imagem): a failed run (name clash, no image) removes nothing
 until docker exec "$NAME" pg_isready -U fibercore >/dev/null 2>&1; do sleep 1; done; sleep 2
 cd $ROOT/apps/api

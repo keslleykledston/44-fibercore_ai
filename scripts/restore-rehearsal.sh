@@ -53,7 +53,7 @@ step "2. PostgreSQL descartável"
 PORT="$("$PY" -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')"
 PGPW="$(openssl rand -hex 16)"; APPPW="$(openssl rand -hex 16)"; WRKPW="$(openssl rand -hex 16)"; RBACPW="$(openssl rand -hex 16)"
 printf 'POSTGRES_USER=fibercore\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=fibercore\n' "$PGPW" > "$WORK/pg.env"   # segredos nunca vão em argv (visível na lista de processos)
-docker run -d --name "$NAME" --env-file "$WORK/pg.env" -p "127.0.0.1:$PORT:5432" postgres:17-alpine >/dev/null
+docker run -d --name "$NAME" --env-file "$WORK/pg.env" -p "127.0.0.1:$PORT:5432" postgres:17-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0 >/dev/null
 until docker exec "$NAME" pg_isready -U fibercore -d fibercore >/dev/null 2>&1; do sleep 1; done
 sleep 2   # a imagem reinicia o servidor uma vez depois do initdb
 until docker exec "$NAME" pg_isready -U fibercore -d fibercore >/dev/null 2>&1; do sleep 1; done
