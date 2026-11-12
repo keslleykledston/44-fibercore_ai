@@ -285,6 +285,9 @@ def create_delivery(olt_id: UUID, body: DeliveryIn, p: Principal = Depends(_pers
     exp = datetime.fromtimestamp(body.expires_at, UTC)
     if not (now < exp <= now + timedelta(seconds=olt_secrets.MAX_WINDOW_SECONDS)):
         raise HTTPException(422, "expires_at_out_of_window")
+    # under the OLT row lock taken above (every statement is its own READ COMMITTED snapshot, so the count below sees what a concurrent creation committed while this one waited):
+    # overdue deliveries of this OLT are expired and lose their blob first, so they neither count against the cap nor keep ciphertext until the sweeper runs
+    conn.execute(text("UPDATE olt_secret_deliveries SET status = 'EXPIRED', sealed = NULL, updated_at = now() WHERE olt_id = :o AND status IN ('PENDING', 'DISPATCHED') AND expires_at <= now()"), {"o": olt_id})
     pending = conn.execute(text("SELECT count(*) FROM olt_secret_deliveries WHERE olt_id = :o AND status IN ('PENDING', 'DISPATCHED') AND expires_at > now()"), {"o": olt_id}).scalar()
     if pending >= olt_secrets.MAX_PENDING_PER_OLT:
         raise HTTPException(429, "too_many_pending", headers={"Retry-After": "60"})

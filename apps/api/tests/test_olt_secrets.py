@@ -320,6 +320,48 @@ def test_at_most_five_waiting_per_olt_and_the_sixth_is_429(ctx):
     assert c.post(c.make(olt_name="SEC-OLT-2")[0], olt=other).status_code == 202
 
 
+def test_simultaneous_creations_never_exceed_the_cap_of_five(ctx):
+    c = ctx
+    for _ in range(4):
+        assert c.post(c.make()[0]).status_code == 202
+    bodies = [c.make()[0] for _ in range(8)]
+    barrier = threading.Barrier(len(bodies))
+
+    def go(b):
+        cli = _new_client()
+        barrier.wait(timeout=30)
+        return cli.post(f"/v1/fleet/olts/{c.olt}/secret-deliveries", headers=c.h, json=b).status_code
+
+    with ThreadPoolExecutor(max_workers=len(bodies)) as ex:
+        codes = sorted(ex.map(go, bodies))
+    assert codes == [202] + [429] * 7, codes
+    with c.migrated.begin() as conn:
+        assert conn.execute(text("SELECT count(*) FROM olt_secret_deliveries WHERE olt_id = :o AND status = 'PENDING'"), {"o": c.olt}).scalar() == 5
+
+
+def test_overdue_deliveries_are_expired_and_erased_by_a_creation_and_do_not_count_against_the_cap(ctx):
+    c = ctx
+    ids = [c.post(c.make()[0]).json()["id"] for _ in range(5)]
+    assert c.post(c.make()[0]).status_code == 429
+    with c.migrated.begin() as conn:
+        conn.execute(text("UPDATE olt_secret_deliveries SET expires_at = now() - interval '1 second' WHERE id = :i"), {"i": ids[0]})
+    assert c.post(c.make()[0]).status_code == 202   # room again: the overdue one no longer counts
+    r = c.row(ids[0])
+    assert (r.status, r.has_blob) == ("EXPIRED", False)   # and its ciphertext did not wait for the sweeper
+
+
+def test_a_result_for_a_lease_that_a_key_change_cancelled_is_refused_and_changes_nothing(ctx):
+    c = ctx
+    did = c.post(c.make()[0]).json()["id"]
+    old = c.next().json()   # the Edge already holds the ciphertext of the old key ...
+    _, pub2 = H.new_edge_key()
+    assert c.client.post("/v1/edge/seal-key", headers=c.ah, json={"public_key": pub2}).status_code == 200   # ... then publishes another key: the delivery is cancelled and erased
+    r = c.result(did, old["lease_token"])
+    assert (r.status_code, r.json()["detail"]) == (409, "result_conflict")
+    assert tuple(c.row(did)[:2]) == ("CANCELLED", False)
+    assert c.next().status_code == 204   # and nothing is handed out for the new key until a person confirms it (and nothing from the old one ever comes back)
+
+
 def test_a_snmp_community_for_a_v3_olt_is_refused_but_ssh_login_is_not(client, seed, inv, migrated):
     c = Ctx(client, seed, inv, migrated, snmp_version="v3")
     r = c.post(c.make("snmp_community")[0])
