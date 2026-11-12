@@ -164,6 +164,9 @@ services:
     environment:
       API_INTERNAL_URL: http://api-core:8000
       FIBERCORE_INSECURE_COOKIES: ${FIBERCORE_INSECURE_COOKIES:-0}
+      # CSP com nonce por requisição (ADR-0042): report-only (padrão) | enforce | off. Lido em tempo de execução: trocar = recriar o contêiner, sem rebuild.
+      FIBERCORE_CSP_MODE: ${FIBERCORE_CSP_MODE:-report-only}
+      FIBERCORE_CSP_REPORT_URI: ${FIBERCORE_CSP_REPORT_URI:-}
     depends_on:
       api-core: {condition: service_healthy}
     networks: [control]

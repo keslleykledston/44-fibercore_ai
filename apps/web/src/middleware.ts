@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { publicBase } from "@/lib/bff";
+import { buildCsp, cspHeaderName, cspMode, generateNonce, safeReportUri } from "@/lib/csp";
 
 // Renova o access token (cookie de 15 min) com o refresh token rotativo. Só navegações de página: prefetch não consome o refresh,
 // porque a API trata reutilização de um refresh já consumido como vazamento e revoga a sessão inteira.
@@ -42,23 +43,46 @@ function rotate(refresh: string): Promise<Rotated> {
 const isPrefetch = (req: NextRequest) =>
   !!(req.headers.get("next-router-prefetch") || req.headers.get("next-router-segment-prefetch") || req.headers.get("purpose") === "prefetch");
 
+// CSP com nonce por requisição (ADR-0042). O mesmo valor vai (a) no cabeçalho de requisição `Content-Security-Policy[-Report-Only]`, de onde o Next extrai
+// o nonce para os próprios scripts, (b) em `x-nonce`, lido pelo layout para o script inline do tema, e (c) no cabeçalho de resposta.
+// `FIBERCORE_CSP_MODE`: `report-only` (padrão) | `enforce` | `off`. Lido a cada requisição (não é inlinado no build).
+function withCsp(req: NextRequest) {
+  const mode = cspMode(process.env.FIBERCORE_CSP_MODE);
+  const headers = new Headers(req.headers);
+  if (mode === "off") return { headers, apply: (res: NextResponse) => res };
+  const nonce = generateNonce();
+  const name = cspHeaderName(mode);
+  const policy = buildCsp({ nonce, dev: process.env.NODE_ENV !== "production", reportUri: safeReportUri(process.env.FIBERCORE_CSP_REPORT_URI) });
+  headers.delete("content-security-policy"); headers.delete("content-security-policy-report-only"); // o cliente não injeta política para o Next
+  headers.set(name, policy);
+  headers.set("x-nonce", nonce);
+  return { headers, apply: (res: NextResponse) => { res.headers.set(name, policy); return res; } };
+}
+
+// A renovação de sessão não roda nas páginas públicas de login (a sessão ainda não existe); o CSP roda em todas as páginas.
+const skipsRefresh = (req: NextRequest) => req.nextUrl.pathname.startsWith("/login");
+
 export async function middleware(req: NextRequest) {
+  const csp = withCsp(req);
+  const next = () => csp.apply(NextResponse.next({ request: { headers: csp.headers } }));
   const refresh = req.cookies.get("fc_refresh")?.value;
   const access = req.cookies.get("fc_token")?.value;
-  if ((access && !expiresSoon(access)) || !refresh || isPrefetch(req)) return NextResponse.next();
+  if ((access && !expiresSoon(access)) || !refresh || isPrefetch(req) || skipsRefresh(req)) return next();
   const body = await rotate(refresh);
-  if (body === "unavailable") return NextResponse.next();
+  if (body === "unavailable") return next();
   if (!body?.access_token || !body.refresh_token) {
     const res = NextResponse.redirect(new URL("/login", publicBase(req)), 303);
     for (const n of ["fc_token", "fc_refresh", "fc_ws"]) res.cookies.delete(n);
-    return res;
+    return csp.apply(res);
   }
   req.cookies.set("fc_token", body.access_token); // visível para a renderização desta mesma requisição
   req.cookies.set("fc_refresh", body.refresh_token);
-  const res = NextResponse.next({ request: { headers: req.headers } });
+  csp.headers.set("cookie", req.headers.get("cookie") ?? "");
+  const res = next();
   res.cookies.set("fc_token", body.access_token, opts(body.expires_in ?? 900));
   res.cookies.set("fc_refresh", body.refresh_token, opts(8 * 3600));
   return res;
 }
 
-export const config = { matcher: ["/((?!_next/|bff/|login|ajuda-assets/|favicon).*)"] };
+// Tudo exceto os estáticos do Next, o BFF (JSON/redirecionamentos, sem HTML), os ativos da ajuda e o favicon.
+export const config = { matcher: ["/((?!_next/|bff/|ajuda-assets/|favicon).*)"] };
