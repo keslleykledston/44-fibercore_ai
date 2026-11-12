@@ -22,6 +22,7 @@ import (
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/config"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/gateway"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/jobs"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/managedcollect"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/nbi"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/olt"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/oltquery"
@@ -34,6 +35,12 @@ import (
 var version = "0.1.0-dev"
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "managed-list" { // ADR-0046: lists the OLTs the Cloud added and their local trust state (never a credential)
+		os.Exit(runManagedList(os.Args[2:], os.Stdout, os.Stderr))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "managed-trust" { // ADR-0046: the LOCAL trust of one managed OLT: shows it and asks for its SSH host key fingerprint to be retyped
+		os.Exit(runManagedTrust(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "seal-fingerprint" { // ADR-0045: prints the fingerprint of the sealing key and exits (no secret, no network)
 		os.Exit(runSealFingerprint(os.Args[2:], os.Stdout, os.Stderr))
 	}
@@ -128,7 +135,7 @@ func main() {
 	}
 
 	var oltCol *collector.OLT
-	if len(cfg.OLTs) > 0 {
+	if len(cfg.OLTs) > 0 || cfg.ManagedOLTs != nil {
 		oc := &collector.OLT{EdgeID: cfg.EdgeID, Guard: collector.FileGuard{Path: guardPath},
 			OnCollected: func(name string, took time.Duration, items int, err error) {
 				if err != nil {
@@ -203,6 +210,22 @@ func main() {
 				}
 			}
 			oc.Sources = append(oc.Sources, src)
+		}
+		if cfg.ManagedOLTs != nil { // ADR-0046: the managed OLTs are read from the local registry at EVERY round; only the locally trusted ones are collected
+			pol, mstore, err := openManaged(cfg)
+			if err != nil {
+				log.Error("managed olts: cannot open the state directory; refusing to start", "err", err)
+				os.Exit(2)
+			}
+			static := make([]managedcollect.Static, 0, len(cfg.OLTs))
+			for _, o := range cfg.OLTs {
+				addr := o.Address
+				if o.Transport == "snmp" {
+					addr = o.SNMPAddress
+				}
+				static = append(static, managedcollect.Static{Name: o.Name, DeviceKey: config.DeviceKey(addr)})
+			}
+			oc.Extra = (&managedcollect.Builder{Store: mstore, Policy: pol, Allow: al, Static: static, Log: log}).Sources
 		}
 		oltCol = oc
 		collectors = append(collectors, oc)

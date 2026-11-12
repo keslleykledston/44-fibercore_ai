@@ -13,6 +13,7 @@ import (
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/credfile"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/gateway"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/jobs"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/managedolts"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/oltsecrets"
 )
 
@@ -82,6 +83,38 @@ func setupSecrets(cfg *config.Config, gw *gateway.Client, log *slog.Logger) (*ol
 		log.Warn("olt secrets: the directory of the applied-delivery store is not safe; deliveries will fail with state_unreadable until it is fixed (or set olt_secrets.applied_file in a private directory)", "err", err)
 	}
 	proc := &oltsecrets.Processor{TenantID: cfg.TenantID, EdgeID: cfg.EdgeID, Key: key, Pub: pub, Targets: targets, Store: store, Log: log}
+	w := &oltsecrets.Worker{Cloud: gw, Proc: proc, Log: log}
+	if cfg.ManagedOLTs != nil { // ADR-0046: the OLTs the Cloud may add, inside the local policy; each one waits for the local trust before anything touches it
+		pol, mstore, err := openManaged(cfg)
+		if err != nil {
+			return nil, err
+		}
+		rep := &oltsecrets.StateReporter{Store: mstore, Cloud: gw, Log: log}
+		static := make([]oltsecrets.StaticOLT, 0, len(cfg.OLTs))
+		for _, o := range cfg.OLTs {
+			addr := o.Address
+			if o.Transport == "snmp" {
+				addr = o.SNMPAddress
+			}
+			static = append(static, oltsecrets.StaticOLT{Name: o.Name, DeviceKey: config.DeviceKey(addr), CloudID: o.CloudID})
+		}
+		proc.Managed = &oltsecrets.Managed{Policy: pol, Store: mstore, Static: static, OnRemoved: rep.NoteRemoved}
+		w.State = rep
+		log.Info("managed olts enabled: the Cloud may add OLTs inside the local policy; each waits for managed-trust", "state_dir", cfg.ManagedOLTs.StateDir, "max_olts", pol.Max, "cidrs", len(pol.CIDRs))
+	}
 	log.Info("olt secrets enabled", "key_id", key.KeyID(), "olts_accepting", len(targets))
-	return &oltsecrets.Worker{Cloud: gw, Proc: proc, Log: log}, nil
+	return w, nil
+}
+
+// openManaged builds the policy and prepares the state directory (created 0700 when missing; anything loose is an error: the Edge refuses to start, like for the seal key).
+func openManaged(cfg *config.Config) (*managedolts.Policy, *managedolts.Store, error) {
+	pol, err := managedolts.NewPolicy(*cfg.ManagedOLTs)
+	if err != nil {
+		return nil, nil, err
+	}
+	st := &managedolts.Store{Dir: cfg.ManagedOLTs.StateDir}
+	if err := st.Init(); err != nil {
+		return nil, nil, fmt.Errorf("managed olts state: %w", err)
+	}
+	return pol, st, nil
 }

@@ -97,7 +97,10 @@ func downTimesCommands(d *DownTimesSource) int {
 type OLT struct {
 	EdgeID  string
 	Sources []OLTSource
-	Now     func() time.Time
+	// Extra (ADR-0046), when set, is asked for more sources at the start of EVERY Collect: the managed OLTs the Cloud added, read again from the local registry on each
+	// round (no restart), only the trusted ones. The static Sources are unchanged and always come first.
+	Extra func() []OLTSource
+	Now   func() time.Time
 
 	// Guard persists the pacing state (last attempt, cooldown) so a restart cannot reopen the window. nil = in memory only (tests).
 	Guard GuardStore
@@ -209,7 +212,11 @@ func (o *OLT) Collect(ctx context.Context) ([]Item, error) {
 	}
 	var items []Item
 	var errs []error
-	for _, src := range o.Sources {
+	sources := o.Sources
+	if o.Extra != nil {
+		sources = append(append([]OLTSource{}, o.Sources...), o.Extra()...)
+	}
+	for _, src := range sources {
 		its, err := o.collectOne(ctx, src, now().UTC().Format(time.RFC3339))
 		o.refreshLastDown(ctx, src) // background, after the CLI read; what it reads travels with the next snapshot
 		if err != nil {
