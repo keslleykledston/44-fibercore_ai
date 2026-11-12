@@ -122,7 +122,7 @@ func LoadKey(path string) (*Key, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !fi.Mode().IsRegular() || fi.Mode().Perm()&0o077 != 0 || fi.Size() > 4096 {
+	if !fi.Mode().IsRegular() || fi.Mode().Perm()&0o077 != 0 || !credfile.OwnedByUs(fi) || fi.Size() > 4096 {
 		return nil, fmt.Errorf("%s: %w", path, ErrKeyFile)
 	}
 	raw, err := io.ReadAll(io.LimitReader(f, 4097))

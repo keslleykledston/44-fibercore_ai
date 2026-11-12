@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/config"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/credfile"
@@ -69,10 +70,17 @@ func setupSecrets(cfg *config.Config, gw *gateway.Client, log *slog.Logger) (*ol
 		if o.CredentialsFile == "" {
 			continue
 		}
-		credfile.RemoveLeftovers(o.CredentialsFile) // a temporary file an earlier crash left behind (the directory must already exist, 0700)
+		if err := credfile.CheckPrivateDir(filepath.Dir(o.CredentialsFile)); err != nil {
+			// not fatal for the rest of the Edge: collection keeps using the static configuration while there is no file; deliveries and sessions that need the file fail closed
+			log.Warn("olt secrets: the directory of this OLT's credentials_file is not usable (create it mode 0700, owned by the Edge user)", "olt", o.Name, "err", err)
+		}
+		credfile.RemoveLeftovers(o.CredentialsFile) // a temporary file an earlier crash left behind
 		targets[o.Name] = oltsecrets.Target{Name: o.Name, Path: o.CredentialsFile, Accepts: o.AcceptsKind}
 	}
 	store := &oltsecrets.AppliedStore{Path: s.AppliedPath(cfg.QueuePath), Log: log}
+	if err := credfile.CheckStateDir(filepath.Dir(store.Path)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Warn("olt secrets: the directory of the applied-delivery store is not safe; deliveries will fail with state_unreadable until it is fixed (or set olt_secrets.applied_file in a private directory)", "err", err)
+	}
 	proc := &oltsecrets.Processor{TenantID: cfg.TenantID, EdgeID: cfg.EdgeID, Key: key, Pub: pub, Targets: targets, Store: store, Log: log}
 	log.Info("olt secrets enabled", "key_id", key.KeyID(), "olts_accepting", len(targets))
 	return &oltsecrets.Worker{Cloud: gw, Proc: proc, Log: log}, nil

@@ -19,6 +19,7 @@ const (
 	KeepApplied    = 24 * time.Hour
 	MaxApplied     = 1000
 	appliedVersion = 1
+	maxStoreBytes  = 1 << 20
 )
 
 // ErrStateUnreadable: the store exists but cannot be read or replaced (permissions, I/O). Fail closed: no delivery is applied while the Edge cannot tell whether it
@@ -62,17 +63,15 @@ func (s *AppliedStore) now() time.Time {
 }
 
 func (s *AppliedStore) load() (*appliedFile, error) {
-	fi, err := os.Lstat(s.Path)
-	if errors.Is(err, os.ErrNotExist) {
+	// the directory is ours and closed to writers, the file is ours, 0600 and not a link (checked on the open descriptor): anything else is unreadable (fail closed),
+	// because another user could otherwise replace or delete the replay and anti-rollback state
+	b, err := credfile.ReadStateFile(s.Path, maxStoreBytes)
+	if credfile.IsNotExist(err) {
+		if derr := credfile.CheckStateDir(filepath.Dir(s.Path)); derr != nil && !credfile.IsNotExist(derr) {
+			return nil, fmt.Errorf("%w: %v", ErrStateUnreadable, derr)
+		}
 		return &appliedFile{V: appliedVersion}, nil
 	}
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrStateUnreadable, err)
-	}
-	if !fi.Mode().IsRegular() || fi.Mode().Perm()&0o077 != 0 {
-		return nil, fmt.Errorf("%w: %s must be a regular file, mode 0600", ErrStateUnreadable, s.Path)
-	}
-	b, err := os.ReadFile(s.Path)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrStateUnreadable, err)
 	}
@@ -174,7 +173,10 @@ func (s *AppliedStore) Record(id, olt, kind string, exp int64) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(s.Path), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.Path), 0o700); err != nil { // only creates what is missing; an existing directory is checked, never loosened or tightened
+		return fmt.Errorf("%w: %v", ErrStateUnreadable, err)
+	}
+	if err := credfile.CheckStateDir(filepath.Dir(s.Path)); err != nil {
 		return fmt.Errorf("%w: %v", ErrStateUnreadable, err)
 	}
 	if err := credfile.WriteAtomic(s.Path, b); err != nil {

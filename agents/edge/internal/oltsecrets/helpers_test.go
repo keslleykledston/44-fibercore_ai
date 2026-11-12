@@ -88,7 +88,7 @@ func newEnv(t *testing.T) *env {
 	oltCLI := config.OLTConfig{Name: tOLT, CredentialsFile: e.credPath, LastDown: &config.LastDownConfig{}}
 	oltCLI2 := config.OLTConfig{Name: tOLT2, CredentialsFile: e.cred2}
 	oltSNMP := config.OLTConfig{Name: tSNMPOLT, Transport: "snmp", CredentialsFile: e.credSNMP}
-	e.store = &AppliedStore{Path: filepath.Join(t.TempDir(), "applied.json"), Now: func() time.Time { return e.now }}
+	e.store = &AppliedStore{Path: filepath.Join(privDir(t), "applied.json"), Now: func() time.Time { return e.now }}
 	log := slog.New(slog.NewJSONHandler(e.logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	e.store.Log = log
 	e.proc = &Processor{
