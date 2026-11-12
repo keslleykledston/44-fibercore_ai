@@ -76,6 +76,14 @@ groups:
           summary: "Há OLT sem coleta há mais de 60 min"
           description: "A última coleta mais antiga entre as OLTs passou de 60 min (mesmo corte da tela de homologação). OLT desativada de propósito mantém o alerta até ser removida do cadastro."
 
+      - alert: FiberCoreOltNeverCollected
+        expr: fibercore_olts_never_collected > 0
+        for: 60m
+        labels: {severity: warning}
+        annotations:
+          summary: "Há OLT cadastrada sem nenhuma coleta há mais de 60 min"
+          description: "A série de idade da coleta só enxerga OLT que já coletou uma vez; este alerta cobre a que nunca coletou (Edge sem a OLT na config, credencial, acesso). Vale desde o primeiro scrape visto, não desde o cadastro."
+
   - name: fibercore-host
     rules:
       - alert: FiberCoreDiskLow

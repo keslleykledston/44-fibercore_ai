@@ -327,6 +327,6 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 - Restam sem o usuário (todos maiores/arriscados): CSP com nonces no Next (+ nginx do host), rotação de chave de assinatura (`kid`) e cofre de segredos, imagens por digest, NATS com TLS/ACL, observabilidade Prometheus/Grafana.
 
 ## Atualização 2026-11-11: observabilidade Prometheus/Grafana implementada (opt-in, NÃO ligada na LAB)
-- Branch de trabalho `worktree-agent-aa983e5357703cac1` (sem push, sem tag, sem merge). ADR-0042, `docs/operations/OBSERVABILITY.md`, perfil `observability` no compose, migração 0048 (`app_metrics_snapshot`), `GET /metrics` da API (off sem `METRICS_TOKEN`), exportador interno, 14 alertas, 2 painéis. Proxies passam a bloquear `/api/metrics` (nginx do host exige root para aplicar).
+- Branch de trabalho `worktree-agent-aa983e5357703cac1` (sem push, sem tag, sem merge). ADR-0042, `docs/operations/OBSERVABILITY.md`, perfil `observability` no compose, migração 0048 (`app_metrics_snapshot`), `GET /metrics` da API (off sem `METRICS_TOKEN`), exportador interno, 15 alertas, 2 painéis. Proxies passam a bloquear `/api/metrics` (nginx do host exige root para aplicar).
 - Para ligar na LAB (ordem do responsável): migração 0048 + recriar `api-core` com `FIBERCORE_METRICS_TOKEN`; `scripts/observability-init.sh`; `FIBERCORE_BACKUP_DIR`; `--profile observability up -d`. Backup lógico antes da migração (regra de sempre).
 - Restam: canal de notificação (Alertmanager), calibrar limiares, métricas do host, TLS/ACL do NATS, imagens postgres/nats/caddy por digest.

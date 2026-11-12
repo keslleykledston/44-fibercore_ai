@@ -127,6 +127,26 @@ tests:
               summary: "Nenhum backup concluído nas últimas 26 h"
               description: "Nenhum marcador *.dump.done recente no diretório de backup montado (FIBERCORE_BACKUP_DIR). Sem esse diretório configurado o alerta dispara de propósito."
 
+  - name: olt-que-nunca-coletou
+    interval: 1m
+    input_series:
+      - series: 'fibercore_olts_never_collected'
+        values: '1x90'          # a série de idade da coleta nem existe (nenhuma OLT coletou)
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: FiberCoreOltNeverCollected
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: FiberCoreOltNeverCollected
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "Há OLT cadastrada sem nenhuma coleta há mais de 60 min"
+              description: "A série de idade da coleta só enxerga OLT que já coletou uma vez; este alerta cobre a que nunca coletou (Edge sem a OLT na config, credencial, acesso). Vale desde o primeiro scrape visto, não desde o cadastro."
+      - eval_time: 70m
+        alertname: FiberCoreOltCollectionStale
+        exp_alerts: []          # documenta o ponto cego que a regra nova cobre
+
   - name: diretorio-de-backup-ilegivel
     interval: 1m
     input_series:

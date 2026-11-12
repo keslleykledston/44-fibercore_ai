@@ -171,5 +171,5 @@ Pacote em `docs/addenda/v2.5/package/`; GAP com os caminhos reais em `docs/adden
 | FC25-14, FC251-12/13 | P2 | [ ] outros fabricantes; IA N3 que só sugere | individual por release |
 
 ## Observabilidade (2026-11-11, ADR-0042)
-- [x] Prometheus/Grafana opt-in (`--profile observability`, nada ligado por padrão): RED da API (`GET /metrics`, token), exportador de agregados (migração 0048), exportador do NATS, 14 alertas com testes promtool, 2 painéis em JSON versionado. Doc: `docs/operations/OBSERVABILITY.md`. **Não ligado na LAB** (ligar exige ordem do responsável: recria a `api-core` e aplica a 0048).
+- [x] Prometheus/Grafana opt-in (`--profile observability`, nada ligado por padrão): RED da API (`GET /metrics`, token), exportador de agregados (migração 0048), exportador do NATS, 15 alertas com testes promtool, 2 painéis em JSON versionado. Doc: `docs/operations/OBSERVABILITY.md`. **Não ligado na LAB** (ligar exige ordem do responsável: recria a `api-core` e aplica a 0048).
 - [ ] Alertmanager/canal de notificação (SMTP é pendência do responsável); calibrar limiares com dados reais; métricas do host (node_exporter exige montar `/`: decisão do responsável); Grafana/Prometheus fora do loopback (túnel ou proxy autenticado).

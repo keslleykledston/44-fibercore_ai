@@ -48,6 +48,7 @@ NATS: `jetstream_consumer_num_pending`, `jetstream_consumer_num_ack_pending` (la
 | FiberCoreEdgeSilent | Edge mais antigo sem heartbeat > 300 s | critical |
 | FiberCoreNoActiveEdge | nenhum Edge ativo, ou Edge que nunca enviou heartbeat (10 min) | warning |
 | FiberCoreOltCollectionStale | coleta mais antiga > 60 min | warning |
+| FiberCoreOltNeverCollected | OLT cadastrada que nunca coletou, por 60 min (desde o 1º scrape visto) | warning |
 | FiberCoreOutboxBacklog | evento sem publicar > 300 s | critical |
 | FiberCoreConsumerLag | > 1000 pendentes por 10 min (limiar inicial) | warning |
 | FiberCoreJobStuck | job em andamento sem mudar > 30 min | warning |
