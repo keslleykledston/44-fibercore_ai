@@ -16,7 +16,7 @@ export default defineConfig({
   },
   // Capturas primeiro (estado do seed intacto), depois os testes funcionais que mutam dados.
   projects: [
-    { name: "puros", testMatch: /(optics|optics-contrast|optics-colormix|quality-source|olt-panel-pure|edge-diagnostic-pure|device-assets-pure)\.spec\.ts/, use: { browserName: "chromium" } },   // funções puras: sem navegador nem API
+    { name: "puros", testMatch: /(optics|optics-contrast|optics-colormix|quality-source|olt-panel-pure|edge-diagnostic-pure|device-assets-pure|csp-pure)\.spec\.ts/, use: { browserName: "chromium" } },   // funções puras: sem navegador nem API
     { name: "capturas", testMatch: /help-(screenshots|speed|quality)\.spec\.ts/, use: { browserName: "chromium" } },
     { name: "funcional", testMatch: /app\.spec\.ts/, dependencies: ["capturas"], use: { browserName: "chromium" } },
     // Por último: reconhecer o incidente demo muda o estado que os testes acima assumem (não reconhecido).
@@ -43,5 +43,7 @@ export default defineConfig({
     { name: "painel", testMatch: /olt-painel\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
     { name: "aparelho", testMatch: /ont-sidebar\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
     { name: "consultas", testMatch: /olt-queries\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
+    // CSP com nonce (ADR-0042). `CSP_ENFORCE_URL` aponta para um segundo next start com FIBERCORE_CSP_MODE=enforce (senão os testes de enforce são pulados).
+    { name: "csp", testMatch: /csp\.spec\.ts/, use: { browserName: "chromium" } },
   ],
 });
