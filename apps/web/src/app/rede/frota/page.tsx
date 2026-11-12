@@ -5,8 +5,9 @@ import { DeviceThumb } from "@/components/DeviceThumb";
 import { EmptyState, ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
 import { featuresOn } from "@/lib/features";
-import { PopCombobox } from "@/components/PopCombobox";
-import { ADDRESS_HELP, CRED_HELP, FLEET_FLASH, FLEET_VENDORS, SNMP_VERSIONS, type FleetOlt, type Pop } from "@/lib/fleet";
+import { OltReadiness } from "@/components/OltReadiness";
+import { OltRegisterForm } from "@/components/OltRegisterForm";
+import { FLEET_FLASH, type FleetOlt, type Pop } from "@/lib/fleet";
 import type { Edge } from "@/lib/types";
 
 const field = "min-h-touch rounded-btn border border-line bg-bg px-3";
@@ -16,7 +17,7 @@ export default async function Frota({ searchParams }: { searchParams: Promise<{ 
   const sp = await searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
   const ok = one(sp.ok), erro = one(sp.erro);
-  const [olts, pops, edges, assets, secrets] = await Promise.all([apiSafe<{ items: FleetOlt[] }>("/v1/fleet/olts"), apiSafe<{ items: Pop[] }>("/v1/pops"), apiSafe<Edge[]>("/v1/edges"), featuresOn("device_assets"), featuresOn("fleet_secrets")]);
+  const [olts, pops, edges, assets, secrets, provision] = await Promise.all([apiSafe<{ items: FleetOlt[] }>("/v1/fleet/olts"), apiSafe<{ items: Pop[] }>("/v1/pops"), apiSafe<Edge[]>("/v1/edges"), featuresOn("device_assets"), featuresOn("fleet_secrets"), featuresOn("fleet_provision")]);
   if (olts.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver a frota de OLTs." /></AppShell>;
   const msg = ok && FLEET_FLASH[ok] ? FLEET_FLASH[ok] : erro && FLEET_FLASH[erro] ? FLEET_FLASH[erro] : null;
   const list = olts.data?.items ?? [], popList = pops.data?.items ?? [], edgeList = edges.data ?? [];
@@ -41,6 +42,7 @@ export default async function Frota({ searchParams }: { searchParams: Promise<{ 
                     <p className="text-sm text-muted">{o.vendor} {o.model ?? "(modelo ainda não lido)"}{o.firmware ? ` · ${o.firmware}` : ""}</p>
                     <p className="mt-1 flex flex-wrap items-center gap-2 text-xs"><StatusPill value={o.support_level} /><span className="text-muted">{o.collected ? `${o.onu_count} ONUs` : "Ainda não coletada"}</span></p>
                     <p className="mt-1 text-xs text-muted">POP: {o.pop?.name ?? "—"} · Edge: {o.edge.name}{o.has_credential_ref ? " · credencial configurada" : " · sem credencial informada"}</p>
+                    {o.connection.protocol && <div className="mt-1"><OltReadiness r={o.readiness} /></div>}
                   </div>
                 </li>))}
             </ul>
@@ -48,23 +50,8 @@ export default async function Frota({ searchParams }: { searchParams: Promise<{ 
         </section>
         <section aria-label="Cadastrar OLT" className="panel p-4" data-testid="frota-cadastro">
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Cadastrar OLT</h2>
-          <p className="mb-3 text-sm text-muted">O cadastro só cria o registro na nuvem. A OLT também precisa estar na configuração do Edge (feita por quem administra o Edge), com o mesmo nome. O teste de conexão e a primeira leitura preenchem o modelo e o firmware.</p>
-          <form method="post" action="/bff/frota/olts" className="grid gap-3 md:grid-cols-2">
-            <label className="grid gap-1 text-sm">Nome da OLT<input name="name" required minLength={2} maxLength={60} className={field} placeholder="ex.: OLT-CENTRO-01" /></label>
-            <label className="grid gap-1 text-sm">Fabricante<select name="vendor" required className={field}>{FLEET_VENDORS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
-            <label className="grid gap-1 text-sm">Edge que vai coletar<select name="edge_id" required className={field}>{edgeList.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></label>
-            <PopCombobox pops={popList.map((p) => ({ id: p.id, name: p.name }))} />
-            <label className="grid gap-1 text-sm">Endereço de gerência (opcional)<input name="mgmt_address" maxLength={45} autoComplete="off" spellCheck={false} inputMode="text" className={`${field} font-mono`} placeholder="ex.: 10.20.30.40" />
-              <span className="text-xs text-muted">{ADDRESS_HELP}</span></label>
-            <label className="grid gap-1 text-sm">Versão do SNMP (opcional)<select name="snmp_version" className={field}><option value="">Não informar</option>{SNMP_VERSIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
-            <label className="grid gap-1 text-sm">Rótulo (opcional)<input name="label" maxLength={80} className={field} /></label>
-            <label className="grid gap-1 text-sm">Nome da credencial no Edge (opcional)<input name="credential_ref" maxLength={64} autoComplete="off" spellCheck={false} className={`${field} font-mono`} placeholder="ex.: olt-centro-01" />
-              <span className="text-xs text-muted">{CRED_HELP}</span></label>
-            <div className="flex flex-wrap items-center gap-3 md:col-span-2"><button type="submit" data-testid="frota-cadastrar" className="min-h-touch rounded-btn border border-line px-4 text-sm hover:bg-bg" disabled={edgeList.length === 0}>Cadastrar OLT</button>
-              <button type="submit" name="acao" value="testar" data-testid="frota-cadastrar-testar" className="min-h-touch rounded-btn border border-accent px-4 text-sm text-accent hover:bg-bg" disabled={edgeList.length === 0}>Cadastrar e testar conexão</button>
-              {secrets && <button type="submit" name="acao" value="credenciais" data-testid="frota-cadastrar-credenciais" className="min-h-touch rounded-btn border border-accent px-4 text-sm text-accent hover:bg-bg" disabled={edgeList.length === 0}>Cadastrar e configurar credenciais</button>}
-              {edgeList.length === 0 && <span className="ml-3 text-xs text-muted">Nenhum Edge disponível.</span>}</div>
-          </form>
+          <p className="mb-3 text-sm text-muted">O cadastro só cria o registro na nuvem. Sem a entrega da conexão (assistente), a OLT também precisa estar na configuração do Edge (feita por quem administra o Edge), com o mesmo nome. O teste de conexão e a primeira leitura preenchem o modelo e o firmware.</p>
+          <OltRegisterForm edges={edgeList} pops={popList} secretsOn={secrets} provisionOn={provision} />
         </section>
         <section aria-label="POPs" className="panel p-4" data-testid="frota-pops">
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">POPs ({popList.length})</h2>

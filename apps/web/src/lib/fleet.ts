@@ -1,8 +1,10 @@
+import type { ConnView, Readiness } from "./oltConnection";
 /** Fleet Manager (ADR-0041, PR2): tipos da API e rótulos. A credencial NUNCA é digitada aqui: só o NOME do segredo que o Edge guarda localmente. */
 export type FleetOlt = {
   id: string; name: string; vendor: string; model: string | null; firmware: string | null; support_level: string; observed_at: string | null;
   has_credential_ref: boolean; mgmt_address_masked: string | null; snmp_version: string | null; label: string | null; pop: { id: string; name: string } | null; registered: boolean; registered_at: string | null;
   edge: { id: string; name: string }; edge_last_heartbeat_at: string | null; onu_count: number; collected: boolean;
+  connection: ConnView; readiness: Readiness;   // ADR-0046: como a OLT é alcançada (nada secreto) e quanto do caminho já foi andado
 };
 export type Pop = { id: string; name: string; code: string | null; note: string | null; created_at: string; olts: number | null };
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -57,4 +59,11 @@ Object.assign(FLEET_FLASH, {
   impressao: "A impressão digital digitada não confere com a da chave do Edge. Compare com o que o servidor do Edge mostra (fibercore-edge seal-fingerprint) e tente de novo.",
   chavemudou: "O Edge publicou outra chave enquanto você conferia. Confira a nova impressão digital.",
   semchave: "O Edge ainda não publicou a chave de selagem.",
+});
+Object.assign(FLEET_FLASH, {
+  oltassistente: "OLT cadastrada. Siga o assistente abaixo: entregue a conexão ao Edge (passo 2), depois as credenciais (passo 3) e teste (passo 4).",
+  protocolo: "A porta, a impressão digital e o modo SSH só valem com um protocolo; Telnet não tem impressão digital, modo SSH nem SSH legado.",
+  snmpv2: "O transporte SNMP exige a versão SNMP v2c: escolha v2c no campo da versão do SNMP.",
+  porta: "A porta é um número de 1 a 65535.",
+  impressaodigital: "A impressão digital do host deve ser “SHA256:” seguida de 43 caracteres (o que ssh-keygen -lf mostra).",
 });

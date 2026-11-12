@@ -8,7 +8,7 @@ const KEY_ID = /^[0-9a-f]{16}$/;
 const SEALED = /^[A-Za-z0-9_-]{100,2048}$/;
 const MAX_BODY = 4096;
 const noStore = { "cache-control": "no-store" };
-const KINDS = new Set(["ssh_login", "snmp_community"]);
+const KINDS = new Set(["ssh_login", "snmp_community", "olt_connection"]);   // ADR-0046: a conexão da OLT segue o mesmo canal (a API decide a permissão e a flag de cada kind)
 const STABLE = /^[a-z][a-z0-9_]{0,59}$/;
 
 /** Código estável da API (nunca texto livre) ou "falha". */

@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { fingerprintOf, keyIdOf, plainProblem, SealError, sealOltSecret, type Plain, type SecretKind } from "@/lib/oltSeal";
+import { fingerprintOf, keyIdOf, plainProblem, SealError, sealOltSecret, type Plain } from "@/lib/oltSeal";
 import { codeText, KIND_PT, SEND_ERR_PT, STATUS_PT, type Delivery, type SealKey } from "@/lib/oltSecrets";
 
 /**
@@ -20,7 +20,7 @@ const OPEN = new Set(["PENDING", "DISPATCHED"]);
 export function OltCredentials({ oltId, oltName, edgeId, snmpV3, initialItems, keyConfirmed }: { oltId: string; oltName: string; edgeId: string; snmpV3: boolean; initialItems: Delivery[]; keyConfirmed: boolean }) {
   const base = useId();
   const [phase, setPhase] = useState<Phase>("checking");
-  const [kind, setKind] = useState<SecretKind>("ssh_login");
+  const [kind, setKind] = useState<"ssh_login" | "snmp_community">("ssh_login");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<Msg>(null);
   const [items, setItems] = useState<Delivery[]>(initialItems);
