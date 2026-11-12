@@ -7,11 +7,12 @@ while the tenant flag `fleet_manager` is off.
 """
 from __future__ import annotations
 
+import ipaddress
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import Connection, text
 
 from app.api.deps import TENANT_CONN, Principal, require
@@ -83,14 +84,46 @@ def update_pop(pop_id: UUID, body: PopPatch, p: Principal = Depends(require("fle
     return _pop_view(r)
 
 
+def _address(v: str | None) -> str | None:
+    why = None if v is None else fleet.address_problem(v)
+    if why:
+        raise ValueError(why)   # never echoes the value
+    return None if v is None else str(ipaddress.ip_address(v.strip()))
+
+
+def _snmp(v: str | None) -> str | None:
+    if v is not None and v not in fleet.SNMP_VERSIONS:
+        raise ValueError(f"snmp_version must be one of: {', '.join(fleet.SNMP_VERSIONS)}")
+    return v
+
+
 class OltIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=2, max_length=60)
     edge_id: UUID
     vendor: str
     pop_id: UUID | None = None
+    pop_name: str | None = Field(None, min_length=2, max_length=60)   # a site typed by the person: found by name (case-insensitive) or created in the same transaction
     credential_ref: str | None = Field(None, max_length=64)
     label: str | None = Field(None, min_length=1, max_length=80)
+    mgmt_address: str | None = Field(None, max_length=45)
+    snmp_version: str | None = None
+
+    @field_validator("mgmt_address")
+    @classmethod
+    def _addr(cls, v: str | None) -> str | None:
+        return _address(v)
+
+    @field_validator("snmp_version")
+    @classmethod
+    def _snmpv(cls, v: str | None) -> str | None:
+        return _snmp(v)
+
+    @model_validator(mode="after")
+    def _one_pop(self):
+        if self.pop_id is not None and self.pop_name is not None:
+            raise ValueError("send pop_id or pop_name, not both")
+        return self
 
     @field_validator("name")
     @classmethod
@@ -119,8 +152,27 @@ class OltIn(BaseModel):
 class OltPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
     pop_id: UUID | None = None
+    pop_name: str | None = Field(None, min_length=2, max_length=60)
     credential_ref: str | None = Field(None, max_length=64)
     label: str | None = Field(None, min_length=1, max_length=80)
+    mgmt_address: str | None = Field(None, max_length=45)
+    snmp_version: str | None = None
+
+    @field_validator("mgmt_address")
+    @classmethod
+    def _addr(cls, v: str | None) -> str | None:
+        return _address(v)
+
+    @field_validator("snmp_version")
+    @classmethod
+    def _snmpv(cls, v: str | None) -> str | None:
+        return _snmp(v)
+
+    @model_validator(mode="after")
+    def _one_pop(self):
+        if self.pop_id is not None and self.pop_name is not None:
+            raise ValueError("send pop_id or pop_name, not both")
+        return self
 
     @field_validator("credential_ref")
     @classmethod
@@ -132,14 +184,16 @@ class OltPatch(BaseModel):
 
 
 _OLT_SQL = ("SELECT o.id, o.name, o.vendor, o.model, o.firmware, o.support_level, o.observed_at, (o.credential_secret_ref IS NOT NULL) AS has_ref, o.label, o.pop_id, p.name AS pop_name, "
-            "o.registered_at, o.edge_id, e.name AS edge_name, e.last_heartbeat_at, (SELECT count(*) FROM onus n WHERE n.olt_id = o.id) AS onu_count "
+            "o.registered_at, host(o.mgmt_address) AS mgmt_address, o.snmp_version, o.edge_id, e.name AS edge_name, "
+            "e.last_heartbeat_at, (SELECT count(*) FROM onus n WHERE n.olt_id = o.id) AS onu_count "
             "FROM olts o JOIN edges e ON e.id = o.edge_id LEFT JOIN pops p ON p.id = o.pop_id ")
 
 
 def _olt_view(r) -> dict:
     return {"id": str(r.id), "name": r.name, "vendor": r.vendor, "model": r.model, "firmware": r.firmware, "support_level": r.support_level,
-            "observed_at": r.observed_at.isoformat() if r.observed_at else None, "has_credential_ref": r.has_ref,   # the NAME of the secret is never returned (least exposure): a reader sees only that one is set
-            
+            "observed_at": r.observed_at.isoformat() if r.observed_at else None,
+            "has_credential_ref": r.has_ref,   # the NAME of the secret is never returned (least exposure): a reader sees only that one is set
+            "mgmt_address_masked": fleet.mask_address(r.mgmt_address), "snmp_version": r.snmp_version,   # the address is write-only: a reader only ever gets the masked form
             "label": r.label, "pop": {"id": str(r.pop_id), "name": r.pop_name} if r.pop_id else None, "registered": r.registered_at is not None,
             "registered_at": r.registered_at.isoformat() if r.registered_at else None, "edge": {"id": str(r.edge_id), "name": r.edge_name},
             "edge_last_heartbeat_at": r.last_heartbeat_at.isoformat() if r.last_heartbeat_at else None, "onu_count": r.onu_count,
@@ -167,20 +221,35 @@ def _check_pop(conn: Connection, pop_id: UUID | None) -> None:
         raise HTTPException(404, "pop not found")
 
 
+def _resolve_pop(conn: Connection, p: Principal, pop_id: UUID | None, pop_name: str | None) -> UUID | None:
+    """The POP an OLT is filed under. `pop_name` finds the site by name (case-insensitive) or creates it in THIS transaction, so a refused OLT never leaves a stray site behind."""
+    if pop_name is None:
+        _check_pop(conn, pop_id)
+        return pop_id
+    made = conn.execute(text("INSERT INTO pops (tenant_id, name, created_by) VALUES (:t,btrim(:n),:by) ON CONFLICT DO NOTHING RETURNING id"),
+                        {"t": p.tenant_id, "n": pop_name, "by": p.id}).scalar_one_or_none()
+    if made is not None:
+        audit(conn, p, "fleet.pop.created", "pop", str(made), {"name": pop_name.strip(), "via": "olt_form"})
+        return made
+    return conn.execute(text("SELECT id FROM pops WHERE lower(name) = lower(btrim(:n))"), {"n": pop_name}).scalar_one()
+
+
 @router.post("/v1/fleet/olts", status_code=201)
 def register_olt(body: OltIn, p: Principal = Depends(require("fleet:manage")), conn: Connection = TENANT_CONN) -> dict:
     _flag(conn, p)
     if conn.execute(text("SELECT 1 FROM edges WHERE id = :i"), {"i": body.edge_id}).first() is None:
         raise HTTPException(404, "edge not found")
-    _check_pop(conn, body.pop_id)
+    pop_id = _resolve_pop(conn, p, body.pop_id, body.pop_name)
     new_id = conn.execute(
-        text("INSERT INTO olts (tenant_id, edge_id, name, vendor, support_level, credential_secret_ref, pop_id, label, registered_by, registered_at) "
-             "VALUES (:t,:e,:n,:v,'identified',:c,:pop,:l,:by,:at) ON CONFLICT (tenant_id, name) DO NOTHING RETURNING id"),
-        {"t": p.tenant_id, "e": body.edge_id, "n": body.name, "v": body.vendor, "c": body.credential_ref, "pop": body.pop_id, "l": body.label, "by": p.id, "at": datetime.now(UTC)}).scalar_one_or_none()
+        text("INSERT INTO olts (tenant_id, edge_id, name, vendor, support_level, credential_secret_ref, pop_id, label, mgmt_address, snmp_version, registered_by, registered_at) "
+             "VALUES (:t,:e,:n,:v,'identified',:c,:pop,:l,CAST(:a AS inet),:sv,:by,:at) ON CONFLICT (tenant_id, name) DO NOTHING RETURNING id"),
+        {"t": p.tenant_id, "e": body.edge_id, "n": body.name, "v": body.vendor, "c": body.credential_ref, "pop": pop_id, "l": body.label, "a": body.mgmt_address, "sv": body.snmp_version,
+         "by": p.id, "at": datetime.now(UTC)}).scalar_one_or_none()
     if new_id is None:
         raise HTTPException(409, "olt_name_taken")
-    audit(conn, p, "fleet.olt.registered", "olt", str(new_id), {"name": body.name, "vendor": body.vendor, "pop": str(body.pop_id) if body.pop_id else None,
-                                                                "has_credential_ref": body.credential_ref is not None})   # the NAME of the secret is not logged, only that one is set
+    audit(conn, p, "fleet.olt.registered", "olt", str(new_id), {"name": body.name, "vendor": body.vendor, "pop": str(pop_id) if pop_id else None,
+                                                                "has_credential_ref": body.credential_ref is not None, "has_mgmt_address": body.mgmt_address is not None,
+                                                                "snmp_version": body.snmp_version})   # neither the NAME of the secret nor the address is logged, only that they are set
     return _olt_view(conn.execute(text(_OLT_SQL + "WHERE o.id = :i"), {"i": new_id}).one())
 
 
@@ -192,15 +261,25 @@ def update_olt(olt_id: UUID, body: OltPatch, p: Principal = Depends(require("fle
         raise HTTPException(422, "nothing to change")
     if conn.execute(text("SELECT 1 FROM olts WHERE id = :i FOR UPDATE"), {"i": olt_id}).first() is None:
         raise HTTPException(404, "olt not found")
-    if "pop_id" in sent:
-        _check_pop(conn, body.pop_id)
     sets, args = [], {"i": olt_id}
-    for field, col in (("pop_id", "pop_id"), ("credential_ref", "credential_secret_ref"), ("label", "label")):
+    if "pop_name" in sent and body.pop_name is not None:
+        sets.append("pop_id = :pop_id")
+        args["pop_id"] = _resolve_pop(conn, p, None, body.pop_name)
+    elif "pop_id" in sent:
+        _check_pop(conn, body.pop_id)
+        sets.append("pop_id = :pop_id")
+        args["pop_id"] = body.pop_id
+    for field, col in (("credential_ref", "credential_secret_ref"), ("label", "label"), ("snmp_version", "snmp_version")):
         if field in sent:   # an explicit null clears the field
             sets.append(f"{col} = :{field}")
             args[field] = getattr(body, field)
+    if "mgmt_address" in sent:
+        sets.append("mgmt_address = CAST(:mgmt_address AS inet)")
+        args["mgmt_address"] = body.mgmt_address
+    if not sets:   # only a null pop_name was sent
+        raise HTTPException(422, "nothing to change")
     conn.execute(text(f"UPDATE olts SET {', '.join(sets)} WHERE id = :i"), args)
-    audit(conn, p, "fleet.olt.updated", "olt", str(olt_id), {"fields": sorted(sent)})
+    audit(conn, p, "fleet.olt.updated", "olt", str(olt_id), {"fields": sorted(sent)})   # field NAMES only, never the address or the secret name
     return _olt_view(conn.execute(text(_OLT_SQL + "WHERE o.id = :i"), {"i": olt_id}).one())
 
 

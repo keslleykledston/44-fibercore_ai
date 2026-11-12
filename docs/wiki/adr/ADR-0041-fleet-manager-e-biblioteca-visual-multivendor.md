@@ -64,3 +64,12 @@ Coletores dos novos vendors sem equipamento de laboratório; configuração/prov
 
 ## 7. Rollback
 Cada PR atrás de flag; desligar a flag remove telas e atalhos (404). Migrações do PR2 são aditivas e reversíveis (`DROP` das colunas/tabela novas). Ativos estáticos podem ser removidos sem efeito nas funções existentes (o resolver cai no fallback por família).
+
+## 8. Emenda 1 (2026-11-11) — endereço de gerência e versão do SNMP no cadastro; segredos seguem só no Edge
+Pedido do responsável (decisão "faseado"): o cadastro de OLT passa a ter **endereço de gerência (IP)** e **versão do SNMP**, e a escolha do **site (POP) por digitação** com criação junto do cadastro.
+- **D3 emendada.** A nuvem passa a **guardar** o endereço de gerência (`olts.mgmt_address`, migração 0048; IPv4/IPv6 literal, sem nome de host, porta ou máscara; loopback/multicast/link-local/não especificado recusados) por não ser segredo. Ele é **só de escrita**: nenhuma resposta o devolve por inteiro (só `mgmt_address_masked`, ex.: `10.20.•.•`), e log/auditoria registram apenas `has_mgmt_address` e os nomes dos campos alterados. É dado de cadastro: o Edge continua usando o endereço da **própria configuração**.
+- **D3 mantida para segredos.** Login, senha e community SNMP **continuam sem campo na nuvem** (a API recusa esses campos, `extra=forbid`); a coluna `credential_secret_ref` segue sendo só o NOME do segredo local do Edge.
+- **Próxima fatia (exige ADR própria + Codex antes de qualquer código):** entrada segura de login/senha/community pela tela, cifrada ponta a ponta com chave do Edge (a nuvem nunca guarda em claro; o Edge grava em arquivo 0600). Enquanto isso, a tela diz que a entrada segura é uma etapa futura.
+- **Site por digitação.** `pop_name` em `POST/PATCH /v1/fleet/olts`: acha o POP pelo nome (sem diferenciar maiúsculas) ou o cria na MESMA transação da OLT (uma OLT recusada não deixa site órfão); `pop_id` e `pop_name` juntos são recusados. Criação auditada (`fleet.pop.created`, `via: olt_form`).
+- **Cadastrar e testar.** A tela de cadastro ganha "Cadastrar e testar conexão": cadastra e pede o mesmo `olt.connection` do detalhe (mesmo orçamento 1/15 min e 4/h, mesmo cache); falha do teste não desfaz o cadastro.
+- **Rollback.** Migração 0048 reversível (remove as duas colunas e os GRANTs).
