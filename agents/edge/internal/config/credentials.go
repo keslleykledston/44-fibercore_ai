@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/credfile"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/managedolts"
 )
 
 // OLTSecretsConfig (ADR-0045) turns on the delivery of OLT credentials typed in the Cloud screen, sealed to a key that never leaves this host. The WHOLE feature is
@@ -41,6 +43,8 @@ func (s OLTSecretsConfig) AppliedPath(queuePath string) string {
 const (
 	KindSSHLogin      = "ssh_login"
 	KindSNMPCommunity = "snmp_community"
+	// KindOLTConnection (ADR-0046): the connection of an OLT the Cloud adds, inside the local managed_olts policy.
+	KindOLTConnection = "olt_connection"
 )
 
 // AcceptsKind says whether a delivery of this kind would ever be USED by this OLT entry: an ssh_login is read by CLI sessions, a community by an SNMP entry or by
@@ -169,6 +173,48 @@ func (c *Config) validateOLTSecrets() []error {
 		}
 		if !filepath.IsAbs(o.CredentialsFile) {
 			errs = append(errs, fmt.Errorf("%s: credentials_file must be an absolute path (a file in a 0700 directory)", p))
+		}
+	}
+	return errs
+}
+
+// validateManagedOLTs checks the managed_olts section (ADR-0046 D4): the policy itself, the state directory, and that it rides the delivery channel of olt_secrets.
+func (c *Config) validateManagedOLTs() []error {
+	m := c.ManagedOLTs
+	if m == nil {
+		return nil
+	}
+	var errs []error
+	if c.OLTSecrets == nil {
+		errs = append(errs, errors.New("managed_olts requires the olt_secrets section (the Cloud's OLTs arrive over the same signed, sealed channel)"))
+	}
+	if _, err := managedolts.NewPolicy(*m); err != nil {
+		errs = append(errs, err)
+	}
+	if m.StateDir == "" || !filepath.IsAbs(m.StateDir) || filepath.Clean(m.StateDir) != m.StateDir || m.StateDir == "/" {
+		errs = append(errs, errors.New("managed_olts.state_dir is required: a clean absolute path of a directory (mode 0700, owned by the Edge user)"))
+		return errs
+	}
+	inside := func(p string) bool {
+		if p == "" {
+			return false
+		}
+		rel, err := filepath.Rel(m.StateDir, filepath.Clean(p))
+		return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	}
+	// the state directory is the Edge's own: no other file of this configuration may live in it (a static credentials_file there could be overwritten or mistaken for a managed one)
+	files := map[string]string{"secret_file": c.SecretFile, "queue_path": c.QueuePath, "nbi_secret_file": c.NBISecretFile}
+	if c.OLTSecrets != nil {
+		files["olt_secrets.seal_key_file"], files["olt_secrets.applied_file"] = c.OLTSecrets.SealKeyFile, c.OLTSecrets.AppliedFile
+	}
+	for i, o := range c.OLTs {
+		files[fmt.Sprintf("olts[%d].credentials_file", i)] = o.CredentialsFile
+		files[fmt.Sprintf("olts[%d].secret_file", i)] = o.SecretFile
+		files[fmt.Sprintf("olts[%d].snmp_community_file", i)] = o.SNMPCommunityFile
+	}
+	for what, f := range files {
+		if inside(f) {
+			errs = append(errs, fmt.Errorf("%s must not be inside managed_olts.state_dir", what))
 		}
 	}
 	return errs

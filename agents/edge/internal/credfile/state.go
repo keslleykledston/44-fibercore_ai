@@ -67,3 +67,7 @@ func IsNotExist(err error) bool { return errors.Is(err, os.ErrNotExist) }
 
 // CheckPrivateDir is the rule for the directory of a credentials file: ours, mode 0700 (no group/other bit).
 func CheckPrivateDir(dir string) error { return checkDir(dir) }
+
+// Lock takes the exclusive process lock named by path+".lock" (shared by every process and every handle in this process) and returns its release function. It lets
+// other state files of the Edge (managed_olts.json, trust.json) follow the same read-modify-write discipline as the credentials file.
+func Lock(path string) (func(), error) { return lockFile(path) }

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/managedolts"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/olt"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/ping"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/speed"
@@ -52,7 +53,10 @@ type Config struct {
 	RefreshTasks           bool `json:"refresh_tasks"` // ADR-SD-002 item 4: let signed refresh jobs ask the ACS to read ONE CPE (needs nbi_url + jobs_enabled)
 	// OLTSecrets (ADR-0045): receive OLT credentials typed in the Cloud screen, sealed to a key of THIS host. nil = the whole feature is off (an Edge with an old config is unchanged).
 	OLTSecrets *OLTSecretsConfig `json:"olt_secrets"`
-	Version    string            `json:"-"`
+	// ManagedOLTs (ADR-0046): OLTs the Cloud adds by signed delivery, inside THIS local policy (CIDRs, ports, vendors, maximum) and only after the administrator of this host
+	// trusts each one (`fibercore-edge managed-trust`). nil = the Cloud cannot add OLTs (managed_olts_disabled). Needs olt_secrets (it rides the same channel).
+	ManagedOLTs *managedolts.Config `json:"managed_olts"`
+	Version     string              `json:"-"`
 }
 
 // BenchConfig is the Edge's own, independent copy of the bench list (ADR-0030): the Cloud can name a device, never add one here.
@@ -441,6 +445,7 @@ func (c *Config) Validate() error {
 		errs = append(errs, errors.New("too many olts (max 64)"))
 	}
 	errs = append(errs, c.validateOLTSecrets()...)
+	errs = append(errs, c.validateManagedOLTs()...)
 	deviceSeen := map[string]bool{}
 	for i, o := range c.OLTs {
 		p := fmt.Sprintf("olts[%d]", i)
