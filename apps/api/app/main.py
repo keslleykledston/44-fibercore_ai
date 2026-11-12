@@ -24,6 +24,7 @@ from app.api.metrics import REGISTRY as METRICS_REGISTRY
 from app.api.metrics import router as metrics_router
 from app.api.noc import router as noc_router
 from app.api.olt_queries import router as olt_queries_router
+from app.api.olt_secrets import router as olt_secrets_router
 from app.api.ont_config import router as ont_config_router
 from app.api.fleet import router as fleet_router
 from app.api.knowledge import router as knowledge_router
@@ -92,6 +93,7 @@ app.include_router(speed_router)
 app.include_router(ping_router)
 app.include_router(onu_discovery_router)
 app.include_router(fleet_router)
+app.include_router(olt_secrets_router)
 app.include_router(knowledge_router)
 app.include_router(profile_studio_router)
 app.include_router(quality_router)
