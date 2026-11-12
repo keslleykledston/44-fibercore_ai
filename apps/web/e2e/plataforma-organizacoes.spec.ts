@@ -92,7 +92,8 @@ test("criar organização sem JavaScript: link do convite uma vez, lista com con
   await expect(p.getByTestId("org-criada")).toContainText(NAME);
   await expect(p.getByTestId("org-convite-estado")).toHaveText("pendente");
   const link = await p.getByTestId("org-convite-link").inputValue();
-  expect(link).toMatch(new RegExp(`^${BASE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/convite/[A-Za-z0-9_-]{43}$`));
+  expect(link).toMatch(/^\/convite\/[A-Za-z0-9_-]{43}$/);          // sem JavaScript: só o CAMINHO (nenhum cabeçalho de host entra no link)
+  await expect(p.getByTestId("org-convite-sem-js")).toBeVisible();
   expect(p.url()).not.toContain(link.split("/").pop()!);       // o token nunca vai na URL
   await expect(p.getByTestId("org-lista")).toContainText(NAME);
   const row = p.getByTestId("org-linha").filter({ hasText: NAME });
@@ -107,7 +108,7 @@ test("criar organização sem JavaScript: link do convite uma vez, lista com con
   // o convite vale: a pessoa convidada o abre (página pública) e vê o nome da organização
   const inv = await browser.newContext({ baseURL: BASE });
   const ip = await inv.newPage();
-  await ip.goto(new URL(link).pathname);
+  await ip.goto(link);
   await expect(ip.locator("main")).toContainText(NAME);
   await inv.close();
   // nome repetido (sem diferenciar maiúsculas) é recusado em português e a lista não duplica
@@ -117,6 +118,15 @@ test("criar organização sem JavaScript: link do convite uma vez, lista com con
   await expect(p.getByTestId("org-erro")).toContainText("Já existe uma organização com esse nome");
   await expect(p.getByTestId("org-linha").filter({ hasText: NAME })).toHaveCount(1);
   await noJs.close();
+  // com JavaScript o link sai inteiro, com a origem do NAVEGADOR, e há o botão de copiar
+  await page.goto("/plataforma/organizacoes");
+  await page.getByLabel("Nome da organização").fill(`${NAME} JS`);
+  await page.getByLabel("E-mail do primeiro administrador").fill(`js.${SUFFIX}@exemplo.com.br`);
+  await page.getByTestId("org-criar").click();
+  await expect(page.getByTestId("org-criada")).toContainText(`${NAME} JS`);
+  await expect(page.getByTestId("org-convite-link")).toHaveValue(new RegExp(`^${BASE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/convite/[A-Za-z0-9_-]{43}$`));
+  await expect(page.getByTestId("org-convite-copiar")).toBeVisible();
+  await expect(page.getByTestId("org-convite-sem-js")).toHaveCount(0);
 });
 
 test("limite de 5 por hora: a sexta é recusada em português", async ({ page, request }) => {
@@ -127,7 +137,7 @@ test("limite de 5 por hora: a sexta é recusada em português", async ({ page, r
     expect(v.status()).toBe(200);
     return (await v.json()).access_token as string;
   })();
-  for (let i = 2; i <= 5; i++) {                                // a primeira (tela) já foi criada acima; mais 4 pela API até o teto
+  for (let i = 3; i <= 5; i++) {                                // duas (tela) já foram criadas acima; mais 3 pela API até o teto
     const r = await request.post(`${API_URL}/v1/platform/organizations`, { headers: { Authorization: `Bearer ${tok}` }, data: { name: `Lote E2E ${SUFFIX} ${i}`, admin_email: `lote${i}.${SUFFIX}@exemplo.com.br` } });
     expect(r.status(), await r.text()).toBe(201);
   }

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { cursorQuery, decodeFlash, encodeFlash, inviteLabel, inviteUrl, orgError, ORG_ERRORS, stepUpError } from "../src/lib/platform";
+import { cursorQuery, decodeFlash, encodeFlash, inviteLabel, invitePath, orgError, ORG_ERRORS, stepUpError } from "../src/lib/platform";
 
 // Organizações da plataforma (ADR-0046 D1): mapa de erros, cookie de aviso do link do convite e textos. Funções puras: sem navegador nem API.
 const TOKEN = "A".repeat(43);
@@ -37,9 +37,8 @@ test("o aviso do link do convite vai e volta pelo cookie sem perder nada e recus
   expect(decodeFlash(inj)).toBeNull();
 });
 
-test("o link do convite junta a origem pública e o token, sem barra repetida", () => {
-  expect(inviteUrl("https://painel.exemplo.com/", TOKEN)).toBe(`https://painel.exemplo.com/convite/${TOKEN}`);
-  expect(inviteUrl("http://127.0.0.1:3000", TOKEN)).toBe(`http://127.0.0.1:3000/convite/${TOKEN}`);
+test("o link do convite é só o caminho: nenhum host entra nele", () => {
+  expect(invitePath(TOKEN)).toBe(`/convite/${TOKEN}`);
 });
 
 test("o estado do convite tem rótulo para cada valor e um traço para nenhum", () => {

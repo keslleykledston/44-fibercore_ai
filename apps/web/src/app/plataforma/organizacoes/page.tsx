@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { AdminTabs } from "@/components/AdminTabs";
 import { AppShell } from "@/components/AppShell";
+import { OrgInviteLink } from "@/components/OrgInviteLink";
 import { EmptyState, ErrorState, PageHeader } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
-import { FLASH_COOKIE, ORG_ERRORS, ORG_FLASH, ORG_STATUS, type PlatformOrgList, cursorQuery, decodeFlash, inviteLabel, inviteUrl } from "@/lib/platform";
+import { FLASH_COOKIE, ORG_ERRORS, ORG_FLASH, ORG_STATUS, type PlatformOrgList, cursorQuery, decodeFlash, inviteLabel, invitePath } from "@/lib/platform";
 import { platformStatus } from "@/lib/platformStatus";
 
 const field = "min-h-touch rounded-btn border border-line bg-bg px-3";
@@ -43,11 +44,9 @@ export default async function Organizacoes({ searchParams }: { searchParams: Pro
     );
   }
   const antes = cursorQuery(one(sp.antes));   // cursor da página (só um instante e um id no formato certo; qualquer outra coisa volta à primeira página)
-  const [list, jar, hdr] = await Promise.all([apiSafe<PlatformOrgList>(`/v1/platform/organizations${antes ? `?${antes}` : ""}`), cookies(), headers()]);
+  const [list, jar] = await Promise.all([apiSafe<PlatformOrgList>(`/v1/platform/organizations${antes ? `?${antes}` : ""}`), cookies()]);
   if (list.status === 403 && list.detail !== "mfa_recent_required") notFound();
   const flash = ok === "criada" ? decodeFlash(jar.get(FLASH_COOKIE)?.value) : null;
-  const host = hdr.get("x-forwarded-host") ?? hdr.get("host") ?? "";
-  const base = host ? `${hdr.get("x-forwarded-proto") ?? (host.startsWith("127.0.0.1") || host.startsWith("localhost") ? "http" : "https")}://${host}` : "";
   const items = list.data?.items ?? [];
   return shell(
     <div className="grid gap-6">
@@ -57,9 +56,7 @@ export default async function Organizacoes({ searchParams }: { searchParams: Pro
           {flash ? (
             <div className="mt-2 grid gap-2 text-sm">
               <p>Convite do primeiro administrador (<strong>{flash.email}</strong>): <strong data-testid="org-convite-estado">pendente</strong>, válido até <time dateTime={flash.expires}>{when(flash.expires)}</time> (72 horas). Nada foi enviado por e-mail: copie o link e envie à pessoa.</p>
-              <label className="grid gap-1">Link do convite (aparece só agora)
-                <input readOnly value={inviteUrl(base, flash.token)} data-testid="org-convite-link" className={`${field} font-mono text-xs`} />
-              </label>
+              <OrgInviteLink path={invitePath(flash.token)} />
               <p className="text-muted">Você não passa a ser membro da organização. Se o link expirar sem ser usado, peça ao dono do sistema (linha de comando) para incluir o administrador.</p>
               <form method="post" action="/bff/plataforma/ocultar"><button type="submit" className="min-h-touch rounded-btn border border-line px-4 text-sm hover:bg-bg">Ocultar o link</button></form>
             </div>

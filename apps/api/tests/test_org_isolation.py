@@ -34,6 +34,7 @@ from tests.org_helpers import PW, _h, _post, _with_mfa_session
 
 UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 ADMIN_PW = "isolamento-seguro-ok-77"
+INVITEE_PW = "outra-senha-bem-longa-91"
 SECRET_AGENT = "iso-agent-secret-0123456789"
 HOST_KEY = "SHA256:" + "A" * 43
 COVERAGE: dict[str, int] = {}
@@ -560,9 +561,9 @@ def test_invites_and_members_of_one_organization_do_not_let_the_other_in(world):
     # B's pending invite is a bearer link: it works for whoever HOLDS it, but it can only ever place that person in B, never in A
     pv = client.get(f"/v1/invites/{b.invite_token}").json()
     assert pv["state"] == "valid" and pv["tenant_name"] == b.name
-    ok = client.post(f"/v1/invites/{b.invite_token}/accept", json={"name": "Convidada B", "password": "outra-senha-bem-longa-91"})
+    ok = client.post(f"/v1/invites/{b.invite_token}/accept", json={"name": "Convidada B", "password": INVITEE_PW})
     assert ok.status_code == 200
-    tok = client.post("/v1/auth/token", json={"email": f"conv.{b.tag}@example.com", "password": "outra-senha-bem-longa-91"}).json()["access_token"]
+    tok = client.post("/v1/auth/token", json={"email": f"conv.{b.tag}@example.com", "password": INVITEE_PW}).json()["access_token"]
     ws = client.get("/v1/auth/workspaces", headers=_h(tok)).json()
     assert [w["tenant_id"] for w in ws] == [str(b.tid)]
     assert client.get("/v1/tenant", headers={**_h(tok), "X-Workspace-ID": str(a.tid)}).status_code == 404

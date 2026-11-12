@@ -71,7 +71,8 @@ export function decodeFlash(raw: string | undefined): Flash | null {
     return { name: j.n.slice(0, 60), email: j.e.slice(0, 254), state: j.s, expires: j.x, token: j.t };
   } catch { return null; }
 }
-export const inviteUrl = (base: string, token: string) => `${base.replace(/\/+$/, "")}/convite/${token}`;
+/** Só o CAMINHO: a origem completa é a que o navegador usa (OrgInviteLink); nenhum cabeçalho de host da requisição entra no link (Codex r2). */
+export const invitePath = (token: string) => `/convite/${token}`;
 
 /** `?antes=<instante>~<id>` da tela → consulta da API. Só passa instante ISO e UUID no formato certo; qualquer outra coisa é ignorada (volta à primeira página). */
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
