@@ -30,7 +30,7 @@ services:
       retries: 3
     restart: unless-stopped
     security_opt: [no-new-privileges:true]
-    # development only: NATS must be configured with TLS, credentials and ACL before production.
+    # development only as shipped: for TLS + per-role ACL layer infra/compose/nats-secure.compose.override.yaml on top (opt-in, ADR-0042, docs/operations/NATS_TLS_ACL.md).
   migrate:
     build:
       context: ../..

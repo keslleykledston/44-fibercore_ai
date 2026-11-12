@@ -111,7 +111,7 @@ def check_compose(p: Path, rel: str, lock: dict[str, str], errors: list[str]) ->
             continue
         image = svc.get("image")
         if image is None:
-            if "build" not in svc:
+            if "build" not in svc and "override" not in p.name:   # override só ajusta serviço que o compose.yaml já define
                 errors.append(f"{rel}: serviço {name} sem image nem build")
         elif "build" not in svc:
             check_ref(f"{rel}: serviço {name}", str(image), lock, errors)
