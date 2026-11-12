@@ -28,9 +28,11 @@ func TestTheTrustIsLookedAtOnceMoreAtTheMomentOfTheConnection(t *testing.T) {
 	if len(f.opened) != 1 || len(f.snmp) != 1 {
 		t.Fatalf("setup: %d %d", len(f.opened), len(f.snmp))
 	}
-	dialOK, snmpOK := f.opened[0].Dial, f.snmp[0].Allowed
-	if !snmpOK("10.20.1.6:161") {
-		t.Fatal("while trusted the agent may be contacted")
+	dialOK, gate := f.opened[0].Dial, f.snmp[0].Gate
+	if release, err := gate(); err != nil {
+		t.Fatal("while trusted the agent may be contacted:", err)
+	} else {
+		release()
 	}
 	// the operator revokes after verify() and before the connection: neither the TCP dial nor the SNMP contact may happen
 	f.remove("OLT-A")
@@ -38,8 +40,8 @@ func TestTheTrustIsLookedAtOnceMoreAtTheMomentOfTheConnection(t *testing.T) {
 	if _, err := dialOK(context.Background(), "tcp", "10.20.1.5:22"); !errors.Is(err, ErrNotTrusted) {
 		t.Fatalf("the dial after a revocation: %v", err)
 	}
-	if snmpOK("10.20.1.6:161") {
-		t.Fatal("the SNMP agent must not be contacted after a revocation")
+	if _, err := gate(); !errors.Is(err, ErrNotTrusted) {
+		t.Fatalf("the SNMP agent must not be contacted after a revocation: %v", err)
 	}
 }
 

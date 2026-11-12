@@ -71,26 +71,44 @@ func TestTheGuardedSessionStillSaysWhetherTheTransportProvesTheEndOfACommand(t *
 	}
 }
 
-type fakeReader struct{ calls int }
-
-func (r *fakeReader) Get(context.Context, []string) (map[string]olt.SNMPValue, error) {
-	r.calls++
-	return nil, nil
-}
-func (r *fakeReader) Walk(context.Context, string, int) ([]olt.SNMPRow, error) {
-	r.calls++
-	return nil, nil
+// gatedReader behaves like the real driver: it asks the gate before the socket exists (done by DialSNMP, here by the hook) and before EVERY packet.
+type gatedReader struct {
+	gate  func() (func(), error)
+	calls int
 }
 
-func TestNoSNMPRequestStartsAfterARevocation(t *testing.T) {
+func (r *gatedReader) packet() error {
+	release, err := r.gate()
+	if err != nil {
+		return err
+	}
+	defer release()
+	r.calls++
+	return nil
+}
+
+func (r *gatedReader) Get(context.Context, []string) (map[string]olt.SNMPValue, error) {
+	return nil, r.packet()
+}
+func (r *gatedReader) Walk(context.Context, string, int) ([]olt.SNMPRow, error) {
+	return nil, r.packet()
+}
+
+func TestNoSNMPPacketIsSentAfterARevocationAndTheGateIsTheOnesOfTheDriver(t *testing.T) {
 	f := newFx(t, nil)
 	e := f.entry("OLT-S", "10.20.1.6")
 	e.Transport = "snmp"
 	f.add(e)
 	f.creds("OLT-S")
 	f.trust("OLT-S")
-	rd := &fakeReader{}
-	f.b.OpenSNMP = func(_ context.Context, _ olt.SNMPConfig) (olt.SNMPReader, func(), error) { return rd, func() {}, nil }
+	rd := &gatedReader{}
+	f.b.OpenSNMP = func(_ context.Context, c olt.SNMPConfig) (olt.SNMPReader, func(), error) {
+		if c.Gate == nil {
+			t.Error("the SNMP session of a managed OLT must carry the gate")
+		}
+		rd.gate = c.Gate
+		return rd, func() {}, nil
+	}
 	r, closeFn, err := f.b.Sources()[0].OpenSNMP(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -107,7 +125,44 @@ func TestNoSNMPRequestStartsAfterARevocation(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 	if rd.calls != 1 {
-		t.Fatalf("the agent saw %d requests", rd.calls)
+		t.Fatalf("the agent saw %d packets", rd.calls)
+	}
+}
+
+func TestARevocationWaitsForTheSNMPExchangeInFlight(t *testing.T) {
+	f := newFx(t, nil)
+	e := f.entry("OLT-S", "10.20.1.6")
+	e.Transport = "snmp"
+	f.add(e)
+	f.creds("OLT-S")
+	f.trust("OLT-S")
+	var gate func() (func(), error)
+	f.b.OpenSNMP = func(_ context.Context, c olt.SNMPConfig) (olt.SNMPReader, func(), error) {
+		gate = c.Gate
+		return &gatedReader{gate: c.Gate}, func() {}, nil
+	}
+	if _, _, err := f.b.Sources()[0].OpenSNMP(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	release, err := gate() // a packet is on the wire
+	if err != nil {
+		t.Fatal(err)
+	}
+	removed := make(chan struct{})
+	go func() { f.remove("OLT-S"); close(removed) }()
+	select {
+	case <-removed:
+		t.Fatal("the revocation must wait for the exchange in flight")
+	case <-time.After(300 * time.Millisecond):
+	}
+	release()
+	select {
+	case <-removed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("and proceed when it is over")
+	}
+	if _, err := gate(); !errors.Is(err, ErrNotTrusted) {
+		t.Fatalf("after the revocation no packet may start: %v", err)
 	}
 }
 
@@ -128,7 +183,7 @@ func TestTheDialAndTheSNMPContactTakeTheSharedLockSoARevocationCannotSlipBetween
 			s.OpenSNMP(context.Background())
 		}
 	}
-	dial, allowed := f.opened[0].Dial, f.snmp[0].Allowed
+	dial, gate := f.opened[0].Dial, f.snmp[0].Gate
 	// a writer holding the exclusive side (a revocation in progress) blocks the next dial and the next SNMP contact until it is done
 	unlock, err := credfile.Lock(filepath.Join(f.st.Dir, "managed-state"))
 	if err != nil {
@@ -136,7 +191,12 @@ func TestTheDialAndTheSNMPContactTakeTheSharedLockSoARevocationCannotSlipBetween
 	}
 	dialed, contacted := make(chan struct{}), make(chan struct{})
 	go func() { dial(context.Background(), "tcp", "10.20.9.9:22"); close(dialed) }() // not in the allowlist: refused, but only after the lock
-	go func() { allowed("10.20.1.6:161"); close(contacted) }()
+	go func() {
+		if release, err := gate(); err == nil {
+			release()
+		}
+		close(contacted)
+	}()
 	select {
 	case <-dialed:
 		t.Fatal("the dial must wait for the revocation in progress")

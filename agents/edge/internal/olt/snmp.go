@@ -58,6 +58,10 @@ type SNMPConfig struct {
 	// sustained rate: values below it are raised to it.
 	Pace    time.Duration
 	MaxReqs int // total requests per client, i.e. per collection cycle (default 400)
+	// Gate (optional, ADR-0046) is asked for permission immediately before the socket is opened and before EVERY packet that is sent, and its release function is called as
+	// soon as that socket open / that packet's exchange (the send and the wait for its answer, at most Timeout) is over. A gate that refuses stops the operation; one that
+	// holds a lock between the two lets a revocation wait for the exchange in flight and block the next. nil = no gate (the static OLTs).
+	Gate func() (release func(), err error)
 }
 
 type snmpClient struct {
@@ -68,6 +72,13 @@ type snmpClient struct {
 
 // DialSNMP validates the destination, then opens a connected UDP socket. GET/WALK only.
 func DialSNMP(ctx context.Context, cfg SNMPConfig) (SNMPReader, func(), error) {
+	if cfg.Gate != nil { // held from the allowlist question until the socket exists
+		release, gerr := cfg.Gate()
+		if gerr != nil {
+			return nil, nil, fmt.Errorf("%w: %v", ErrSNMPDenied, gerr)
+		}
+		defer release()
+	}
 	host, port, err := net.SplitHostPort(cfg.Addr)
 	if err != nil || cfg.Allowed == nil || !cfg.Allowed(cfg.Addr) || net.ParseIP(host) == nil || cfg.Community == "" {
 		return nil, nil, ErrSNMPDenied
@@ -133,7 +144,17 @@ func (c *snmpClient) do(ctx context.Context, fn func() error) error {
 			return e
 		}
 		c.g.Context = ctx
-		if err = fn(); err == nil || ctx.Err() != nil || !isTimeout(err) {
+		release := func() {}
+		if c.cfg.Gate != nil { // one packet's exchange at a time under the gate
+			r, gerr := c.cfg.Gate()
+			if gerr != nil {
+				return gerr
+			}
+			release = r
+		}
+		err = fn()
+		release()
+		if err == nil || ctx.Err() != nil || !isTimeout(err) {
 			return err
 		}
 	}
