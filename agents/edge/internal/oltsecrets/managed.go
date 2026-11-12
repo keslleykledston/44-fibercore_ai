@@ -227,8 +227,12 @@ func (p *Processor) writeConnection(c *connection, log *slog.Logger) string {
 	if c.Action == actionRemove {
 		cloudID, err := st.Remove(c.Entry.Name)
 		if err != nil {
-			log.Error("olt secret delivery not applied: the managed OLT could not be removed", "code", CodeWriteFailed, "err", err)
-			return CodeWriteFailed
+			code := CodeWriteFailed
+			if errors.Is(err, managedolts.ErrState) {
+				code = CodeStateUnreadable
+			}
+			log.Error("olt secret delivery not applied: the managed OLT could not be removed", "code", code, "err", err)
+			return code
 		}
 		if cloudID == "" {
 			cloudID = c.CloudID
