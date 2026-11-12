@@ -1,0 +1,30 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1d1b5-61bf-7900-a9cd-9c35375010e3).
+[codex] Turn started (01a1d1b5-61fe-7061-9f8d-4a1236567c9d).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os caminhos de confiança, revogação, persistência ...
+[codex] Running command: /bin/bash -lc 'git diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-edge/managed.go...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=80 main...HEAD -- agents/edge/cmd/fibercore-edge/managed.go... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --unified=20 main...HEAD -- agents/edge/internal/managedolts/store.go...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=20 main...HEAD -- agents/edge/internal/managedolts/store.go... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/managedcollect/managedcollect.go | sed -n '135,255...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/managedcollect/managedcollect.go | sed -n '135,255... (exit 0)
+[codex] Running command: /bin/bash -lc "rg -n \"Allowed|DialSNMP|func \\(.*Walk|func .*Walk\" agents/edge/internal/olt...
+[codex] Command completed: /bin/bash -lc "rg -n \"Allowed|DialSNMP|func \\(.*Walk|func .*Walk\" agents/edge/internal/olt... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/olt/snmp.go | sed -n '65,120p'; nl -ba agents/edge...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/olt/snmp.go | sed -n '65,120p'; nl -ba agents/edge... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a barreira de revogação não cobre ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a barreira de revogação não cobre operações SNMP em voo; uma revogação pode terminar antes de o Edge enviar pacotes autorizados pela confiança antiga.
+
+Findings:
+- [high] SNMP libera a trava antes de abrir o socket e enviar cada operação (agents/edge/internal/managedcollect/managedcollect.go:196-207)
+  `Allowed` chama `verifyShared`, que libera a trava compartilhada ao retornar; `DialSNMP` só conecta depois, em `g.Connect()`. Da mesma forma, `guardedSNMP.Get` e `Walk` liberam a trava ao fim de `verifyShared` e só então chamam o leitor interno. Uma remoção, mudança ou revogação pode obter a trava exclusiva e terminar nesse intervalo; o Edge ainda pode abrir o contato UDP ou enviar a operação com confiança já revogada. Isso viola a barreira de revogação descrita para a rodada e permite tráfego/uso de credencial após a revogação retornar.
+  Recommendation: Manter a trava compartilhada desde a verificação até a conclusão do contato SNMP e de cada Get/Walk, incluindo o envio de seus pacotes; adapte o seam do transporte para que a verificação e a operação protegida compartilhem a mesma trava.
+
+Next steps:
+- Cobrir com teste concorrente o caso em que a revogação tenta obter a trava entre a validação SNMP e a conexão/operação, e confirmar que ela só retorna após a operação protegida terminar.

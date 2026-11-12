@@ -29,6 +29,19 @@ func New(entries []string) (*List, error) {
 	return l, nil
 }
 
+// With returns a NEW list holding this one's entries plus the extra host:port ones (this list is not changed). The managed OLTs of ADR-0046 use it: the static allowlist
+// plus the exact ip:port of every trusted managed OLT, with every protection of this package (dangerous resolved addresses, no proxies, no redirects) intact.
+func (l *List) With(extra []string) (*List, error) {
+	n, err := New(extra)
+	if err != nil {
+		return nil, err
+	}
+	for k := range l.entries {
+		n.entries[k] = struct{}{}
+	}
+	return n, nil
+}
+
 func (l *List) Allowed(hostport string) bool {
 	h, p, err := net.SplitHostPort(hostport)
 	if err != nil {

@@ -35,6 +35,9 @@ type fakeCloud struct {
 	next429        int
 	staleOnce      bool // the first result is answered 409 and the lease rotates (the Cloud re-leased meanwhile)
 	loseResultOnce bool // the result is NOT recorded and the answer is a 503 (response/processing lost)
+
+	stateReports [][]gateway.ManagedState // ADR-0046: every body of POST /v1/edge/managed-olts/state
+	stateStatus  int                      // 0 = 204
 }
 
 func (f *fakeCloud) token() string { return "lease-" + string(rune('A'+f.lease)) }
@@ -104,6 +107,20 @@ func (f *fakeCloud) handler(w http.ResponseWriter, r *http.Request) {
 		}
 		f.results = append(f.results, b)
 		f.dispatched = nil
+		w.WriteHeader(204)
+	case r.URL.Path == "/v1/edge/managed-olts/state" && r.Method == http.MethodPost:
+		var b struct {
+			Items []gateway.ManagedState `json:"items"`
+		}
+		json.NewDecoder(r.Body).Decode(&b)
+		if f.stateStatus != 0 {
+			if f.stateStatus == 429 {
+				w.Header().Set("Retry-After", "2")
+			}
+			w.WriteHeader(f.stateStatus)
+			return
+		}
+		f.stateReports = append(f.stateReports, b.Items)
 		w.WriteHeader(204)
 	default:
 		w.WriteHeader(404)

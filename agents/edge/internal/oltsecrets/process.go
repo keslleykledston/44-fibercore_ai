@@ -14,6 +14,7 @@ import (
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/config"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/credfile"
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/gateway"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/managedolts"
 )
 
 // Failure codes of ADR-0045 (the closed list the Cloud accepts).
@@ -30,6 +31,20 @@ const (
 	CodeStateUnreadable     = "state_unreadable"
 )
 
+// Codes of ADR-0046 D5 (the olt_connection kind). CodeAwaitingLocalTrust is not a failure: it rides an `applied` result while the local administrator has not trusted the OLT.
+const (
+	CodeAwaitingLocalTrust   = managedolts.StateAwaiting
+	CodeProtocolNotSupported = "protocol_not_supported"
+	CodeVendorNotSupported   = managedolts.CodeVendorNotSupported
+	CodeVendorNotAllowed     = managedolts.CodeVendorNotAllowed
+	CodeAddressNotAllowed    = managedolts.CodeAddressNotAllowed
+	CodePortNotAllowed       = managedolts.CodePortNotAllowed
+	CodeTooManyOLTs          = "too_many_olts"
+	CodeLegacyNotAllowed     = managedolts.CodeLegacyNotAllowed
+	CodeNameConflict         = "name_conflict"
+	CodeManagedDisabled      = "managed_olts_disabled"
+)
+
 // Clock tolerances (ADR-0045): an expires_at in the past is accepted up to 2 minutes (clock drift); one more than 65 minutes ahead is refused (the Cloud only issues <= 60).
 const (
 	PastTolerance = 2 * time.Minute
@@ -44,7 +59,7 @@ const (
 // Result is what is reported to the Cloud for one attempt.
 type Result struct {
 	Outcome string // applied | failed
-	Code    string // failure code; empty when applied
+	Code    string // failure code; empty when applied (the only code an applied result carries is awaiting_local_trust, for an olt_connection that is not trusted yet)
 }
 
 // ErrAborted is returned by a test hook to simulate the process dying at that point: nothing is reported.
@@ -70,8 +85,10 @@ type Processor struct {
 	Pub              ed25519.PublicKey // the Cloud's pinned key (job_public_key)
 	Targets          map[string]Target
 	Store            *AppliedStore
-	Now              func() time.Time
-	Log              *slog.Logger
+	// Managed (ADR-0046) is the policy, registry and trust of the OLTs the Cloud may add. nil = the olt_connection kind is refused with managed_olts_disabled.
+	Managed *Managed
+	Now     func() time.Time
+	Log     *slog.Logger
 
 	// Test hooks (nil in production): called after step 4 / step 5; an error aborts the processing as if the process had died there.
 	AfterWrite  func() error
@@ -144,7 +161,7 @@ func (p *Processor) Process(d *gateway.SecretDelivery) (Result, error) {
 	// Structure first: nothing here is trusted, it only decides whether the signed bytes can even be rebuilt.
 	exp, expOK := parseExpires(d.ExpiresAt)
 	if !uuidRe.MatchString(d.ID) || d.LeaseToken == "" || d.OLTName == "" || len(d.OLTName) > 128 ||
-		(d.Kind != config.KindSSHLogin && d.Kind != config.KindSNMPCommunity) || !keyIDRe.MatchString(d.KeyID) || !expOK ||
+		(d.Kind != config.KindSSHLogin && d.Kind != config.KindSNMPCommunity && d.Kind != config.KindOLTConnection) || !keyIDRe.MatchString(d.KeyID) || !expOK ||
 		d.Sealed == "" || len(d.Sealed) > 4*MaxBlobBytes {
 		log.Warn("olt secret delivery refused", "code", CodeInvalidPayload, "step", "structure")
 		return fail(CodeInvalidPayload), nil
@@ -181,10 +198,19 @@ func (p *Processor) Process(d *gateway.SecretDelivery) (Result, error) {
 		log.Warn("olt secret delivery refused", "code", CodeInvalidPayload, "step", "validity too far ahead")
 		return fail(CodeInvalidPayload), nil
 	}
-	tgt, ok := p.Targets[d.OLTName]
-	if !ok || tgt.Path == "" || (tgt.Accepts != nil && !tgt.Accepts(d.Kind)) {
-		log.Warn("olt secret delivery refused", "code", CodeTargetNotConfigured)
-		return fail(CodeTargetNotConfigured), nil
+	credPath := ""
+	if d.Kind == config.KindOLTConnection {
+		if p.Managed == nil || p.Managed.Policy == nil || p.Managed.Store == nil {
+			log.Warn("olt secret delivery refused", "code", CodeManagedDisabled)
+			return fail(CodeManagedDisabled), nil
+		}
+	} else {
+		path, code := p.credentialTarget(d.OLTName, d.Kind)
+		if code != "" {
+			log.Warn("olt secret delivery refused", "code", code)
+			return fail(code), nil
+		}
+		credPath = path
 	}
 
 	// (2) open and validate
@@ -194,10 +220,24 @@ func (p *Processor) Process(d *gateway.SecretDelivery) (Result, error) {
 		return fail(CodeDecryptFailed), nil
 	}
 	defer credfile.Zero(pt)
-	set, perr := parsePlaintext(pt, d.Kind)
-	if perr != nil {
-		log.Warn("olt secret delivery refused", "code", CodeInvalidPayload, "step", "plaintext")
-		return fail(CodeInvalidPayload), nil
+	var set credfile.Creds
+	var conn *connection
+	if d.Kind == config.KindOLTConnection {
+		var code string
+		if conn, code = parseConnection(pt, d.OLTName); code != "" {
+			log.Warn("olt secret delivery refused", "code", code, "step", "plaintext")
+			return fail(code), nil
+		}
+		if code = p.checkConnection(conn); code != "" {
+			log.Warn("olt secret delivery refused", "code", code)
+			return fail(code), nil
+		}
+	} else {
+		var perr error
+		if set, perr = parsePlaintext(pt, d.Kind); perr != nil {
+			log.Warn("olt secret delivery refused", "code", CodeInvalidPayload, "step", "plaintext")
+			return fail(CodeInvalidPayload), nil
+		}
 	}
 
 	// (3) already applied => never write again, answer applied; a rollback is refused
@@ -208,6 +248,9 @@ func (p *Processor) Process(d *gateway.SecretDelivery) (Result, error) {
 	}
 	if done {
 		log.Info("olt secret delivery was already applied; reporting applied without writing again")
+		if conn != nil {
+			return p.connectionResult(d.OLTName, conn), nil
+		}
 		return Result{Outcome: OutcomeApplied}, nil
 	}
 	if stale {
@@ -215,10 +258,22 @@ func (p *Processor) Process(d *gateway.SecretDelivery) (Result, error) {
 		return fail(CodeStale), nil
 	}
 
-	// (4) credentials file (atomic, locked, merged)
-	if err := credfile.Merge(tgt.Path, set); err != nil {
-		log.Error("olt secret delivery not applied: the credentials file could not be written", "code", CodeWriteFailed, "err", err)
-		return fail(CodeWriteFailed), nil
+	// (4) the credentials file (atomic, locked, merged) or, for olt_connection, the registry (atomic) and the local trust that goes with it
+	if conn != nil {
+		if code := p.writeConnection(conn, log); code != "" {
+			return fail(code), nil
+		}
+	} else {
+		if p.Managed != nil && !p.isStatic(d.OLTName) {
+			if err := p.Managed.Store.EnsureCredsDir(); err != nil {
+				log.Error("olt secret delivery not applied: the managed credentials directory is not usable", "code", CodeWriteFailed, "err", err)
+				return fail(CodeWriteFailed), nil
+			}
+		}
+		if err := credfile.Merge(credPath, set); err != nil {
+			log.Error("olt secret delivery not applied: the credentials file could not be written", "code", CodeWriteFailed, "err", err)
+			return fail(CodeWriteFailed), nil
+		}
 	}
 	if p.AfterWrite != nil {
 		if err := p.AfterWrite(); err != nil {
@@ -236,6 +291,11 @@ func (p *Processor) Process(d *gateway.SecretDelivery) (Result, error) {
 		if err := p.AfterRecord(); err != nil {
 			return Result{}, err
 		}
+	}
+	if conn != nil {
+		res := p.connectionResult(d.OLTName, conn)
+		log.Info("olt secret delivery applied", "action", conn.Action, "state", res.Code)
+		return res, nil
 	}
 	log.Info("olt secret delivery applied")
 	return Result{Outcome: OutcomeApplied}, nil

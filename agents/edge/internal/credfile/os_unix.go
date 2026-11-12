@@ -31,6 +31,19 @@ func lockFile(path string) (func(), error) {
 	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
 }
 
+// lockFileShared takes the SHARED flock of the same lock file: any number of holders, and an exclusive holder (lockFile) waits for all of them.
+func lockFileShared(path string) (func(), error) {
+	f, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_SH); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
+}
+
 func syncDir(dir string) error {
 	d, err := os.Open(filepath.Clean(dir))
 	if err != nil {

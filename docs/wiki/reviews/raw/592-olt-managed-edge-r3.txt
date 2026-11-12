@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1d1af-0bb8-7041-87ca-e9e4a02f6a77).
+[codex] Turn started (01a1d1af-0bf6-77e0-8c0c-3e9d8e69aec1).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os caminhos de confiança, conexão e persistência, ...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=5 main...HEAD -- agents/edge...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --unified=5 main...HEAD -- agents/edge... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --unified=3 main...HEAD -- agents/edge/internal/managedolts/policy.go...
+[codex] Command completed: /bin/bash -lc 'git diff --unified=3 main...HEAD -- agents/edge/internal/managedolts/policy.go... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/managedolts/store.go | sed -n '370,515p'; nl -ba a...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/managedolts/store.go | sed -n '370,515p'; nl -ba a... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/managedolts/policy.go | sed -n '90,130p'; nl -ba a...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/managedolts/policy.go | sed -n '90,130p'; nl -ba a... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não deve seguir ainda: o novo estado removido é duráv...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não deve seguir ainda: o novo estado removido é durável só até o limite de 256 tombstones; remoções acumuladas enquanto a nuvem não aceita os reportes descartam silenciosamente estados pendentes.
+
+Findings:
+- [high] Limite de tombstones descarta remoções que ainda não foram reportadas (agents/edge/internal/managedolts/store.go:407-430)
+  `addTombstone` mantém apenas os 256 registros mais recentes. Se a nuvem estiver indisponível ou rejeitar reportes enquanto mais de 256 OLTs forem removidas, cada nova remoção elimina a mais antiga de `removed.json`. Quando a comunicação voltar, o reporter não terá como reportar essas remoções, contrariando a garantia de durabilidade até a nuvem aceitar o reporte e deixando o estado remoto incorreto sem indicação local. Recusar a remoção antes de apagar os dados quando o limite for atingido, ou usar armazenamento que não descarte tombstones pendentes, evita essa perda.
+  Recommendation: Não evictar tombstones não confirmados. Se houver limite operacional, falhar a remoção antes de gravar/apagar qualquer estado quando o limite for atingido, ou persistir tombstones em formato que possa crescer até a confirmação da nuvem.
+
+Next steps:
+- Revisar o comportamento quando há mais de 256 remoções pendentes e adicionar cobertura para garantir que nenhuma seja descartada antes da confirmação da nuvem.
