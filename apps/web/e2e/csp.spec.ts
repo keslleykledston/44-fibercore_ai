@@ -87,7 +87,8 @@ test("renovação de sessão com CSP: /login não consome o refresh; rota proteg
   const html = await both[0].text();
   const hdr = both[0].headers()["content-security-policy-report-only"] ?? both[0].headers()["content-security-policy"];
   expect(hdr).toContain("'nonce-");
-  expect(html, "o HTML renderizado tem o nonce da PRÓPRIA resposta").toContain(`nonce="${/'nonce-([^']+)'/.exec(hdr)![1]}"`);
+  for (const r of both) expect(await r.text(), "o renderizador recebeu o cookie JÁ renovado: a requisição que renovou renderiza logada (menu principal, não a tela de login)").toContain('aria-label="Principal"');
+  expect(html,"o HTML renderizado tem o nonce da PRÓPRIA resposta").toContain(`nonce="${/'nonce-([^']+)'/.exec(hdr)![1]}"`);
   expect(await refresh(), "o refresh rotacionou").not.toBe(r0);
   await page.goto("/rede");
   await expect(page).toHaveURL(/\/rede$/);

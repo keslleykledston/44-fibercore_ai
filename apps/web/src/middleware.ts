@@ -77,6 +77,8 @@ export async function middleware(req: NextRequest) {
   }
   req.cookies.set("fc_token", body.access_token); // visível para a renderização desta mesma requisição
   req.cookies.set("fc_refresh", body.refresh_token);
+  // `req.cookies.set` reescreve o cabeçalho `cookie` de `req.headers` (RequestCookies compartilha o Headers); esta cópia leva o valor JÁ RENOVADO
+  // (e não o original) para a renderização: provado em e2e (a página protegida renderiza logada na requisição que renovou).
   csp.headers.set("cookie", req.headers.get("cookie") ?? "");
   const res = next();
   res.cookies.set("fc_token", body.access_token, opts(body.expires_in ?? 900));
