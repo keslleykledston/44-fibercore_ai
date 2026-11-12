@@ -16,3 +16,8 @@ ef641c1a5d056a2e37af8c703517d4d345a2d87d:agents/edge/internal/oltsecrets/worker_
 cb39a0d1b204b8c5acd3576698f63cbc7e20eb09:agents/edge/internal/oltsecrets/process_test.go:generic-api-key:122
 cb39a0d1b204b8c5acd3576698f63cbc7e20eb09:agents/edge/internal/oltsecrets/process_test.go:generic-api-key:198
 cb39a0d1b204b8c5acd3576698f63cbc7e20eb09:agents/edge/internal/oltsecrets/process_test.go:generic-api-key:505
+# valores FALSOS dos testes do centro de OLT e do isolamento entre organizações (ADR-0046): key_id fictício de 16 hex e senha de exemplo de um convite de teste; sem relação com qualquer credencial real
+4c32c53f945e612652341717c0bab71f9abb18bb:apps/web/e2e/frota-centro-flag.spec.ts:generic-api-key:26
+4c32c53f945e612652341717c0bab71f9abb18bb:apps/web/e2e/frota-centro.spec.ts:generic-api-key:271
+41c0a1e5d0945a597bb435b2b759a44841db0c1a:apps/api/tests/test_org_isolation.py:generic-api-key:563
+41c0a1e5d0945a597bb435b2b759a44841db0c1a:apps/api/tests/test_org_isolation.py:generic-api-key:565
