@@ -453,6 +453,8 @@ def test_a_lapsed_lease_goes_back_to_pending_with_a_new_token_and_the_late_resul
     did = c.post(c.make()[0]).json()["id"]
     old = c.next().json()
     c.lapse(did)
+    stale = c.result(did, old["lease_token"])   # the lease ran out and no `next` reconciled it yet: the token is no longer the CURRENT attempt, so the result is refused and nothing changes
+    assert (stale.status_code, stale.json()["detail"]) == (409, "stale_lease") and c.row(did).status == "DISPATCHED"
     new = c.next().json()   # the lapse is reconciled by the next call, which hands the delivery out again
     assert new["id"] == did and new["lease_token"] != old["lease_token"] and new["sealed"] == old["sealed"]
     assert c.row(did).attempts == 1

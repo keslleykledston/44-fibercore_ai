@@ -171,14 +171,15 @@ class ResultIn(BaseModel):
 
 @router.post("/v1/edge/secret-deliveries/{delivery_id}/result", status_code=204)
 def delivery_result(delivery_id: UUID, body: ResultIn, p: Principal = Depends(require("jobs:execute")), conn: Connection = TENANT_CONN) -> Response:
-    """Only the CURRENT lease token of a DISPATCHED delivery moves it (409 `stale_lease` otherwise, nothing changed). The same result repeated in a terminal state is 204; a different one is 409. Every terminal state erases the blob."""
+    """Only the CURRENT, unexpired lease token of a DISPATCHED delivery moves it (409 `stale_lease` otherwise, nothing changed). The same result repeated in a terminal state is 204; a different one is 409. Every terminal state erases the blob."""
     edge_id = _edge(p)
-    row = conn.execute(text("SELECT id, status, lease_token, code, kind, olt_id FROM olt_secret_deliveries WHERE id = :i AND edge_id = :e FOR UPDATE"), {"i": delivery_id, "e": edge_id}).first()
+    row = conn.execute(text("SELECT id, status, lease_token, code, kind, olt_id, (lease_until IS NOT NULL AND lease_until > now()) AS live FROM olt_secret_deliveries WHERE id = :i AND edge_id = :e FOR UPDATE"),
+                       {"i": delivery_id, "e": edge_id}).first()
     if row is None:
         raise HTTPException(404, "delivery not found")
     status = "APPLIED" if body.outcome == "applied" else "FAILED"
     if row.status == "DISPATCHED":
-        if row.lease_token != body.lease_token:
+        if row.lease_token != body.lease_token or not row.live:   # the CURRENT attempt only: a lease that ran out is not current even if no `next` has reconciled it yet (the redelivery is idempotent at the Edge: it reports `applied` again)
             raise HTTPException(409, "stale_lease")
         conn.execute(text("UPDATE olt_secret_deliveries SET status = :s, code = :c, sealed = NULL, updated_at = now() WHERE id = :i"), {"s": status, "c": body.code, "i": delivery_id})
         audit(conn, p, "fleet.secret_delivery.result", "olt", str(row.olt_id), {"delivery_id": str(delivery_id), "kind": row.kind, "outcome": body.outcome, "code": body.code})
