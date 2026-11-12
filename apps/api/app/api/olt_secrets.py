@@ -204,6 +204,10 @@ class ResultIn(BaseModel):
 def delivery_result(delivery_id: UUID, body: ResultIn, p: Principal = Depends(require("jobs:execute")), conn: Connection = TENANT_CONN) -> Response:
     """Only the CURRENT, unexpired lease token of a DISPATCHED delivery moves it (409 `stale_lease` otherwise, nothing changed). The same result repeated in a terminal state is 204; a different one is 409. Every terminal state erases the blob."""
     edge_id = _edge(p)
+    pre = conn.execute(text("SELECT olt_id, kind FROM olt_secret_deliveries WHERE id = :i AND edge_id = :e"), {"i": delivery_id, "e": edge_id}).first()
+    if pre is not None and pre.kind == olt_secrets.CONNECTION_KIND:
+        # an applied connection writes the OLT row (narrow function): take the OLT BEFORE the delivery, the order `next`, PATCH and create_delivery use (Codex r2: no deadlock)
+        conn.execute(text("SELECT 1 FROM olts WHERE id = :o FOR UPDATE"), {"o": pre.olt_id})
     row = conn.execute(text("SELECT id, status, lease_token, code, kind, olt_id, (lease_until IS NOT NULL AND lease_until > now()) AS live FROM olt_secret_deliveries WHERE id = :i AND edge_id = :e FOR UPDATE"),
                        {"i": delivery_id, "e": edge_id}).first()
     if row is None:

@@ -594,3 +594,30 @@ def test_a_change_of_the_connection_and_the_dispatch_of_its_delivery_never_inter
             assert (rp.status_code, rp.json()["detail"]) == (409, "delivery_in_flight") and rn.status_code == 200 and row.status == "DISPATCHED"
             assert c.result(rn.json()["id"], rn.json()["lease_token"]).status_code == 204
     assert outcomes                                                                                                 # (which of the two wins is the scheduler's; both are consistent)
+
+
+def test_result_next_patch_and_create_take_the_olt_before_the_delivery_so_they_never_deadlock(ctx):
+    """Codex r2: `result` of an applied connection writes the OLT row. Four writers racing for the same OLT must all finish without a 5xx (a deadlock would abort one of them after ~1 s)."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    c = ctx
+    reach(c.migrated, c.olt)
+    for i in range(10):
+        assert c.post(make_conn(c)[0]).status_code == 202
+        n = c.next().json()
+        assert n["kind"] == "olt_connection"
+        assert c.post(make_conn(c)[0]).status_code == 202                                                          # one more waiting: `next` has something to dispatch next to the result
+        barrier = threading.Barrier(4)
+
+        def run(fn, b=barrier):
+            b.wait()
+            return fn()
+        jobs = (lambda n=n: c.result(n["id"], n["lease_token"], code="awaiting_local_trust"),
+                lambda: c.next(),
+                lambda i=i: c.client.patch(f"/v1/fleet/olts/{c.olt}", headers=c.h, json={"label": f"L{i}"}),
+                lambda: c.post(make_conn(c)[0]))
+        with ThreadPoolExecutor(4) as ex:
+            res = [f.result() for f in [ex.submit(run, j) for j in jobs]]
+        assert [r.status_code for r in res][0] in (204, 409) and all(r.status_code < 500 for r in res), [r.status_code for r in res]
+        with c.migrated.begin() as conn:   # the board is clean for the next round
+            conn.execute(text("UPDATE olt_secret_deliveries SET status = 'CANCELLED', sealed = NULL WHERE olt_id = :o AND status IN ('PENDING', 'DISPATCHED')"), {"o": c.olt})
