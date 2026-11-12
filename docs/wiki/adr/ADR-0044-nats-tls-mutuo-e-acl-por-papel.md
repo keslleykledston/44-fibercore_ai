@@ -1,4 +1,4 @@
-# ADR-0042: NATS com TLS mútuo e ACL por papel (opt-in)
+# ADR-0044: NATS com TLS mútuo e ACL por papel (opt-in)
 
 Status: Accepted (implementação opt-in; NÃO ativada na LAB) | Data: 2026-11-11 | Owner: Claude Code (implementação), Codex (revisão)
 
