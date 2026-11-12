@@ -1,0 +1,30 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1d1d6-5d2b-7522-8e3b-0c0be24e9802).
+[codex] Turn started (01a1d1d6-5d78-7bb3-99e1-8c6a32470581).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main`, priorizando os limites de tenant, permissões e os fluxo...
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=5 main...HEAD -- apps/api/alembic/versions/00...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=5 main...HEAD -- apps/api/alembic/versions/00... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/acs.py | sed -n '1,270p'; nl -ba apps/api/alembic/vers...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/acs.py | sed -n '1,270p'; nl -ba apps/api/alembic/vers... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '270,320p'; nl -ba apps/api/app/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/inventory.py | sed -n '270,320p'; nl -ba apps/api/app/... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=4 main...HEAD -- agents/edge/cmd/fibercore-ed...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=4 main...HEAD -- agents/edge/cmd/fibercore-ed... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/agent/agent.go | sed -n '55,95p'; nl -ba agents/ed...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/agent/agent.go | sed -n '55,95p'; nl -ba agents/ed... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a função SECURITY DEFINER permite ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a função SECURITY DEFINER permite que qualquer sessão com a role da aplicação reporte estado em ACS de qualquer Edge do mesmo tenant; relatos de falha também podem acumular e ser aplicados fora de ordem.
+
+Findings:
+- [high] A função de relato não vincula o Edge ao chamador (apps/api/alembic/versions/0052_acs_registry.py:77-98)
+  A função recebe `p_edge` do chamador e usa esse valor para conferir o ACS, mas não verifica que ele corresponde ao Edge autenticado. Como `EXECUTE` é concedido a `fibercore_app`, uma sessão dessa role pode chamar a função com o ID de outro Edge do mesmo tenant e atualizar o estado do ACS associado. A rota HTTP verifica `p.edge_id`, mas isso não protege chamadas diretas à função SECURITY DEFINER nem satisfaz o isolamento por Edge no banco. Vincule a função a uma identidade de Edge não controlável pelo argumento, ou restrinja a execução por um mecanismo que impeça sessões não Edge de invocá-la.
+  Recommendation: Faça a função validar uma identidade de Edge autenticada e confiável da sessão, ou remova o GRANT amplo e exponha o relato somente por uma camada que não permita chamadas diretas com `p_edge` arbitrário.
+- [medium] Relatos de falha podem se acumular na fila durável (agents/edge/internal/collector/collector.go:147-150)
+  Quando `Devices()` falha, o coletor retorna um item `acs_status` junto com erro. `CollectOnce` persiste o item, mas marca a rodada incompleta; por isso não chama `PruneSuperseded` para a chave do ACS. Repetidas falhas acumulam relatos antigos até o limite da fila. Quando a conexão volta, o Edge pode enviar esses relatos em sequência, sobrescrevendo o estado mais recente com um erro antigo e atualizando `last_seen_at` durante a reprodução, o que pode mostrar saúde desatualizada como recente.
+  Recommendation: Permita coalescer relatos `acs_status` da mesma chave mesmo em rodadas incompletas, ou persista apenas o estado mais recente de forma que não descarte snapshots incompletos de outros tipos.

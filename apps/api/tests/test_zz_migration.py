@@ -63,3 +63,33 @@ def test_0013_refuses_colliding_identity_data_instead_of_merging_it(migrated, ad
     assert run("upgrade", "head").returncode == 0  # clean data: canonicalised, constraints in place
     with migrated.connect() as c:
         assert c.execute(text("SELECT canonical_serial FROM cpes WHERE tenant_id = :t"), {"t": tid}).scalar() == "LOWER-FIXME"
+
+
+def test_0052_downgrade_removes_the_acs_registry_completely_and_upgrade_brings_it_back(migrated, admin_url):
+    """ADR-0046 D2: the CPEs survive (only their `acs_id` goes), the table, its function, the trigger and the constraints leave no trace, and the way back up is clean."""
+    import os
+    import subprocess
+    import sys
+
+    from tests.conftest import API_DIR, APP_PW, RBAC_PW, WORKER_PW
+    env = {**os.environ, "ADMIN_DATABASE_URL": admin_url, "APP_DB_PASSWORD": APP_PW, "WORKER_DB_PASSWORD": WORKER_PW, "RBAC_DB_PASSWORD": RBAC_PW}
+    run = lambda *a: subprocess.run([sys.executable, "-m", "alembic", *a], cwd=API_DIR, env=env, capture_output=True, text=True)  # noqa: E731, S603
+    with migrated.begin() as c:
+        tid = c.execute(text("INSERT INTO tenants(name) VALUES ('m52') RETURNING id")).scalar()
+        eid = c.execute(text("INSERT INTO edges(tenant_id,name) VALUES (:t,'e52') RETURNING id"), {"t": tid}).scalar()
+        aid = c.execute(text("INSERT INTO acs_connections(tenant_id, name, kind, edge_id) VALUES (:t,'Genie','genieacs',:e) RETURNING id"), {"t": tid, "e": eid}).scalar()
+        c.execute(text("INSERT INTO cpes(tenant_id, edge_id, canonical_serial, acs_id) VALUES (:t,:e,'M52-0001',:a)"), {"t": tid, "e": eid, "a": aid})
+    r = run("downgrade", "0051")
+    assert r.returncode == 0, r.stderr[-800:]
+    with migrated.connect() as c:
+        assert c.execute(text("SELECT to_regclass('public.acs_connections')")).scalar() is None
+        assert c.execute(text("SELECT count(*) FROM information_schema.columns WHERE table_name = 'cpes' AND column_name = 'acs_id'")).scalar() == 0
+        assert c.execute(text("SELECT count(*) FROM pg_proc WHERE proname IN ('app_acs_edge_report', 'acs_connections_guard')")).scalar() == 0
+        assert c.execute(text("SELECT count(*) FROM cpes WHERE canonical_serial = 'M52-0001'")).scalar() == 1
+        assert c.execute(text("SELECT count(*) FROM pg_constraint WHERE conname = 'cpes_acs_fk'")).scalar() == 0
+    r = run("upgrade", "head")
+    assert r.returncode == 0, r.stderr[-800:]
+    with migrated.connect() as c:
+        assert c.execute(text("SELECT to_regclass('public.acs_connections')")).scalar() is not None
+        assert c.execute(text("SELECT acs_id FROM cpes WHERE canonical_serial = 'M52-0001'")).scalar() is None   # the link was local to the registry and is gone; nothing is invented on the way up
+        assert c.execute(text("SELECT count(*) FROM pg_proc WHERE proname = 'app_acs_edge_report'")).scalar() == 1

@@ -60,6 +60,7 @@ CAPABILITIES: list[tuple[str, str, tuple[str, ...]]] = [
     ("fleet_secrets", "Configurar login, senha e community das OLTs pela tela (cifrados no navegador até o Edge; a nuvem nunca os vê nem os devolve)", ("fleet:secrets",)),
     ("fleet_provision", "Cadastrar a OLT de ponta a ponta: entregar ao Edge o endereço, a porta, o protocolo e a impressão digital do host "
      "(cifrados no navegador; o Edge só conecta depois da confirmação local)", ("fleet:provision",)),
+    ("acs", "Ver e cadastrar o ACS do provedor por Edge (só o cadastro e o estado informado pelo Edge; a URL e a senha do ACS ficam no Edge, nunca na nuvem)", ("acs:read", "acs:manage")),
     ("discovery", "Ver e registrar avistamentos de ONUs aguardando autorização (somente leitura; nada é autorizado)", ("discovery:read", "discovery:import")),
     ("profiles", "Ver, importar e editar rascunhos de profiles da OLT, simular e publicar revisões (nada é enviado à OLT)", ("profiles:read", "profiles:import", "profiles:edit", "profiles:publish")),
     ("erp", "Conectar e testar o ERP do provedor (somente leitura)", ("erp:manage", "erp:test")),

@@ -43,6 +43,8 @@
 | `fleet:test` | R1 | não | sim | Pedir um teste de conexão de uma OLT (leitura somente leitura pelo Edge, com orçamento por OLT) |
 | `fleet:secrets` | R3 | sim | não | Confirmar a chave de um Edge e enviar login/senha/community de uma OLT, cifrados no navegador até o Edge (a nuvem nunca vê nem devolve o segredo) |
 | `fleet:provision` | R3 | sim | não | Entregar ao Edge a CONEXÃO de uma OLT (endereço, porta, protocolo, impressão digital do host), cifrada no navegador, dentro da política local do Edge; a confiança no host é dada no próprio Edge |
+| `acs:read` | R0 | não | não | Ver os ACS cadastrados do provedor (nome, tipo, Edge, estado informado pelo Edge); a URL e a senha do ACS nunca estão na nuvem |
+| `acs:manage` | R2 | não | não | Cadastrar, renomear, ativar e desativar o ACS de um Edge (só o cadastro: a URL e o segredo do NBI ficam no Edge) |
 | `members:read` | R1 | não | não | Ver os membros do provedor e o estado do MFA de cada um |
 | `members:manage` | R3 | sim | não | Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite) |
 | `platform:delegate` | R3 | sim | não | Conceder e revogar o acesso temporário (até 8 h, com motivo) do suporte da plataforma a este provedor |
@@ -93,6 +95,8 @@
 | `fleet:test` | ✔ | ✔ | ✔ |  |  |  |  |  |  |
 | `fleet:secrets` | ✔ |  |  |  |  |  |  |  |  |
 | `fleet:provision` | ✔ |  |  |  |  |  |  |  |  |
+| `acs:read` | ✔ | ✔ | ✔ |  |  | ✔ |  |  |  |
+| `acs:manage` | ✔ |  |  |  |  |  |  |  |  |
 | `members:read` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `members:manage` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `platform:delegate` | ✔ |  |  |  |  |  |  |  |  |
@@ -109,6 +113,10 @@
 | GET | `/livez` | (pública ou usa credencial no corpo) |
 | GET | `/metrics` | (pública ou usa credencial no corpo) |
 | GET | `/readyz` | (pública ou usa credencial no corpo) |
+| GET | `/v1/acs` | `acs:read` |
+| POST | `/v1/acs` | `acs:manage` |
+| GET | `/v1/acs/{acs_id}` | `acs:read` |
+| PATCH | `/v1/acs/{acs_id}` | `acs:manage` |
 | GET | `/v1/associations` | `customers:read` |
 | POST | `/v1/associations/{assoc_id}/approve` | `associations:review` |
 | POST | `/v1/associations/{assoc_id}/reject` | `associations:review` |
@@ -163,6 +171,7 @@
 | POST | `/v1/diagnostics/runs` | `diagnostics:run` |
 | GET | `/v1/diagnostics/runs/{run_id}` | `incidents:read` |
 | GET | `/v1/discovery/onus` | `discovery:read` |
+| POST | `/v1/edge/acs-status` | `jobs:execute` |
 | POST | `/v1/edge/cpe-config` | `inventory:write` |
 | POST | `/v1/edge/cpe-snapshots` | `inventory:write` |
 | POST | `/v1/edge/cpe-state` | `inventory:write` |

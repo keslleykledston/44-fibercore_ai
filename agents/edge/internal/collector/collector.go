@@ -16,6 +16,9 @@ type Item struct {
 	Kind    string
 	Key     string // logical stream; a newer complete round of the same Key supersedes older queued items
 	Payload []byte
+	// Gauge marks an item that is the CURRENT value of something (the ACS status): once it is persisted it supersedes the older queued items of its Key even when the round that made it was
+	// incomplete. Without it a long ACS outage would queue one failure report per round and replay stale ones, in order, when the Cloud came back.
+	Gauge bool
 }
 
 // Collector gathers one read-only observation round. Implementations MUST NOT write to devices.
@@ -40,10 +43,37 @@ type GenieACS struct {
 	// OnSkip, when set, receives how many devices were left out and why ("no_serial", "placeholder_identity"); nothing identifying.
 	OnSkip func(reason string, n int)
 
+	// ACSID (ADR-0046 D2) is `nbi_cloud_id`: the id of THIS Edge's ACS in the Cloud registry. When set, every round also queues ONE `acs_status` item (did the NBI answer, how many devices,
+	// a closed error code). It rides on the read the round already makes: nothing extra is asked of the ACS. Empty = the Cloud is not told (an Edge with an old config is unchanged).
+	ACSID string
+
 	EdgeID      string
 	ConnectorID string
 	Client      DeviceLister
 	Now         func() time.Time
+}
+
+// ACSKind is the registry kind this collector speaks (the Cloud checks it against the registered kind).
+const ACSKind = "genieacs"
+
+type acsStatus struct {
+	ACSID       string  `json:"acs_id"`
+	Kind        string  `json:"kind"`
+	OK          bool    `json:"ok"`
+	DeviceCount *int    `json:"device_count"`
+	ErrorCode   *string `json:"error_code"`
+}
+
+// statusItem is the closed report the Cloud accepts: ok carries the device count and no error code, a failure the reverse. Superseded by the next round of the same ACS.
+func (g *GenieACS) statusItem(devices int, errCode string) Item {
+	st := acsStatus{ACSID: g.ACSID, Kind: ACSKind, OK: errCode == ""}
+	if st.OK {
+		st.DeviceCount = &devices
+	} else {
+		st.ErrorCode = &errCode
+	}
+	b, _ := json.Marshal(st) // plain types: cannot fail
+	return Item{Kind: "acs_status", Key: "acs_status:" + g.ACSID, Payload: b, Gauge: true}
 }
 
 func (g *GenieACS) Name() string { return "genieacs" }
@@ -118,6 +148,9 @@ func isPlaceholder(d nbi.Device) bool {
 func (g *GenieACS) Collect(ctx context.Context) ([]Item, error) {
 	devs, err := g.Client.Devices(ctx)
 	if err != nil {
+		if g.ACSID != "" && ctx.Err() == nil { // the failure is itself the news; a shutdown (cancelled context) is not an ACS failure
+			return []Item{g.statusItem(0, nbi.ErrorCode(err))}, err
+		}
 		return nil, err
 	}
 	now := g.Now
@@ -193,6 +226,9 @@ func (g *GenieACS) Collect(ctx context.Context) ([]Item, error) {
 	}
 	if err := flush(); err != nil {
 		return nil, err
+	}
+	if g.ACSID != "" {
+		items = append(items, g.statusItem(len(devs), ""))
 	}
 	// State goes AFTER the inventory items of the same round (the Cloud resolves the CPE through the binding the snapshot just created).
 	// Failing to read it never costs the inventory.

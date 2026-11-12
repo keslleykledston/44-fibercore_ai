@@ -5,8 +5,10 @@ package nbi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -15,6 +17,44 @@ import (
 )
 
 const maxBody = 16 << 20 // 16 MiB
+
+// What a failed Devices() round says about the ACS, in a closed set the Cloud accepts (ADR-0046 D2, POST /v1/edge/acs-status). Never the text of an error, a URL or a device id.
+var (
+	ErrTooLarge    = errors.New("nbi: response too large")
+	ErrBadResponse = errors.New("nbi: invalid response")
+	ErrUnreachable = errors.New("nbi: connection lost while reading")
+)
+
+// StatusError is an ACS answer that was not 200.
+type StatusError struct{ Code int }
+
+func (e *StatusError) Error() string { return fmt.Sprintf("nbi: unexpected status %d", e.Code) }
+
+// ErrorCode classifies a failure of Devices() into the closed list of the Cloud: timeout, unauthorized, unexpected_status, bad_response, too_large, unreachable, unknown.
+func ErrorCode(err error) string {
+	var se *StatusError
+	var ne net.Error
+	var ue *url.Error
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &ne) && ne.Timeout()):
+		return "timeout"
+	case errors.As(err, &se):
+		if se.Code == http.StatusUnauthorized || se.Code == http.StatusForbidden {
+			return "unauthorized"
+		}
+		return "unexpected_status"
+	case errors.Is(err, ErrTooLarge):
+		return "too_large"
+	case errors.Is(err, ErrBadResponse):
+		return "bad_response"
+	case errors.Is(err, ErrUnreachable) || errors.As(err, &ue) || errors.As(err, &ne):
+		return "unreachable"
+	default:
+		return "unknown"
+	}
+}
 
 type Client struct {
 	refreshMu sync.Mutex // serialises RefreshParams: pre-flight check, POSTs and cleanup of one call never interleave with another call's
@@ -112,18 +152,18 @@ func (c *Client) Devices(ctx context.Context) ([]Device, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("nbi: unexpected status %d", resp.StatusCode)
+		return nil, &StatusError{Code: resp.StatusCode}
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("nbi: reading response: %w: %w", ErrUnreachable, err)
 	}
 	if len(body) > maxBody {
-		return nil, fmt.Errorf("nbi: response exceeds %d bytes", maxBody)
+		return nil, fmt.Errorf("nbi: response exceeds %d bytes: %w", maxBody, ErrTooLarge)
 	}
 	var out []Device
 	if err := json.Unmarshal(body, &out); err != nil {
-		return nil, fmt.Errorf("nbi: invalid json: %w", err)
+		return nil, fmt.Errorf("nbi: invalid json: %w: %w", ErrBadResponse, err)
 	}
 	return out, nil
 }

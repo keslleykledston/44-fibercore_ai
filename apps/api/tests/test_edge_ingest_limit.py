@@ -94,6 +94,7 @@ def test_an_agent_over_its_budget_gets_429_with_retry_after_and_others_are_untou
     assert client.post("/v1/edge/cpe-state", headers=a1, json={"edge_id": str(inv["a1"]["edge"]), "observed_at": _now(), "states": []}).status_code == 429
     assert client.post("/v1/edge/cpe-config", headers=a1, json={"edge_id": str(inv["a1"]["edge"]), "observed_at": _now(), "configs": []}).status_code == 429
     assert client.post("/v1/edge/speed-health", headers=a1, json={"endpoints": []}).status_code == 429
+    assert client.post("/v1/edge/acs-status", headers=a1, json={"acs_id": str(inv["a1"]["edge"]), "kind": "genieacs", "ok": True, "device_count": 1, "error_code": None}).status_code == 429   # ADR-0046 D2
     # another Edge of the same tenant, and an Edge of another tenant, keep their own budget
     assert client.post("/v1/edge/olt-snapshots", headers=a2, json=snap(inv, "a2", name="OLT-RL-2")).status_code == 202
     assert client.post("/v1/edge/olt-snapshots", headers=b1, json=snap(inv, "b1", name="OLT-RL-3")).status_code == 202

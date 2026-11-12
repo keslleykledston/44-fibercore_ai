@@ -8,6 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app import __version__
+from app.api.acs import router as acs_router
 from app.api.bench_authorizations import router as bench_auth_router
 from app.api.context import router as context_router
 from app.api.cpe_state import router as cpe_state_router
@@ -94,6 +95,7 @@ app.include_router(ping_router)
 app.include_router(onu_discovery_router)
 app.include_router(fleet_router)
 app.include_router(olt_secrets_router)
+app.include_router(acs_router)
 app.include_router(knowledge_router)
 app.include_router(profile_studio_router)
 app.include_router(quality_router)

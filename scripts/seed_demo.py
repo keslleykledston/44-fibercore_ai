@@ -110,6 +110,7 @@ def main() -> None:
     cli("feature-set", tenant, "fleet_manager", "on")   # ADR-0041 PR2: cadastro de OLTs e POPs
     cli("feature-set", tenant, "fleet_secrets", "on")   # ADR-0045: credenciais da OLT cifradas no navegador (o e2e faz o papel do Edge)
     cli("feature-set", tenant, "fleet_provision", "on")   # ADR-0046: a conexão da OLT (endereço, porta, impressão digital) entregue ao Edge pelo assistente (o e2e faz o papel do Edge)
+    cli("feature-set", tenant, "acs_registry", "on")   # ADR-0046 D2: cadastro de ACS por Edge (o e2e faz o papel do Edge e informa o estado)
     # Certificação SINTÉTICA da leitura de perfis só para o tenant de demonstração (a OLT de laboratório real NÃO é certificada por aqui).
     cli("capability-set", tenant, "huawei", "MA5800-X7", "R018", "olt", "olt_profile_read", "supported", "observed",
         "--evidence", "seed-demo-sintetico", "--verified-at", datetime.now(UTC).isoformat())

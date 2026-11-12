@@ -195,6 +195,14 @@ articles:
   - assets/rede/frota-de-olts/teste/mobile.png
   e2e_test: help-screenshots.spec.ts › rede/frota-de-olts; fluxo em frota.spec.ts (frota)
   last_verified: '2026-11-02'
+- slug: rede/acs
+  ui_route: /rede/acs
+  status: published
+  images:
+  - assets/rede/acs/desktop.png
+  - assets/rede/acs/mobile.png
+  e2e_test: help-screenshots.spec.ts › rede/acs; fluxo em acs.spec.ts (acs)
+  last_verified: '2026-11-12'
 - slug: rede/base-de-conhecimento
   ui_route: /rede/conhecimento
   status: published

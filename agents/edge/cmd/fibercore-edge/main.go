@@ -130,7 +130,7 @@ func main() {
 					rep.DataModel, rep.Groups, rep.Completed, rep.Faulted, rep.Queued, rep.Cleaned, readable, rejected), nil
 			}
 		}
-		collectors = append(collectors, &collector.GenieACS{EdgeID: cfg.EdgeID, ConnectorID: cfg.ConnectorID, Client: nbiClient, Params: nbiClient,
+		collectors = append(collectors, &collector.GenieACS{EdgeID: cfg.EdgeID, ConnectorID: cfg.ConnectorID, Client: nbiClient, Params: nbiClient, ACSID: cfg.NBICloudID,
 			OnSkip: func(reason string, n int) { log.Info("genieacs: devices left out", "reason", reason, "count", n) }})
 	}
 

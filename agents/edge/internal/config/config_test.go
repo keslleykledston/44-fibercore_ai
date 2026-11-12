@@ -279,6 +279,27 @@ func TestR015ProfileLimitsPonPortsAtLoadTime(t *testing.T) {
 	}
 }
 
+func TestNBICloudIDIsOptionalAndMustBeALowerCaseUUIDWithAnNBI(t *testing.T) {
+	const nbi = `,"nbi_url":"http://10.0.0.5:7557","allowlist":["10.0.0.5:7557"]`
+	const id = "5f0c1d52-1b5e-4c36-9a3e-0f6a3f0d8c11"
+	if c, err := Load(write(t, 0o600, good(nbi)), "v"); err != nil || c.NBICloudID != "" {
+		t.Fatalf("optional: an old config must load unchanged: %+v %v", c, err)
+	}
+	if c, err := Load(write(t, 0o600, good(nbi+`,"nbi_cloud_id":"`+id+`"`)), "v"); err != nil || c.NBICloudID != id {
+		t.Fatalf("%+v %v", c, err)
+	}
+	for name, extra := range map[string]string{
+		"not a uuid":    nbi + `,"nbi_cloud_id":"genieacs-matriz"`,
+		"upper case":    nbi + `,"nbi_cloud_id":"` + strings.ToUpper(id) + `"`,
+		"url as id":     nbi + `,"nbi_cloud_id":"http://10.0.0.5:7557"`,
+		"without a nbi": `,"nbi_cloud_id":"` + id + `"`,
+	} {
+		if _, err := Load(write(t, 0o600, good(extra)), "v"); err == nil {
+			t.Errorf("%s: must be refused", name)
+		}
+	}
+}
+
 func TestRefreshTasksNeedsNBIAndSignedJobsAndIsOffByDefault(t *testing.T) {
 	const nbi = `,"nbi_url":"http://10.0.0.5:7557","allowlist":["10.0.0.5:7557"]`
 	const jobs = `,"jobs_enabled":true,"job_public_key":"A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg="`
