@@ -173,14 +173,17 @@ func LoadOrCreateKey(path string) (k *Key, created bool, err error) {
 	defer credfile.Zero(scalar)
 	b, _ := json.Marshal(keyFile{V: 1, Alg: "ECDH-P256", Private: b64.EncodeToString(scalar)})
 	defer credfile.Zero(b)
-	// O_EXCL through the same atomic path: never overwrite a key that appeared meanwhile, never leave a partial one
-	if _, statErr := os.Lstat(path); statErr == nil {
-		return nil, false, fmt.Errorf("%s: %w", path, ErrKeyFile)
+	// installed WITHOUT replacing: a complete temporary file is hard-linked to the final name (link fails if the name exists), so two processes racing here cannot
+	// overwrite each other's key and nobody ever sees a partial one. The loser loads the winner's key from disk.
+	err = credfile.CreateExclusive(path, b)
+	if errors.Is(err, os.ErrExist) {
+		k, err = LoadKey(path)
+		return k, false, err
 	}
-	if err := credfile.WriteAtomic(path, b); err != nil {
+	if err != nil {
 		return nil, false, err
 	}
-	k, err = LoadKey(path) // what is on disk is what will be used
+	k, err = LoadKey(path) // what is on disk is what will be used (and published)
 	if err != nil {
 		return nil, false, err
 	}

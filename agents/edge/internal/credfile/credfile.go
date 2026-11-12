@@ -316,3 +316,34 @@ func zero(b []byte) {
 
 // Zero wipes a buffer that held a secret (best effort: Go strings made from it are not wiped).
 func Zero(b []byte) { zero(b) }
+
+// CreateExclusive stores data at path ONLY if nothing is there: a complete temporary file (0600, fsynced) is hard-linked to the final name, and link(2) fails with
+// os.ErrExist instead of replacing. A concurrent creator therefore cannot overwrite the winner, and nobody sees a partial file. The temporary name is removed either way.
+func CreateExclusive(path string, data []byte) (err error) {
+	dir := filepath.Dir(path)
+	var rnd [8]byte
+	if _, err := rand.Read(rnd[:]); err != nil {
+		return err
+	}
+	tmp := filepath.Join(dir, ".fc-new-"+hex.EncodeToString(rnd[:])) // not tempPrefix: a Merge in the same directory must not sweep it away
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp)
+	if err = f.Chmod(0o600); err == nil {
+		if _, err = f.Write(data); err == nil {
+			err = f.Sync()
+		}
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	if err = os.Link(tmp, path); err != nil {
+		return err // os.ErrExist when someone else got there first
+	}
+	return syncDir(dir)
+}
