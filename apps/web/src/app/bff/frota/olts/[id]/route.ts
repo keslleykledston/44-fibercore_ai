@@ -50,5 +50,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (r.status === 200) return back(req, `/rede/frota/${id}?ok=oltatualizada`);
   const detail = (r.json as { detail?: unknown } | null)?.detail;
   const why422 = detail === "protocol_required" || detail === "telnet_has_no_ssh_fields" ? "protocolo" : detail === "snmp_transport_needs_v2c" ? "snmpv2" : "invalido";
+  if (r.status === 409 && detail === "delivery_in_flight") return back(req, `/rede/frota/${id}?erro=emandamento`);   // o Edge ainda aplica uma entrega desta OLT
   return back(req, `/rede/frota/${id}?erro=${r.status === 403 ? "permissao" : r.status === 422 ? why422 : r.status === 404 ? "popinexistente" : "falha"}`);
 }

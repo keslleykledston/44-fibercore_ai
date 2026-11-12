@@ -65,5 +65,6 @@ Object.assign(FLEET_FLASH, {
   protocolo: "A porta, a impressão digital e o modo SSH só valem com um protocolo; Telnet não tem impressão digital, modo SSH nem SSH legado.",
   snmpv2: "O transporte SNMP exige a versão SNMP v2c: escolha v2c no campo da versão do SNMP.",
   porta: "A porta é um número de 1 a 65535.",
+  emandamento: "O Edge ainda está aplicando uma entrega desta OLT (até 5 min). Espere o resultado e salve de novo.",
   impressaodigital: "A impressão digital do host deve ser “SHA256:” seguida de 43 caracteres (o que ssh-keygen -lf mostra).",
 });
