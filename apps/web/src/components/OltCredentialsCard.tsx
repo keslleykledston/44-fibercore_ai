@@ -17,7 +17,7 @@ export async function OltCredentialsCard({ olt, secretsOn = true }: { olt: Fleet
   const list = secretsOn && !telnet ? await apiSafe<{ items: Delivery[] }>(`/v1/fleet/olts/${olt.id}/secret-deliveries`) : { data: null };
   const confirmed = k.state === "confirmed";
   return (
-    <section id="credenciais" className="panel p-4 md:col-span-2" aria-label="Credenciais da OLT" data-testid="frota-credenciais">
+    <section id="credenciais" className="panel p-4 md:col-span-2" aria-label="Credenciais da OLT" data-testid={secretsOn ? "frota-credenciais" : "frota-chave-edge"}>
       <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">{secretsOn ? "Credenciais da OLT" : "Chave do Edge"}</h2>
       {secretsOn && !telnet && <div className="mb-4 grid gap-1 text-sm text-muted">
         <p>Login, senha e community SNMP são <strong>cifrados no seu navegador</strong> com a chave pública do Edge e só o Edge consegue abri-los: a nuvem, o servidor web e os backups guardam apenas texto cifrado, e nada devolve o segredo. A tela nunca mostra o que foi enviado.</p>

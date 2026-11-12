@@ -45,8 +45,8 @@ export function ConnectionFields({ defaults }: { defaults: Defaults }) {
             <span className="text-xs text-muted">Obtenha na rede da OLT com <code>{HOST_KEY_HELP}</code> (troque IP pelo endereço da OLT; confira por um canal confiável). A nuvem só a repassa ao Edge, que NÃO conecta antes de quem administra o Edge confirmá-la no servidor dele.</span></label>
           <label className="grid gap-1 text-sm" htmlFor={id("mode")}>Modo SSH
             <select id={id("mode")} name="ssh_mode" defaultValue={defaults.ssh_mode ?? "exec"} className={field}>{SSH_MODES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
-          <label className="flex min-h-touch items-center gap-2 text-sm" htmlFor={id("legacy")}>
-            <input id={id("legacy")} type="checkbox" name="legacy_ssh" value="1" defaultChecked={defaults.legacy_ssh} className="h-6 w-6" /> SSH legado (algoritmos antigos; o Edge só aceita se a política local permitir)</label>
+          <label className="flex min-h-touch items-center gap-2 text-sm">
+            <input type="checkbox" name="legacy_ssh" value="1" defaultChecked={defaults.legacy_ssh} className="h-7 w-7 shrink-0" /> SSH legado (algoritmos antigos; o Edge só aceita se a política local permitir)</label>
         </>
       )}
     </fieldset>

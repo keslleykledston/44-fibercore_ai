@@ -64,8 +64,8 @@ export function OltSteps({ olt, secretsOn, deliveries, sealKey, edgeOk }: { olt:
 
   // 3 Credenciais
   if (telnet) steps.push({ n: 3, title: "Entregar credenciais", ...blocked("Aguardando suporte a Telnet: nenhuma senha nem community é pedida ou entregue.") });
-  else if (simple) steps.push({ n: 3, title: "Entregar credenciais", ...blocked("Disponível depois de escolher o protocolo em Cadastro.") });
   else if (!secretsOn) steps.push({ n: 3, title: "Entregar credenciais", ...blocked("O recurso Credenciais da OLT (fleet_secrets) está desligado para este provedor.") });
+  else if (simple) steps.push({ n: 3, title: "Entregar credenciais", ...blocked("Disponível depois de escolher o protocolo em Cadastro.") });
   else {
     const kind = c.transport === "snmp" ? "snmp_community" : "ssh_login";
     const d = deliveryState(latest(items, kind));

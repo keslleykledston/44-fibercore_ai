@@ -82,6 +82,7 @@ export function OltConnectionDelivery({ olt, keyConfirmed, initialItems }: { olt
       if (r.status === 202) {
         setMsg({ tone: "ok", text: "Conexão cifrada e enviada. O Edge a aplica no próximo ciclo; o estado aparece abaixo. Depois de aplicada, quem administra o Edge precisa confirmar o host no servidor dele." });
         await refresh();
+        router.refresh();   // o estado do passo (que vem do servidor) acompanha o envio
       } else {
         const d = ((await r.json().catch(() => null)) as { detail?: string } | null)?.detail ?? "";
         setMsg({ tone: "error", text: SEND_ERR_PT[d] ?? SEND_ERR_PT.falha });
