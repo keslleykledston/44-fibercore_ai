@@ -6,6 +6,7 @@ import { DataFreshness, ErrorState, PageHeader, StatusPill } from "@/components/
 import { apiSafe } from "@/lib/api";
 import { featuresOn } from "@/lib/features";
 import { PopCombobox } from "@/components/PopCombobox";
+import { OltCredentialsCard } from "@/components/OltCredentialsCard";
 import { ADDRESS_HELP, CRED_HELP, FLEET_FLASH, JOB_LABEL, SNMP_VERSIONS, UUID, uptimeText, type ConnectionTests, type FleetOlt, type Pop } from "@/lib/fleet";
 
 const field = "min-h-touch rounded-btn border border-line bg-bg px-3";
@@ -91,6 +92,7 @@ export default async function FrotaOlt({ params, searchParams }: { params: Promi
             </div>
           )}
         </section>
+        <OltCredentialsCard olt={o} />
       </div>
     </>,
   );

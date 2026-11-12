@@ -58,6 +58,7 @@ CATALOG: dict[str, Permission] = dict([
     _p("fleet:read", "Ver as OLTs cadastradas, os POPs e o histórico de testes de conexão (somente leitura)", "R0", scopable=True),
     _p("fleet:manage", "Cadastrar e editar OLTs e POPs (nome, POP, rótulo e NOME da credencial local do Edge; nunca o segredo; nada é enviado à OLT)", "R2", scopable=True),
     _p("fleet:test", "Pedir um teste de conexão de uma OLT (leitura somente leitura pelo Edge, com orçamento por OLT)", "R1", scopable=True),
+    _p("fleet:secrets", "Confirmar a chave de um Edge e enviar login/senha/community de uma OLT, cifrados no navegador até o Edge (a nuvem nunca vê nem devolve o segredo)", "R3", mfa_recent=True),
     _p("members:read", "Ver os membros do provedor e o estado do MFA de cada um", "R1"),
     _p("members:manage", "Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite)", "R3", mfa_recent=True),
     _p("platform:delegate", "Conceder e revogar o acesso temporário (até 8 h, com motivo) do suporte da plataforma a este provedor", "R3", mfa_recent=True),

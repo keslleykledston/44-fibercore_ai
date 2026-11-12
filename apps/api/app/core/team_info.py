@@ -57,6 +57,7 @@ CAPABILITIES: list[tuple[str, str, tuple[str, ...]]] = [
     ("ping", "Pedir teste de ping da ONT pela WAN de serviço (hoje só o aparelho de bancada)", ("diagnostics:ping_run",)),
     ("olt_query", "Consultar a OLT (somente leitura)", ("olt_query:run",)),
     ("fleet", "Ver, cadastrar e editar OLTs e POPs e pedir teste de conexão (somente leitura; a credencial fica no Edge, nunca na nuvem)", ("fleet:read", "fleet:manage", "fleet:test")),
+    ("fleet_secrets", "Configurar login, senha e community das OLTs pela tela (cifrados no navegador até o Edge; a nuvem nunca os vê nem os devolve)", ("fleet:secrets",)),
     ("discovery", "Ver e registrar avistamentos de ONUs aguardando autorização (somente leitura; nada é autorizado)", ("discovery:read", "discovery:import")),
     ("profiles", "Ver, importar e editar rascunhos de profiles da OLT, simular e publicar revisões (nada é enviado à OLT)", ("profiles:read", "profiles:import", "profiles:edit", "profiles:publish")),
     ("erp", "Conectar e testar o ERP do provedor (somente leitura)", ("erp:manage", "erp:test")),

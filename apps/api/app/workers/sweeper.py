@@ -33,6 +33,14 @@ def sweep_once(engine: Engine) -> dict[str, int]:
     return {"expired": r.expired, "unknown": r.unknown, "locked": r.locked}
 
 
+def sweep_secrets_once(engine: Engine) -> dict[str, int]:
+    """ADR-0045 retention: no sealed OLT-credential blob outlives its `expires_at`, whatever the traffic (an overdue delivery becomes EXPIRED; any blob on a terminal row is erased), in EVERY tenant. Its own
+    transaction: a failure here never holds back the job reconciliation above, and the other way round."""
+    with engine.begin() as conn:
+        s = conn.execute(text("SELECT expired, scrubbed FROM app_sweep_secret_deliveries()")).one()
+    return {"expired": s.expired, "scrubbed": s.scrubbed}
+
+
 def run() -> None:  # pragma: no cover - process entrypoint
     logging.basicConfig(level=logging.INFO)
     engine = make_engine(os.environ["WORKER_DATABASE_URL"])
@@ -45,6 +53,12 @@ def run() -> None:  # pragma: no cover - process entrypoint
                 log.info("swept jobs: %s", n)  # counts only: never a target or a parameter
         except Exception:
             log.exception("sweep iteration failed; retrying")
+        try:
+            m = sweep_secrets_once(engine)
+            if any(m.values()):
+                log.info("swept secret deliveries: %s", m)   # counts only: never a blob, an OLT or a name
+        except Exception:
+            log.exception("secret delivery sweep failed; retrying")
         time.sleep(interval)
 
 

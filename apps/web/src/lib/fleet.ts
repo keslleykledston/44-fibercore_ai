@@ -14,7 +14,7 @@ export const FLEET_FLASH: Record<string, string> = {
   edge: "O Edge escolhido não existe neste provedor.", popinexistente: "O POP escolhido não existe neste provedor.", desligado: "O recurso Frota de OLTs está desligado para este provedor.",
   falha: "Não foi possível concluir. Tente novamente.",
 };
-export const CRED_HELP = "O NOME do segredo guardado no Edge (letras minúsculas, números, . _ -). Nunca digite senha, community ou chave aqui: a entrada segura de login, senha e community pela tela é uma etapa futura (hoje ficam só no Edge).";
+export const CRED_HELP = "O NOME do segredo guardado no Edge (letras minúsculas, números, . _ -). Nunca digite senha, community ou chave aqui: login, senha e community vão pelo cartão “Credenciais da OLT” da página da OLT (cifrados no navegador até o Edge), quando esse recurso estiver ligado.";
 
 /** Teste de conexão (parte B): leitura somente leitura da identidade da OLT pelo Edge, com orçamento de 1 por 15 min e 4 por hora por OLT. */
 export type ConnectionTests = {
@@ -51,3 +51,10 @@ export function popChoice(text: string, pops: { id: string; name: string }[]): P
   const matches = key ? pops.filter((p) => p.name.toLocaleLowerCase("pt-BR").includes(key)) : pops;
   return { id: exact?.id ?? null, typed, create: key.length >= 2 && !exact, matches };
 }
+Object.assign(FLEET_FLASH, {
+  oltcredenciais: "OLT cadastrada. Configure agora as credenciais no cartão “Credenciais da OLT” abaixo (a chave do Edge precisa estar confirmada). O Edge também precisa ter esta OLT na configuração dele, com credentials_file habilitado.",
+  chaveconfirmada: "Chave do Edge confirmada. Agora é possível enviar credenciais cifradas para as OLTs deste Edge.",
+  impressao: "A impressão digital digitada não confere com a da chave do Edge. Compare com o que o servidor do Edge mostra (fibercore-edge seal-fingerprint) e tente de novo.",
+  chavemudou: "O Edge publicou outra chave enquanto você conferia. Confira a nova impressão digital.",
+  semchave: "O Edge ainda não publicou a chave de selagem.",
+});
