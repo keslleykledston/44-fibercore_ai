@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1d194-f283-7301-bf79-56d59f1118fd).
+[codex] Turn started (01a1d194-f2c2-7d83-955d-d25520b73714).
+[codex] Assistant message captured: Vou comparar o diff com `main` e ler o ADR completo ao redor do R-3, rastreando as afirmações...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/adr/ADR-0046-orga...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- docs/wiki/adr/ADR-0046-orga... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0046-organizacoes-isoladas-acs-por-organizacao-e-cent...
+[codex] Command completed: /bin/bash -lc "nl -ba docs/wiki/adr/ADR-0046-organizacoes-isoladas-acs-por-organizacao-e-cent... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar: o escopo do dano é limitado, mas a trilh...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar: o escopo do dano é limitado, mas a trilha dupla não detecta o abuso pela própria API que o R-3 aceita.
+
+Findings:
+- [high] A trilha dupla não detecta criação não autorizada pela API comprometida (docs/wiki/adr/ADR-0046-organizacoes-isoladas-acs-por-organizacao-e-centro-de-olt.md:21)
+  O R-3 admite que quem controla a API ou a role da aplicação pode escolher o UUID de um operador e chamar a criação. Porém, a detecção só conta organizações sem o par de eventos. Uma chamada pela rota pode gravar `platform.organization.created` na função e `platform.organization.requested` na própria API com o mesmo `request_id`; assim, o abuso que o risco descreve fica com o par completo e não gera esse alerta. `session_user` identifica a role compartilhada, e `application_name` é contexto da conexão, não prova independente de autorização. O texto é honesto sobre quem pode criar, mas apresenta como trilha de detecção algo que não detecta esse caminho. O dano parece limitado a organizações novas e convites, conforme o contrato descrito; o problema é a alegação de detecção, não evidência de acesso a organizações existentes ou escalada para elas.
+  Recommendation: Declare explicitamente que o par detecta apenas chamadas fora da rota e não o abuso via API, ou acrescente uma fonte de autorização independente e monitore divergências entre o ator alegado e a identidade autenticada, com evidência que a API comprometida não possa forjar.
