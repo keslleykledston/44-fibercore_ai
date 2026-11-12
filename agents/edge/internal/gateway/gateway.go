@@ -45,6 +45,8 @@ type Client struct {
 	mu       sync.Mutex
 	token    string
 	until    time.Time // the Cloud asked us to wait until then (a 429); zero when not throttled
+	// secretUntil is the same wait for the ADR-0045 routes (their own window: see secrets.go)
+	secretUntil time.Time
 }
 
 // ThrottledUntil is when the Cloud's last 429 says a new send may go out (zero or past: now).

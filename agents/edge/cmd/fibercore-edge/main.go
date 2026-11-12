@@ -34,6 +34,9 @@ import (
 var version = "0.1.0-dev"
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "seal-fingerprint" { // ADR-0045: prints the fingerprint of the sealing key and exits (no secret, no network)
+		os.Exit(runSealFingerprint(os.Args[2:], os.Stdout, os.Stderr))
+	}
 	cfgPath := flag.String("config", "/etc/fibercore-edge/config.json", "config file (mode 0600)")
 	flag.Parse()
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -141,7 +144,7 @@ func main() {
 					Name: o.Name, Ports: o.PonPorts, AllowUnverified: o.AllowUnverifiedFirmware, SNMPDriver: olt.HuaweiSNMP{},
 					SNMPKey: config.DeviceKey(o.SNMPAddress), Interval: o.OLTInterval(), Cooldown: o.OLTCooldown(),
 					OpenSNMP: func(ctx context.Context) (olt.SNMPReader, func(), error) {
-						community, err := config.ReadSecret(o.SNMPCommunityFile)
+						community, err := o.Community(o.SNMPCommunityFile) // ADR-0045: credentials_file wins, else the static file; read at every session
 						if err != nil {
 							return nil, nil, err
 						}
@@ -166,11 +169,11 @@ func main() {
 				Name: o.Name, Driver: drv, Ports: o.PonPorts, AllowUnverified: o.AllowUnverifiedFirmware, CloudID: o.CloudID,
 				SNMPKey: config.DeviceKey(o.Address), Interval: o.OLTInterval(), Cooldown: o.OLTCooldown(),
 				Open: func(ctx context.Context) (olt.Session, func(), error) {
-					pw, err := config.ReadSecret(o.SecretFile)
+					user, pw, err := o.SSHLogin() // ADR-0045: credentials_file wins field by field, else username/secret_file; read at every session, fail-closed
 					if err != nil {
 						return nil, nil, err
 					}
-					s, err := olt.DialSSH(ctx, olt.SSHConfig{Addr: o.Address, User: o.Username, Password: pw,
+					s, err := olt.DialSSH(ctx, olt.SSHConfig{Addr: o.Address, User: user, Password: pw,
 						HostKeySHA256: o.HostKeySHA256, Dial: al.DialContext,
 						Shell: o.SSHMode == "shell", Legacy: o.LegacySSH, PagerSpace: o.SSHPagerSpace})
 					if err != nil {
@@ -190,7 +193,7 @@ func main() {
 				src.LastDown = &collector.LastDownSource{
 					Key: "last-down|" + config.DeviceKey(l.SNMPAddress), Every: l.Every(), Settle: l.Settle(), Driver: olt.HuaweiSNMP{},
 					Open: func(ctx context.Context) (olt.SNMPReader, func(), error) {
-						community, err := config.ReadSecret(l.SNMPCommunityFile)
+						community, err := o.Community(l.SNMPCommunityFile) // ADR-0045: the community of the SAME OLT (credentials_file), else last_down's own file
 						if err != nil {
 							return nil, nil, err
 						}
@@ -391,6 +394,14 @@ func main() {
 	ag := &agent.Agent{
 		EdgeID: cfg.EdgeID, TenantID: cfg.TenantID, Version: cfg.Version, GW: gw, Q: q, Collectors: collectors,
 		Jobs: verifier, Queries: queryStore, OLTLease: oltLease, Refresher: refresher, Bench: benchRunner, JobPollEvery: 15 * time.Second, HeartbeatEvery: cfg.HeartbeatEvery(), CollectEvery: cfg.CollectEvery(), Log: log,
+	}
+	secrets, err := setupSecrets(cfg, gw, log)
+	if err != nil {
+		log.Error("olt secrets: cannot start the credential delivery; refusing to start", "err", err)
+		os.Exit(2)
+	}
+	if secrets != nil {
+		ag.Secrets, ag.SecretsEvery = secrets, cfg.OLTSecrets.Poll()
 	}
 	if pingCat != nil {
 		log.Warn("ping tests ENABLED for the bench devices", "destinations", len(pingCat.All()))
