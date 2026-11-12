@@ -5,7 +5,8 @@ import { DeviceThumb } from "@/components/DeviceThumb";
 import { DataFreshness, ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
 import { featuresOn } from "@/lib/features";
-import { CRED_HELP, FLEET_FLASH, JOB_LABEL, UUID, uptimeText, type ConnectionTests, type FleetOlt, type Pop } from "@/lib/fleet";
+import { PopCombobox } from "@/components/PopCombobox";
+import { ADDRESS_HELP, CRED_HELP, FLEET_FLASH, JOB_LABEL, SNMP_VERSIONS, UUID, uptimeText, type ConnectionTests, type FleetOlt, type Pop } from "@/lib/fleet";
 
 const field = "min-h-touch rounded-btn border border-line bg-bg px-3";
 
@@ -38,6 +39,7 @@ export default async function FrotaOlt({ params, searchParams }: { params: Promi
             <div><dt className="text-xs text-muted">Nível do driver</dt><dd><StatusPill value={o.support_level} /></dd></div>
             <div><dt className="text-xs text-muted">Última coleta</dt><dd>{o.observed_at ? <DataFreshness freshness="fresh" observedAt={o.observed_at} /> : "Ainda não coletada"}</dd></div>
             <div><dt className="text-xs text-muted">Edge</dt><dd>{o.edge.name}</dd></div>
+            <div><dt className="text-xs text-muted">Endereço de gerência · SNMP</dt><dd data-testid="frota-endereco">{o.mgmt_address_masked ?? "Não informado"} · {o.snmp_version ? `SNMP ${o.snmp_version}` : "versão do SNMP não informada"}</dd></div>
             <div><dt className="text-xs text-muted">Credencial</dt><dd data-testid="frota-credencial">{o.has_credential_ref ? "Informada (o nome não é mostrado)" : "Não informada"}</dd></div>
             {o.collected && <div><Link href={`/rede?olt=${o.id}`} className="text-accent underline underline-offset-2">Ver as ONUs desta OLT</Link></div>}
           </dl>
@@ -45,7 +47,11 @@ export default async function FrotaOlt({ params, searchParams }: { params: Promi
         <section className="panel p-4" aria-label="Cadastro">
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Cadastro</h2>
           <form method="post" action={`/bff/frota/olts/${o.id}`} className="grid gap-3">
-            <label className="grid gap-1 text-sm">POP<select name="pop_id" defaultValue={o.pop?.id ?? ""} className={field}><option value="">Sem POP</option>{(pops.data?.items ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+            <PopCombobox pops={(pops.data?.items ?? []).map((p) => ({ id: p.id, name: p.name }))} defaultName={o.pop?.name ?? ""} />
+            <label className="grid gap-1 text-sm">{o.mgmt_address_masked ? "Substituir o endereço de gerência" : "Endereço de gerência"}<input name="mgmt_address" maxLength={45} autoComplete="off" spellCheck={false} className={`${field} font-mono`} placeholder={o.mgmt_address_masked ? "deixe vazio para manter o atual" : "ex.: 10.20.30.40"} />
+              <span className="text-xs text-muted">{ADDRESS_HELP} O endereço já salvo não é mostrado por inteiro.</span></label>
+            {o.mgmt_address_masked && <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="remover_endereco" value="1" /> Remover o endereço</label>}
+            <label className="grid gap-1 text-sm">Versão do SNMP<select name="snmp_version" defaultValue={o.snmp_version ?? ""} className={field}><option value="">Não informar</option>{SNMP_VERSIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
             <label className="grid gap-1 text-sm">Rótulo<input name="label" defaultValue={o.label ?? ""} maxLength={80} className={field} /></label>
             <label className="grid gap-1 text-sm">{o.has_credential_ref ? "Substituir o nome da credencial no Edge" : "Nome da credencial no Edge"}<input name="credential_ref" defaultValue="" maxLength={64} autoComplete="off" spellCheck={false} placeholder={o.has_credential_ref ? "deixe vazio para manter a atual" : "ex.: olt-centro-01"} className={`${field} font-mono`} />
               <span className="text-xs text-muted">{CRED_HELP} O nome já informado não é mostrado de volta.</span></label>

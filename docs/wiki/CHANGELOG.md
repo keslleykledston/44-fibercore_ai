@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased — Cadastro de OLT: site por digitação, endereço, SNMP e "cadastrar e testar" (2026-11-11)
+- API: `pop_name` em `POST/PATCH /v1/fleet/olts` (acha o site pelo nome ou o cria na mesma transação); `mgmt_address` (IP, só de escrita: respostas trazem `mgmt_address_masked`) e `snmp_version` (`v2c`|`v3`); migração 0048 (colunas + CHECKs + GRANTs, reversível). Login, senha e community continuam sem campo (ADR-0041 emenda 1: faseado, entrada segura é fatia futura).
+- Web: `PopCombobox` (digitar, escolher ou "Adicionar “X” como novo site"), campos de endereço e versão do SNMP no cadastro e no detalhe, botão "Cadastrar e testar conexão". Ajuda e capturas da tela NÃO regeneradas ainda.
+- Provas: testes novos em `test_fleet_register_fields.py` (rollback do site em OLT recusada, endereço nunca em resposta/auditoria, segredos recusados), `pop-choice-pure` e e2e da frota (a11y com a lista aberta).
+
 ## Unreleased — Limite de ingestão por agente (2026-11-03)
 - API: token bucket por (tenant, Edge) nas rotas de coleta `olt-snapshots`, `cpe-snapshots`, `cpe-state`, `cpe-config`, `speed-health` (rajada 30, 120/min; `EDGE_INGEST_BURST`, `EDGE_INGEST_PER_MINUTE`). Acima do orçamento: 429 `edge_rate_limited` + `Retry-After`. Nada é gasto antes da autenticação. Estado em memória de um processo. Modo `EDGE_INGEST_LIMIT` (`FIBERCORE_EDGE_INGEST_LIMIT` no compose): `capable` (padrão; só limita o Edge que manda `X-Edge-Backoff: retry-after`, seguro sob version skew), `all`, `off`.
 - Edge: 429 é `Throttled` (não conta tentativa, não vai para a dead-letter, espera o `Retry-After` limitado a 1 s–15 min, ordem preservada) e todo POST anuncia `X-Edge-Backoff`. Heartbeat, `jobs/next` e resultados de job não são limitados.

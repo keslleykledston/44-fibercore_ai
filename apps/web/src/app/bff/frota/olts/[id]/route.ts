@@ -4,17 +4,25 @@ import { back } from "@/lib/bff";
 import { sameOrigin } from "@/lib/csrf";
 import { UUID } from "@/lib/fleet";
 
+const ADDR = /^[0-9A-Fa-f:.]{2,45}$/;
 const s = (v: FormDataEntryValue | null, max: number) => String(v ?? "").trim().slice(0, max);
 
-/** Edita o POP, o rótulo e o NOME da credencial de uma OLT. POP e rótulo vazios limpam; a credencial só muda por substituição ou remoção explícita. Nada é enviado à OLT. */
+/** Edita o site (POP), o rótulo, o endereço de gerência, a versão do SNMP e o NOME da credencial de uma OLT. POP e rótulo vazios limpam; a credencial só muda por substituição ou remoção explícita. Nada é enviado à OLT. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!sameOrigin(req)) return NextResponse.json({ detail: "forbidden" }, { status: 403 });
   const { id } = await params;
   if (!UUID.test(id)) return NextResponse.json({ detail: "not found" }, { status: 404 });
   const f = await req.formData();
-  const pop = s(f.get("pop_id"), 40);
+  const pop = s(f.get("pop_id"), 40), popName = s(f.get("pop_name"), 60), addr = s(f.get("mgmt_address"), 45), snmp = s(f.get("snmp_version"), 4);
   if (pop && !UUID.test(pop)) return back(req, `/rede/frota/${id}?erro=invalido`);
-  const body: Record<string, unknown> = { pop_id: pop || null, label: s(f.get("label"), 80) || null };
+  if (addr && !ADDR.test(addr)) return back(req, `/rede/frota/${id}?erro=invalido`);   // o endereço digitado nunca volta numa mensagem
+  const body: Record<string, unknown> = { label: s(f.get("label"), 80) || null, snmp_version: snmp || null };
+  if (pop) body.pop_id = pop;                       // site existente
+  else if (popName) body.pop_name = popName;        // site digitado: encontrado pelo nome ou criado
+  else body.pop_id = null;                          // campo vazio limpa o site
+  // o endereço salvo nunca volta da API: vazio mantém, digitar substitui, a caixa remove
+  if (f.get("remover_endereco") === "1") body.mgmt_address = null;
+  else if (addr) body.mgmt_address = addr;
   // o nome da credencial nunca volta da API: o campo vem vazio e só muda quando a pessoa SUBSTITUI (digitando) ou REMOVE (caixa); campo vazio sem a caixa não toca na credencial
   const cred = s(f.get("credential_ref"), 64);
   if (f.get("remover_credencial") === "1") body.credential_ref = null;
