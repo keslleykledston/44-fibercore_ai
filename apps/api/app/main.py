@@ -20,6 +20,8 @@ from app.api.erp_connections import router as erp_connections_router
 from app.api.inventory import router as inventory_router
 from app.api.jobs import router as jobs_router
 from app.api.members import router as members_router
+from app.api.metrics import REGISTRY as METRICS_REGISTRY
+from app.api.metrics import router as metrics_router
 from app.api.noc import router as noc_router
 from app.api.olt_queries import router as olt_queries_router
 from app.api.ont_config import router as ont_config_router
@@ -33,6 +35,7 @@ from app.api.routes import router
 from app.api.session import router as session_router
 from app.api.speed import router as speed_router
 from app.api.team import router as team_router
+from app.core.metrics import MetricsMiddleware
 from app.core.settings import get_settings, required_mfa_roles
 
 logging.basicConfig(level=logging.INFO, format='{"ts":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","msg":"%(message)s"}')
@@ -69,7 +72,9 @@ async def limit_body(request, call_next):
     return await call_next(request)
 
 
+app.add_middleware(MetricsMiddleware, registry=METRICS_REGISTRY)  # outermost: it also counts what limit_body refuses (411/413)
 app.include_router(router)
+app.include_router(metrics_router)
 app.include_router(session_router)
 app.include_router(inventory_router)
 app.include_router(erp_router)
