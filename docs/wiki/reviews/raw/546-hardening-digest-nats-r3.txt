@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1cd92-d8d7-7ce0-a8ab-73dd8c391f1e).
+[codex] Turn started (01a1cd92-db70-7820-bdd7-5efec7ed48ec).
+[codex] Assistant message captured: Vou comparar a branch com `main` e seguir os fluxos de falha em `scripts/images.py` e na conf...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- scripts/images.py infra/nat...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=60 main...HEAD -- scripts/images.py infra/nat... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba scripts/images.py | sed -n '90,340p'; nl -ba infra/nats/nats-server.con...
+[codex] Command completed: /bin/bash -lc "nl -ba scripts/images.py | sed -n '90,340p'; nl -ba infra/nats/nats-server.con... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=3 main...HEAD -- .github/workflows/ci.yml Mak...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=3 main...HEAD -- .github/workflows/ci.yml Mak... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não aprovar ainda: o verificador pode deixar passar i...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não aprovar ainda: o verificador pode deixar passar imagens externas sem digest em sintaxes válidas do Dockerfile e da CLI.
+
+Findings:
+- [medium] `FROM` com continuação de linha não é verificado (scripts/images.py:94-106)
+  `check_dockerfile` examina cada linha isoladamente e só reconhece `FROM` quando a referência está na mesma linha. Dockerfiles aceitam instruções continuadas com `\`; assim, `FROM \` seguido por uma imagem sem digest pode escapar do check e entrar no build sem estar fixada pelo lock. Isso enfraquece a garantia de pinning no ponto de build.
+  Recommendation: Junte continuações de linha do Dockerfile antes de analisar as instruções e adicione um caso de regressão com `FROM` continuado e imagem sem digest.
+- [medium] `docker image pull` escapa da validação de pulls (scripts/images.py:150)
+  A regex reconhece `docker pull` e `docker container pull`, mas não a forma válida `docker image pull`. Um script ou workflow pode usar essa forma para buscar uma imagem sem digest sem que `docker_image_refs` a identifique; o check então não exige digest nem entrada no lock. A regra anunciada cobre pulls, mas essa forma comum da CLI contorna o controle.
+  Recommendation: Aceite o subcomando `docker image pull` na extração e teste um pull sem digest que deve falhar, além de um pull fixado que deve passar.

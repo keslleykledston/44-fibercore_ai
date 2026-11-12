@@ -1,0 +1,35 @@
+# OPT-IN (ADR-0044): NATS com TLS mútuo + ACL por papel. O compose.yaml sozinho continua sem TLS/ACL (dev e LAB atual).
+# Ativar:  FIBERCORE_NATS_TLS_DIR=/caminho/absoluto/da/pki docker compose --env-file <env> -f infra/compose/compose.yaml -f infra/compose/nats-secure.compose.override.yaml up -d nats outbox-relay event-consumer
+# A PKI vem de `scripts/nats-tls.sh gen <dir>` (fora do repositório). Só os arquivos de CADA serviço são montados: ca.key nunca entra em contêiner.
+# Se as chaves privadas ficam em modo 0600, o uid 10001 da imagem da API não as lê: gere com KEY_MODE=0644 num <dir> 0700 (ver docs/operations/NATS_TLS_ACL.md).
+# Atenção: relay e consumer precisam subir JUNTOS com o NATS seguro (um cliente sem TLS/identidade é recusado). Plano de ativação e de volta: NATS_TLS_ACL.md.
+services:
+  nats:
+    command: ["-c", "/etc/nats/nats-server.conf"]      # jetstream (store_dir /data = o mesmo volume) e monitor 8222 estão no arquivo
+    volumes:
+      - ../nats/nats-server.conf:/etc/nats/nats-server.conf:ro
+      - ${FIBERCORE_NATS_TLS_DIR:?defina FIBERCORE_NATS_TLS_DIR (diretório da PKI gerada por scripts/nats-tls.sh)}/ca.pem:/etc/nats/tls/ca.pem:ro
+      - ${FIBERCORE_NATS_TLS_DIR}/server.pem:/etc/nats/tls/server.pem:ro
+      - ${FIBERCORE_NATS_TLS_DIR}/server.key:/etc/nats/tls/server.key:ro
+  outbox-relay:
+    environment:
+      NATS_URL: tls://nats:4222
+      NATS_TLS_CA: /etc/nats-client/ca.pem
+      NATS_TLS_CERT: /etc/nats-client/relay.pem
+      NATS_TLS_KEY: /etc/nats-client/relay.key
+      NATS_INBOX_PREFIX: _INBOX.relay
+    volumes:
+      - ${FIBERCORE_NATS_TLS_DIR:?defina FIBERCORE_NATS_TLS_DIR}/ca.pem:/etc/nats-client/ca.pem:ro
+      - ${FIBERCORE_NATS_TLS_DIR}/relay.pem:/etc/nats-client/relay.pem:ro
+      - ${FIBERCORE_NATS_TLS_DIR}/relay.key:/etc/nats-client/relay.key:ro
+  event-consumer:
+    environment:
+      NATS_URL: tls://nats:4222
+      NATS_TLS_CA: /etc/nats-client/ca.pem
+      NATS_TLS_CERT: /etc/nats-client/consumer.pem
+      NATS_TLS_KEY: /etc/nats-client/consumer.key
+      NATS_INBOX_PREFIX: _INBOX.consumer
+    volumes:
+      - ${FIBERCORE_NATS_TLS_DIR:?defina FIBERCORE_NATS_TLS_DIR}/ca.pem:/etc/nats-client/ca.pem:ro
+      - ${FIBERCORE_NATS_TLS_DIR}/consumer.pem:/etc/nats-client/consumer.pem:ro
+      - ${FIBERCORE_NATS_TLS_DIR}/consumer.key:/etc/nats-client/consumer.key:ro

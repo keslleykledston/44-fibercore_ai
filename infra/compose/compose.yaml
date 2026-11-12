@@ -1,7 +1,7 @@
 name: fibercore-dev
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
     environment:
       POSTGRES_USER: fibercore
       POSTGRES_DB: fibercore
@@ -18,7 +18,7 @@ services:
     restart: unless-stopped
     security_opt: [no-new-privileges:true]
   nats:
-    image: nats:2.11-alpine
+    image: nats:2.11-alpine@sha256:e4bf19f15fd3218814a4e3c9e0064e1334bd8aa20d5984b9f1a0afd084f8cc00
     command: ["-js", "-sd", "/data", "-m", "8222"]
     volumes:
       - nats_data:/data
@@ -30,7 +30,7 @@ services:
       retries: 3
     restart: unless-stopped
     security_opt: [no-new-privileges:true]
-    # development only: NATS must be configured with TLS, credentials and ACL before production.
+    # development only as shipped: for TLS + per-role ACL layer infra/compose/nats-secure.compose.override.yaml on top (opt-in, ADR-0044, docs/operations/NATS_TLS_ACL.md).
   migrate:
     build:
       context: ../..
@@ -165,7 +165,7 @@ services:
     environment:
       API_INTERNAL_URL: http://api-core:8000
       FIBERCORE_INSECURE_COOKIES: ${FIBERCORE_INSECURE_COOKIES:-0}
-      # CSP com nonce por requisição (ADR-0043): report-only (padrão) | enforce | off. Lido em tempo de execução: trocar = recriar o contêiner, sem rebuild.
+      # CSP com nonce por requisição (ADR-0042): report-only (padrão) | enforce | off. Lido em tempo de execução: trocar = recriar o contêiner, sem rebuild.
       FIBERCORE_CSP_MODE: ${FIBERCORE_CSP_MODE:-report-only}
       FIBERCORE_CSP_REPORT_URI: ${FIBERCORE_CSP_REPORT_URI:-}
     depends_on:
@@ -184,7 +184,7 @@ services:
   proxy:
     # Profile "public": reverse proxy do frontend/API (ADR-0012). NÃO sobe por padrão. Só o proxy é publicável.
     profiles: [public]
-    image: caddy:2.8-alpine
+    image: caddy:2.8-alpine@sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17
     volumes:
       - ../deploy/${FIBERCORE_CADDYFILE:-Caddyfile.dev}:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

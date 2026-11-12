@@ -94,3 +94,8 @@ Sprint 0→3 (parcial) + frontend + ajuda por construção. PRs 1–14 submetido
 - H5 `onu_reauthorize`: 4 execuções reais (falha segura sem comando; 2 falhas parciais com ONU reposta à mão; sucesso). Defeitos achados: campos recuados no parser, autofind lido uma só vez, eco quebrado em 80 colunas (`␠ESC[1D`). Codex: r1/r4 approve nas três correções; um achado high (normalização global do eco) refeito para primeira linha + coluna de quebra.
 - `olt.autofind` validado; bruto destruído (`shred`) no Edge e local. Pins de hash do catálogo em 3 lugares.
 - Aprendizado de processo: o teste com dispositivo falso só pega o que o falso reproduz; todo formato real novo (eco, indentação, tempo de reaparecer) vira fixture/comportamento do falso. Achado do Codex pode ser sobre diff antigo: verificar contra o código atual antes de aceitar.
+
+## 2026-11-11 — Endurecimento: imagens por digest + NATS TLS/ACL opt-in (worktree; sem push/tag/deploy)
+- Entregue em branch do worktree (ver `git log`): `infra/images.lock` + `scripts/images.py` (check/update) e digests em tudo; ADR-0044, `infra/nats/nats-server.conf`, `scripts/nats-tls.sh`, override de compose, `bus.connect_options`, runbook `docs/operations/NATS_TLS_ACL.md` (plano de ativação NÃO executado). Codex 4 rodadas, approve na 4ª (raw 544–547).
+- Achados: só relay e consumer falam NATS (API e Edge Go não: sem identidade, Edge sem mudança); nats-py contra servidor só-TLS pendurava para sempre (prazo de 20 s no connect); o Docker do host esgotou os pools de rede (testes com `network_mode: bridge`).
+- Provas: ver o relatório final e `docs/wiki/CHANGELOG.md`. LAB e portas 18420/18480/18490 intocadas.

@@ -1,0 +1,24 @@
+# SÓ para o teste de integração apps/api/tests/test_nats_acl.py (ADR-0044). Projeto compose próprio e descartável (down -v ao final); portas altas escolhidas pelo teste.
+# Não tem nada a ver com a stack da LAB. Variáveis obrigatórias vêm do teste: NATS_IT_SECURE_PORT, NATS_IT_PLAIN_PORT, NATS_IT_PKI_DIR.
+services:
+  nats-secure:
+    image: nats:2.11-alpine@sha256:e4bf19f15fd3218814a4e3c9e0064e1334bd8aa20d5984b9f1a0afd084f8cc00
+    command: ["-c", "/etc/nats/nats-server.conf"]
+    ports: ["127.0.0.1:${NATS_IT_SECURE_PORT:?}:4222"]
+    volumes:
+      - ../nats/nats-server.conf:/etc/nats/nats-server.conf:ro
+      - ${NATS_IT_PKI_DIR:?}/ca.pem:/etc/nats/tls/ca.pem:ro
+      - ${NATS_IT_PKI_DIR}/server.pem:/etc/nats/tls/server.pem:ro
+      - ${NATS_IT_PKI_DIR}/server.key:/etc/nats/tls/server.key:ro
+    tmpfs: [/data]
+    restart: "no"
+    network_mode: bridge   # sem rede de projeto própria: o host da LAB já esgotou os pools de endereços do Docker (criar rede nova falha); a porta só publica em 127.0.0.1
+    security_opt: [no-new-privileges:true]
+  nats-plain:     # o que o compose.yaml padrão faz hoje (sem TLS/ACL): prova que o recurso desligado não muda nada
+    image: nats:2.11-alpine@sha256:e4bf19f15fd3218814a4e3c9e0064e1334bd8aa20d5984b9f1a0afd084f8cc00
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports: ["127.0.0.1:${NATS_IT_PLAIN_PORT:?}:4222"]
+    tmpfs: [/data]
+    restart: "no"
+    network_mode: bridge   # sem rede de projeto própria: o host da LAB já esgotou os pools de endereços do Docker (criar rede nova falha); a porta só publica em 127.0.0.1
+    security_opt: [no-new-privileges:true]

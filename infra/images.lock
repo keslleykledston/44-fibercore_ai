@@ -1,0 +1,16 @@
+# Imagens externas do projeto, fixadas por digest do ÍNDICE multi-arquitetura (sha256 do manifest list).
+# Fonte da verdade lida por scripts/images.py: `check` falha se algum FROM/image:/docker run ficar sem digest ou com digest diferente daqui.
+# Procedimento de atualização: docs/operations/IMAGE_DIGESTS.md.  Formato: <repo>:<tag> <sha256:digest | PENDING>
+# PENDING = digest ainda não resolvido (sem rede ou sem imagem pública); `check` falha enquanto houver PENDING. Nunca preencha à mão sem resolver de verdade.
+postgres:17-alpine sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+nats:2.11-alpine sha256:e4bf19f15fd3218814a4e3c9e0064e1334bd8aa20d5984b9f1a0afd084f8cc00
+caddy:2.8-alpine sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17
+node:22-alpine sha256:5b05da3f938f1c604b24c633646d48805a6667f378cb4908438616f3cc48a0bf
+python:3.12-slim sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
+golang:1.22-alpine sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052
+alpine:3.20 sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+aquasec/trivy:0.58.1 sha256:ab70a02200597efa04748f210f793936eb647cbcdb0ea69cc30b226d6f5a22c7
+zricethezav/gitleaks:v8.21.2 sha256:0e99e8821643ea5b235718642b93bb32486af9c8162c8b8731f7cbdc951a7f46
+natsio/prometheus-nats-exporter:0.20.1 sha256:4fbf6dacb84780a45a1c3af9b1080c69451a288d20902deae671b80717bb8f61
+prom/prometheus:v3.15.1 sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
+grafana/grafana:12.4.15 sha256:2894082f6cf7081aefdc1389265c04000812309208c190d75e8c65f7a30e4b7e

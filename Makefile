@@ -36,9 +36,9 @@ test-api: venv  ## sobe Postgres descartável, roda pytest, remove SÓ o que est
 	@set -e; PG=; NATS=; \
 	cleanup() { if [ -n "$$PG" ]; then docker rm -fv "$$PG" >/dev/null 2>&1 || true; fi; if [ -n "$$NATS" ]; then docker rm -fv "$$NATS" >/dev/null 2>&1 || true; fi; }; \
 	trap cleanup EXIT INT TERM; \
-	NATS=$$(docker run -d --label fibercore.test-run=api -p 127.0.0.1:$(TEST_NATS_PORT):4222 nats:2.11-alpine -js); \
+	NATS=$$(docker run -d --label fibercore.test-run=api -p 127.0.0.1:$(TEST_NATS_PORT):4222 nats:2.11-alpine@sha256:e4bf19f15fd3218814a4e3c9e0064e1334bd8aa20d5984b9f1a0afd084f8cc00 -js); \
 	PG=$$(docker run -d --label fibercore.test-run=api --tmpfs /var/lib/postgresql/data -e POSTGRES_USER=fibercore -e POSTGRES_PASSWORD=test_admin_pw_only \
-	  -e POSTGRES_DB=fibercore_test -p 127.0.0.1:$(TEST_PG_PORT):5432 postgres:17-alpine); \
+	  -e POSTGRES_DB=fibercore_test -p 127.0.0.1:$(TEST_PG_PORT):5432 postgres:17-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0); \
 	for i in $$(seq 1 90); do docker exec "$$PG" pg_isready -U fibercore >/dev/null 2>&1 && break; [ "$$(docker inspect -f '{{.State.Running}}' "$$PG" 2>/dev/null)" = true ] || { echo 'Postgres de teste parou antes de ficar pronto' >&2; exit 1; }; sleep 1; done; \
 	docker exec "$$PG" pg_isready -U fibercore >/dev/null 2>&1 || { echo 'Postgres de teste não ficou pronto em 90 s' >&2; exit 1; }; sleep 2; \
 	cd apps/api && TEST_NATS_URL=nats://127.0.0.1:$(TEST_NATS_PORT) TEST_ADMIN_DATABASE_URL=postgresql://fibercore:test_admin_pw_only@127.0.0.1:$(TEST_PG_PORT)/fibercore_test \
