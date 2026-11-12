@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Imagens por digest: verificação (offline) e atualização (precisa de rede).
+r"""Imagens por digest: verificação (offline) e atualização (precisa de rede).
 
   scripts/images.py check [--root DIR]        falha (rc=1) se algum FROM/image:/`docker run` ficar sem digest, com digest
                                               diferente de infra/images.lock, fora do lock ou com digest PENDING
@@ -7,17 +7,21 @@
                                               e mostra o que mudaria; com --write regrava o lock e todos os arquivos
 
 Regras do `check`:
-  * Dockerfile: todo `FROM` externo precisa de `@sha256:` (stage anterior e `scratch` são isentos; `$VAR` é recusado).
+  * Dockerfile: todo `FROM` externo e `COPY --from=`/`--mount ...from=` externo precisam de `@sha256:` (stage anterior e `scratch` são isentos; `$VAR` é recusado).
   * Compose: todo `image:` precisa de `@sha256:`, exceto serviço com `build:` (a tag é do build local).
-  * Qualquer outra ocorrência textual de um <repo>:<tag> do lock (Makefile, scripts, CI) precisa do digest do lock.
+  * Makefile, scripts e CI: a imagem de TODO `docker run|create|pull` e de `uses: docker://` é extraída (mesmo fora do lock, mesmo em linha continuada com `\`)
+    e validada; se não der para identificar a imagem, falha. Qualquer outra ocorrência textual de um <repo>:<tag> do lock também precisa do digest do lock.
   * Toda imagem externa precisa estar no lock; PENDING no lock = falha (lista explícita do que falta resolver).
 """
 from __future__ import annotations
 
 import argparse
+import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -90,6 +94,10 @@ def check_ref(where: str, ref: str, lock: dict[str, str], errors: list[str]) -> 
 def check_dockerfile(p: Path, rel: str, lock: dict[str, str], errors: list[str]) -> None:
     stages: set[str] = set()
     for n, raw in enumerate(p.read_text().splitlines(), 1):
+        for fm in re.finditer(r"(?:^\s*COPY\s+(?:--\S+\s+)*?--from=|^\s*RUN\s+.*--mount=\S*?\bfrom=)([^\s,]+)", raw, re.I):
+            src = fm.group(1)
+            if src.lower() not in stages and not src.isdigit():
+                check_ref(f"{rel}:{n}", src, lock, errors)
         m = re.match(r"^\s*FROM\s+(?:--\S+\s+)*(\S+)(?:\s+AS\s+(\S+))?\s*$", raw, re.I)
         if not m:
             continue
@@ -132,19 +140,77 @@ def check_workflow(p: Path, rel: str, lock: dict[str, str], errors: list[str]) -
             check_ref(f"{rel}: job {job} container", str(c.get("image") if isinstance(c, dict) else c), lock, errors)
 
 
-def text_problems(text: str, lock: dict[str, str], skip_image_keys: bool):
-    """(linha, mensagem) para cada <repo>:<tag> do lock que aparece sem `@sha256:` ou com digest diferente do lock."""
+# flags de `docker run|create` que consomem o PRÓXIMO argumento (sem `=`); flag desconhecida é tratada como booleana (se errar, falha FECHADO: "sem digest")
+VALUE_FLAGS = {
+    "-e", "--env", "--env-file", "-p", "--publish", "-v", "--volume", "--name", "-l", "--label", "--label-file", "--network", "--net", "--tmpfs", "-u", "--user", "-w", "--workdir",
+    "--entrypoint", "--mount", "--add-host", "-m", "--memory", "-c", "--cpus", "--cpu-shares", "--restart", "--cap-add", "--cap-drop", "--security-opt", "--pids-limit", "-h", "--hostname",
+    "--platform", "--pull", "--log-driver", "--log-opt", "--device", "--group-add", "--ulimit", "--health-cmd", "--health-interval", "--health-retries", "--health-timeout", "--health-start-period",
+    "--dns", "--ip", "--shm-size", "--stop-signal", "--stop-timeout", "--user-ns", "--pid", "--ipc", "--cgroupns", "--runtime", "--sysctl", "--annotation", "--expose", "--link", "--volumes-from",
+}
+DOCKER_CMD_RE = re.compile(r"\bdocker\s+(?:container\s+)?(run|create|pull)\b")
+
+
+def logical_lines(text: str):
+    """(nº da primeira linha, linha lógica): junta as linhas continuadas com `\\` (shell/Makefile)."""
+    buf, start = "", 0
+    for n, raw in enumerate(text.splitlines(), 1):
+        if not buf:
+            start = n
+        if raw.rstrip().endswith("\\"):
+            buf += raw.rstrip()[:-1] + " "
+            continue
+        yield start, buf + raw
+        buf = ""
+    if buf:
+        yield start, buf
+
+
+def docker_image_refs(text: str):
+    """(linha, ref | None) para cada docker run/create/pull e `uses: docker://`; None = imagem não identificável (falha fechado)."""
+    built = {t for _, ln in logical_lines(text) for t in re.findall(r"\bdocker\s+(?:buildx\s+)?build\b.*?(?:-t|--tag)[= ]+(\S+)", ln)}   # tag construída neste mesmo arquivo: não é do registro
+    for n, line in logical_lines(text):
+        line = re.sub(r"\s#.*$", "", line)
+        if line.lstrip().startswith("#"):
+            continue
+        for m in re.finditer(r"\buses:\s*docker://(\S+)", line):
+            yield n, m.group(1).strip("'\"")
+        for m in DOCKER_CMD_RE.finditer(line):
+            toks = line[m.end():].split()
+            i, image = 0, None
+            while i < len(toks):
+                t = toks[i]
+                if t.startswith("-"):
+                    i += 2 if (t in VALUE_FLAGS) else 1
+                    continue
+                image = t.strip("'\"").rstrip(");|&`").strip("'\"")
+                break
+            if image not in built:
+                yield n, (image or None)
+
+
+def text_problems(text: str, lock: dict[str, str], skip_image_keys: bool, lock_only: bool = False):
+    """{linha: mensagem}: imagem de comando docker sem digest/fora do lock/digest errado, e <repo>:<tag> do lock sem `@sha256:` ou com digest diferente."""
+    out: dict[int, str] = {}
+    if not lock_only:
+        for n, ref in docker_image_refs(text):
+            tmp: list[str] = []
+            if ref is None:
+                tmp.append("docker run/create/pull sem imagem identificável (ajuste o comando ou VALUE_FLAGS em scripts/images.py)")
+            else:
+                check_ref("", ref, lock, tmp)
+            if tmp:
+                out.setdefault(n, tmp[0].lstrip(": "))
     for n, line in enumerate(text.splitlines(), 1):
         if line.lstrip().startswith("#") or (skip_image_keys and re.match(r"^\s*(-\s*)?image:", line)):
             continue
         for base, want in lock.items():
             for m in re.finditer(r"(?<![\w./-])" + re.escape(base) + r"(?![\w.-])", line):
-                rest = line[m.end():]
-                dm = re.match(r"@(sha256:[0-9a-f]{64})", rest)
+                dm = re.match(r"@(sha256:[0-9a-f]{64})", line[m.end():])
                 if not dm:
-                    yield n, f"{base} sem digest"
+                    out.setdefault(n, f"{base} sem digest")
                 elif dm.group(1) != want:
-                    yield n, f"digest de {base} difere do lock"
+                    out.setdefault(n, f"digest de {base} difere do lock")
+    return out
 
 
 def check(root: Path) -> list[str]:
@@ -159,7 +225,7 @@ def check(root: Path) -> list[str]:
         elif is_text_target(p, root):  # Makefile, scripts, CI: `docker run`, services:, etc.
             if is_workflow(p):
                 check_workflow(p, rel, lock, errors)
-            errors += [f"{rel}:{n}: {msg}" for n, msg in text_problems(p.read_text(), lock, skip_image_keys=is_workflow(p))]
+            errors += [f"{rel}:{n}: {msg}" for n, msg in sorted(text_problems(p.read_text(), lock, skip_image_keys=is_workflow(p)).items())]
     return errors
 
 
@@ -187,23 +253,43 @@ def update(root: Path, write: bool) -> int:
     if not write:
         print("dry-run: nada gravado (use --write)")
         return 0
+    changes: dict[Path, str] = {}
     for p in walk(root):
         if not is_text_target(p, root):
             continue
-        txt = orig = p.read_text()
+        txt = orig = p.read_bytes().decode("utf-8")
         for ref, d in new.items():
             if d != "PENDING":
                 txt = re.sub(r"(?<![\w./-])" + re.escape(ref) + r"(@sha256:[0-9a-f]{64})?(?![\w.@-])", f"{ref}@{d}", txt)
         if txt != orig:
-            p.write_text(txt)
-            print(f"regravado {p.relative_to(root)}")
-    lines = (root / LOCK_REL).read_text().splitlines()
+            changes[p] = txt
     out = []
-    for line in lines:
+    for line in (root / LOCK_REL).read_bytes().decode("utf-8").splitlines():
         parts = line.split()
         out.append(f"{parts[0]} {new[parts[0]]}" if len(parts) == 2 and parts[0] in new and not line.lstrip().startswith("#") else line)
-    (root / LOCK_REL).write_text("\n".join(out) + "\n")
+    changes[root / LOCK_REL] = "\n".join(out) + "\n"
+    replace_all(changes)
+    for p in changes:
+        print(f"regravado {p.relative_to(root)}")
     return 0
+
+
+def replace_all(changes: dict[Path, str]) -> None:
+    """Tudo ou nada na parte que pode falhar (disco cheio, permissão): grava TODOS os temporários (mesmo diretório, mesmo modo) e só então troca cada original por os.replace (atômico)."""
+    staged: list[tuple[str, Path]] = []
+    try:
+        for p, txt in changes.items():
+            fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=f".{p.name}.", suffix=".tmp")
+            staged.append((tmp, p))
+            with os.fdopen(fd, "wb") as f:
+                f.write(txt.encode("utf-8"))
+            shutil.copymode(p, tmp)
+    except BaseException:
+        for tmp, _ in staged:
+            Path(tmp).unlink(missing_ok=True)
+        raise
+    for tmp, p in staged:
+        os.replace(tmp, p)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1,0 +1,33 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1cd8e-04b5-7b61-8e92-8d748d84aab2).
+[codex] Turn started (01a1cd8e-050a-7d91-912a-047b7d85d68e).
+[codex] Assistant message captured: Vou comparar o diff com `main` e seguir os caminhos de verificação de digest, configuração TL...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- scripts/images.py infra/ima...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- scripts/images.py infra/ima... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba scripts/images.py | sed -n '85,225p'; nl -ba infra/nats/nats-server.con...
+[codex] Command completed: /bin/bash -lc "nl -ba scripts/images.py | sed -n '85,225p'; nl -ba infra/nats/nats-server.con... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/tests/test_nats_acl.py | sed -n '110,276p'; nl -ba docs/wiki/a...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/tests/test_nats_acl.py | sed -n '110,276p'; nl -ba docs/wiki/a... (exit 0)
+[codex] Searching:
+[codex] Searching:
+[codex] Running command: /bin/bash -lc "rg -n -A28 -B4 '"'^ nats:|nats:'"' infra/compose/compose.yaml;"
+[codex] Command completed: /bin/bash -lc "rg -n -A28 -B4 '"'^ nats:|nats:'"' infra/compose/compose.yaml;" (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: o verificador deixa imagens novas ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: o verificador deixa imagens novas sem digest passarem em comandos de script/CI, e o update pode deixar arquivos parcialmente regravados se falhar durante a escrita.
+
+Findings:
+- [high] Imagens novas em scripts e comandos de CI passam sem digest (scripts/images.py:140-147)
+  A varredura textual só procura referências que já estão no lock. Assim, adicionar `docker run ghcr.io/vendor/tool:latest` em um script alvo ou num `run:` do workflow não gera erro, porque essa referência nunca é examinada por `check_ref`. O CI pode, portanto, executar uma imagem externa não fixada enquanto `images.py check` passa. Faça a varredura identificar e validar todas as referências de imagem em comandos Docker, incluindo referências ausentes do lock, ou imponha um inventário verificável para esses comandos.
+  Recommendation: Detectar referências de imagem externas independentemente do lock e falhar quando não estiverem inventariadas ou fixadas por digest; incluir um caso de teste com imagem desconhecida em `docker run` dentro de workflow e script.
+- [medium] `update --write` pode deixar arquivos truncados ou com digests inconsistentes (scripts/images.py:190-205)
+  O comando grava cada arquivo alvo diretamente com `Path.write_text` e só grava o lock depois. Se uma escrita falhar ou o processo for interrompido, um arquivo pode ficar truncado e vários arquivos podem refletir digests novos enquanto outros e o lock continuam antigos. Isso torna a atualização capaz de corromper o checkout em uma falha local, apesar de o cálculo de digests ter terminado.
+  Recommendation: Preparar todas as alterações em arquivos temporários no mesmo filesystem, validar o conjunto antes de substituir os originais e usar substituições atômicas; preservar conteúdo e modo dos arquivos e testar falha durante a etapa de escrita.
+- [medium] A limpeza do teste não detecta contêineres ou recursos que ficaram para trás (apps/api/tests/test_nats_acl.py:189-192)
+  O `finally` ignora o resultado de `docker compose down` e apaga a PKI mesmo se a remoção falhar. Nesse cenário, o teste termina sem sinalizar o vazamento e pode deixar contêineres ocupando portas ou recursos Docker; a remoção dos certificados também dificulta diagnosticar o estado residual. Isso contradiz a garantia de isolamento declarada pelo teste.
+  Recommendation: Verificar e reportar falha no teardown, registrar projeto/contêineres residuais e só remover a PKI depois de confirmar a limpeza; manter uma rotina de recuperação identificada pelo nome exclusivo do projeto.

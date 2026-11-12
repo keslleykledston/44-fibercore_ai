@@ -188,8 +188,20 @@ def stack(tmp_path_factory):
                 time.sleep(1)
         yield st
     finally:
-        subprocess.run([*compose, "down", "-v", "--remove-orphans", "--timeout", "3"], capture_output=True, env=env, timeout=120)
+        down = subprocess.run([*compose, "down", "-v", "--remove-orphans", "--timeout", "3"], capture_output=True, text=True, env=env, timeout=120)
+        left = _project_leftovers(project)
+        if left:                                                                         # só mexe no que leva o rótulo do NOSSO projeto (nome único)
+            subprocess.run(["docker", "rm", "-fv", *left], capture_output=True, timeout=120)
+            left = _project_leftovers(project)
+        if down.returncode != 0 or left:
+            # deixa a PKI e diz exatamente o que ficou, para diagnóstico e limpeza manual (docker compose -p <projeto> down -v)
+            raise AssertionError(f"teardown do NATS de teste incompleto: projeto={project} down_rc={down.returncode} contêineres_restantes={left} pki={pki} stderr={down.stderr[-300:]}")
         shutil.rmtree(pki, ignore_errors=True)
+
+
+def _project_leftovers(project: str) -> list[str]:
+    out = subprocess.run(["docker", "ps", "-aq", "--filter", f"label=com.docker.compose.project={project}"], capture_output=True, text=True, timeout=60)
+    return out.stdout.split()
 
 
 def _issue(pki: Path, name: str, san: str, days: int = 1, ca: Path | None = None) -> Path:

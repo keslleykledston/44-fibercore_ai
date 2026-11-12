@@ -4,7 +4,8 @@ Toda imagem externa (Dockerfiles, `infra/compose/*.yaml`, `docker run` em `Makef
 
 - Fonte da verdade: `infra/images.lock` (uma linha por `<repo>:<tag>`).
 - Verificação (offline, sem Docker): `python3 scripts/images.py check` — falha (rc=1) se algum `FROM`, `image:` ou ocorrência em script/Makefile/CI estiver sem digest, com digest diferente do lock, com variável (`$VAR`), fora do lock ou `PENDING`. Roda no CI (job `supply-chain`) e nos testes (`apps/api/tests/test_images_pinned.py`).
-- Isentos: `FROM scratch`, `FROM <stage anterior>` e serviço de compose com `build:` (a tag é do build local, ex.: `fibercore-speed-node:local`).
+- A imagem de TODO `docker run|create|pull` (inclusive em linha continuada com `\`) e de `uses: docker://`, de `COPY --from=` e `RUN --mount ...from=` é extraída e exigida com digest MESMO fora do lock; comando cuja imagem não dá para identificar também falha (flag nova que consome valor: acrescentar a `VALUE_FLAGS` em `scripts/images.py`). `update --write` troca todos os arquivos de uma vez (temporários + `os.replace`; falha antes da troca não altera nada).
+- Isentos: tags construídas no mesmo arquivo por `docker build -t`, `FROM scratch`, `FROM <stage anterior>` e serviço de compose com `build:` (a tag é do build local, ex.: `fibercore-speed-node:local`).
 
 ## Atualizar digests (procedimento)
 

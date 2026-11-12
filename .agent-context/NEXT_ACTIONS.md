@@ -325,3 +325,9 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 ## Atualização 2026-11-03 (2): limite de ingestão por agente no ar
 - LAB: `main` = `56e98ca`; Edge `0.1.0-lab-56e98ca`; `FIBERCORE_EDGE_INGEST_LIMIT=all` no `.env.prod`. Binário anterior do Edge segue no host como `fibercore-edge.prev`. Reverter o limite: trocar para `capable`/`off` e recriar `api-core`. Qualquer Edge novo/antigo ligado a um provedor em modo `all` precisa ser desta versão ou mais nova.
 - Restam sem o usuário (todos maiores/arriscados): CSP com nonces no Next (+ nginx do host), rotação de chave de assinatura (`kid`) e cofre de segredos, imagens por digest, NATS com TLS/ACL, observabilidade Prometheus/Grafana.
+
+## Atualização 2026-11-11: imagens por digest e NATS TLS/ACL (branch do worktree; NÃO mesclado, NÃO enviado, NÃO implantado)
+- Imagens por digest: `infra/images.lock` + `scripts/images.py check|update` (CI e `test_images_pinned.py`); 9 imagens, 0 pendentes. Procedimento em `docs/operations/IMAGE_DIGESTS.md`. Na LAB, `postgres` e `node` locais estão em digests mais antigos que os do lock: o próximo rebuild/recreate puxa o 17.x/22.x atual da tag (backup antes, como sempre).
+- NATS TLS mútuo + ACL por papel (ADR-0042): opt-in e DESLIGADO. Só relay e consumer falam NATS (API e Edge Go não: sem identidade, Edge sem mudança). Plano de ativação e de volta em `docs/operations/NATS_TLS_ACL.md` (NÃO executado). Decisão do responsável: quando ativar na LAB (gera PKI no host, recria `nats`, `outbox-relay`, `event-consumer` juntos).
+- Achado de infra: o Docker do host esgotou os pools de endereço (criar rede de projeto novo falha); os testes usam `network_mode: bridge`. Limpar redes órfãs é decisão do responsável.
+- Restam sem o usuário: CSP com nonces (+ nginx do host), rotação de chave de assinatura (`kid`) e cofre de segredos, observabilidade Prometheus/Grafana, assinatura/atestação de imagens.

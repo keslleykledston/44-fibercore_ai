@@ -91,3 +91,67 @@ def test_update_rewrites_lock_and_files_and_keeps_unresolved_as_is(tmp_path, mon
     assert (root / "Dockerfile").read_text() == f"FROM alpine:3.20@{D2}\n"
     lock = images.read_lock(root)
     assert lock == {"alpine:3.20": D2, "postgres:17-alpine": D1}                                # não resolvido: mantido, nunca inventado
+
+
+def test_unknown_images_in_docker_commands_are_caught_even_outside_the_lock(tmp_path):
+    files = {
+        "scripts/a.sh": "docker run --rm -p 1:1 -e A=b ghcr.io/vendor/tool:latest --flag\n",
+        "scripts/b.sh": f"X=$(docker run -d \\\n  --name n -v /a:/b \\\n  busybox:1@{D1} sleep 1)\n",
+        "scripts/c.sh": "docker pull redis:7\ndocker container create --rm redis:7@sha256:x\n",
+        "scripts/d.sh": 'docker run --rm "$IMG" true\ndocker run --rm\n',
+        ".github/workflows/ci.yml": "jobs:\n  j:\n    steps:\n      - run: docker run --rm vendor/scan:1 image x\n      - uses: docker://vendor/act:2\n",
+        "Makefile": "t:\n\tdocker run -d --label k=v $(IMG)\n",
+    }
+    errs = "\n".join(images.check(tree(tmp_path, files)))
+    assert "scripts/a.sh:1: imagem sem digest: ghcr.io/vendor/tool:latest" in errs
+    assert "scripts/b.sh:1: busybox:1 não está em" in errs                      # linha continuada: a imagem está na 3ª linha, o erro aponta o comando
+    assert "scripts/c.sh:1: imagem sem digest: redis:7" in errs and "scripts/c.sh:2" in errs
+    assert "scripts/d.sh:1: referência com variável" in errs and "scripts/d.sh:2: docker run/create/pull sem imagem identificável" in errs
+    assert "ci.yml:4: imagem sem digest: vendor/scan:1" in errs and "ci.yml:5: imagem sem digest: vendor/act:2" in errs
+    assert "Makefile:2: referência com variável" in errs
+
+
+def test_locally_built_tags_comments_and_flag_values_are_not_false_positives(tmp_path):
+    files = {
+        "scripts/ok.sh": "docker build -f Dockerfile -t app:ci .\ndocker run --rm app:ci true\n# docker run nope:1 (comentário)\ntrap 'x' EXIT   # armed only AFTER docker run succeeded\n"
+                         f"docker run -d --name x --label a=b -p 1:1 --tmpfs /t -e K=v alpine:3.20@{D1}\n",
+    }
+    assert images.check(tree(tmp_path, files)) == []
+
+
+def test_dockerfile_copy_from_an_external_image_needs_a_digest(tmp_path):
+    ok = f"FROM alpine:3.20@{D1} AS build\nFROM alpine:3.20@{D1}\nCOPY --from=build /a /b\nCOPY --from=0 /a /b\nCOPY --chown=1:1 --from=alpine:3.20@{D1} /x /y\n"
+    assert images.check(tree(tmp_path, {"Dockerfile": ok})) == []
+    bad = f"FROM alpine:3.20@{D1}\nCOPY --from=busybox:1 /a /b\nRUN --mount=type=bind,from=nginx:1,target=/x true\n"
+    errs = "\n".join(images.check(tree(tmp_path / "bad", {"Dockerfile": bad})))
+    assert "Dockerfile:2: imagem sem digest: busybox:1" in errs and "Dockerfile:3: imagem sem digest: nginx:1" in errs
+
+
+def test_update_is_all_or_nothing_and_keeps_mode_and_line_endings(tmp_path, monkeypatch):
+    import os
+    import shutil
+
+    import pytest
+    root = tree(tmp_path, {"Dockerfile": f"FROM alpine:3.20@{D1}\r\n", "scripts/t.sh": f"docker run alpine:3.20@{D1} true\n"})
+    os.chmod(root / "scripts" / "t.sh", 0o755)  # noqa: S103
+    monkeypatch.setattr(images, "resolve", lambda ref: D2)
+    real = shutil.copymode
+    calls = {"n": 0}
+
+    def flaky(src, dst):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise OSError("disco cheio")
+        return real(src, dst)
+
+    before = {p: p.read_bytes() for p in (root / "Dockerfile", root / "scripts" / "t.sh", root / "infra" / "images.lock")}
+    monkeypatch.setattr(images.shutil, "copymode", flaky)
+    with pytest.raises(OSError):
+        images.update(root, write=True)
+    assert {p: p.read_bytes() for p in before} == before                       # nenhum arquivo mudou
+    assert not list(root.rglob("*.tmp"))                                       # sem resíduo
+    monkeypatch.setattr(images.shutil, "copymode", real)
+    assert images.update(root, write=True) == 0
+    assert (root / "Dockerfile").read_bytes() == f"FROM alpine:3.20@{D2}\r\n".encode()   # CRLF preservado
+    assert oct((root / "scripts" / "t.sh").stat().st_mode & 0o777) == "0o755"
+    assert [e for e in images.check(root) if "PENDING" not in e] == []
