@@ -242,7 +242,7 @@ _OLT_SQL = ("SELECT o.id, o.name, o.vendor, o.model, o.firmware, o.support_level
             "(SELECT max(d.finished_at) FROM olt_secret_deliveries d WHERE d.olt_id = o.id AND d.kind = 'ssh_login' AND d.status = 'APPLIED') AS ssh_cred_at, "
             "(SELECT max(d.finished_at) FROM olt_secret_deliveries d WHERE d.olt_id = o.id AND d.kind = 'snmp_community' AND d.status = 'APPLIED') AS snmp_cred_at, "
             "EXISTS (SELECT 1 FROM olt_query_latest l WHERE l.olt_id = o.id AND l.query_id = 'olt.connection' AND l.source = 'job' AND l.owner_epoch = o.owner_epoch "
-            "AND (o.conn_applied_at IS NULL OR l.asked_at >= o.conn_applied_at)) AS tested, "
+            "AND o.conn_applied_at IS NOT NULL AND l.asked_at >= o.conn_applied_at) AS tested, "
             "e.last_heartbeat_at, (SELECT count(*) FROM onus n WHERE n.olt_id = o.id) AS onu_count "
             "FROM olts o JOIN edges e ON e.id = o.edge_id LEFT JOIN pops p ON p.id = o.pop_id ")
 
@@ -422,9 +422,11 @@ def connection_test(olt_id: UUID, idempotency_key: str | None = Header(None, ali
     _flag(conn, p)
     if not (p.can("jobs:request") and p.can("jobs:read")):
         raise HTTPException(403, "forbidden")
-    olt = conn.execute(text("SELECT id, vendor, model, firmware FROM olts WHERE id = :i"), {"i": olt_id}).first()
+    olt = conn.execute(text("SELECT id, vendor, model, firmware, mgmt_protocol FROM olts WHERE id = :i"), {"i": olt_id}).first()
     if olt is None:
         raise HTTPException(404, "olt not found")
+    if olt.mgmt_protocol == "telnet":   # ADR-0046 D3 (Codex r4): Telnet is inventory, nothing operational is asked of it (no protocol = the Edge's own config: still testable)
+        raise HTTPException(422, "protocol_not_supported")
     reason = jobs._query_gate(conn, p.tenant_id, {"query_id": TEST_QUERY})   # the very gates of any olt_query: flag, rollout, Edge channel
     if reason is not None:
         raise HTTPException(409, reason)

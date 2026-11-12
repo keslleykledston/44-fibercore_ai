@@ -632,3 +632,18 @@ def test_a_connection_needs_the_protocol_registered_as_ssh_while_the_credentials
     assert c.post(c.make("ssh_login")[0]).status_code == 202                                                       # an OLT written in the Edge's own config keeps receiving credentials (ADR-0045)
     reach(c.migrated, c.olt)
     assert c.post(make_conn(c)[0]).status_code == 202
+
+
+def test_the_connection_test_is_refused_for_telnet_and_a_test_before_the_connection_was_applied_is_not_readiness(ctx):
+    c = ctx
+    reach(c.migrated, c.olt, mgmt_protocol="telnet", mgmt_port=23, host_key_sha256=None, ssh_mode=None)
+    r = c.client.post(f"/v1/fleet/olts/{c.olt}/connection-test", headers=c.h)
+    assert (r.status_code, r.json()["detail"]) == (422, "protocol_not_supported")
+    reach(c.migrated, c.olt)
+    with c.migrated.begin() as conn:   # an identity read by a job BEFORE the connection was ever applied
+        conn.execute(text("INSERT INTO olt_query_latest (tenant_id, olt_id, query_id, params_key, data, observed_at, asked_at, owner_epoch, source, version) "
+                          "SELECT tenant_id, id, 'olt.connection', '', CAST(:d AS jsonb), now(), now(), owner_epoch, 'job', 1 FROM olts WHERE id = :o"),
+                     {"o": c.olt, "d": json.dumps({"product": "MA5608T", "version": "R015", "patch": "SPC100", "uptime_seconds": 1})})
+    assert view(c)["readiness"]["steps"]["tested"] is False                                                        # not applied: an old reading is not "tested"
+    apply_conn(c, code="awaiting_local_trust")
+    assert view(c)["readiness"]["steps"]["tested"] is False                                                        # the reading predates the applied connection
