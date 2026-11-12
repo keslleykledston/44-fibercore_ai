@@ -16,7 +16,7 @@ export default defineConfig({
   },
   // Capturas primeiro (estado do seed intacto), depois os testes funcionais que mutam dados.
   projects: [
-    { name: "puros", testMatch: /(optics|optics-contrast|optics-colormix|quality-source|olt-panel-pure|edge-diagnostic-pure|device-assets-pure|pop-choice-pure|csp-pure)\.spec\.ts/, use: { browserName: "chromium" } },   // funções puras: sem navegador nem API
+    { name: "puros", testMatch: /(optics|optics-contrast|optics-colormix|quality-source|olt-panel-pure|edge-diagnostic-pure|device-assets-pure|pop-choice-pure|csp-pure|olt-seal-pure)\.spec\.ts/, use: { browserName: "chromium" } },   // funções puras: sem navegador nem API
     { name: "capturas", testMatch: /help-(screenshots|speed|quality)\.spec\.ts/, use: { browserName: "chromium" } },
     { name: "funcional", testMatch: /app\.spec\.ts/, dependencies: ["capturas"], use: { browserName: "chromium" } },
     // Por último: reconhecer o incidente demo muda o estado que os testes acima assumem (não reconhecido).
@@ -30,9 +30,11 @@ export default defineConfig({
     { name: "catalogo", testMatch: /catalogo\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
     // Recuo do catálogo de equipamentos com a flag `device_assets` DESLIGADA: DEVICE_ASSETS_FLAG_OFF=1 npx playwright test --project=recuo-catalogo
     { name: "recuo-catalogo", testMatch: /catalogo-flag\.spec\.ts/, use: { browserName: "chromium" } },
-    { name: "frota", testMatch: /frota\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
+    { name: "frota", testMatch: /frota(-credenciais)?\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
     // Recuo da Frota de OLTs com a flag `fleet_manager` DESLIGADA: FLEET_FLAG_OFF=1 npx playwright test --project=recuo-frota
     { name: "recuo-frota", testMatch: /frota-flag\.spec\.ts/, use: { browserName: "chromium" } },
+    // Recuo das credenciais da OLT com a flag `fleet_secrets` DESLIGADA (ADR-0045): FLEET_SECRETS_FLAG_OFF=1 npx playwright test --project=recuo-credenciais
+    { name: "recuo-credenciais", testMatch: /frota-credenciais-flag\.spec\.ts/, use: { browserName: "chromium" } },
     { name: "conhecimento", testMatch: /(conhecimento|homologacao)\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
     { name: "perfis", testMatch: /perfis\.spec\.ts/, dependencies: ["funcional"], use: { browserName: "chromium" } },
     // Recuo com a flag `profile_studio` DESLIGADA: PERFIS_FLAG_OFF=1 npx playwright test --project=recuo-perfis

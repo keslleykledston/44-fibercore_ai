@@ -27,6 +27,7 @@ export async function POST(req: Request) {
   const r = await apiPost("/v1/fleet/olts", JSON.stringify(body), { "Content-Type": "application/json" });
   if (r.status === 201) {
     const id = (r.json as { id?: string } | null)?.id;
+    if (f.get("acao") === "credenciais" && id && UUID.test(id)) return back(req, `/rede/frota/${id}?ok=oltcredenciais#credenciais`);   // cadastra e vai direto ao cartão de credenciais (a entrada segura é lá, nunca neste formulário)
     if (f.get("acao") !== "testar" || !id || !UUID.test(id)) return back(req, "/rede/frota?ok=olt");
     // "Cadastrar e testar conexão": o teste é o mesmo do detalhe (leitura da identidade pelo Edge, com orçamento e cache); falhar aqui não desfaz o cadastro
     const t = await apiPost(`/v1/fleet/olts/${id}/connection-test`, undefined, { "Idempotency-Key": `fleet-${randomUUID()}` });

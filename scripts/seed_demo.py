@@ -6,6 +6,7 @@ Uso: python scripts/seed_demo.py  -> imprime apenas e-mail/senha DEMO (descartá
 """
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -51,6 +52,10 @@ def main() -> None:
     cid = next(line.split("=", 1)[1] for line in sa.splitlines() if line.startswith("client_id="))
     secret = next(line.split("=", 1)[1].split()[0] for line in sa.splitlines() if line.startswith("client_secret="))
 
+    if os.environ.get("E2E_EDGE_CREDS_FILE"):   # o e2e das credenciais (ADR-0045) faz o papel do Edge: precisa da conta de serviço descartável do seed. Arquivo 0600, só no ambiente de teste.
+        fd = os.open(os.environ["E2E_EDGE_CREDS_FILE"], os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            fh.write(json.dumps({"client_id": cid, "client_secret": secret}))
     c = httpx.Client(base_url=API, timeout=15)
     tok = c.post("/v1/auth/service-token", json={"client_id": cid, "client_secret": secret}).json()["access_token"]
     h = {"Authorization": f"Bearer {tok}"}
@@ -102,6 +107,7 @@ def main() -> None:
     cli("feature-set", tenant, "profile_studio", "on")   # ADR-0040: Profile Studio (somente leitura/rascunho/simulação)
     cli("feature-set", tenant, "device_assets", "on")   # ADR-0041: catálogo de equipamentos (só arte esquemática)
     cli("feature-set", tenant, "fleet_manager", "on")   # ADR-0041 PR2: cadastro de OLTs e POPs
+    cli("feature-set", tenant, "fleet_secrets", "on")   # ADR-0045: credenciais da OLT cifradas no navegador (o e2e faz o papel do Edge)
     # Certificação SINTÉTICA da leitura de perfis só para o tenant de demonstração (a OLT de laboratório real NÃO é certificada por aqui).
     cli("capability-set", tenant, "huawei", "MA5800-X7", "R018", "olt", "olt_profile_read", "supported", "observed",
         "--evidence", "seed-demo-sintetico", "--verified-at", datetime.now(UTC).isoformat())

@@ -8,7 +8,8 @@ WEB_PORT="${WEB_PORT:-18490}"
 make env-dev >/dev/null
 COMPOSE=(docker compose --env-file .env.dev -f infra/compose/compose.yaml)
 WEB_PID=""
-cleanup() { [[ -z "$WEB_PID" ]] || kill "$WEB_PID" 2>/dev/null || true; "${COMPOSE[@]}" down -v >/dev/null 2>&1 || true; }
+EDGE_CREDS="$(mktemp)"; export E2E_EDGE_CREDS_FILE="$EDGE_CREDS"   # conta de serviço descartável do seed, para o e2e das credenciais (ADR-0045)
+cleanup() { rm -f "$EDGE_CREDS"; [[ -z "$WEB_PID" ]] || kill "$WEB_PID" 2>/dev/null || true; "${COMPOSE[@]}" down -v >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 "${COMPOSE[@]}" down -v >/dev/null 2>&1 || true
 "${COMPOSE[@]}" up -d --build >/dev/null

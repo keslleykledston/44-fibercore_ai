@@ -4,7 +4,7 @@ slug: "rede/frota-de-olts"
 role: [isp_admin, engineer, noc_n2]
 status: published
 product_version: "0.1.0"
-last_verified: "2026-11-02"
+last_verified: "2026-11-12"
 help_owner: "Plataforma FiberCore"
 ui_route: "/rede/frota"
 ---
@@ -13,17 +13,19 @@ ui_route: "/rede/frota"
 
 **Objetivo:** registrar uma OLT no FiberCore antes da primeira coleta, associá-la a um POP, e ver quais OLTs já foram lidas pelo Edge.
 
-**Antes de começar:** o recurso **Frota de OLTs** precisa estar ligado para o provedor (flag `fleet_manager`). **Nada nesta tela envia comando à OLT, e login, senha e community da OLT nunca são digitados aqui (ficam só no Edge):** ela fica guardada no Edge, e o cadastro guarda só o **nome** dela.
+**Antes de começar:** o recurso **Frota de OLTs** precisa estar ligado para o provedor (flag `fleet_manager`). **Nada nesta tela envia comando à OLT, e a nuvem nunca guarda login, senha ou community em claro:** o cadastro guarda só o **nome** da credencial, e a entrega cifrada do passo 7 só é aberta pelo Edge.
 
 ## Passo a passo
 
 1. Em **Rede**, clique em **Frota de OLTs**. A lista mostra cada OLT com a miniatura do modelo (quando o catálogo de equipamentos está ligado), o fabricante, o modelo e o firmware lidos pelo Edge, o nível do driver, o POP e o Edge que a coleta. Uma OLT cadastrada que ainda não foi lida aparece como **Ainda não coletada** e com o modelo **ainda não lido**: nada é afirmado antes da leitura.
 2. Para criar um **POP**, preencha o nome (e, se quiser, um código e uma observação) em **POPs** e clique em **Criar POP**. O nome é único, sem diferenciar maiúsculas de minúsculas.
-3. Para **cadastrar uma OLT**, preencha o nome, escolha o fabricante, o Edge que vai coletá-la e, se quiser, o **Site / POP**, o **endereço de gerência**, a **versão do SNMP** e um rótulo. No campo **Site / POP**, digite para buscar; se o nome não existir, aparece **Adicionar “nome” como novo site** e o site é criado junto com a OLT. O **endereço de gerência** é um IP (sem porta nem máscara) e, depois de salvo, só aparece mascarado (por exemplo `10.20.•.•`); ele é só cadastro, pois o Edge usa o endereço da configuração dele. No campo **Nome da credencial no Edge** informe **só o nome** do segredo guardado no Edge (letras minúsculas, números, `.`, `_` e `-`), nunca a senha, a community nem a chave: login, senha e community ficam só no Edge (a entrada segura pela tela é uma etapa futura). Valores que parecem endereço ou chave são recusados, e o valor recusado não volta na tela. O botão **Cadastrar e testar conexão** cadastra e já pede o teste de conexão (passo 6); se o teste não puder ser pedido, o cadastro continua feito.
+3. Para **cadastrar uma OLT**, preencha o nome, escolha o fabricante, o Edge que vai coletá-la e, se quiser, o **Site / POP**, o **endereço de gerência**, a **versão do SNMP** e um rótulo. No campo **Site / POP**, digite para buscar; se o nome não existir, aparece **Adicionar “nome” como novo site** e o site é criado junto com a OLT. O **endereço de gerência** é um IP (sem porta nem máscara) e, depois de salvo, só aparece mascarado (por exemplo `10.20.•.•`); ele é só cadastro, pois o Edge usa o endereço da configuração dele. No campo **Nome da credencial no Edge** informe **só o nome** do segredo guardado no Edge (letras minúsculas, números, `.`, `_` e `-`), nunca a senha, a community nem a chave: login, senha e community **não** vão neste formulário: com o recurso **Credenciais da OLT** ligado (flag `fleet_secrets`, só para o Administrador) elas são digitadas no cartão da página da OLT e **cifradas no seu navegador até o Edge** (passo 7). O botão **Cadastrar e configurar credenciais** cadastra e já leva ao cartão. Valores que parecem endereço ou chave são recusados, e o valor recusado não volta na tela. O botão **Cadastrar e testar conexão** cadastra e já pede o teste de conexão (passo 6); se o teste não puder ser pedido, o cadastro continua feito.
 4. **Passo de quem administra o Edge:** a OLT também precisa estar na configuração do Edge, com o **mesmo nome**. Na primeira coleta o Edge preenche modelo, firmware e nível; o POP, o rótulo e o nome da credencial cadastrados são mantidos.
 5. Para editar, clique no nome da OLT, altere o site, o endereço de gerência, a versão do SNMP ou o rótulo (deixar o site ou o rótulo vazio o limpa; o endereço salvo nunca é mostrado por inteiro: digite outro para substituir ou marque **Remover o endereço**) e clique em **Salvar**. **O nome da credencial já informado nunca é mostrado de volta** (a tela só diz “Informada”): para trocá-lo, digite o novo nome em **Substituir o nome da credencial no Edge**; para tirá-lo, marque **Remover o nome da credencial**; deixando o campo vazio, ele continua como está. O nome da OLT e o Edge dono não mudam por aqui.
 
 6. **Teste de conexão:** no detalhe da OLT, o cartão **Teste de conexão** tem o botão **Testar conexão**. Ele **pede ao Edge** que leia a identidade da OLT (modelo, firmware, patch e tempo ligada, a mesma leitura somente leitura da versão) na **próxima janela de coleta**, que pode levar alguns minutos: o pedido aparece em **Pedidos recentes** como **Aguardando o Edge** e a identidade aparece depois de **Atualizar**. O resultado mostra se a identidade **confere** ou **diverge** da que a coleta já tinha; o fabricante é o do cadastro (a leitura não o informa). **Limite por OLT: 1 teste a cada 15 minutos e 4 por hora**; dentro do limite o botão fica desligado e a tela diz quando o próximo é permitido. Se já houver uma identidade recente guardada, ela responde na hora e **nenhuma consulta é feita à OLT** (isso não gasta o limite).
+
+7. **Credenciais da OLT (só Administrador, recurso `fleet_secrets` ligado):** no detalhe da OLT aparece o cartão **Credenciais da OLT**. (a) O **Edge publica uma chave de selagem**; o cartão mostra o estado e a **impressão digital** dela (8 grupos de 4 caracteres). Enquanto estiver **Aguardando a sua confirmação**, nada pode ser enviado. (b) No servidor do Edge rode `fibercore-edge seal-fingerprint`, **digite** o valor que ele mostra em **Digite a impressão digital mostrada no servidor do Edge** e clique em **Confirmar chave** (a tela também recalcula a impressão digital no seu navegador e avisa se divergir). Se o Edge trocar a chave, a confirmação volta a ser pedida e o que estava aguardando é cancelado e apagado. (c) Com a chave confirmada, escolha **Login e senha (SSH)** ou **Community SNMP v2c**, digite nos campos (mascarados) e clique em **Cifrar e enviar ao Edge**. O navegador cifra com a chave do Edge, envia só o texto cifrado e **apaga os campos**; a tela nunca mostra nem devolve o que foi enviado. (d) Acompanhe em **Últimas entregas**: **Aguardando o Edge**, **Entregue ao Edge, aguardando a aplicação**, **Aplicada**, **Falhou** (com o motivo em português), **Expirou sem ser aplicada** ou **Cancelada**. A entrega vale por 30 minutos e há no máximo 5 aguardando por OLT. (e) **Depois de aplicada, use Testar conexão** (passo 6) para conferir se o novo login funciona. Avisos: **SNMP v3 não é suportado** (uma OLT cadastrada com v3 não aceita envio de community); e o **administrador do Edge precisa habilitar `credentials_file` para esta OLT** na configuração do Edge (sem isso o Edge responde que a OLT não aceita credencial remota). Isto **não troca a senha na OLT**: só atualiza a cópia que o Edge usa. O recurso exige JavaScript e um navegador com WebCrypto em conexão segura (https); sem isso os campos nem aparecem.
 
 ![Frota de OLTs (desktop)](../../assets/rede/frota-de-olts/desktop.png)
 
@@ -38,12 +40,16 @@ ui_route: "/rede/frota"
 ## Resultado esperado
 
 - A OLT cadastrada aparece na lista com **Ainda não coletada** até o Edge lê-la; depois mostra modelo, firmware, nível e quantidade de ONUs.
-- Nenhuma tela, resposta ou registro de auditoria traz senha, chave ou endereço de OLT.
+- Nenhuma tela, resposta ou registro de auditoria traz senha, community, texto cifrado ou endereço de OLT por inteiro.
+- Uma credencial enviada pelo cartão fica **Aplicada** quando o Edge a grava; depois disso nada na nuvem a guarda (o texto cifrado é apagado ao fim da entrega).
 - Não existe exclusão de OLT por esta tela.
 - O teste de conexão nunca configura nada na OLT: é só a leitura da versão, dentro do limite de 1 por 15 minutos e 4 por hora por OLT.
 
 ## Se algo não funcionar
 
+- **O cartão “Credenciais da OLT” não aparece:** o recurso `fleet_secrets` está desligado para o provedor ou seu papel não é Administrador.
+- **“Aguardando a sua confirmação” não sai:** compare a impressão digital **digitando** o valor de `fibercore-edge seal-fingerprint`; se o Edge ainda não publicou a chave, atualize o Edge e a página.
+- **Entrega “Falhou: Esta OLT não aceita credencial remota”:** peça a quem administra o Edge para habilitar `credentials_file` para esta OLT.
 - **O atalho “Frota de OLTs” não aparece:** o recurso está desligado para o provedor ou seu papel não tem permissão.
 - **“Já existe uma OLT (ou POP) com esse nome”:** os nomes são únicos por provedor.
 - **“Algum campo está fora do formato”:** confira o nome (2 a 60 caracteres) e o nome da credencial (só o nome do segredo, em minúsculas).
@@ -56,5 +62,5 @@ ui_route: "/rede/frota"
 
 - Build/commit: árvore de trabalho do PR2 parte A (ADR-0041)
 - Browser/viewport: Chromium; desktop 1440×900 e mobile 390×844
-- Caso de teste E2E: help-screenshots.spec.ts › rede/frota-de-olts; frota.spec.ts
+- Caso de teste E2E: help-screenshots.spec.ts › rede/frota-de-olts; frota.spec.ts; frota-credenciais.spec.ts; olt-seal-pure.spec.ts (as capturas ainda não mostram o cartão de credenciais)
 - Dados: fictícios (seed `scripts/seed_demo.py`); sem informações reais de equipamentos ou clientes

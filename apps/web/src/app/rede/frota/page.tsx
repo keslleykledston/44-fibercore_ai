@@ -16,7 +16,7 @@ export default async function Frota({ searchParams }: { searchParams: Promise<{ 
   const sp = await searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
   const ok = one(sp.ok), erro = one(sp.erro);
-  const [olts, pops, edges, assets] = await Promise.all([apiSafe<{ items: FleetOlt[] }>("/v1/fleet/olts"), apiSafe<{ items: Pop[] }>("/v1/pops"), apiSafe<Edge[]>("/v1/edges"), featuresOn("device_assets")]);
+  const [olts, pops, edges, assets, secrets] = await Promise.all([apiSafe<{ items: FleetOlt[] }>("/v1/fleet/olts"), apiSafe<{ items: Pop[] }>("/v1/pops"), apiSafe<Edge[]>("/v1/edges"), featuresOn("device_assets"), featuresOn("fleet_secrets")]);
   if (olts.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver a frota de OLTs." /></AppShell>;
   const msg = ok && FLEET_FLASH[ok] ? FLEET_FLASH[ok] : erro && FLEET_FLASH[erro] ? FLEET_FLASH[erro] : null;
   const list = olts.data?.items ?? [], popList = pops.data?.items ?? [], edgeList = edges.data ?? [];
@@ -62,6 +62,7 @@ export default async function Frota({ searchParams }: { searchParams: Promise<{ 
               <span className="text-xs text-muted">{CRED_HELP}</span></label>
             <div className="flex flex-wrap items-center gap-3 md:col-span-2"><button type="submit" data-testid="frota-cadastrar" className="min-h-touch rounded-btn border border-line px-4 text-sm hover:bg-bg" disabled={edgeList.length === 0}>Cadastrar OLT</button>
               <button type="submit" name="acao" value="testar" data-testid="frota-cadastrar-testar" className="min-h-touch rounded-btn border border-accent px-4 text-sm text-accent hover:bg-bg" disabled={edgeList.length === 0}>Cadastrar e testar conexão</button>
+              {secrets && <button type="submit" name="acao" value="credenciais" data-testid="frota-cadastrar-credenciais" className="min-h-touch rounded-btn border border-accent px-4 text-sm text-accent hover:bg-bg" disabled={edgeList.length === 0}>Cadastrar e configurar credenciais</button>}
               {edgeList.length === 0 && <span className="ml-3 text-xs text-muted">Nenhum Edge disponível.</span>}</div>
           </form>
         </section>
