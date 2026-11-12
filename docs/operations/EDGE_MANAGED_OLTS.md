@@ -48,12 +48,12 @@ Lado do Edge do cadastro de OLT de ponta a ponta. A nuvem **propõe** uma OLT (I
 5. Ligar as flags `fleet_provision` e `fleet_secrets` do provedor na nuvem por último.
 
 ## O que zera a confiança
-A confiança fica em `trust.json` como o **resumo SHA-256** dos campos de conexão confiados (nome, `address`, `port`, `protocol`, `transport`, `host_key_sha256`, `snmp_port`, `ssh_mode`, `legacy_ssh`). Por isso:
+A confiança fica em `trust.json` como o **resumo SHA-256** dos campos de conexão confiados (nome, `address`, `port`, `protocol`, `transport`, `host_key_sha256`, `snmp_port`, `ssh_mode`, `legacy_ssh` e `vendor`, este último porque escolhe o driver, isto é, os comandos que rodam). Por isso:
 - Editar `managed_olts.json` à mão **não ativa nada** (uma OLT nova nasce sem confiança; mudar qualquer desses campos numa já confiada a tira da confiança; voltar ao valor antigo na mão devolve exatamente o que foi confiado).
-- Uma entrega `set` que mude qualquer desses campos **apaga** a confiança (e voltar ao valor antigo **não** a traz de volta): rode `managed-trust` de novo. `vendor` e `cloud_id` não mudam para onde o Edge conecta e não zeram.
+- Uma entrega `set` que mude qualquer desses campos **apaga** a confiança (e voltar ao valor antigo **não** a traz de volta): rode `managed-trust` de novo. Só o `cloud_id` não zera (não muda para onde o Edge conecta nem o que roda).
 - `remove` apaga o registro, a confiança e o arquivo de credenciais.
 
-A confiança e a política são **reverificadas a cada ciclo e de novo na abertura de cada sessão**: uma OLT removida, alterada ou que deixou de caber na política (CIDR/porta/fabricante/legado reduzidos depois) deixa de ser coletada na hora.
+A confiança e a política são **reverificadas a cada ciclo e de novo na abertura de cada sessão**: uma OLT removida, alterada ou que deixou de caber na política (CIDR/porta/fabricante/legado reduzidos depois) deixa de ser coletada na hora. A confiança é conferida mais uma vez **no instante da conexão** (TCP ou contato SNMP), depois da leitura das credenciais. A revogação vale para a **próxima** conexão: uma sessão que já está aberta termina a sua rodada de leitura (somente leitura; no máximo o orçamento de tempo da OLT, 9 min).
 
 ## Credenciais
 `ssh_login` e `snmp_community` (ADR-0045) para uma OLT gerenciada vão para `state_dir/creds/<nome>.json` (0600, em `creds/` 0700), automaticamente, **mesmo antes da confiança** (nunca usadas antes dela). Sem registro gerenciado nem `credentials_file` estático: `target_not_configured`. `ssh_login` só para transporte `cli`, `snmp_community` só para `snmp`. Nomes que não são "comuns" (`[A-Za-z0-9][A-Za-z0-9._-]{0,63}`) viram `<prefixo>~<12 hex do SHA-256>.json` (nunca um caminho vindo da nuvem).

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"sort"
 	"sync"
 
@@ -166,7 +167,8 @@ func (b *Builder) source(e managedolts.Entry, list *allowlist.List) collector.OL
 			if err != nil {
 				return nil, nil, err
 			}
-			cfg := olt.SNMPConfig{Addr: e.HostPort(), Community: community, Allowed: list.Allowed}
+			// the trust is looked at once more at the moment the agent is contacted (the allowlist is asked exactly there), not only before the credentials were read
+			cfg := olt.SNMPConfig{Addr: e.HostPort(), Community: community, Allowed: func(hp string) bool { return b.verify(e) == nil && list.Allowed(hp) }}
 			if b.OpenSNMP != nil {
 				return b.OpenSNMP(ctx, cfg)
 			}
@@ -187,7 +189,15 @@ func (b *Builder) source(e managedolts.Entry, list *allowlist.List) collector.OL
 		if err != nil {
 			return nil, nil, err
 		}
-		cfg := olt.SSHConfig{Addr: e.HostPort(), User: user, Password: pw, HostKeySHA256: e.HostKeySHA256, Dial: list.DialContext,
+		// the trust is looked at once more at the moment the TCP connection is made, after the credentials were read: a remove, a change or an untrust that lands in
+		// between stops the connection. (Revocation takes effect at the NEXT connection: a session that is already open finishes its read-only round.)
+		dial := func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if err := b.verify(e); err != nil {
+				return nil, err
+			}
+			return list.DialContext(ctx, network, addr)
+		}
+		cfg := olt.SSHConfig{Addr: e.HostPort(), User: user, Password: pw, HostKeySHA256: e.HostKeySHA256, Dial: dial,
 			Shell: e.SSHMode == managedolts.ModeShell, Legacy: e.LegacySSH}
 		if b.OpenSSH != nil {
 			return b.OpenSSH(ctx, cfg)

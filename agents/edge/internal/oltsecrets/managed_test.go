@@ -492,6 +492,7 @@ func TestManagedAnyConnectionFieldChangeZeroesTheTrust(t *testing.T) {
 		"snmp_port":       {"snmp_port": 162},
 		"ssh_mode":        {"ssh_mode": "shell"},
 		"legacy_ssh":      {"legacy_ssh": true},
+		"vendor":          {"vendor": "zte"}, // picks the driver, i.e. the commands that run (Codex r1)
 	}
 	i := 0
 	for field, over := range changes {
@@ -515,11 +516,11 @@ func TestManagedAnyConnectionFieldChangeZeroesTheTrust(t *testing.T) {
 			t.Errorf("%s: the trust entry was not dropped", field)
 		}
 	}
-	// vendor and cloud_id are not connection fields: they never change where the Edge connects
+	// the Cloud id alone never changes where the Edge connects nor what it runs
 	m := newManagedEnv(t, nil)
 	m.wantSet(mDelivID, nil, CodeAwaitingLocalTrust)
 	m.trust()
-	m.wantSet(mDeliv2, map[string]any{"vendor": "zte", "cloud_id": "5a1f3c52-0b6e-4f0e-9a52-0a6f6a0c2222"}, "")
+	m.wantSet(mDeliv2, map[string]any{"cloud_id": "5a1f3c52-0b6e-4f0e-9a52-0a6f6a0c2222"}, "")
 	if !m.item().Trusted {
 		t.Fatal("vendor/cloud_id must not clear the trust")
 	}

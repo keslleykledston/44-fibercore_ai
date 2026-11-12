@@ -105,6 +105,7 @@ func TestDigestCoversExactlyTheConnectionFields(t *testing.T) {
 		"name": func(e *Entry) { e.Name = "B" }, "address": func(e *Entry) { e.Address = "10.20.1.6" }, "port": func(e *Entry) { e.Port = 2222 },
 		"transport": func(e *Entry) { e.Transport = "snmp" }, "host key": func(e *Entry) { e.HostKeySHA256 = "SHA256:" + strings.Repeat("A", 43) },
 		"snmp_port": func(e *Entry) { e.SNMPPort = 162 }, "ssh_mode": func(e *Entry) { e.SSHMode = "shell" }, "legacy": func(e *Entry) { e.LegacySSH = true },
+		"vendor": func(e *Entry) { e.Vendor = "zte" }, // the vendor picks the driver, i.e. the commands that run (Codex r1)
 	}
 	for name, f := range changes {
 		x := base
@@ -113,7 +114,7 @@ func TestDigestCoversExactlyTheConnectionFields(t *testing.T) {
 			t.Errorf("%s must change the digest", name)
 		}
 	}
-	for name, f := range map[string]func(*Entry){"vendor": func(e *Entry) { e.Vendor = "zte" }, "cloud_id": func(e *Entry) { e.CloudID = "5a1f3c52-0b6e-4f0e-9a52-0a6f6a0c2222" }} {
+	for name, f := range map[string]func(*Entry){"cloud_id": func(e *Entry) { e.CloudID = "5a1f3c52-0b6e-4f0e-9a52-0a6f6a0c2222" }} {
 		x := base
 		f(&x)
 		if x.Digest() != d {

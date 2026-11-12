@@ -73,14 +73,15 @@ func (e Entry) DialPort() int {
 // HostPort is the ip:port the Edge would actually connect to (see DialPort).
 func (e Entry) HostPort() string { return net.JoinHostPort(e.Address, strconv.Itoa(e.DialPort())) }
 
-// Digest is the SHA-256 (hex) of the connection fields that trust is given to: name, address, port, protocol, transport, host key, SNMP port, ssh mode and legacy flag. Trust
-// is stored as this digest, never as a flag in the registry: editing the registry by hand cannot make anything trusted, and a change of any of these fields no longer
-// matches the stored digest. (Vendor and cloud_id are not part of it: they never change where the Edge connects.) Fields are length-prefixed, so none can shift into another.
+// Digest is the SHA-256 (hex) of the fields that trust is given to: name, address, port, protocol, transport, host key, SNMP port, ssh mode, legacy flag and vendor (the
+// vendor picks the driver, i.e. the commands the Edge runs, so a change of it needs a new confirmation too; Codex r1). Trust is stored as this digest, never as a flag in
+// the registry: editing the registry by hand cannot make anything trusted, and a change of any of these fields no longer matches the stored digest. Only the Cloud id is left
+// out: it never changes where the Edge connects nor what it runs. Fields are length-prefixed, so none can shift into another.
 func (e Entry) Digest() string {
 	h := sha256.New()
 	for _, f := range []string{
-		"fibercore-managed-olt-trust-v1", e.Name, e.Address, strconv.Itoa(e.Port), e.Protocol, e.Transport, e.HostKeySHA256,
-		strconv.Itoa(e.SNMPPort), e.SSHMode, strconv.FormatBool(e.LegacySSH),
+		"fibercore-managed-olt-trust-v2", e.Name, e.Address, strconv.Itoa(e.Port), e.Protocol, e.Transport, e.HostKeySHA256,
+		strconv.Itoa(e.SNMPPort), e.SSHMode, strconv.FormatBool(e.LegacySSH), e.Vendor,
 	} {
 		h.Write([]byte(strconv.Itoa(len(f))))
 		h.Write([]byte{':'})

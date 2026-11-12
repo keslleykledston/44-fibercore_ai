@@ -1,0 +1,29 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1d1a7-1931-7800-9161-eff6f1cba7ae).
+[codex] Turn started (01a1d1a7-197e-7dc1-bf10-89994daaa4d3).
+[codex] Assistant message captured: Vou inspecionar o diff contra `main` e seguir os caminhos de confiança, validação de destino,...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- agents/edge/internal/manage...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=50 main...HEAD -- agents/edge/internal/manage... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=8 main...HEAD -- agents/edge/internal/managed...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=8 main...HEAD -- agents/edge/internal/managed... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/managedolts/store.go | sed -n '1,460p'; nl -ba age...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/managedolts/store.go | sed -n '1,460p'; nl -ba age... (exit 0)
+[codex] Assistant message captured: Encontrei um ponto material no resumo de confiança: `vendor` não entra no digest, embora dete...
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/managedcollect/managedcollect.go | sed -n '105,205...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/managedcollect/managedcollect.go | sed -n '105,205... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviar ainda: o trust local não cobre a escolha d...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviar ainda: o trust local não cobre a escolha do driver e pode não proteger a sessão contra uma revogação concorrente.
+
+Findings:
+- [high] Mudança de vendor preserva o trust e troca os comandos de coleta (agents/edge/internal/managedolts/entry.go:76-84)
+  `Digest()` omite `Vendor`, e `Upsert` só limpa o trust quando o digest muda. Assim, uma entrega assinada pode alterar `vendor` de `huawei` para `zte` mantendo endereço, porta e chave; o Edge continua considerando a OLT confiada, mas `source()` seleciona outro driver e executa suas rotinas de identificação e coleta. Isso permite que uma mudança remota altere o comportamento de acesso sem nova confirmação local. Inclua vendor no resumo de confiança (e limpe/reconfirme trust nas entradas existentes quando essa semântica mudar).
+  Recommendation: Adicionar `Vendor` ao digest e garantir que alterações de vendor invalidem trusts já registrados.
+- [medium] Revogação pode ocorrer entre a verificação e a abertura da sessão (agents/edge/internal/managedcollect/managedcollect.go:138-195)
+  `verify()` confirma o registro e o trust, mas libera a leitura antes de carregar as credenciais e chamar o dialer. Uma remoção, mudança de conexão ou untrust concorrente após essa verificação ainda permite abrir uma sessão usando a entrada capturada no início do ciclo. A checagem final reduz a janela, mas não a fecha; isso é relevante para `managed-trust`/remoção usados para interromper acesso. O caminho SNMP tem a mesma sequência.
+  Recommendation: Serializar revogação e abertura/sessão com um mecanismo que mantenha a autorização válida até o dial iniciar ou até a sessão terminar, ou revalidar sob lock imediatamente antes de permitir o dial e documentar a semântica de revogação.
