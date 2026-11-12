@@ -72,6 +72,27 @@ test("modo padrão (report-only): cabeçalho Report-Only com nonce novo a cada r
   expect(consoleHits, "mensagens de violação no console").toEqual([]);
 });
 
+// O middleware passou a cobrir /login e a montar os cabeçalhos da requisição (nonce) junto com a renovação de sessão: regressão da renovação.
+test("renovação de sessão com CSP: /login não consome o refresh; rota protegida renova (inclusive 2 requisições simultâneas) e traz CSP; sem cair no login", async ({ page, context }) => {
+  await login(page);
+  const refresh = async () => (await context.cookies()).find((c) => c.name === "fc_refresh")!.value;
+  const r0 = await refresh();
+  await context.clearCookies({ name: "fc_token" });             // access token expirado, refresh válido
+  const rl = await page.goto("/login");
+  expect(rl!.headers()["content-security-policy-report-only"] ?? rl!.headers()["content-security-policy"], "CSP também em /login").toContain("'nonce-");
+  expect(await refresh(), "/login não pode rotacionar o refresh").toBe(r0);
+  expect((await context.cookies()).find((c) => c.name === "fc_token"), "/login não cria sessão nova").toBeUndefined();
+  const both = await Promise.all([context.request.get("/rede", { maxRedirects: 0 }), context.request.get("/rede", { maxRedirects: 0 })]);   // mesmo cookie, em paralelo: UMA rotação compartilhada
+  expect(both.map((r) => r.status()), "nenhuma das duas pode ser redirecionada ao login").toEqual([200, 200]);
+  const html = await both[0].text();
+  const hdr = both[0].headers()["content-security-policy-report-only"] ?? both[0].headers()["content-security-policy"];
+  expect(hdr).toContain("'nonce-");
+  expect(html, "o HTML renderizado tem o nonce da PRÓPRIA resposta").toContain(`nonce="${/'nonce-([^']+)'/.exec(hdr)![1]}"`);
+  expect(await refresh(), "o refresh rotacionou").not.toBe(r0);
+  await page.goto("/rede");
+  await expect(page).toHaveURL(/\/rede$/);
+});
+
 test.describe("enforce", () => {
   test.skip(!ENFORCE_URL, "CSP_ENFORCE_URL não definido: suba um segundo next start com FIBERCORE_CSP_MODE=enforce");
   test.use({ baseURL: ENFORCE_URL });
