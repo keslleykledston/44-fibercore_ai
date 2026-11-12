@@ -4,6 +4,11 @@ A registered OLT is a row the provider names BEFORE the Edge first reads it: nam
 the Edge's own local store (D3: the Cloud never holds, receives or echoes a credential or an address; the name itself is write-only here: no response returns it, a reader sees only `has_credential_ref`). When the Edge's first snapshot arrives it adopts the row by name and fills in the real
 vendor/model/firmware/level; the registration fields are left alone. There is no delete here: removing an OLT is a separate, deliberate step. The whole router answers 403 `feature_disabled`
 while the tenant flag `fleet_manager` is off.
+
+ADR-0046 (migration 0051): the registration also says HOW the OLT is reached (protocol ssh|telnet, port, transport cli|snmp, SNMP port, SSH host-key fingerprint, ssh mode, legacy ssh).
+None of it is a secret and the fingerprint may be returned; the address still comes back only masked. Telnet is inventory only (no credential, no connection is ever delivered for it).
+`edge_trust_state` is what the EDGE reports and cannot be written
+here. Changing how the OLT is reached voids the connection already delivered (the database demotes the trust) and cancels the deliveries still waiting.
 """
 from __future__ import annotations
 
@@ -17,7 +22,7 @@ from sqlalchemy import Connection, text
 
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import audit
-from app.core import features, fleet
+from app.core import features, fleet, olt_secrets
 
 router = APIRouter()
 LIST_LIMIT = 500
@@ -97,7 +102,55 @@ def _snmp(v: str | None) -> str | None:
     return v
 
 
-class OltIn(BaseModel):
+def _choice(v: str | None, allowed: tuple[str, ...], name: str) -> str | None:
+    if v is not None and v not in allowed:
+        raise ValueError(f"{name} must be one of: {', '.join(allowed)}")
+    return v
+
+
+class _ConnectionFields(BaseModel):
+    """How the OLT is reached (ADR-0046 D3). Format only here; the rules BETWEEN the fields (port by protocol, v2c for SNMP, no ssh fields for Telnet)
+    are `fleet.merge_connection`, on the merged state."""
+    mgmt_protocol: str | None = None
+    mgmt_port: int | None = Field(None, strict=True, ge=1, le=65535)
+    mgmt_transport: str | None = None
+    snmp_port: int | None = Field(None, strict=True, ge=1, le=65535)
+    host_key_sha256: str | None = Field(None, max_length=64)
+    ssh_mode: str | None = None
+    legacy_ssh: bool | None = Field(None, strict=True)
+
+    @field_validator("mgmt_protocol")
+    @classmethod
+    def _protocol(cls, v: str | None) -> str | None:
+        return _choice(v, fleet.PROTOCOLS, "mgmt_protocol")
+
+    @field_validator("mgmt_transport")
+    @classmethod
+    def _transport(cls, v: str | None) -> str | None:
+        return _choice(v, fleet.TRANSPORTS, "mgmt_transport")
+
+    @field_validator("ssh_mode")
+    @classmethod
+    def _ssh_mode(cls, v: str | None) -> str | None:
+        return _choice(v, fleet.SSH_MODES, "ssh_mode")
+
+    @field_validator("host_key_sha256")
+    @classmethod
+    def _host_key(cls, v: str | None) -> str | None:
+        if v is not None and not fleet.HOST_KEY_RE.match(v):
+            raise ValueError("host_key_sha256 must be SHA256: followed by 43 base64 characters (ssh-keygen -lf)")   # never echoes the value
+        return v
+
+
+def _merged(cur: dict, body: BaseModel, snmp_version: str | None) -> dict:
+    sent = {k: getattr(body, k) for k in fleet.CONN_FIELDS if k in body.model_fields_set}
+    try:
+        return fleet.merge_connection(cur, sent, snmp_version)
+    except fleet.ConnectionRuleError as exc:
+        raise HTTPException(422, exc.code) from exc
+
+
+class OltIn(_ConnectionFields):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=2, max_length=60)
     edge_id: UUID
@@ -149,7 +202,7 @@ class OltIn(BaseModel):
         return v
 
 
-class OltPatch(BaseModel):
+class OltPatch(_ConnectionFields):
     model_config = ConfigDict(extra="forbid")
     pop_id: UUID | None = None
     pop_name: str | None = Field(None, min_length=2, max_length=60)
@@ -185,6 +238,11 @@ class OltPatch(BaseModel):
 
 _OLT_SQL = ("SELECT o.id, o.name, o.vendor, o.model, o.firmware, o.support_level, o.observed_at, (o.credential_secret_ref IS NOT NULL) AS has_ref, o.label, o.pop_id, p.name AS pop_name, "
             "o.registered_at, host(o.mgmt_address) AS mgmt_address, o.snmp_version, o.edge_id, e.name AS edge_name, "
+            "o.mgmt_protocol, o.mgmt_port, o.mgmt_transport, o.snmp_port, o.host_key_sha256, o.ssh_mode, o.legacy_ssh, o.edge_trust_state, o.conn_applied_at, "
+            "(SELECT max(d.finished_at) FROM olt_secret_deliveries d WHERE d.olt_id = o.id AND d.kind = 'ssh_login' AND d.status = 'APPLIED') AS ssh_cred_at, "
+            "(SELECT max(d.finished_at) FROM olt_secret_deliveries d WHERE d.olt_id = o.id AND d.kind = 'snmp_community' AND d.status = 'APPLIED') AS snmp_cred_at, "
+            "EXISTS (SELECT 1 FROM olt_query_latest l WHERE l.olt_id = o.id AND l.query_id = 'olt.connection' AND l.source = 'job' AND l.owner_epoch = o.owner_epoch "
+            "AND (o.conn_applied_at IS NULL OR l.asked_at >= o.conn_applied_at)) AS tested, "
             "e.last_heartbeat_at, (SELECT count(*) FROM onus n WHERE n.olt_id = o.id) AS onu_count "
             "FROM olts o JOIN edges e ON e.id = o.edge_id LEFT JOIN pops p ON p.id = o.pop_id ")
 
@@ -197,7 +255,13 @@ def _olt_view(r) -> dict:
             "label": r.label, "pop": {"id": str(r.pop_id), "name": r.pop_name} if r.pop_id else None, "registered": r.registered_at is not None,
             "registered_at": r.registered_at.isoformat() if r.registered_at else None, "edge": {"id": str(r.edge_id), "name": r.edge_name},
             "edge_last_heartbeat_at": r.last_heartbeat_at.isoformat() if r.last_heartbeat_at else None, "onu_count": r.onu_count,
-            "collected": r.observed_at is not None}
+            "collected": r.observed_at is not None,
+            # ADR-0046: how it is reached (none of this is a secret; the host-key fingerprint is public) and how far the OLT is on the way to being usable
+            "connection": {"protocol": r.mgmt_protocol, "port": r.mgmt_port, "transport": r.mgmt_transport, "snmp_port": r.snmp_port, "host_key_sha256": r.host_key_sha256, "ssh_mode": r.ssh_mode,
+                           "legacy_ssh": r.legacy_ssh, "trust_state": r.edge_trust_state, "applied": r.conn_applied_at is not None,
+                           "applied_at": r.conn_applied_at.isoformat() if r.conn_applied_at else None},
+            "readiness": fleet.readiness(protocol=r.mgmt_protocol, transport=r.mgmt_transport, conn_applied=r.conn_applied_at is not None, trust=r.edge_trust_state,
+                                         ssh_cred=r.ssh_cred_at is not None, snmp_cred=r.snmp_cred_at is not None, tested=bool(r.tested))}
 
 
 @router.get("/v1/fleet/olts")
@@ -214,6 +278,12 @@ def get_olt(olt_id: UUID, p: Principal = Depends(require("fleet:read")), conn: C
     if r is None:
         raise HTTPException(404, "olt not found")
     return _olt_view(r)
+
+
+def _cancel_waiting(conn: Connection, olt_id: UUID, kind: str | None, code: str) -> int:
+    """PENDING/DISPATCHED deliveries of the OLT (all kinds, or one) become CANCELLED with the blob erased. The caller holds the OLT row lock (the same one `create_delivery` takes)."""
+    return conn.execute(text("UPDATE olt_secret_deliveries SET status = 'CANCELLED', code = :c, sealed = NULL, updated_at = now() "
+                             "WHERE olt_id = :o AND status IN ('PENDING', 'DISPATCHED') AND (CAST(:k AS text) IS NULL OR kind = :k)"), {"c": code, "o": olt_id, "k": kind}).rowcount
 
 
 def _check_pop(conn: Connection, pop_id: UUID | None) -> None:
@@ -239,17 +309,21 @@ def register_olt(body: OltIn, p: Principal = Depends(require("fleet:manage")), c
     _flag(conn, p)
     if conn.execute(text("SELECT 1 FROM edges WHERE id = :i"), {"i": body.edge_id}).first() is None:
         raise HTTPException(404, "edge not found")
+    cx = _merged({}, body, body.snmp_version)   # 422 with a stable code when the fields contradict each other (e.g. a fingerprint for Telnet)
     pop_id = _resolve_pop(conn, p, body.pop_id, body.pop_name)
     new_id = conn.execute(
-        text("INSERT INTO olts (tenant_id, edge_id, name, vendor, support_level, credential_secret_ref, pop_id, label, mgmt_address, snmp_version, registered_by, registered_at) "
-             "VALUES (:t,:e,:n,:v,'identified',:c,:pop,:l,CAST(:a AS inet),:sv,:by,:at) ON CONFLICT (tenant_id, name) DO NOTHING RETURNING id"),
+        text("INSERT INTO olts (tenant_id, edge_id, name, vendor, support_level, credential_secret_ref, pop_id, label, mgmt_address, snmp_version, registered_by, registered_at, "
+             "mgmt_protocol, mgmt_port, mgmt_transport, snmp_port, host_key_sha256, ssh_mode, legacy_ssh) "
+             "VALUES (:t,:e,:n,:v,'identified',:c,:pop,:l,CAST(:a AS inet),:sv,:by,:at,:mp,:mport,:mt,:sp,:hk,:sm,:ls) ON CONFLICT (tenant_id, name) DO NOTHING RETURNING id"),
         {"t": p.tenant_id, "e": body.edge_id, "n": body.name, "v": body.vendor, "c": body.credential_ref, "pop": pop_id, "l": body.label, "a": body.mgmt_address, "sv": body.snmp_version,
-         "by": p.id, "at": datetime.now(UTC)}).scalar_one_or_none()
+         "by": p.id, "at": datetime.now(UTC), "mp": cx["mgmt_protocol"], "mport": cx["mgmt_port"], "mt": cx["mgmt_transport"], "sp": cx["snmp_port"], "hk": cx["host_key_sha256"], "sm": cx["ssh_mode"],
+         "ls": cx["legacy_ssh"]}).scalar_one_or_none()
     if new_id is None:
         raise HTTPException(409, "olt_name_taken")
     audit(conn, p, "fleet.olt.registered", "olt", str(new_id), {"name": body.name, "vendor": body.vendor, "pop": str(pop_id) if pop_id else None,
                                                                 "has_credential_ref": body.credential_ref is not None, "has_mgmt_address": body.mgmt_address is not None,
-                                                                "snmp_version": body.snmp_version})   # neither the NAME of the secret nor the address is logged, only that they are set
+                                                                "snmp_version": body.snmp_version, "mgmt_protocol": cx["mgmt_protocol"], "mgmt_transport": cx["mgmt_transport"],
+                                                                "has_host_key": cx["host_key_sha256"] is not None})   # no secret NAME, address, port or fingerprint is logged
     return _olt_view(conn.execute(text(_OLT_SQL + "WHERE o.id = :i"), {"i": new_id}).one())
 
 
@@ -259,9 +333,20 @@ def update_olt(olt_id: UUID, body: OltPatch, p: Principal = Depends(require("fle
     sent = body.model_fields_set
     if not sent:
         raise HTTPException(422, "nothing to change")
-    if conn.execute(text("SELECT 1 FROM olts WHERE id = :i FOR UPDATE"), {"i": olt_id}).first() is None:
+    old = conn.execute(text("SELECT host(mgmt_address) AS mgmt_address, snmp_version, mgmt_protocol, mgmt_port, mgmt_transport, snmp_port, host_key_sha256, ssh_mode, legacy_ssh "
+                            "FROM olts WHERE id = :i FOR UPDATE"), {"i": olt_id}).first()
+    if old is None:
         raise HTTPException(404, "olt not found")
     sets, args = [], {"i": olt_id}
+    new_cx = _merged(dict(old._mapping), body, body.snmp_version if "snmp_version" in sent else old.snmp_version)   # the rules between the fields hold on the state the OLT WILL have
+    conn_changed = False
+    for k in fleet.CONN_FIELDS:
+        if new_cx[k] != (bool(old._mapping[k]) if k == "legacy_ssh" else old._mapping[k]):
+            sets.append(f"{k} = :{k}")
+            args[k] = new_cx[k]
+            conn_changed = True
+    if "mgmt_address" in sent and (None if body.mgmt_address is None else ipaddress.ip_address(body.mgmt_address)) != (None if old.mgmt_address is None else ipaddress.ip_address(old.mgmt_address)):
+        conn_changed = True
     if "pop_name" in sent and body.pop_name is not None:
         sets.append("pop_id = :pop_id")
         args["pop_id"] = _resolve_pop(conn, p, None, body.pop_name)
@@ -278,8 +363,14 @@ def update_olt(olt_id: UUID, body: OltPatch, p: Principal = Depends(require("fle
         args["mgmt_address"] = body.mgmt_address
     if not sets:   # only a null pop_name was sent
         raise HTTPException(422, "nothing to change")
-    conn.execute(text(f"UPDATE olts SET {', '.join(sets)} WHERE id = :i"), args)
-    audit(conn, p, "fleet.olt.updated", "olt", str(olt_id), {"fields": sorted(sent)})   # field NAMES only, never the address or the secret name
+    conn.execute(text(f"UPDATE olts SET {', '.join(sets)} WHERE id = :i"), args)  # noqa: S608  (column names come from a fixed list)  the trigger of migration 0051 voids the confirmed/applied connection when any of how-it-is-reached changed
+    cancelled = 0
+    if new_cx["mgmt_protocol"] == "telnet" and old.mgmt_protocol != "telnet":   # ADR-0046 D3(b): Telnet is inventory: whatever waited for the Edge (any kind) is cancelled and its blob erased
+        cancelled = _cancel_waiting(conn, olt_id, None, "protocol_changed")
+    elif conn_changed:   # a connection sealed for the OLD way of reaching it must not reach the Edge
+        cancelled = _cancel_waiting(conn, olt_id, olt_secrets.CONNECTION_KIND, "connection_changed")
+    ev = {"fields": sorted(sent), "cancelled_deliveries": cancelled} if cancelled else {"fields": sorted(sent)}   # field NAMES and a count only, never the address, a port or the secret name
+    audit(conn, p, "fleet.olt.updated", "olt", str(olt_id), ev)
     return _olt_view(conn.execute(text(_OLT_SQL + "WHERE o.id = :i"), {"i": olt_id}).one())
 
 

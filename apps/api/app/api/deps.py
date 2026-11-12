@@ -120,18 +120,39 @@ def mfa_is_recent(p: Principal, settings: Settings) -> bool:
     return 0 <= age <= settings.mfa_recent_seconds
 
 
+def ensure_permission(p: Principal, settings: Settings, perm: str) -> None:
+    """The check `require` makes, for a handler that learns WHICH permission it needs only from the body (ADR-0046: the `kind` of a delivery): the role, then the recent second factor."""
+    require_known(perm)
+    if not p.can(perm):
+        raise HTTPException(403, "forbidden")
+    if CATALOG[perm].mfa_recent and settings.mfa_recent_enforce and p.kind == "user" and not mfa_is_recent(p, settings):
+        raise HTTPException(403, "mfa_recent_required")  # the client answers with POST /v1/auth/mfa/step-up and repeats the call
+
+
 def require(perm: str):
     require_known(perm)  # a permission outside the catalog is a programming error: the app does not even import
-    needs_recent = CATALOG[perm].mfa_recent
 
     def dep(p: Principal = Depends(get_principal), settings: Settings = Depends(get_settings)) -> Principal:
-        if not p.can(perm):
-            raise HTTPException(403, "forbidden")
-        if needs_recent and settings.mfa_recent_enforce and p.kind == "user" and not mfa_is_recent(p, settings):
-            raise HTTPException(403, "mfa_recent_required")  # the client answers with POST /v1/auth/mfa/step-up and repeats the call
+        ensure_permission(p, settings, perm)
         return p
 
     dep.rbac_permission = perm  # type: ignore[attr-defined]  # read by the route inventory test and the generated matrix
+    return dep
+
+
+def require_any(*perms: str):
+    """At least ONE of the permissions (the handler then checks the one its input needs with `ensure_permission`). Listed for the inventory and the matrix as every permission it accepts."""
+    for perm in perms:
+        require_known(perm)
+
+    def dep(p: Principal = Depends(get_principal), settings: Settings = Depends(get_settings)) -> Principal:
+        held = [perm for perm in perms if p.can(perm)]
+        if not held:
+            raise HTTPException(403, "forbidden")
+        ensure_permission(p, settings, held[0])   # the first held decides the recent-factor rule; the handler repeats it for the permission it really needs
+        return p
+
+    dep.rbac_permissions = tuple(perms)  # type: ignore[attr-defined]
     return dep
 
 

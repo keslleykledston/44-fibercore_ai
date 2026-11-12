@@ -51,7 +51,7 @@ def inventory() -> list[dict]:
     for r in _routes():
         acc: list = []
         _deps(r.dependant, acc)
-        perms = sorted({c.rbac_permission for c in acc if hasattr(c, "rbac_permission")})
+        perms = sorted({c.rbac_permission for c in acc if hasattr(c, "rbac_permission")} | {x for c in acc for x in getattr(c, "rbac_permissions", ())})
         if perms:
             kind = "require"
         elif deps.get_principal in acc:
