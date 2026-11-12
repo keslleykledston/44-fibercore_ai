@@ -220,11 +220,11 @@ func TestUpsertListRemoveRoundTripAndFileModes(t *testing.T) {
 	if !ok || !it.Trusted || it.State() != StateTrusted {
 		t.Fatalf("%+v", it)
 	}
-	id, err := s.Remove("A")
+	id, err := s.Remove("A", entry("A").CloudID)
 	if err != nil || id != entry("A").CloudID {
 		t.Fatalf("%q %v", id, err)
 	}
-	if id, err := s.Remove("A"); err != nil || id != "" {
+	if id, err := s.Remove("A", ""); err != nil || id != "" {
 		t.Fatalf("a second remove is a no-op: %q %v", id, err)
 	}
 	if l, _ := s.List(); len(l) != 1 {

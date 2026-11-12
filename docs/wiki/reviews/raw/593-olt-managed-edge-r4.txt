@@ -1,0 +1,28 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1d1b0-d1d2-7ed1-b27a-64c03e222cd6).
+[codex] Turn started (01a1d1b0-d210-7e10-b98f-b6d8430b04d8).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir os caminhos de confiança, aplicação e reporte, inc...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge'
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=80 main...HEAD -- agents/edge' (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=5 main...HEAD -- agents/edge/internal/managed...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=5 main...HEAD -- agents/edge/internal/managed... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/managedolts/store.go | sed -n '1,240p'; nl -ba age...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/managedolts/store.go | sed -n '1,240p'; nl -ba age... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba agents/edge/internal/managedolts/store.go | sed -n '300,560p'; rg -n 'r...
+[codex] Command completed: /bin/bash -lc "nl -ba agents/edge/internal/managedolts/store.go | sed -n '300,560p'; rg -n 'r... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não enviaria ainda: a remoção não confere o Cloud ID ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não enviaria ainda: a remoção não confere o Cloud ID com o OLT nomeado, e a revogação local ainda tem uma janela entre a última checagem de confiança e a conexão.
+
+Findings:
+- [high] Remoção ignora o Cloud ID da entrega (agents/edge/internal/oltsecrets/managed.go:118-131)
+  Uma entrega `remove` valida e guarda `cloud_id`, mas `checkConnection` não confere esse ID com o registro e `writeConnection` chama `Store.Remove` apenas pelo nome. Assim, uma entrega assinada para remover um OLT pode apagar outro OLT se nome e ID divergirem — por erro, entrega obsoleta ou inconsistência no Cloud. Isso também permite que uma repetição remova uma entrada recriada com o mesmo nome e outro ID. Exija que o registro encontrado tenha o mesmo `cloud_id` antes de apagar; trate divergência como falha sem alterar estado.
+  Recommendation: Passe o Cloud ID esperado até `Store.Remove` e compare-o com o registro sob o mesmo lock antes de gravar tombstone ou remover credenciais; rejeite divergências sem efeitos.
+- [medium] Revogação pode ocorrer entre a checagem de confiança e o dial (agents/edge/internal/managedcollect/managedcollect.go:156-177)
+  O código verifica confiança e depois chama `list.DialContext`; remoção ou mudança pode ocorrer nesse intervalo, pois o dial e a operação de remoção não compartilham uma trava. A conexão ainda pode ser aberta após a revogação local, apesar da checagem final. O mesmo padrão aparece no callback `Allowed` do SNMP. A janela é curta, mas contradiz a garantia de que uma remoção impede a próxima conexão.
+  Recommendation: Coordene a checagem final e o início do dial com a revogação usando uma trava compartilhada, ou outra barreira que garanta que remoção aguarde dials já autorizados e bloqueie novos.

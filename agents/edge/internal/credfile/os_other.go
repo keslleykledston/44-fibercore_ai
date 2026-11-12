@@ -13,4 +13,5 @@ var errPlatform = errors.New("credfile: not supported on this platform")
 func openNoFollow(string) (*os.File, error) { return nil, errPlatform }
 func ownedByUs(os.FileInfo) bool            { return false }
 func lockFile(string) (func(), error)       { return nil, errPlatform }
+func lockFileShared(string) (func(), error) { return nil, errPlatform }
 func syncDir(string) error                  { return errPlatform }

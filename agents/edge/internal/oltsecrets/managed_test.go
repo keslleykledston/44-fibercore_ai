@@ -515,13 +515,13 @@ func TestManagedAnyConnectionFieldChangeZeroesTheTrust(t *testing.T) {
 			t.Errorf("%s: the trust entry was not dropped", field)
 		}
 	}
-	// the Cloud id alone never changes where the Edge connects nor what it runs
+	// the Cloud id of a name never changes by a set (it is another OLT: see TestARemoveOrSetForAnotherCloudID...), so it cannot be used to slip a change past the trust
 	m := newManagedEnv(t, nil)
 	m.wantSet(mDelivID, nil, CodeAwaitingLocalTrust)
 	m.trust()
-	m.wantSet(mDeliv2, map[string]any{"cloud_id": "5a1f3c52-0b6e-4f0e-9a52-0a6f6a0c2222"}, "")
+	m.wantRefused(mDeliv2, map[string]any{"cloud_id": "5a1f3c52-0b6e-4f0e-9a52-0a6f6a0c2222"}, CodeNameConflict)
 	if !m.item().Trusted {
-		t.Fatal("vendor/cloud_id must not clear the trust")
+		t.Fatal("a refused set must not clear the trust")
 	}
 }
 

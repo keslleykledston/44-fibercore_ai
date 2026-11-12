@@ -184,6 +184,9 @@ func (p *Processor) checkConnection(c *connection) string {
 	if p.isStatic(c.Entry.Name) {
 		return CodeNameConflict // the static OLT wins; the Cloud never overrides it (not even to remove it)
 	}
+	if it, found, err := m.Store.Get(c.Entry.Name); err == nil && found && it.Entry.CloudID != c.Entry.CloudID {
+		return CodeNameConflict // the name belongs to another Cloud id: a remove or a set for a different OLT never touches it
+	}
 	if c.Action == actionRemove {
 		return ""
 	}
@@ -223,10 +226,13 @@ func (p *Processor) checkConnection(c *connection) string {
 func (p *Processor) writeConnection(c *connection, log *slog.Logger) string {
 	st := p.Managed.Store
 	if c.Action == actionRemove {
-		if _, err := st.Remove(c.Entry.Name); err != nil {
+		if _, err := st.Remove(c.Entry.Name, c.CloudID); err != nil {
 			code := CodeWriteFailed
 			if errors.Is(err, managedolts.ErrState) {
 				code = CodeStateUnreadable
+			}
+			if errors.Is(err, managedolts.ErrCloudIDMismatch) {
+				code = CodeNameConflict
 			}
 			log.Error("olt secret delivery not applied: the managed OLT could not be deleted", "code", code, "err", err)
 			return code
@@ -238,6 +244,9 @@ func (p *Processor) writeConnection(c *connection, log *slog.Logger) string {
 		code := CodeWriteFailed
 		if errors.Is(err, managedolts.ErrState) {
 			code = CodeStateUnreadable
+		}
+		if errors.Is(err, managedolts.ErrCloudIDMismatch) {
+			code = CodeNameConflict
 		}
 		log.Error("olt secret delivery not applied: the managed registry could not be written", "code", code, "err", err)
 		return code

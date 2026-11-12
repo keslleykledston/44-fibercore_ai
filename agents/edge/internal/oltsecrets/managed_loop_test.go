@@ -199,7 +199,7 @@ func TestStateReportIsSplitIntoChunksOfAtMost64(t *testing.T) {
 		if _, err := m.st.Upsert(mk(name, 100+i)); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := m.st.Remove(name); err != nil {
+		if _, err := m.st.Remove(name, mk(name, 100+i).CloudID); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -263,7 +263,7 @@ func TestRemovedSurvivesARestartAndIsClearedOnlyAfterTheCloudHasIt(t *testing.T)
 	// a removal that lands while the same OLT is added again is not reported as removed
 	m.wantSet(mDeliv3, nil, CodeAwaitingLocalTrust)
 	m.st.Upsert(managedolts.Entry{Name: "OUTRA", Vendor: "huawei", Address: "10.20.8.8", Port: 22, Protocol: "ssh", Transport: "cli", SNMPPort: 161, HostKeySHA256: mHostKey, SSHMode: "exec", CloudID: mCloudID})
-	m.st.Remove("OUTRA")
+	m.st.Remove("OUTRA", mCloudID)
 	rep3 := &StateReporter{Store: m.st, Cloud: up, Now: func() time.Time { return m.now }}
 	rep3.Tick(context.Background())
 	last := up.reports[len(up.reports)-1]
@@ -277,7 +277,7 @@ func TestRemovedSurvivesARestartAndIsClearedOnlyAfterTheCloudHasIt(t *testing.T)
 
 func TestARemovalOfANameThatWasNeverThereLeavesNoTombstone(t *testing.T) {
 	m := newManagedEnv(t, nil)
-	if _, err := m.st.Remove("NUNCA-EXISTIU"); err != nil {
+	if _, err := m.st.Remove("NUNCA-EXISTIU", ""); err != nil {
 		t.Fatal(err)
 	}
 	if tomb, err := m.st.Tombstones(); err != nil || len(tomb) != 0 {

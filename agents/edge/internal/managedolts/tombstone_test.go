@@ -23,7 +23,7 @@ func TestAPendingRemovalIsNeverDroppedToMakeRoom(t *testing.T) {
 		}
 	}
 	for i := 0; i < 3; i++ {
-		if _, err := s.Remove(fmt.Sprintf("OLT-%d", i)); err != nil {
+		if _, err := s.Remove(fmt.Sprintf("OLT-%d", i), mk(i).CloudID); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -31,7 +31,7 @@ func TestAPendingRemovalIsNeverDroppedToMakeRoom(t *testing.T) {
 	if err := s.Trust("OLT-3", mk(3).Digest()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Remove("OLT-3"); !errors.Is(err, ErrTooManyRemovals) {
+	if _, err := s.Remove("OLT-3", mk(3).CloudID); !errors.Is(err, ErrTooManyRemovals) {
 		t.Fatalf("err=%v", err)
 	}
 	tomb, err := s.Tombstones()
@@ -45,10 +45,10 @@ func TestAPendingRemovalIsNeverDroppedToMakeRoom(t *testing.T) {
 	if err := s.ClearTombstones([]string{mk(0).CloudID}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Remove("OLT-3"); err != nil {
+	if _, err := s.Remove("OLT-3", mk(3).CloudID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Remove("OLT-3"); err != nil { // already gone: nothing new to record
+	if _, err := s.Remove("OLT-3", mk(3).CloudID); err != nil { // already gone: nothing new to record
 		t.Fatal(err)
 	}
 	if tomb, _ := s.Tombstones(); len(tomb) != 3 {

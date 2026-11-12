@@ -129,6 +129,17 @@ func (f *fx) creds(name string) {
 	}
 }
 
+func (f *fx) remove(name string) {
+	f.t.Helper()
+	it, ok, err := f.st.Get(name)
+	if err != nil || !ok {
+		f.t.Fatal(err, ok)
+	}
+	if _, err := f.st.Remove(name, it.Entry.CloudID); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
 func (f *fx) names() []string {
 	var out []string
 	for _, s := range f.b.Sources() {
@@ -173,9 +184,7 @@ func TestOnlyTrustedOLTsAreCollectedAndTheRegistryIsReReadEveryRound(t *testing.
 		t.Fatalf("%v", got)
 	}
 	// and one is removed: gone in the next round
-	if _, err := f.st.Remove("OLT-A"); err != nil {
-		t.Fatal(err)
-	}
+	f.remove("OLT-A")
 	if got := f.names(); len(got) != 1 || got[0] != "OLT-B" {
 		t.Fatalf("%v", got)
 	}
@@ -282,7 +291,7 @@ func TestTheTrustIsCheckedAgainWhenTheSessionOpens(t *testing.T) {
 	f.creds("OLT-B")
 	f.trust("OLT-B")
 	srcB := f.b.Sources()
-	f.st.Remove("OLT-B")
+	f.remove("OLT-B")
 	for _, s := range srcB {
 		if s.Name == "OLT-B" {
 			if _, _, err := s.Open(context.Background()); !errors.Is(err, ErrNotTrusted) {

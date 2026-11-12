@@ -39,6 +39,8 @@ var (
 	ErrState = errors.New("managed olts state is unreadable")
 	// ErrNotFound: no managed OLT with that name.
 	ErrNotFound = errors.New("no managed olt with that name")
+	// ErrCloudIDMismatch: the delivery names an OLT (by name) whose registry entry belongs to another Cloud id. Nothing is changed.
+	ErrCloudIDMismatch = errors.New("the managed olt with that name has another Cloud id")
 	// ErrChanged: the entry is not the one that was shown (it changed between the display and the confirmation).
 	ErrChanged = errors.New("the managed olt changed since it was shown")
 )
@@ -230,6 +232,16 @@ func (s *Store) writeTrust(m map[string]trustEntry) error {
 	return credfile.WriteAtomic(s.trustPath(), b)
 }
 
+// RLock takes the shared side of the state lock: while it is held no registry, trust or removal write can happen (they take the exclusive side and wait). The collector holds it
+// around the moment it opens a connection or sends a command, so a revocation (remove, change) that has returned is never followed by a connection or a command that was
+// authorised before it.
+func (s *Store) RLock() (release func(), err error) {
+	if err := credfile.CheckPrivateDir(s.Dir); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrState, err)
+	}
+	return credfile.RLock(s.lockPath())
+}
+
 // Item is one managed OLT with its state.
 type Item struct {
 	Entry   Entry
@@ -326,6 +338,9 @@ func (s *Store) Upsert(e Entry) (UpsertResult, error) {
 		}
 		reg = append(reg, e)
 		res.Changed = true
+	case reg[idx].CloudID != e.CloudID:
+		// the name and the Cloud id of an OLT stay linked: a different Cloud id under an existing name is another OLT, which must replace this one only after a remove
+		return res, ErrCloudIDMismatch
 	case reg[idx] != e:
 		reg[idx] = e
 		res.Changed = true
@@ -349,8 +364,9 @@ func (s *Store) Upsert(e Entry) (UpsertResult, error) {
 // redelivery after a crash finishes what the first attempt did not. BEFORE anything is deleted it records a durable tombstone (removed.json) for the Cloud id of the entry
 // that is being deleted, so the "removed" state is still reported after a restart; the reporter clears it once the Cloud has it. A tombstone is NEVER dropped to make
 // room: when ErrTooManyRemovals pending ones exist, the removal is refused before anything is written or deleted. It returns the Cloud id of the entry that was there
-// ("" when none; a name that was never there leaves no tombstone: there is nothing the Cloud could still believe about it).
-func (s *Store) Remove(name string) (cloudID string, err error) {
+// ("" when none; a name that was never there leaves no tombstone: there is nothing the Cloud could still believe about it). expectedCloudID is the id the `remove`
+// carried: an entry of that name with ANOTHER Cloud id is not removed (ErrCloudIDMismatch, no effect at all).
+func (s *Store) Remove(name, expectedCloudID string) (cloudID string, err error) {
 	if err := credfile.CheckPrivateDir(s.Dir); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", nil
@@ -377,6 +393,9 @@ func (s *Store) Remove(name string) (cloudID string, err error) {
 	kept := reg[:0:0]
 	for _, e := range reg {
 		if e.Name == name {
+			if e.CloudID != expectedCloudID { // a remove for another OLT (an old delivery, a recreated name): nothing is touched
+				return "", ErrCloudIDMismatch
+			}
 			cloudID = e.CloudID
 			continue
 		}

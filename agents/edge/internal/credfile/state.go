@@ -71,3 +71,7 @@ func CheckPrivateDir(dir string) error { return checkDir(dir) }
 // Lock takes the exclusive process lock named by path+".lock" (shared by every process and every handle in this process) and returns its release function. It lets
 // other state files of the Edge (managed_olts.json, trust.json) follow the same read-modify-write discipline as the credentials file.
 func Lock(path string) (func(), error) { return lockFile(path) }
+
+// RLock takes the SHARED side of the same lock: it is granted while nobody holds the exclusive side (Lock), and an exclusive holder waits until every shared one is released.
+// The managed OLTs use it to make a revocation a barrier for the connections that were authorised just before it.
+func RLock(path string) (func(), error) { return lockFileShared(path) }
