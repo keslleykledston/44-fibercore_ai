@@ -621,3 +621,14 @@ def test_result_next_patch_and_create_take_the_olt_before_the_delivery_so_they_n
         assert [r.status_code for r in res][0] in (204, 409) and all(r.status_code < 500 for r in res), [r.status_code for r in res]
         with c.migrated.begin() as conn:   # the board is clean for the next round
             conn.execute(text("UPDATE olt_secret_deliveries SET status = 'CANCELLED', sealed = NULL WHERE olt_id = :o AND status IN ('PENDING', 'DISPATCHED')"), {"o": c.olt})
+
+
+def test_a_connection_needs_the_protocol_registered_as_ssh_while_the_credentials_of_an_older_registration_still_go(ctx):
+    c = ctx                                                                                                         # the OLT of `ctx` has no protocol at all (an older-style registration)
+    r = c.post(make_conn(c)[0])
+    assert (r.status_code, r.json()["detail"]) == (422, "protocol_required")
+    with c.migrated.begin() as conn:
+        assert conn.execute(text("SELECT count(*) FROM olt_secret_deliveries WHERE olt_id = :o"), {"o": c.olt}).scalar() == 0
+    assert c.post(c.make("ssh_login")[0]).status_code == 202                                                       # an OLT written in the Edge's own config keeps receiving credentials (ADR-0045)
+    reach(c.migrated, c.olt)
+    assert c.post(make_conn(c)[0]).status_code == 202

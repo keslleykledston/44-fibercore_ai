@@ -1,0 +1,25 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1d1ad-b169-7dc2-81c2-9e5c1e702e00).
+[codex] Turn started (01a1d1ad-b1a4-7e91-b97c-60caefcee9b7).
+[codex] Assistant message captured: Vou conferir o diff contra `main` e seguir as transações e triggers da API/migração pelos cam...
+[codex] Running command: /bin/bash -lc 'git diff --stat main...HEAD && git diff --name-only main...HEAD && git status ...
+[codex] Command completed: /bin/bash -lc 'git diff --stat main...HEAD && git diff --name-only main...HEAD && git status ... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff main...HEAD -- apps/api/alembic/versions/0051_olt_connection_center.p...
+[codex] Command completed: /bin/bash -lc 'git diff main...HEAD -- apps/api/alembic/versions/0051_olt_connection_center.p... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/olt_secrets.py | sed -n '1,430p'; rg -n \"app_sweep_se...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/olt_secrets.py | sed -n '1,430p'; rg -n \"app_sweep_se... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/api/app/api/fleet.py | sed -n '235,430p'; nl -ba apps/api/alembic/...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/api/app/api/fleet.py | sed -n '235,430p'; nl -ba apps/api/alembic/... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: a API aceita entregas `olt_connect...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: a API aceita entregas `olt_connection` para OLTs sem protocolo SSH registrado, permitindo provisionamento divergente do estado de confiança que a nuvem consegue acompanhar.
+
+Findings:
+- [high] Entrega de conexão aceita OLT sem protocolo SSH configurado (apps/api/app/api/olt_secrets.py:342-346)
+  `create_delivery` recusa Telnet, mas não exige `mgmt_protocol == 'ssh'`; para uma OLT com protocolo NULL, `olt_connection` ainda pode ser enfileirada. Se o Edge aplicar o conteúdo selado, `delivery_result` marca a entrega como aplicada, mas `app_olt_edge_report('connection_applied')` atualiza apenas OLTs com protocolo SSH. A configuração pode então existir no Edge enquanto a nuvem continua indicando que a conexão não foi aplicada, sem um caminho confiável para sincronizar a confiança. Exija SSH registrado para `olt_connection` antes de enfileirar; mantenha a recusa de Telnet para todos os kinds.
+  Recommendation: Antes de inserir uma entrega `olt_connection`, responda com erro se `mgmt_protocol` não for `ssh`; cubra explicitamente o caso NULL e o caso Telnet.

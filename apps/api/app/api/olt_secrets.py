@@ -344,6 +344,8 @@ def create_delivery(olt_id: UUID, body: DeliveryIn, p: Principal = Depends(_pers
         raise HTTPException(404, "olt not found")
     if olt.mgmt_protocol == "telnet":   # ADR-0046 D3: Telnet is inventory, never a credential or a connection to hand to an Edge (plain text on the provider's network). Nothing is queued.
         raise HTTPException(422, "protocol_not_supported")
+    if body.kind == olt_secrets.CONNECTION_KIND and olt.mgmt_protocol != "ssh":   # Codex r3: with no protocol registered the Edge could apply it while the Cloud could not follow it
+        raise HTTPException(422, "protocol_required")
     if body.kind == "snmp_community" and olt.snmp_version == "v3":
         raise HTTPException(422, "snmp_v3_unsupported")   # the Edge speaks v2c only: a community for a v3 OLT would be silently useless
     edge = conn.execute(text("SELECT seal_key_id, seal_key_state FROM edges WHERE id = :e FOR SHARE"), {"e": olt.edge_id}).first()
