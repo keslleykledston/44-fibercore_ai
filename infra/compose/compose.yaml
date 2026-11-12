@@ -70,6 +70,7 @@ services:
       JWT_KID: ${FIBERCORE_JWT_KID:-k1}  # rotation: set new JWT_SECRET+KID, move the old pair to *_PREVIOUS until tokens expire
       JWT_SECRET_PREVIOUS: ${FIBERCORE_JWT_SECRET_PREVIOUS:-}
       JWT_KID_PREVIOUS: ${FIBERCORE_JWT_KID_PREVIOUS:-}
+      METRICS_TOKEN: ${FIBERCORE_METRICS_TOKEN:-}  # ADR-0042: empty => GET /metrics answers 404 (off); >=32 chars => Prometheus (profile "observability") may scrape it with this bearer token
     ports:
       - "127.0.0.1:${FIBERCORE_API_PORT:-18420}:8000"
     depends_on:
@@ -195,6 +196,133 @@ services:
     security_opt: [no-new-privileges:true]
     read_only: true
     tmpfs: [/tmp]
+  # ---- Observability (ADR-0042, docs/operations/OBSERVABILITY.md). NOTHING below starts by default: `--profile observability`. Host ports are loopback only; no secret is in this file. ----
+  fibercore-exporter:
+    # What the API process cannot know about itself: Edge/OLT collection age, outbox backlog, jobs by state (aggregates only, through app_metrics_snapshot()), backup age and disk free. Internal port only.
+    profiles: [observability]
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    command: ["python", "-m", "app.workers.metrics_exporter"]
+    environment:
+      WORKER_DATABASE_URL: postgresql://fibercore_worker:${FIBERCORE_WORKER_DB_PASSWORD}@postgres:5432/fibercore
+      BACKUP_DIR: /backups
+      BACKUP_GLOB: ${FIBERCORE_BACKUP_GLOB:-fibercore-prod-*.dump.done}
+    volumes:
+      - type: bind
+        source: ${FIBERCORE_BACKUP_DIR:-../observability/no-backup-dir}  # the host backup directory, READ-ONLY (only the mtime of the *.done markers is read); the default is an empty dir, which makes the backup alert fire on purpose
+        target: /backups
+        read_only: true
+        bind: {create_host_path: false}
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    networks: [control]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9101/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp]
+  nats-exporter:
+    # JetStream consumer lag (num_pending / ack_pending) and server health from the NATS monitor port (already enabled with -m 8222). Internal port only.
+    profiles: [observability]
+    image: natsio/prometheus-nats-exporter:0.20.1@sha256:4fbf6dacb84780a45a1c3af9b1080c69451a288d20902deae671b80717bb8f61
+    command: ["-addr", "0.0.0.0", "-port", "7777", "-varz", "-healthz", "-jsz=all", "http://nats:8222"]
+    user: "65534:65534"
+    depends_on:
+      nats: {condition: service_healthy}
+    networks: [control]
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    read_only: true
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${FIBERCORE_PROMETHEUS_RETENTION_TIME:-15d}
+      - --storage.tsdb.retention.size=${FIBERCORE_PROMETHEUS_RETENTION_SIZE:-2GB}
+      - --web.listen-address=:9090
+    volumes:
+      - ../observability/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    secrets:
+      - source: fibercore_metrics_token   # read by `authorization.credentials_file` in prometheus.yml
+        target: fibercore_metrics_token
+        uid: "65534"
+        gid: "65534"
+        mode: 0400
+    ports:
+      - "127.0.0.1:${FIBERCORE_PROMETHEUS_PORT:-19090}:9090"
+    networks: [control]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    # no `read_only`: Compose cannot inject an environment-sourced secret into a read-only root (it would need `file:`, which keeps the host owner/mode and the non-root user could not read it)
+    mem_limit: 1g
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:12.4.15@sha256:2894082f6cf7081aefdc1389265c04000812309208c190d75e8c65f7a30e4b7e
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password  # never a literal value here
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_BASIC_ENABLED: "true"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_SECURITY_ALLOW_EMBEDDING: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_PLUGINS_PLUGIN_ADMIN_ENABLED: "false"
+      GF_LOG_MODE: console
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../observability/grafana/dashboards:/var/lib/fibercore-dashboards:ro
+    secrets:
+      - source: grafana_admin_password
+        target: grafana_admin_password
+        uid: "472"
+        gid: "472"
+        mode: 0400
+    ports:
+      - "127.0.0.1:${FIBERCORE_GRAFANA_PORT:-19300}:3000"
+    depends_on:
+      prometheus: {condition: service_healthy}
+    networks: [control]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    tmpfs: [/tmp]   # no `read_only`, same reason as prometheus
+    mem_limit: 512m
+secrets:
+  # Values come from the ENVIRONMENT of the compose invocation (an env-file the operator keeps outside the repository: scripts/observability-init.sh creates it, mode 0600). Compose writes them
+  # into the container as files owned by the service user (a `file:` secret would keep the host owner/mode and the non-root service could not read it). Only used when the profile starts.
+  fibercore_metrics_token:
+    environment: FIBERCORE_METRICS_TOKEN
+  grafana_admin_password:
+    environment: FIBERCORE_GRAFANA_ADMIN_PASSWORD
 networks:
   control:
     driver: bridge
@@ -203,3 +331,5 @@ volumes:
   nats_data: {}
   caddy_data: {}
   caddy_config: {}
+  prometheus_data: {}
+  grafana_data: {}

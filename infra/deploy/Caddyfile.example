@@ -9,6 +9,12 @@
 fibercore.devops.k3gsolutions.com.br {
     encode zstd gzip
 
+    # /api/metrics NUNCA publico (ADR-0042): antes do /api/* (os `handle` valem na ordem em que aparecem)
+    @apimetrics path /api/metrics /api/metrics/*
+    handle @apimetrics {
+        respond "not found" 404
+    }
+
     @api path /api /api/*
     handle @api {
         uri strip_prefix /api

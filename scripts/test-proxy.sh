@@ -20,6 +20,6 @@ check "frontend: / sem sessão redireciona (307)"   "$(code "http://127.0.0.1:$P
 check "/ajuda exige sessão (307 -> login)"         "$(code "http://127.0.0.1:$PORT/ajuda")" 307
 check "cabeçalho X-Frame-Options presente"         "$(curl -sI "http://127.0.0.1:$PORT/login" | grep -ci '^x-frame-options: deny')" 1
 check "BFF aceita same-origin e rejeita credencial inválida" "$(curl -s -D - -o /dev/null -X POST -H "origin: http://127.0.0.1:$PORT" -H "host: 127.0.0.1:$PORT" -F email=x@example.com -F password=x "http://127.0.0.1:$PORT/bff/login" | grep -ci 'location: .*login?erro=1')" 1
-for p in /livez /readyz /metrics /internal/x /docs /openapi.json; do check "interno bloqueado $p" "$(code "http://127.0.0.1:$PORT$p")" 404; done
+for p in /livez /readyz /metrics /api/metrics /internal/x /docs /openapi.json; do check "interno bloqueado $p" "$(code "http://127.0.0.1:$PORT$p")" 404; done
 echo "--- portas publicadas:"; docker ps --filter "name=fibercore-dev" --format '{{.Names}} {{.Ports}}' | grep -E '0\.0\.0\.0|\[::\]' && { echo "FAIL: porta pública inesperada"; fail=1; } || echo "nenhuma em 0.0.0.0 (apenas 127.0.0.1)"
 exit $fail
