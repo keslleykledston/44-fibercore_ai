@@ -4,8 +4,10 @@ Lado do Edge da entrada segura de login, senha e community SNMP. O navegador cif
 
 **Tudo é opt-in.** Sem a seção `olt_secrets` no `config.json` o Edge não publica chave, não pergunta por entregas e recusa qualquer `credentials_file` (erro de configuração). Um Edge com a configuração antiga fica idêntico.
 
+> **ADR-0046 (emenda):** a nuvem também pode entregar a **conexão** de uma OLT (`kind:"olt_connection"`), mas só dentro da seção local `managed_olts` e só depois de `fibercore-edge managed-trust`. Passo a passo, política e reversão: `docs/operations/EDGE_MANAGED_OLTS.md`. Sem essa seção o texto abaixo vale como está.
+
 ## O que o Edge nunca deixa a nuvem mudar
-Endereço, `host_key_sha256`, `allowlist`, a lista de OLTs e o perfil continuam só no `config.json` local. A entrega só preenche as credenciais de uma OLT **já configurada** e que o administrador do Edge habilitou com `credentials_file`. A entrega **não** troca a senha na OLT: só atualiza a cópia que o Edge usa.
+Endereço, `host_key_sha256`, `allowlist`, a lista de OLTs e o perfil continuam só no `config.json` local (a exceção, opt-in e sob confiança local, é a seção `managed_olts` acima). A entrega só preenche as credenciais de uma OLT **já configurada** e que o administrador do Edge habilitou com `credentials_file`. A entrega **não** troca a senha na OLT: só atualiza a cópia que o Edge usa.
 
 ## Habilitar (por OLT)
 
