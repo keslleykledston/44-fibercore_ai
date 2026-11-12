@@ -298,8 +298,9 @@ type UpsertResult struct {
 }
 
 // Upsert stores the entry (a set of the same content is a no-op) and DROPS the local trust whenever the trusted digest is not the digest of this entry: any change of a
-// connection field (address, port, protocol, transport, host key, snmp_port, ssh_mode, legacy_ssh) sends the OLT back to awaiting_local_trust, and going back to an
+// connection field (address, port, protocol, transport, host key, snmp_port, ssh_mode, legacy_ssh, vendor) sends the OLT back to awaiting_local_trust, and going back to an
 // earlier value does not bring the trust back. A brand new name starts with an empty credentials file (nothing left from an earlier OLT of that name is ever reused).
+// A name keeps its Cloud id: a different one under an existing name is refused (ErrCloudIDMismatch) until the old OLT is removed.
 func (s *Store) Upsert(e Entry) (UpsertResult, error) {
 	var res UpsertResult
 	if err := e.Validate(); err != nil {
