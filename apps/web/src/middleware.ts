@@ -49,11 +49,11 @@ const isPrefetch = (req: NextRequest) =>
 function withCsp(req: NextRequest) {
   const mode = cspMode(process.env.FIBERCORE_CSP_MODE);
   const headers = new Headers(req.headers);
+  for (const h of ["content-security-policy", "content-security-policy-report-only", "x-nonce"]) headers.delete(h); // o cliente não injeta política nem nonce para o Next
   if (mode === "off") return { headers, apply: (res: NextResponse) => res };
   const nonce = generateNonce();
   const name = cspHeaderName(mode);
   const policy = buildCsp({ nonce, dev: process.env.NODE_ENV !== "production", reportUri: safeReportUri(process.env.FIBERCORE_CSP_REPORT_URI) });
-  headers.delete("content-security-policy"); headers.delete("content-security-policy-report-only"); // o cliente não injeta política para o Next
   headers.set(name, policy);
   headers.set("x-nonce", nonce);
   return { headers, apply: (res: NextResponse) => { res.headers.set(name, policy); return res; } };
