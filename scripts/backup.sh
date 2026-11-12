@@ -15,7 +15,7 @@ TMP="$(mktemp "$DIR/.backup.XXXXXX")"; GTMP=""; STMP=""; PUBLISHED=(); OK=0
 # Em qualquer saída: remove temporários e, se a execução NÃO concluiu, também o que já foi publicado.
 trap 'rm -f "$TMP" "$GTMP" "$STMP"; [[ $OK -eq 1 || ${#PUBLISHED[@]} -eq 0 ]] || rm -f "${PUBLISHED[@]}"' EXIT
 COMPOSE=(docker compose ${COMPOSE_PROJECT:+-p "$COMPOSE_PROJECT"} --env-file "${ENV_FILE:-.env.dev}" -f infra/compose/compose.yaml)   # COMPOSE_PROJECT=fibercore-prod p/ o LAB
-"${COMPOSE[@]}" exec -T postgres pg_dump -U fibercore -d fibercore -Fc --no-owner > "$TMP"
+"${COMPOSE[@]}" exec -T postgres pg_dump -U fibercore -d fibercore -Fc --no-owner --exclude-table-data=olt_secret_deliveries > "$TMP"
 test -s "$TMP" || { echo "backup vazio" >&2; exit 1; }
 STMP="$(mktemp "$DIR/.backup.sha.XXXXXX")"
 echo "$(sha256sum "$TMP" | cut -d' ' -f1)  $(basename "$OUT")" > "$STMP"
