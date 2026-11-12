@@ -40,4 +40,5 @@ ignore = ["S101", "E702", "B008"]
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S105", "S106", "E501"]
 "tests/test_olt_cache.py" = ["F811", "F401"]   # the fixtures `olt` and `on` are imported from test_olt_query: pytest finds them by name
+"tests/test_nats_acl.py" = ["S603", "S607"]   # runs docker compose, openssl and scripts/nats-tls.sh with fixed arguments (no user input)
 "alembic/versions/*" = ["S608", "E501"]   # applied migrations are never edited, and their SQL strings carry long messages

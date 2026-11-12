@@ -5,7 +5,10 @@ Publishing sets Nats-Msg-Id = outbox event id => JetStream de-duplicates relay r
 """
 from __future__ import annotations
 
+import asyncio
 import os
+import ssl
+from collections.abc import Mapping
 
 import nats
 from nats.js.api import RetentionPolicy, StreamConfig
@@ -23,8 +26,42 @@ def subject_for(tenant_id: str, event_type: str) -> str:
     return f"{SUBJECT_ROOT}.{tenant_id}.{event_type}"
 
 
+def connect_options(env: Mapping[str, str] | None = None) -> dict:
+    """Extra `nats.connect` options from the environment (ADR-0042). EMPTY when nothing is configured: the plain connection
+    (dev / current LAB) is byte-for-byte what it was. Once ANY of these is set it is all-or-nothing and fail-closed: a
+    half-configured or unreadable setting raises at startup, it never silently falls back to a plain connection.
+
+      NATS_TLS_CA          CA bundle that signed the server certificate (verifies the server; enables TLS)
+      NATS_TLS_CERT/_KEY   this role's client certificate + key (mutual TLS: the cert IS the identity, see infra/nats/nats-server.conf)
+      NATS_INBOX_PREFIX    reply-subject prefix, e.g. _INBOX.relay (the ACL only lets a role listen on its own prefix)
+    """
+    env = os.environ if env is None else env
+    ca, cert, key, inbox = (env.get(k, "").strip() for k in ("NATS_TLS_CA", "NATS_TLS_CERT", "NATS_TLS_KEY", "NATS_INBOX_PREFIX"))
+    opts: dict = {}
+    if bool(cert) != bool(key):
+        raise ValueError("NATS_TLS_CERT and NATS_TLS_KEY must be set together")
+    if cert and not ca:
+        raise ValueError("NATS_TLS_CERT/NATS_TLS_KEY need NATS_TLS_CA (a client identity without verifying the server is refused)")
+    if ca:
+        try:
+            ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=ca)
+            if cert:
+                ctx.load_cert_chain(certfile=cert, keyfile=key)
+        except (OSError, ssl.SSLError) as e:
+            raise ValueError(f"NATS TLS configuration unusable: {e}") from e
+        opts["tls"] = ctx
+    if inbox:
+        if not all(c.isalnum() or c in "_.-" for c in inbox) or inbox.endswith((".", ">", "*")) or ".." in inbox:
+            raise ValueError("NATS_INBOX_PREFIX must be dot-separated tokens (e.g. _INBOX.relay)")
+        opts["inbox_prefix"] = inbox.encode()
+    return opts
+
+
+CONNECT_DEADLINE_S = 20.0   # wall clock for the WHOLE connect: a plain client against a TLS-only server can otherwise wait forever (observed), instead of failing and being restarted
+
+
 async def connect(url: str):
-    nc = await nats.connect(url, connect_timeout=3, max_reconnect_attempts=3)
+    nc = await asyncio.wait_for(nats.connect(url, connect_timeout=3, max_reconnect_attempts=3, **connect_options()), CONNECT_DEADLINE_S)
     return nc, nc.jetstream()
 
 
