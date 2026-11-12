@@ -21,6 +21,7 @@ docker compose --env-file .env.prod --env-file ~/fibercore-observability/observa
   -f infra/compose/compose.yaml --profile observability up -d
 ```
 - O **mesmo** `FIBERCORE_METRICS_TOKEN` chega à API (`METRICS_TOKEN`, liga o `/metrics`) e ao Prometheus. A API é **recriada** ao receber a variável nova: janela curta de reinício da `api-core`; fazer fora de horário de uso e só com ordem do responsável.
+- Subir o perfil sem `FIBERCORE_METRICS_TOKEN` ou sem `FIBERCORE_GRAFANA_ADMIN_PASSWORD` no ambiente **falha com mensagem clara** (`environment variable ... required by secret ... is not set`), nunca sobe com segredo vazio. Sem o perfil, essas variáveis não são exigidas.
 - Backup: `FIBERCORE_BACKUP_DIR` = diretório dos backups (montado somente-leitura; só o `mtime` dos `fibercore-prod-*.dump.done` é lido; padrão do arquivo: `FIBERCORE_BACKUP_GLOB`). **Sem essa variável o alerta de backup dispara de propósito** (o padrão é um diretório vazio).
 - Senha do Grafana (usuário `admin`): `grep '^FIBERCORE_GRAFANA_ADMIN_PASSWORD=' ~/fibercore-observability/observability.env`. **Só vale na primeira criação do volume `grafana_data`**; para trocar depois: `docker compose exec grafana grafana cli admin reset-admin-password <nova>` (ou apagar o volume, perdendo estado do Grafana; os painéis vêm de arquivo).
 - Projeto compose diferente (ex.: `-p fibercore-prod`): o nome dos volumes e redes acompanha o projeto; use o mesmo `-p` do resto da stack.
