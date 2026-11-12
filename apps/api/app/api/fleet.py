@@ -363,9 +363,18 @@ def update_olt(olt_id: UUID, body: OltPatch, p: Principal = Depends(require("fle
         args["mgmt_address"] = body.mgmt_address
     if not sets:   # only a null pop_name was sent
         raise HTTPException(422, "nothing to change")
-    conn.execute(text(f"UPDATE olts SET {', '.join(sets)} WHERE id = :i"), args)  # noqa: S608  (column names come from a fixed list)  the trigger of migration 0051 voids the confirmed/applied connection when any of how-it-is-reached changed
+    goes_telnet = new_cx["mgmt_protocol"] == "telnet" and old.mgmt_protocol != "telnet"
+    if goes_telnet or conn_changed:
+        # What is already IN FLIGHT (leased to the Edge, answer pending) cannot be recalled: the Edge may apply it. So the change waits for it (409): the lease lasts at most 5 minutes.
+        # A connection leased to the Edge blocks any change of how the OLT is reached; going to Telnet is blocked by a lease of ANY kind.
+        # What is merely waiting is cancelled below, under the OLT row lock `next` also takes (Codex r1).
+        busy = conn.execute(text("SELECT 1 FROM olt_secret_deliveries WHERE olt_id = :o AND status = 'DISPATCHED' AND lease_until > now() AND (CAST(:all AS boolean) OR kind = :k) LIMIT 1"),
+                            {"o": olt_id, "all": goes_telnet, "k": olt_secrets.CONNECTION_KIND}).first()
+        if busy is not None:
+            raise HTTPException(409, "delivery_in_flight")
+    conn.execute(text(f"UPDATE olts SET {', '.join(sets)} WHERE id = :i"), args)  # noqa: S608  (column names come from a fixed list)  the trigger of migration 0051 demotes the trust when how-it-is-reached changed
     cancelled = 0
-    if new_cx["mgmt_protocol"] == "telnet" and old.mgmt_protocol != "telnet":   # ADR-0046 D3(b): Telnet is inventory: whatever waited for the Edge (any kind) is cancelled and its blob erased
+    if goes_telnet:   # ADR-0046 D3(b): Telnet is inventory: whatever waited for the Edge (any kind) is cancelled and its blob erased
         cancelled = _cancel_waiting(conn, olt_id, None, "protocol_changed")
     elif conn_changed:   # a connection sealed for the OLD way of reaching it must not reach the Edge
         cancelled = _cancel_waiting(conn, olt_id, olt_secrets.CONNECTION_KIND, "connection_changed")

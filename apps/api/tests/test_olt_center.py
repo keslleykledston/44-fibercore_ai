@@ -287,15 +287,21 @@ def test_editing_how_it_is_reached_demotes_the_trust_cancels_the_waiting_connect
     pend_conn, _, _ = make_conn(c)
     assert c.post(pend_conn).status_code == 202
     assert c.post(c.make("ssh_login")[0]).status_code == 202
-    assert c.next().json()["kind"] == "olt_connection"                                                           # the oldest one is now in flight (DISPATCHED); the credential still waits (PENDING)
-    r = c.client.patch(f"/v1/fleet/olts/{c.olt}", headers=c.h, json={"mgmt_protocol": "telnet"})
+    leased = c.next().json()
+    assert leased["kind"] == "olt_connection"                                                                    # the oldest one is now in flight (DISPATCHED); the credential still waits (PENDING)
+    for kw in ({"mgmt_protocol": "telnet"}, {"mgmt_port": 2201}, {"host_key_sha256": "SHA256:" + "C" * 43}, {"mgmt_address": "10.77.88.101"}):   # what is leased to the Edge cannot be recalled: the change waits (Codex r1)
+        r = c.client.patch(f"/v1/fleet/olts/{c.olt}", headers=c.h, json=kw)
+        assert (r.status_code, r.json()["detail"]) == (409, "delivery_in_flight"), kw
+    assert state(c.migrated, c.olt).mgmt_protocol == "ssh" and c.client.patch(f"/v1/fleet/olts/{c.olt}", headers=c.h, json={"label": "ok"}).status_code == 200   # nothing was half-applied
+    assert c.result(leased["id"], leased["lease_token"]).status_code == 204                                      # the Edge answers: the lease is over...
+    r = c.client.patch(f"/v1/fleet/olts/{c.olt}", headers=c.h, json={"mgmt_protocol": "telnet"})                 # ...and now the PENDING credential is cancelled with the rest
     assert r.status_code == 200, r.text
     assert (r.json()["connection"]["protocol"], r.json()["connection"]["port"], r.json()["connection"]["host_key_sha256"], r.json()["connection"]["ssh_mode"], r.json()["connection"]["legacy_ssh"],
             r.json()["connection"]["trust_state"], r.json()["connection"]["applied"], r.json()["readiness"]["stage"]) == ("telnet", 23, None, None, False, "none", False, "telnet_inventory")
     with c.migrated.begin() as conn:
         left = conn.execute(text("SELECT status, code, has_blob FROM olt_secret_deliveries WHERE olt_id = :o AND status IN ('PENDING', 'DISPATCHED')"), {"o": c.olt}).all()
         cancelled = conn.execute(text("SELECT count(*) FROM olt_secret_deliveries WHERE olt_id = :o AND code = 'protocol_changed' AND NOT has_blob AND status = 'CANCELLED'"), {"o": c.olt}).scalar()
-    assert left == [] and cancelled >= 2
+    assert left == [] and cancelled >= 1
     for kind in ("olt_connection", "ssh_login", "snmp_community"):                                               # and from now on nothing is queued, whatever the kind
         body = make_conn(c)[0] if kind == "olt_connection" else c.make(kind)[0]
         r = c.post(body)
@@ -541,3 +547,50 @@ def test_nothing_secret_and_no_full_address_in_any_response_log_or_audit(ctx, ca
     assert HK not in audit and HK not in caplog.text                                                               # the fingerprint is public and may be READ back (it is in the OLT view), but is not logged
     assert HK in view(c).__repr__() and "10.77.•.•" in view(c).__repr__()
     assert "SENTINEL-PW" not in everything and "SENTINEL-USER" not in everything
+
+
+def test_a_credential_in_flight_blocks_the_switch_to_telnet_but_not_a_change_of_the_connection(ctx):
+    c = ctx
+    reach(c.migrated, c.olt)
+    assert c.post(c.make("ssh_login")[0]).status_code == 202
+    n = c.next().json()
+    assert n["kind"] == "ssh_login"
+    assert c.client.patch(f"/v1/fleet/olts/{c.olt}", headers=c.h, json={"mgmt_port": 2202}).status_code == 200     # a credential is not tied to how the OLT is reached
+    r = c.client.patch(f"/v1/fleet/olts/{c.olt}", headers=c.h, json={"mgmt_protocol": "telnet"})
+    assert (r.status_code, r.json()["detail"]) == (409, "delivery_in_flight")
+    c.lapse(n["id"])                                                                                                # a lease that ran out is not in flight any more
+    assert c.client.patch(f"/v1/fleet/olts/{c.olt}", headers=c.h, json={"mgmt_protocol": "telnet"}).status_code == 200
+
+
+def test_a_change_of_the_connection_and_the_dispatch_of_its_delivery_never_interleave(ctx):
+    """Real concurrency: PATCH (holds the OLT row) against `next` (locks the OLT row FOR SHARE before the delivery). Either the dispatch came first (the PATCH is then refused: 409) or the PATCH committed first
+    (the delivery is CANCELLED and nothing is handed out: 204). Never a delivery handed to the Edge AND cancelled by an accepted change."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    c = ctx
+    reach(c.migrated, c.olt)
+    outcomes = set()
+    for i in range(12):
+        body, _, _ = make_conn(c)
+        assert c.post(body).status_code == 202
+        barrier = threading.Barrier(2)
+
+        def patch(b=barrier, port=3000 + i):
+            b.wait()
+            return c.client.patch(f"/v1/fleet/olts/{c.olt}", headers=c.h, json={"mgmt_port": port})
+
+        def nxt(b=barrier):
+            b.wait()
+            return c.next()
+        with ThreadPoolExecutor(2) as ex:
+            fp, fn = ex.submit(patch), ex.submit(nxt)
+            rp, rn = fp.result(), fn.result()
+        row = c.row(body["delivery_id"])
+        if rp.status_code == 200:
+            outcomes.add("patch_first")
+            assert rn.status_code == 204 and (row.status, row.has_blob) == ("CANCELLED", False), (rn.status_code, row.status)
+        else:
+            outcomes.add("dispatch_first")
+            assert (rp.status_code, rp.json()["detail"]) == (409, "delivery_in_flight") and rn.status_code == 200 and row.status == "DISPATCHED"
+            assert c.result(rn.json()["id"], rn.json()["lease_token"]).status_code == 204
+    assert outcomes                                                                                                 # (which of the two wins is the scheduler's; both are consistent)

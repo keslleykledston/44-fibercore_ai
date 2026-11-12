@@ -117,10 +117,19 @@ def _in_flight(conn: Connection, edge_id: UUID):
 
 def _grant(conn: Connection, edge_id: UUID, key_id: str, kinds: tuple[str, ...]):
     """The oldest PENDING delivery (of a kind whose flag is on) for the Edge's CURRENT key becomes DISPATCHED with a fresh lease token, in this transaction.
-    SKIP LOCKED: a row someone else holds is not waited for."""
-    row = conn.execute(text("SELECT id FROM olt_secret_deliveries WHERE edge_id = :e AND status = 'PENDING' AND key_id = :k AND kind = ANY(:kinds) AND expires_at > now() "
-                            "ORDER BY created_at, id LIMIT 1 FOR UPDATE SKIP LOCKED"),
-                       {"e": edge_id, "k": key_id, "kinds": list(kinds)}).first()
+    SKIP LOCKED: a row someone else holds is not waited for.
+    ADR-0046 (Codex r1): the OLT row is locked FOR SHARE BEFORE its delivery row (the order `PATCH /v1/fleet/olts/{id}` and `create_delivery` use: OLT, then deliveries), so a change of how
+    the OLT is reached (which holds the OLT row FOR UPDATE and cancels what waits) and the dispatch of one of its deliveries never interleave: either the dispatch happened first (and the change
+    is then refused while it is in flight) or the change committed first (and the delivery is no longer PENDING here)."""
+    cands = conn.execute(text("SELECT id, olt_id FROM olt_secret_deliveries WHERE edge_id = :e AND status = 'PENDING' AND key_id = :k AND kind = ANY(:kinds) "
+                              "AND expires_at > now() ORDER BY created_at, id LIMIT 20"), {"e": edge_id, "k": key_id, "kinds": list(kinds)}).all()
+    row = None
+    for cand in cands:
+        conn.execute(text("SELECT 1 FROM olts WHERE id = :o FOR SHARE"), {"o": cand.olt_id})   # waits while a PATCH of this OLT holds it
+        row = conn.execute(text("SELECT id FROM olt_secret_deliveries WHERE id = :i AND status = 'PENDING' AND expires_at > now() FOR UPDATE SKIP LOCKED"),
+                           {"i": cand.id}).first()   # re-read under the lock
+        if row is not None:
+            break
     if row is None:
         return None
     return conn.execute(text("UPDATE olt_secret_deliveries SET status = 'DISPATCHED', lease_token = :t, lease_until = now() + make_interval(secs => :s), updated_at = now() WHERE id = :i "
