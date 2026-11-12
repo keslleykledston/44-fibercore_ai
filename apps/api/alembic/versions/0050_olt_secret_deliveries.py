@@ -112,22 +112,25 @@ def upgrade() -> None:
         REVOKE ALL ON FUNCTION app_secret_delivery_blob(uuid, uuid) FROM PUBLIC;
         GRANT EXECUTE ON FUNCTION app_secret_delivery_blob(uuid, uuid) TO fibercore_app;
 
-        -- retention, every tenant, on a clock (called by the job-sweeper worker): an overdue PENDING/DISPATCHED delivery becomes EXPIRED and loses its blob; any blob left on a terminal row is erased
+        -- retention, every tenant, on a clock (called by the job-sweeper worker). To enumerate tenants the function owner needs cross-tenant visibility, so its SELECT policy shows ONLY the rows that are
+        -- already due for erasure: an overdue PENDING/DISPATCHED delivery, or a terminal row that still has a blob. A LIVE blob (inside its window) is invisible to the owner path under RLS, and the function
+        -- never selects the blob bytes (it tests `has_blob` and writes NULL).
         DO $$ BEGIN
-          EXECUTE format($p$CREATE POLICY retention_scan ON olt_secret_deliveries FOR SELECT TO %I USING (sealed IS NOT NULL OR status IN ('PENDING','DISPATCHED'))$p$, current_user);
+          EXECUTE format($p$CREATE POLICY retention_scan ON olt_secret_deliveries FOR SELECT TO %I
+                              USING ((status IN ('PENDING','DISPATCHED') AND expires_at <= now()) OR (has_blob AND status NOT IN ('PENDING','DISPATCHED')))$p$, current_user);
         END $$;
         CREATE FUNCTION app_sweep_secret_deliveries() RETURNS TABLE (expired integer, scrubbed integer)
         LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
         DECLARE t uuid; a integer; b integer;
         BEGIN
           expired := 0; scrubbed := 0;
-          FOR t IN SELECT DISTINCT tenant_id FROM olt_secret_deliveries WHERE sealed IS NOT NULL OR status IN ('PENDING', 'DISPATCHED') LOOP
+          FOR t IN SELECT DISTINCT tenant_id FROM olt_secret_deliveries WHERE (status IN ('PENDING', 'DISPATCHED') AND expires_at <= now()) OR (has_blob AND status NOT IN ('PENDING', 'DISPATCHED')) LOOP
             PERFORM set_config('app.tenant_id', t::text, true);
             WITH s AS (UPDATE olt_secret_deliveries SET status = 'EXPIRED', sealed = NULL, updated_at = now()
                         WHERE status IN ('PENDING', 'DISPATCHED') AND expires_at <= now() RETURNING 1)
             SELECT count(*) INTO a FROM s;
             WITH s AS (UPDATE olt_secret_deliveries SET sealed = NULL, updated_at = now()
-                        WHERE sealed IS NOT NULL AND status NOT IN ('PENDING', 'DISPATCHED') RETURNING 1)
+                        WHERE has_blob AND status NOT IN ('PENDING', 'DISPATCHED') RETURNING 1)
             SELECT count(*) INTO b FROM s;
             expired := expired + a; scrubbed := scrubbed + b;
           END LOOP;

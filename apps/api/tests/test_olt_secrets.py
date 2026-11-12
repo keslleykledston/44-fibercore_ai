@@ -614,6 +614,92 @@ def test_concurrent_pollers_draining_the_queue_keep_the_one_in_flight_rule(ctx):
         assert conn.execute(text("SELECT count(*) FROM olt_secret_deliveries WHERE sealed IS NOT NULL")).scalar() == 0
 
 
+def _rotate_in_tx(migrated, edge, tenant_pub: str, *, lock_advisory: bool):
+    """Plays a key publication that is IN FLIGHT: holds the Edge row (and the per-Edge advisory lock) in an open transaction, changes the key and cancels what waited. The caller commits it."""
+    conn = migrated.connect()
+    tx = conn.begin()
+    if lock_advisory:
+        conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended('olt_secret_next|' || CAST(:e AS text), 0))"), {"e": edge})
+    conn.execute(text("SELECT 1 FROM edges WHERE id = :e FOR UPDATE"), {"e": edge})
+    kid = olt_secrets.key_id(olt_secrets.b64url_decode(tenant_pub))
+
+    def finish():
+        conn.execute(text("UPDATE edges SET seal_public_key = :k, seal_key_id = :i, seal_key_state = 'pending', seal_key_confirmed_by = NULL, seal_key_confirmed_at = NULL WHERE id = :e"), {"k": tenant_pub, "i": kid, "e": edge})
+        conn.execute(text("UPDATE olt_secret_deliveries SET status = 'CANCELLED', code = 'key_changed', sealed = NULL WHERE edge_id = :e AND status IN ('PENDING', 'DISPATCHED')"), {"e": edge})
+        tx.commit()
+        conn.close()
+    return finish, kid
+
+
+def test_a_confirmation_waiting_behind_a_key_change_never_confirms_the_replaced_key(client, seed, inv, migrated):
+    c = Ctx(client, seed, inv, migrated, confirm=False)
+    _, pub2 = H.new_edge_key()
+    finish, kid2 = _rotate_in_tx(migrated, c.edge, pub2, lock_advisory=True)
+    out = {}
+
+    def confirm():
+        out["r"] = _new_client().post(f"/v1/fleet/edges/{c.edge}/seal-key/confirm", headers=c.h, json={"key_id": c.key_id, "fingerprint": olt_secrets.fingerprint(c.point)})
+
+    t = threading.Thread(target=confirm)
+    t.start()
+    time.sleep(1.0)
+    assert t.is_alive() and "r" not in out   # it is waiting for the publication in flight
+    finish()
+    t.join(30)
+    assert out["r"].status_code == 409 and out["r"].json()["detail"] == "seal_key_changed"
+    with migrated.begin() as conn:
+        row = conn.execute(text("SELECT seal_key_id, seal_key_state FROM edges WHERE id = :e"), {"e": c.edge}).one()
+    assert tuple(row) == (kid2, "pending")   # the replaced key was not confirmed, and the new one was not either
+
+
+def test_a_next_waiting_behind_a_key_change_hands_out_nothing_from_the_old_key(ctx):
+    c = ctx
+    did = c.post(c.make()[0]).json()["id"]
+    _, pub2 = H.new_edge_key()
+    finish, _ = _rotate_in_tx(c.migrated, c.edge, pub2, lock_advisory=True)
+    out = {}
+    t = threading.Thread(target=lambda: out.update(r=_new_client().get("/v1/edge/secret-deliveries/next", headers=c.ah)))
+    t.start()
+    time.sleep(1.0)
+    assert t.is_alive()
+    finish()
+    t.join(30)
+    assert out["r"].status_code == 204
+    r = c.row(did)
+    assert (r.status, r.has_blob, r.code) == ("CANCELLED", False, "key_changed")
+
+
+def test_next_racing_a_real_key_publication_never_leaves_a_delivery_under_the_replaced_key(ctx):
+    c = ctx
+    for _ in range(12):
+        did = c.post(c.make()[0]).json()["id"]
+        _, pub2 = H.new_edge_key()
+        barrier = threading.Barrier(2)
+        res = {}
+
+        def publish():
+            cli = _new_client()
+            barrier.wait(timeout=20)
+            res["pub"] = cli.post("/v1/edge/seal-key", headers=c.ah, json={"public_key": pub2}).status_code
+
+        def poll():
+            cli = _new_client()
+            barrier.wait(timeout=20)
+            res["next"] = cli.get("/v1/edge/secret-deliveries/next", headers=c.ah).status_code
+
+        ts = [threading.Thread(target=publish), threading.Thread(target=poll)]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join(30)
+        assert res["pub"] == 200 and res["next"] in (200, 204), res   # no 5xx either way
+        r = c.row(did)
+        assert (r.status, r.has_blob) == ("CANCELLED", False), r      # whoever won, the delivery under the replaced key ends cancelled with no blob
+        with c.migrated.begin() as conn:   # put the first key back (confirmed) for the next round
+            conn.execute(text("UPDATE edges SET seal_public_key = :k, seal_key_id = :i, seal_key_state = 'confirmed', seal_key_confirmed_by = :u, seal_key_confirmed_at = now() WHERE id = :e"),
+                         {"k": c.pub, "i": c.key_id, "u": c.seed["alice"], "e": c.edge})
+
+
 # ------------------------------------------------------------------ isolation between tenants
 def test_rls_a_tenant_never_sees_touches_or_confirms_another_tenants_edge_or_deliveries(client, seed, inv, migrated, app_url):
     c = Ctx(client, seed, inv, migrated)

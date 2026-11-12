@@ -40,6 +40,7 @@ export async function OltCredentialsCard({ olt }: { olt: FleetOlt }) {
                 <form method="post" action={`/bff/frota/edges/${olt.edge.id}/chave/confirmar`} className="grid gap-2" data-testid="cred-confirmar">
                   <input type="hidden" name="key_id" value={k.key_id} />
                   <input type="hidden" name="olt" value={olt.id} />
+                  <p className="text-sm" data-testid="cred-confirmar-contexto">Confira no servidor do Edge <strong>“{k.edge_name}”</strong> (é o Edge da OLT “{olt.name}”): a chave é do Edge, vale para todas as OLTs dele.</p>
                   <label className="grid gap-1 text-sm">Digite a impressão digital mostrada no servidor do Edge
                     <input name="fingerprint" required maxLength={64} autoComplete="off" spellCheck={false} placeholder="xxxx-xxxx-xxxx-xxxx-xxxx-xxxx-xxxx-xxxx" className="min-h-touch rounded-btn border border-line bg-bg px-3 font-mono" /></label>
                   <p className="text-xs text-muted">No servidor do Edge rode <code>fibercore-edge seal-fingerprint</code> e compare <strong>digitando</strong> o valor que ele mostra (não copie desta tela): assim você confirma que a chave que vamos usar é a do seu Edge.</p>

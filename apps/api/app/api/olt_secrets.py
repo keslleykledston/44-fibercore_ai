@@ -41,6 +41,11 @@ def _person(p: Principal = Depends(require("fleet:secrets")), conn: Connection =
     return p
 
 
+def _lock_edge_deliveries(conn: Connection, edge_id: UUID) -> None:
+    """The per-Edge advisory lock of ADR-0045: `next`, a key publication and a key confirmation for the same Edge are serialised on it (taken BEFORE any row lock, always in this order)."""
+    conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended('olt_secret_next|' || CAST(:e AS text), 0))"), {"e": edge_id})
+
+
 def _edge(p: Principal) -> UUID:
     if p.edge_id is None:
         raise HTTPException(403, "token is not bound to an edge")
@@ -66,6 +71,7 @@ class SealKeyIn(BaseModel):
 def report_seal_key(body: SealKeyIn, p: Principal = Depends(require("jobs:execute")), _rl: None = Depends(edge_ingest_limit), conn: Connection = TENANT_CONN) -> dict:
     """The Edge publishes its seal public key (idempotent). A NEW value means `pending` again (a person must confirm the fingerprint) and cancels what was waiting under the old key."""
     edge_id = _edge(p)
+    _lock_edge_deliveries(conn, edge_id)
     cur = conn.execute(text("SELECT status, seal_public_key, seal_key_id, seal_key_state FROM edges WHERE id = :e FOR UPDATE"), {"e": edge_id}).first()
     if cur is None:
         raise HTTPException(404, "edge not found")
@@ -131,7 +137,7 @@ def next_delivery(response: Response, p: Principal = Depends(require("jobs:execu
         response.status_code = 204
         return None
     jobsign.load_private(settings.job_signing_key)   # a malformed key is a 5xx before anything is leased
-    conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended('olt_secret_next|' || CAST(:e AS text), 0))"), {"e": edge_id})   # serialised per Edge: two polls never race the unique index
+    _lock_edge_deliveries(conn, edge_id)   # serialised per Edge: two polls never race the unique index, and neither races a key change
     edge = conn.execute(text("SELECT seal_key_id, seal_key_state FROM edges WHERE id = :e FOR SHARE"), {"e": edge_id}).first()
     if edge is None:
         raise HTTPException(404, "edge not found")
@@ -222,6 +228,9 @@ class ConfirmIn(BaseModel):
 @router.post("/v1/fleet/edges/{edge_id}/seal-key/confirm")
 def confirm_seal_key(edge_id: UUID, body: ConfirmIn, p: Principal = Depends(_person), conn: Connection = TENANT_CONN) -> dict:
     """A person compares the fingerprint the screen shows with the one the Edge host prints (`fibercore-edge seal-fingerprint`) and types it. Only then is the key trusted."""
+    if conn.execute(text("SELECT 1 FROM edges WHERE id = :e"), {"e": edge_id}).first() is None:   # RLS: another tenant's Edge is simply not found, and no lock is taken for it
+        raise HTTPException(404, "edge not found")
+    _lock_edge_deliveries(conn, edge_id)   # a publication of a new key in another transaction finishes first; the row is then read AFTER it (FOR UPDATE re-reads the committed row)
     r = conn.execute(text(_KEY_SQL + " FOR UPDATE"), {"e": edge_id}).first()
     if r is None:
         raise HTTPException(404, "edge not found")
