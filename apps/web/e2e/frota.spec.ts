@@ -87,7 +87,7 @@ test("frota: teste de conexão pede a leitura ao Edge, mostra 'aguardando' e blo
   await expect(page.getByTestId("frota-orcamento")).toContainText("Próximo teste em cerca de");
   await expect(page.getByTestId("frota-testar")).toBeDisabled();                        // o orçamento de 15 minutos desliga o botão
   const res2 = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
-  expect(res2.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
+  expect(res2.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(" || ")}`)).toEqual([]);
 });
 
 test("frota: site digitado que não existe é oferecido para criar e nasce junto com a OLT; endereço fica mascarado; cadastrar e testar", async ({ page }) => {

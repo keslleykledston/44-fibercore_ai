@@ -41,7 +41,7 @@ export default async function FrotaOlt({ params, searchParams }: { params: Promi
             <div><dt className="text-xs text-muted">Edge</dt><dd>{o.edge.name}</dd></div>
             <div><dt className="text-xs text-muted">Endereço de gerência · SNMP</dt><dd data-testid="frota-endereco">{o.mgmt_address_masked ?? "Não informado"} · {o.snmp_version ? `SNMP ${o.snmp_version}` : "versão do SNMP não informada"}</dd></div>
             <div><dt className="text-xs text-muted">Credencial</dt><dd data-testid="frota-credencial">{o.has_credential_ref ? "Informada (o nome não é mostrado)" : "Não informada"}</dd></div>
-            {o.collected && <div><Link href={`/rede?olt=${o.id}`} className="text-accent underline underline-offset-2">Ver as ONUs desta OLT</Link></div>}
+            {o.collected && <div><dt className="text-xs text-muted">ONUs</dt><dd><Link href={`/rede?olt=${o.id}`} className="inline-block py-1 text-accent underline underline-offset-2">Ver as ONUs desta OLT</Link></dd></div>}
           </dl>
         </section>
         <section className="panel p-4" aria-label="Cadastro">
