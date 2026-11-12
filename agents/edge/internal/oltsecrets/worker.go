@@ -35,6 +35,8 @@ type Worker struct {
 	Proc  *Processor
 	Log   *slog.Logger
 	Now   func() time.Time
+	// State (ADR-0046), when set, reports the trust state of the managed OLTs to the Cloud at the end of every round (on a change, and now and then).
+	State *StateReporter
 
 	mu          sync.Mutex
 	lastTick    time.Time
@@ -62,6 +64,14 @@ func (w *Worker) Tick(ctx context.Context) {
 	if w.Log == nil {
 		w.Log = slog.New(slog.NewJSONHandler(discard{}, nil))
 	}
+	w.round(ctx, now)
+	if w.State != nil {
+		w.State.Tick(ctx)
+	}
+}
+
+// round is the delivery part of a Tick: publish the key when due, then take deliveries.
+func (w *Worker) round(ctx context.Context, now time.Time) {
 	if time.Now().Before(w.Cloud.SecretsWaitUntil()) { // the Cloud asked this Edge to wait (intake budget or this channel's own): no call is made (the gateway keeps these windows on the wall clock)
 		return
 	}

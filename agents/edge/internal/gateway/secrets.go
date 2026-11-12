@@ -207,3 +207,24 @@ func (c *Client) SecretDeliveryResult(ctx context.Context, id, leaseToken, outco
 	}
 	return classify(st, err)
 }
+
+// ManagedState is one item of the trust-state report of ADR-0046 D6.
+type ManagedState struct {
+	CloudID string `json:"cloud_id"`
+	State   string `json:"state"` // awaiting_local_trust | trusted | removed
+}
+
+// MaxManagedStateItems is the most items one report may carry (ADR-0046 D6).
+const MaxManagedStateItems = 64
+
+// ReportManagedState sends POST /v1/edge/managed-olts/state {"items":[{"cloud_id","state"}]} (at most 64 items). Same classes as the other routes of this channel: Delivered
+// = 2xx; a 5xx or a network error is Retry (never a failure of anything); a 429 is Throttled (the wait is recorded in SecretsWaitUntil); any other 4xx is Rejected, and the
+// status is returned so the caller can tell a 404 (a Cloud that does not have the route yet) from a refusal.
+func (c *Client) ReportManagedState(ctx context.Context, items []ManagedState) (Outcome, int, error) {
+	if len(items) == 0 || len(items) > MaxManagedStateItems {
+		return Rejected, 0, errors.New("managed olts state: between 1 and 64 items")
+	}
+	b, _ := json.Marshal(map[string]any{"items": items})
+	code, _, err := c.secretsDo(ctx, http.MethodPost, "/v1/edge/managed-olts/state", b, 1<<16)
+	return classify(code, err)
+}
