@@ -129,9 +129,6 @@ func (c *Client) secretsDo(ctx context.Context, method, path string, payload []b
 		if rerr != nil {
 			return 0, nil, rerr
 		}
-		if int64(len(b)) > maxBody {
-			return resp.StatusCode, nil, errors.New("secret deliveries: answer too large")
-		}
 		if resp.StatusCode == http.StatusUnauthorized && attempt == 0 {
 			c.mu.Lock()
 			c.token = ""
@@ -141,6 +138,9 @@ func (c *Client) secretsDo(ctx context.Context, method, path string, payload []b
 		if resp.StatusCode == http.StatusTooManyRequests {
 			c.secretThrottle(resp.Header.Get("Retry-After"))
 			return resp.StatusCode, nil, ErrSecretsThrottled
+		}
+		if int64(len(b)) > maxBody {
+			return resp.StatusCode, nil, errors.New("secret deliveries: answer too large")
 		}
 		return resp.StatusCode, b, nil
 	}

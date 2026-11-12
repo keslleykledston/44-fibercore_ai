@@ -62,7 +62,7 @@ func (w *Worker) Tick(ctx context.Context) {
 	if w.Log == nil {
 		w.Log = slog.New(slog.NewJSONHandler(discard{}, nil))
 	}
-	if now.Before(w.Cloud.SecretsWaitUntil()) { // the Cloud asked this Edge to wait (intake budget or this channel's own): not a call is made
+	if time.Now().Before(w.Cloud.SecretsWaitUntil()) { // the Cloud asked this Edge to wait (intake budget or this channel's own): no call is made (the gateway keeps these windows on the wall clock)
 		return
 	}
 	if now.Before(w.nextPublish) && !w.published { // a refused first publication waits before it is asked again
