@@ -155,3 +155,34 @@ def test_update_is_all_or_nothing_and_keeps_mode_and_line_endings(tmp_path, monk
     assert (root / "Dockerfile").read_bytes() == f"FROM alpine:3.20@{D2}\r\n".encode()   # CRLF preservado
     assert oct((root / "scripts" / "t.sh").stat().st_mode & 0o777) == "0o755"
     assert [e for e in images.check(root) if "PENDING" not in e] == []
+
+
+def test_docker_pull_validates_every_image_it_receives(tmp_path):
+    root = tree(tmp_path, {"scripts/p.sh": f"docker pull --platform linux/amd64 alpine:3.20@{D1} vendor/tool:latest && echo ok\n"})
+    errs = images.check(root)
+    assert errs == ["scripts/p.sh:1: imagem sem digest: vendor/tool:latest"]
+    ok = tree(tmp_path / "ok", {"scripts/p.sh": f"docker pull -q alpine:3.20@{D1} postgres:17-alpine@{D1}\n"})
+    assert images.check(ok) == []
+
+
+def test_update_restores_every_file_when_a_replace_fails_midway(tmp_path, monkeypatch):
+    import os
+
+    import pytest
+    root = tree(tmp_path, {"Dockerfile": f"FROM alpine:3.20@{D1}\n", "scripts/t.sh": f"docker run alpine:3.20@{D1} true\n"})
+    monkeypatch.setattr(images, "resolve", lambda ref: D2)
+    files = (root / "Dockerfile", root / "scripts" / "t.sh", root / "infra" / "images.lock")
+    before = {p: p.read_bytes() for p in files}
+    real, calls = os.replace, {"n": 0}
+
+    def flaky(src, dst):
+        calls["n"] += 1
+        if calls["n"] == 2:                                                     # a 2ª troca do commit falha (a 1ª já valeu)
+            raise OSError("filesystem ficou somente leitura")
+        return real(src, dst)
+
+    monkeypatch.setattr(images.os, "replace", flaky)
+    with pytest.raises(OSError):
+        images.update(root, write=True)
+    assert {p: p.read_bytes() for p in files} == before                         # TODOS os originais intactos, inclusive o já trocado
+    assert not [p for p in root.rglob("*") if p.name.endswith((".tmp", ".bak"))]

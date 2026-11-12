@@ -176,16 +176,24 @@ def docker_image_refs(text: str):
             yield n, m.group(1).strip("'\"")
         for m in DOCKER_CMD_RE.finditer(line):
             toks = line[m.end():].split()
-            i, image = 0, None
+            images: list[str] = []
+            i = 0
             while i < len(toks):
                 t = toks[i]
                 if t.startswith("-"):
-                    i += 2 if (t in VALUE_FLAGS) else 1
+                    i += 2 if (t in VALUE_FLAGS and "=" not in t) else 1
                     continue
-                image = t.strip("'\"").rstrip(");|&`").strip("'\"")
-                break
-            if image not in built:
-                yield n, (image or None)
+                if t in {"|", "||", "&&", ";"}:
+                    break
+                images.append(t.strip("'\"").rstrip(");|&`").strip("'\""))
+                if m.group(1) != "pull":      # run/create: o primeiro argumento é a imagem, o resto é o comando; pull aceita VÁRIAS imagens
+                    break
+                i += 1
+            if not images:
+                yield n, None
+            for image in images:
+                if image not in built:
+                    yield n, (image or None)
 
 
 def text_problems(text: str, lock: dict[str, str], skip_image_keys: bool, lock_only: bool = False):
@@ -288,8 +296,22 @@ def replace_all(changes: dict[Path, str]) -> None:
         for tmp, _ in staged:
             Path(tmp).unlink(missing_ok=True)
         raise
-    for tmp, p in staged:
-        os.replace(tmp, p)
+    originals = {p: p.read_bytes() for _, p in staged}
+    done: list[Path] = []
+    try:
+        for tmp, p in staged:
+            os.replace(tmp, p)
+            done.append(p)
+    except BaseException:                               # troca falhou no meio: devolve os já trocados e apaga os temporários que sobraram
+        for p in done:
+            fd, back = tempfile.mkstemp(dir=p.parent, prefix=f".{p.name}.", suffix=".bak")
+            with os.fdopen(fd, "wb") as f:
+                f.write(originals[p])
+            shutil.copymode(p, back)
+            os.replace(back, p)
+        for tmp, _ in staged:
+            Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def main(argv: list[str] | None = None) -> int:
