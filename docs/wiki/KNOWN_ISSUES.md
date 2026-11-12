@@ -8,7 +8,8 @@
 - `users_global.password_hash` legível pelo role runtime (sem RLS). Mitigar com função SECURITY DEFINER.
 - Login: lockout por conta após 5 falhas/15 min (tabela `login_attempts`, `Retry-After: 900`; aceita o risco de bloqueio malicioso de uma conta). **Ainda sem** rate-limit por IP, MFA, refresh token ou revogação de token antes do `exp` (TTL 15 min).
 - Header `X-Workspace-ID` opcional para usuário com 1 membership (contrato original: obrigatório).
-- NATS em dev sem TLS/ACL. Imagens Docker por tag, não digest.
+- NATS em dev sem TLS/ACL. Imagens Docker por tag, não digest (as 3 imagens de terceiros do perfil `observability` já são tag+digest, ADR-0042; postgres, nats, caddy seguem por tag).
+- Observabilidade (ADR-0042, opt-in, NÃO ligada na LAB): limiares de alerta fora os do watchdog são iniciais (sem calibragem com tráfego real); sem Alertmanager (notificação só pelo webhook do watchdog; canal depende do responsável); idade por Edge/OLT só como máximo agregado (não diz qual); Prometheus e Grafana sem `read_only` (limite do Compose com segredo de ambiente); policies `metrics_scan` da migração 0048 só provadas com dono superusuário; contador da API por processo (um uvicorn); `jobs` agregado por varredura sem índice em `updated_at` (revisar com volume).
 - `/livez` `/readyz` `/version` estão na raiz (fora de `/v1`); contrato OpenAPI ainda não os descreve.
 - Tabelas de domínio (edges, olts, onus, cpes, jobs…) do `postgres_baseline_draft.sql` ainda não migradas.
 - JetStream: `FIBERCORE_EVENTS` sem expiração por idade (max_age=0); definir `max_bytes` + alerta de uso antes de piloto. `published_at` ≠ consumido. Recuperação: `python -m app.workers.relay replay <ISO-ts> [tenant]` (replay incrementa `replay_gen` => novo Nats-Msg-Id, ignora a janela de dedupe; consumidores idempotentes pelo ledger).
