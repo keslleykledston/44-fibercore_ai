@@ -156,6 +156,45 @@ def require_any(*perms: str):
     return dep
 
 
+PLATFORM_MFA_MAX_SECONDS = 600   # the database function checks the same 10 minutes (ADR-0031); a longer MFA_RECENT_SECONDS never loosens a platform route
+
+
+@dataclass(frozen=True)
+class PlatformOperator:
+    id: UUID
+    mfa_at: float | None
+
+
+def require_platform_operator(perm: str):
+    """Guard of the platform routes (no tenant in the token, ADR-0046 D1). `perm` is a catalog permission that NO organization role holds: it is decided by the account
+    flag `users_global.is_platform_operator` (set only by the owner's CLI), never by a role. Order: a valid user session (401), an ACTIVE operator account (403 `forbidden`, the same
+    answer for every other account, so nothing is revealed), then a second factor proved in the last 10 minutes (403 `mfa_recent_required`, said only to an operator). This
+    check always applies, whatever MFA_RECENT_ENFORCE says."""
+    require_known(perm)
+
+    def dep(authorization: str | None = Header(default=None), settings: Settings = Depends(get_settings)) -> PlatformOperator:
+        if not authorization or not authorization.lower().startswith("bearer "):
+            raise _unauth()
+        try:
+            claims = decode_token(settings, authorization[7:].strip())
+        except (jwt.PyJWTError, ValueError) as exc:
+            raise _unauth() from exc
+        if claims.kind != "user":
+            raise HTTPException(403, "forbidden")
+        with scoped_connection(get_engine(), user_id=claims.sub) as conn:
+            assert_user_token_current(conn, claims)   # active account, not revoked
+            is_operator = conn.execute(text("SELECT is_platform_operator FROM users_global WHERE id = :u"), {"u": claims.sub}).scalar()
+        if not is_operator:
+            raise HTTPException(403, "forbidden")
+        window = min(settings.mfa_recent_seconds, PLATFORM_MFA_MAX_SECONDS)
+        if claims.mfa_at is None or not 0 <= time.time() - claims.mfa_at <= window:
+            raise HTTPException(403, "mfa_recent_required")
+        return PlatformOperator(claims.sub, claims.mfa_at)
+
+    dep.rbac_permission = perm  # type: ignore[attr-defined]  # the route inventory lists it; `test_rbac_inventory` pins that no role holds it
+    return dep
+
+
 def tenant_conn(p: Principal = Depends(get_principal)) -> Iterator[Connection]:
     """Always use TENANT_CONN (Depends(tenant_conn, scope="function")): the transaction must COMMIT before the response is sent. With the
     default request scope the commit runs after the client already has its 2xx, so a follow-up call (read-your-writes) can race it."""

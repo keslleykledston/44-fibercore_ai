@@ -40,6 +40,7 @@ EXPORTER_METRICS = (
     "fibercore_outbox_oldest_unpublished_age_seconds",
     "fibercore_jobs",
     "fibercore_jobs_in_flight_oldest_age_seconds",
+    "fibercore_organizations_without_api_trail",
     "fibercore_backup_dir_readable",
     "fibercore_backup_files_found",
     "fibercore_backup_last_success_timestamp_seconds",

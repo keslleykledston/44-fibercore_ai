@@ -84,6 +84,16 @@ groups:
           summary: "Há OLT cadastrada sem nenhuma coleta há mais de 60 min"
           description: "A série de idade da coleta só enxerga OLT que já coletou uma vez; este alerta cobre a que nunca coletou (Edge sem a OLT na config, credencial, acesso). Vale desde o primeiro scrape visto, não desde o cadastro."
 
+  - name: fibercore-platform
+    rules:
+      - alert: FiberCoreOrganizationWithoutApiTrail
+        expr: fibercore_organizations_without_api_trail > 0
+        for: 0m
+        labels: {severity: critical}
+        annotations:
+          summary: "Organização criada FORA da rota da API (sem o par de auditoria)"
+          description: "Há organização criada pela função de plataforma nos últimos 30 dias sem `platform.organization.requested` da rota com o mesmo request_id: alguém chamou a função direto no banco (SQL ou script). Conferir session_user e application_name em `platform.organization.created` na auditoria da organização e na lista do operador. NÃO detecta abuso feito PELA API comprometida (produz o par completo): limite declarado, ADR-0046 D1."
+
   - name: fibercore-host
     rules:
       - alert: FiberCoreDiskLow

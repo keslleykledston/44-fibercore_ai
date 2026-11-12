@@ -174,7 +174,7 @@ def test_snapshot_counts_edges_olts_outbox_and_jobs_without_a_single_identifier(
         blob = str(after)
         assert not UUID_RE.search(blob) and "obs-" not in blob and not IP_RE.search(blob)
         assert set(after) == {"edges_active", "edges_never_heartbeat", "edge_heartbeat_age_seconds_max", "olts_registered", "olts_never_collected", "olt_collection_age_seconds_max",
-                              "outbox_unpublished", "outbox_oldest_unpublished_age_seconds", "jobs", "jobs_in_flight_oldest_age_seconds"}
+                              "outbox_unpublished", "outbox_oldest_unpublished_age_seconds", "jobs", "jobs_in_flight_oldest_age_seconds", "organizations_without_api_trail"}
     finally:
         with migrated.begin() as c:
             c.execute(text("DELETE FROM jobs WHERE operation = 'obs_op'"))

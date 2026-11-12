@@ -51,6 +51,18 @@ SESSION_ONLY = {  # any valid session of the provider; no permission needed (the
 }
 
 
+# Permissions NO organization role holds: decided by an account flag, not a role (ADR-0046 D1). A role gaining one of these is a security change and must fail here.
+PLATFORM_ONLY = {"platform:organizations"}
+
+
+def test_platform_only_permissions_are_held_by_no_role_and_required_by_routes():
+    held = set().union(*ROLE_PERMISSIONS.values())
+    assert not (PLATFORM_ONLY & held), "an organization role must never hold a platform-only permission"
+    assert PLATFORM_ONLY <= set(CATALOG) and CATALOG["platform:organizations"].risk == "R3" and CATALOG["platform:organizations"].mfa_recent
+    required = {p for r in inventory() for p in r["permissions"]}
+    assert PLATFORM_ONLY <= required
+
+
 def test_every_role_has_exactly_the_permissions_it_has_today():
     assert {r: set(p) for r, p in ROLE_PERMISSIONS.items()} == EXPECTED
 
@@ -60,7 +72,7 @@ def test_every_permission_a_role_holds_or_a_route_requires_is_in_the_catalog_and
     required = {p for r in inventory() for p in r["permissions"]}
     assert held <= set(CATALOG) and required <= set(CATALOG)
     assert set(CATALOG) <= held | required, f"catalog entries nobody holds or requires: {sorted(set(CATALOG) - held - required)}"
-    assert required <= held, f"routes require permissions no role holds: {sorted(required - held)}"
+    assert required <= held | PLATFORM_ONLY, f"routes require permissions no role holds: {sorted(required - held - PLATFORM_ONLY)}"
 
 
 def test_require_rejects_a_permission_outside_the_catalog():
