@@ -719,12 +719,12 @@ def test_next_racing_a_real_key_publication_never_leaves_a_delivery_under_the_re
         barrier = threading.Barrier(2)
         res = {}
 
-        def publish():
+        def publish(barrier=barrier, res=res, pub2=pub2):
             cli = _new_client()
             barrier.wait(timeout=20)
             res["pub"] = cli.post("/v1/edge/seal-key", headers=c.ah, json={"public_key": pub2}).status_code
 
-        def poll():
+        def poll(barrier=barrier, res=res):
             cli = _new_client()
             barrier.wait(timeout=20)
             res["next"] = cli.get("/v1/edge/secret-deliveries/next", headers=c.ah).status_code
