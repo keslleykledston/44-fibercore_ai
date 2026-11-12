@@ -21,7 +21,7 @@ function Pon({ p, cap, y, onSelect, active }: { p: PortModel; cap: number; y: nu
   const fire = (el: Element) => onSelect(p, el);
   return (
     <g id={`slot-${p.slot}-pon-${String(p.port).padStart(2, "0")}`} data-testid="olt-pon" data-port-key={p.key} data-led={p.led} role="button" tabIndex={0} aria-label={label} aria-pressed={active}
-      className="fc-pon" style={{ cursor: "pointer", outline: "none" }}
+      className="fc-pon cursor-pointer outline-none"
       onClick={(e) => fire(e.currentTarget)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fire(e.currentTarget); } }}>
       <text x={x + 11} y={y - 3} textAnchor="middle" fill="#405269" fontSize="10" fontWeight="600">{p.port}</text>
       <rect className="fc-pon-body" x={x} y={y + 2} width="22" height="24" rx="3" fill="#687b8c" stroke={active ? "#38bdf8" : "#3c4b5e"} strokeWidth={active ? 2.6 : 1} />

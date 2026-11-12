@@ -12,5 +12,7 @@ proxy_hide_header X-Frame-Options;
 proxy_hide_header Referrer-Policy;
 proxy_hide_header Permissions-Policy;
 proxy_hide_header X-Content-Type-Options;
+# CSP: o web (Next) emite CSP com nonce por requisição (ADR-0042). Esta linha o descarta; em `enforce` o dono do host deve removê-la
+# (docs/operations/CSP_HOST_NGINX.md). O `-Report-Only` do app NÃO é escondido por ela e já atravessa o nginx.
 proxy_hide_header Content-Security-Policy;
 proxy_hide_header Strict-Transport-Security;

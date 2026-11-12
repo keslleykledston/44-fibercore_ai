@@ -14,5 +14,5 @@ O host já roda um nginx compartilhado em 80/443 com um vhost por projeto e cert
 
 ## Consequências
 - Estado: `LAB` publicado com TLS. Não é `PRODUCTION_READY`.
-- Pendências antes de `INTERNAL_PILOT` com dados reais: MFA, refresh token, rotação de chave (kid), cofre de segredos, monitoramento de TLS/5xx, ensaio de restore, CSP sem `unsafe-inline` (nonce).
+- Pendências antes de `INTERNAL_PILOT` com dados reais: MFA, refresh token, rotação de chave (kid), cofre de segredos, monitoramento de TLS/5xx, ensaio de restore, CSP sem `unsafe-inline` (nonce) — lado do app entregue na ADR-0042; falta o nginx do host (`docs/operations/CSP_HOST_NGINX.md`).
 - O vhost antigo `olt.devops...` (kit anterior, outro skeleton) não foi alterado.

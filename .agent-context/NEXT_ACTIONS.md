@@ -325,3 +325,8 @@ Ordem de entrega (cada item: testes, Codex, evidência): (1) modo captura no Edg
 ## Atualização 2026-11-03 (2): limite de ingestão por agente no ar
 - LAB: `main` = `56e98ca`; Edge `0.1.0-lab-56e98ca`; `FIBERCORE_EDGE_INGEST_LIMIT=all` no `.env.prod`. Binário anterior do Edge segue no host como `fibercore-edge.prev`. Reverter o limite: trocar para `capable`/`off` e recriar `api-core`. Qualquer Edge novo/antigo ligado a um provedor em modo `all` precisa ser desta versão ou mais nova.
 - Restam sem o usuário (todos maiores/arriscados): CSP com nonces no Next (+ nginx do host), rotação de chave de assinatura (`kid`) e cofre de segredos, imagens por digest, NATS com TLS/ACL, observabilidade Prometheus/Grafana.
+
+## Atualização 2026-11-11: CSP com nonce no web (branch `worktree-agent-af3bb7572f04e40b3`, NÃO mesclada, NÃO implantada)
+- Feito no app (ADR-0042): middleware com nonce por requisição, política sem `unsafe-inline` em script/estilo de elemento, modo `FIBERCORE_CSP_MODE` (`report-only` padrão | `enforce` | `off`). Sobra só `style-src-attr 'unsafe-inline'`. Todas as páginas dinâmicas (sem cache de HTML).
+- Falta (dono do host, root): `docs/operations/CSP_HOST_NGINX.md` (parar de esconder o CSP do upstream e remover o CSP com `unsafe-inline` do nginx; decidir `includeSubDomains` no HSTS). Ordem: deploy em report-only -> navegar a LAB com o console aberto -> mudar nginx -> `enforce` -> `curl -sI`.
+- Resta: zerar `style-src-attr` (14 pontos de atributo `style=`), coletor de relatórios de violação.

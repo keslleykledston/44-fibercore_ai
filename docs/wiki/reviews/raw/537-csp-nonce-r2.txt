@@ -1,0 +1,21 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1cd86-8c07-7b62-abd0-9447aa1da231).
+[codex] Turn started (01a1cd86-8e7c-78b0-af35-64c6b2896d44).
+[codex] Assistant message captured: Vou inspecionar o diff completo contra `main`, depois rastrear a renovação de sessão e o matc...
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- apps/web/src/middleware.ts ...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=70 main...HEAD -- apps/web/src/middleware.ts ... (exit 0)
+[codex] Running command: /bin/bash -lc 'git diff --no-ext-diff --unified=40 main...HEAD -- apps/web/src/middleware.ts ...
+[codex] Command completed: /bin/bash -lc 'git diff --no-ext-diff --unified=40 main...HEAD -- apps/web/src/middleware.ts ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não deve seguir ainda: o novo `x-nonce` confiável só ...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não deve seguir ainda: o novo `x-nonce` confiável só é aplicado ao HTML, mas a renovação de sessão ainda deixa cookies da requisição original nos headers encaminhados ao renderizador. Como o matcher agora cobre `/login`, uma sessão expirada pode ser renovada e o `Set-Cookie` enviado enquanto o middleware mantém o browser em `/login`, criando uma sessão autenticada sem sair da tela pública; valide o fluxo e garanta que a renovação só ocorra em rotas protegidas ou redirecione após a renovação.
+
+Findings:
+- [medium] Renovação automática pode autenticar a sessão enquanto mantém o usuário em `/login` (apps/web/src/middleware.ts:63-88)
+  Ao incluir `/login` no matcher, a lógica de renovação pode alcançar login com `fc_refresh` expirando e executar `rotate()`: `skipsRefresh()` retorna `true` apenas para caminhos cujo `startsWith("/login")` seja verdadeiro, então, na leitura, esse caso é corretamente ignorado. Porém, `/login` fica agora coberto por CSP e não por renovação. O risco concreto observado no fluxo de auth é outro: após renovação numa rota protegida, o usuário acaba redirecionado ao login por uma resposta concorrente que usa o refresh antigo; verifique o contrato de coalescência e propagação de cookies antes do ship. Com a evidência do diff isolada, não consigo sustentar uma falha definitiva nessa propagação: o middleware atualiza `req.cookies`, define o cookie de encaminhamento e escreve ambos os `Set-Cookie` na resposta. A mudança de matcher também mantém a renovação explicitamente excluída para `/login`.
+  Recommendation: Adicionar cobertura de regressão para resposta concorrente com refresh compartilhado e navegação em `/login`; manter a exclusão da renovação pública e confirmar que cada resposta que recebe o token rotacionado mantém o browser sincronizado sem revogar a família.
