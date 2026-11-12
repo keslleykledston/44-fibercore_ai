@@ -189,16 +189,22 @@ func TestStateReportIsSplitIntoChunksOfAtMost64(t *testing.T) {
 	m := newManagedEnv(t, nil)
 	cloud := &recCloud{}
 	rep := &StateReporter{Store: m.st, Cloud: cloud, Now: func() time.Time { return m.now }}
-	// 64 live entries (the registry limit) and 10 removals the Edge was told about (a `remove` of an OLT it did not have is still reported): 74 items, 2 chunks
-	for i := 0; i < 64; i++ {
-		e := managedolts.Entry{Name: fmt.Sprintf("OLT-%02d", i), Vendor: "huawei", Address: fmt.Sprintf("10.20.%d.1", i), Port: 22, Protocol: "ssh", Transport: "cli", SNMPPort: 161,
+	mk := func(name string, i int) managedolts.Entry {
+		return managedolts.Entry{Name: name, Vendor: "huawei", Address: fmt.Sprintf("10.20.%d.1", i), Port: 22, Protocol: "ssh", Transport: "cli", SNMPPort: 161,
 			HostKeySHA256: mHostKey, SSHMode: "exec", CloudID: cid(1000 + i)}
-		if _, err := m.st.Upsert(e); err != nil {
+	}
+	// 10 OLTs added and removed (10 pending "removed"), then 64 live entries (the registry limit): 74 items, 2 chunks
+	for i := 0; i < 10; i++ {
+		name := fmt.Sprintf("FANTASMA-%d", i)
+		if _, err := m.st.Upsert(mk(name, 100+i)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := m.st.Remove(name); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for i := 0; i < 10; i++ {
-		if _, err := m.st.Remove(fmt.Sprintf("FANTASMA-%d", i), cid(i)); err != nil {
+	for i := 0; i < 64; i++ {
+		if _, err := m.st.Upsert(mk(fmt.Sprintf("OLT-%02d", i), i)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -256,7 +262,8 @@ func TestRemovedSurvivesARestartAndIsClearedOnlyAfterTheCloudHasIt(t *testing.T)
 	}
 	// a removal that lands while the same OLT is added again is not reported as removed
 	m.wantSet(mDeliv3, nil, CodeAwaitingLocalTrust)
-	m.st.Remove("OUTRA", mCloudID)
+	m.st.Upsert(managedolts.Entry{Name: "OUTRA", Vendor: "huawei", Address: "10.20.8.8", Port: 22, Protocol: "ssh", Transport: "cli", SNMPPort: 161, HostKeySHA256: mHostKey, SSHMode: "exec", CloudID: mCloudID})
+	m.st.Remove("OUTRA")
 	rep3 := &StateReporter{Store: m.st, Cloud: up, Now: func() time.Time { return m.now }}
 	rep3.Tick(context.Background())
 	last := up.reports[len(up.reports)-1]
@@ -268,23 +275,13 @@ func TestRemovedSurvivesARestartAndIsClearedOnlyAfterTheCloudHasIt(t *testing.T)
 	}
 }
 
-func TestTombstonesAreBoundedAndValidated(t *testing.T) {
+func TestARemovalOfANameThatWasNeverThereLeavesNoTombstone(t *testing.T) {
 	m := newManagedEnv(t, nil)
-	for i := 0; i < managedolts.MaxTombstones+10; i++ {
-		if _, err := m.st.Remove("X", cid(i)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	tomb, err := m.st.Tombstones()
-	if err != nil || len(tomb) != managedolts.MaxTombstones {
-		t.Fatalf("%d %v", len(tomb), err)
-	}
-	// a hint that is not a Cloud id records nothing
-	if _, err := m.st.Remove("Y", "not-a-uuid"); err != nil {
+	if _, err := m.st.Remove("NUNCA-EXISTIU"); err != nil {
 		t.Fatal(err)
 	}
-	if after, _ := m.st.Tombstones(); len(after) != managedolts.MaxTombstones {
-		t.Fatalf("%d", len(after))
+	if tomb, err := m.st.Tombstones(); err != nil || len(tomb) != 0 {
+		t.Fatalf("%v %v", tomb, err)
 	}
 	// a damaged file is refused, never half-read
 	os.WriteFile(filepath.Join(m.dir, managedolts.RemovedFile), []byte(`{"v":1,"removed":[{"cloud_id":"x","at":1}]}`), 0o600)

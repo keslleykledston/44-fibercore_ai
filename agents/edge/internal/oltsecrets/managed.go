@@ -223,7 +223,7 @@ func (p *Processor) checkConnection(c *connection) string {
 func (p *Processor) writeConnection(c *connection, log *slog.Logger) string {
 	st := p.Managed.Store
 	if c.Action == actionRemove {
-		if _, err := st.Remove(c.Entry.Name, c.CloudID); err != nil {
+		if _, err := st.Remove(c.Entry.Name); err != nil {
 			code := CodeWriteFailed
 			if errors.Is(err, managedolts.ErrState) {
 				code = CodeStateUnreadable

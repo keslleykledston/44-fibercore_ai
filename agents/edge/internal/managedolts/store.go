@@ -346,10 +346,11 @@ func (s *Store) Upsert(e Entry) (UpsertResult, error) {
 }
 
 // Remove deletes the registry entry, its trust and its credentials file. It is idempotent (a name that is not there is not an error) and always attempts all of it, so a
-// redelivery after a crash finishes what the first attempt did not. BEFORE anything is deleted it records a durable tombstone (removed.json) for the Cloud id (the entry's,
-// or the one the `remove` carried when the name was not there), so the "removed" state is still reported after a restart; the reporter clears it once the Cloud has it.
-// It returns the Cloud id of the entry that was there ("" when none).
-func (s *Store) Remove(name, hintCloudID string) (cloudID string, err error) {
+// redelivery after a crash finishes what the first attempt did not. BEFORE anything is deleted it records a durable tombstone (removed.json) for the Cloud id of the entry
+// that is being deleted, so the "removed" state is still reported after a restart; the reporter clears it once the Cloud has it. A tombstone is NEVER dropped to make
+// room: when ErrTooManyRemovals pending ones exist, the removal is refused before anything is written or deleted. It returns the Cloud id of the entry that was there
+// ("" when none; a name that was never there leaves no tombstone: there is nothing the Cloud could still believe about it).
+func (s *Store) Remove(name string) (cloudID string, err error) {
 	if err := credfile.CheckPrivateDir(s.Dir); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", nil
@@ -381,12 +382,12 @@ func (s *Store) Remove(name, hintCloudID string) (cloudID string, err error) {
 		}
 		kept = append(kept, e)
 	}
-	report := cloudID
-	if report == "" && ValidCloudID(hintCloudID) {
-		report = hintCloudID
-	}
-	if report != "" { // first the tombstone: a fall after this line and before the next ones is finished by the redelivery
-		if err := s.writeTombstones(addTombstone(tomb, report, s.now().Unix())); err != nil {
+	if cloudID != "" { // first the tombstone: a fall after this line and before the next ones is finished by the redelivery
+		grown, err := addTombstone(tomb, cloudID, s.now().Unix())
+		if err != nil {
+			return cloudID, err
+		}
+		if err := s.writeTombstones(grown); err != nil {
 			return cloudID, err
 		}
 	}
@@ -404,8 +405,15 @@ func (s *Store) Remove(name, hintCloudID string) (cloudID string, err error) {
 	return cloudID, s.removeCreds(name)
 }
 
-// MaxTombstones bounds removed.json (the oldest go first).
-const MaxTombstones = 256
+// MaxTombstones bounds removed.json. It is a ceiling for a Cloud that has not accepted any report for a very long time, not a retention policy: nothing is ever evicted to
+// make room (a removal that would exceed it is refused with ErrTooManyRemovals, before anything is deleted).
+const MaxTombstones = 4096
+
+// tombstoneCap is MaxTombstones (a variable only so a test can lower it).
+var tombstoneCap = MaxTombstones
+
+// ErrTooManyRemovals: too many removals are waiting to be reported to the Cloud.
+var ErrTooManyRemovals = errors.New("too many removals are waiting to be reported to the Cloud")
 
 type tombstone struct {
 	CloudID string `json:"cloud_id"`
@@ -417,17 +425,16 @@ type tombstoneFile struct {
 	Removed []tombstone `json:"removed"`
 }
 
-func addTombstone(l []tombstone, id string, at int64) []tombstone {
+func addTombstone(l []tombstone, id string, at int64) ([]tombstone, error) {
 	for _, t := range l {
 		if t.CloudID == id {
-			return l
+			return l, nil
 		}
 	}
-	l = append(l, tombstone{CloudID: id, At: at})
-	if len(l) > MaxTombstones {
-		l = l[len(l)-MaxTombstones:]
+	if len(l) >= tombstoneCap {
+		return l, ErrTooManyRemovals
 	}
-	return l
+	return append(l, tombstone{CloudID: id, At: at}), nil
 }
 
 func (s *Store) readTombstones() ([]tombstone, error) {

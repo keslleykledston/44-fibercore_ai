@@ -173,7 +173,7 @@ func TestOnlyTrustedOLTsAreCollectedAndTheRegistryIsReReadEveryRound(t *testing.
 		t.Fatalf("%v", got)
 	}
 	// and one is removed: gone in the next round
-	if _, err := f.st.Remove("OLT-A", ""); err != nil {
+	if _, err := f.st.Remove("OLT-A"); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.names(); len(got) != 1 || got[0] != "OLT-B" {
@@ -282,7 +282,7 @@ func TestTheTrustIsCheckedAgainWhenTheSessionOpens(t *testing.T) {
 	f.creds("OLT-B")
 	f.trust("OLT-B")
 	srcB := f.b.Sources()
-	f.st.Remove("OLT-B", "")
+	f.st.Remove("OLT-B")
 	for _, s := range srcB {
 		if s.Name == "OLT-B" {
 			if _, _, err := s.Open(context.Background()); !errors.Is(err, ErrNotTrusted) {

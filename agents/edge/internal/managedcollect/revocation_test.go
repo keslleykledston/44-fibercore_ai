@@ -33,8 +33,8 @@ func TestTheTrustIsLookedAtOnceMoreAtTheMomentOfTheConnection(t *testing.T) {
 		t.Fatal("while trusted the agent may be contacted")
 	}
 	// the operator revokes after verify() and before the connection: neither the TCP dial nor the SNMP contact may happen
-	f.st.Remove("OLT-A", "")
-	f.st.Remove("OLT-S", "")
+	f.st.Remove("OLT-A")
+	f.st.Remove("OLT-S")
 	if _, err := dialOK(context.Background(), "tcp", "10.20.1.5:22"); !errors.Is(err, ErrNotTrusted) {
 		t.Fatalf("the dial after a revocation: %v", err)
 	}
