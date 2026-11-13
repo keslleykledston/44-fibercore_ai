@@ -41,11 +41,12 @@ export function OltRegisterForm({ edges, pops, secretsOn, provisionOn }: { edges
   const showSecrets = provisionOn && secretsOn && sealOk && sshSelected;
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    if (lock.current || busy) { e.preventDefault(); return; }   // um cadastro em andamento: nenhum botão do formulário (nativo ou não) envia outro
     const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
     if (submitter?.value === "tudo") { e.preventDefault(); void runAll(new FormData(e.currentTarget)); return; }
     if (submitter?.value !== "assistente") return;   // os outros botões seguem o envio nativo (recarrega a página com o aviso)
     e.preventDefault();
-    if (busy) return;
+    lock.current = true;
     setBusy(true);
     setErr(null);
     try {
@@ -63,6 +64,7 @@ export function OltRegisterForm({ edges, pops, secretsOn, provisionOn }: { edges
     } catch {
       setErr(FLEET_FLASH.falha);
     } finally {
+      lock.current = false;
       setBusy(false);
     }
   }
@@ -177,9 +179,9 @@ export function OltRegisterForm({ edges, pops, secretsOn, provisionOn }: { edges
       <div className="flex flex-wrap items-center gap-3 md:col-span-2">
         {provisionOn && sealOk && sshSelected && <button type="submit" name="acao" value="tudo" data-testid="frota-cadastrar-tudo" className="min-h-touch rounded-btn bg-accent px-4 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60" disabled={none || busy}>{busy ? "Enviando…" : secretsOn ? "Cadastrar e enviar tudo ao Edge" : "Cadastrar e enviar a conexão ao Edge"}</button>}
         {provisionOn && <button type="submit" name="acao" value="assistente" data-testid="frota-cadastrar-continuar" className="min-h-touch rounded-btn border border-accent px-4 text-sm font-medium text-accent hover:bg-bg disabled:opacity-60" disabled={none || busy}>{busy ? "Cadastrando…" : "Cadastrar e continuar"}</button>}
-        <button type="submit" data-testid="frota-cadastrar" className="min-h-touch rounded-btn border border-line px-4 text-sm hover:bg-bg" disabled={none}>Cadastrar OLT</button>
-        <button type="submit" name="acao" value="testar" data-testid="frota-cadastrar-testar" className="min-h-touch rounded-btn border border-accent px-4 text-sm text-accent hover:bg-bg" disabled={none}>Cadastrar e testar conexão</button>
-        {secretsOn && <button type="submit" name="acao" value="credenciais" data-testid="frota-cadastrar-credenciais" className="min-h-touch rounded-btn border border-accent px-4 text-sm text-accent hover:bg-bg" disabled={none}>Cadastrar e configurar credenciais</button>}
+        <button type="submit" data-testid="frota-cadastrar" className="min-h-touch rounded-btn border border-line px-4 text-sm hover:bg-bg disabled:opacity-60" disabled={none || busy}>Cadastrar OLT</button>
+        <button type="submit" name="acao" value="testar" data-testid="frota-cadastrar-testar" className="min-h-touch rounded-btn border border-accent px-4 text-sm text-accent hover:bg-bg disabled:opacity-60" disabled={none || busy}>Cadastrar e testar conexão</button>
+        {secretsOn && <button type="submit" name="acao" value="credenciais" data-testid="frota-cadastrar-credenciais" className="min-h-touch rounded-btn border border-accent px-4 text-sm text-accent hover:bg-bg disabled:opacity-60" disabled={none || busy}>Cadastrar e configurar credenciais</button>}
         {none && <span className="ml-3 text-xs text-muted">Nenhum Edge disponível.</span>}
       </div>
       {prog && (

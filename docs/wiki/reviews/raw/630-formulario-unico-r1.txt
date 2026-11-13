@@ -1,0 +1,26 @@
+[codex] Starting Codex task thread.
+[codex] Thread ready (01a1d2cd-522c-79b0-8ffe-821468902134).
+[codex] Turn started (01a1d2cd-526f-7ce2-87a7-19db9b5a3225).
+[codex] Assistant message captured: Vou ler as instruções de revisão do repositório e conferir o diff contra `main`, priorizando ...
+[codex] Running command: /bin/bash -lc 'cat /home/suporte/.codex/skills/code-review/SKILL.md && git diff --no-ext-diff...
+[codex] Command completed: /bin/bash -lc 'cat /home/suporte/.codex/skills/code-review/SKILL.md && git diff --no-ext-diff... (exit 0)
+[codex] Running command: /bin/bash -lc "git diff --no-ext-diff --unified=35 main...HEAD -- apps/web/src/app/rede/frota...
+[codex] Command completed: /bin/bash -lc "git diff --no-ext-diff --unified=35 main...HEAD -- apps/web/src/app/rede/frota... (exit 0)
+[codex] Running command: /bin/bash -lc "nl -ba apps/web/src/components/OltRegisterForm.tsx | sed -n '48,155p'; nl -ba ...
+[codex] Command completed: /bin/bash -lc "nl -ba apps/web/src/components/OltRegisterForm.tsx | sed -n '48,155p'; nl -ba ... (exit 0)
+[codex] Assistant message captured: {"verdict":"needs-attention","summary":"Não liberar ainda: uma falha de rede ou dois envios r...
+[codex] Turn completed.
+# Codex Adversarial Review
+
+Target: branch diff against main
+Verdict: needs-attention
+
+Não liberar ainda: uma falha de rede ou dois envios rápidos podem criar OLTs duplicadas, sem mecanismo para retomar com segurança o cadastro já criado.
+
+Findings:
+- [medium] Reenvio após falha incerta pode duplicar o cadastro (apps/web/src/components/OltRegisterForm.tsx:100-110)
+  O POST de cadastro não usa chave de idempotência. Se a API criar a OLT, mas a resposta se perder ou não puder ser interpretada, a execução cai no `catch`, libera `busy` e deixa o formulário disponível. Um novo clique inicia outro POST e pode criar uma segunda OLT; o mesmo risco existe se dois eventos de envio ocorrerem antes de React renderizar `busy=true`. Isso também pode separar entregas subsequentes do registro que o usuário esperava. Preserve o ID da operação criada e retome a partir do passo pendente; para falha incerta no cadastro, use uma chave de idempotência no servidor ou impeça um novo cadastro até reconciliar o resultado.
+  Recommendation: Torne o cadastro idempotente com uma chave estável por tentativa e sincronize a trava de envio com um `ref`; em falhas posteriores, ofereça retomar os passos para o ID já criado.
+
+Next steps:
+- Adicionar cobertura para resposta perdida após criação, repetição do envio e clique duplo; confirmar que só um registro e uma sequência de entregas são criados.
