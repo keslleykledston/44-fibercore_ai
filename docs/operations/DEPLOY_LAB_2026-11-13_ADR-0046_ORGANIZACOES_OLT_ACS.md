@@ -23,3 +23,10 @@ Evidência operacional redigida (sem IP, credencial, serial ou conteúdo de back
 ## Reversão
 - Edge: `mv fibercore-edge.prev fibercore-edge` e `pkill -x fibercore-edge` (o cron religa).
 - Nuvem: flags já desligadas; `alembic downgrade 0050` desfaz 0053, 0052 e 0051 (apaga os dados dessas tabelas/colunas); restaurar o backup só se necessário.
+
+## Ativação das flags (ordem do responsável: "Faça push e ligue as flags", mesmo dia)
+- **Push:** `main` enviada a `origin` (`721727e..fa3cb57`) depois do gitleaks 8.21.2 nos 42 commits novos: no leaks.
+- **Edge (host do GenieACS):** backup `config.json.pre-managed`; acrescentadas as seções `olt_secrets` (chave de selagem em `~/fibercore-edge/seal`, 0700) e `managed_olts` com política **conservadora**: `allowed_cidrs` = só a rede /24 da OLT já cadastrada, `allowed_ports` [22], `max_olts` 8 (estáticas incluídas), `allowed_vendors` ["huawei"], `allow_legacy_ssh` false, `pon_ports` iguais às da OLT estática, `state_dir` em `~/fibercore-edge/managed` (0700). `managed-list` validou a configuração antes; reinício com a coleta parada; log: "managed olts enabled", "olt secrets enabled", "seal key published". Chave nova gerada; `key_id` 18cb776972f3972f (impressão digital 18cb-7769-72f3-972f-1802-aa8d-7258-9c84).
+- **Nuvem:** `feature-set` do provedor da LAB (K3G Solutions): `fleet_secrets`, `fleet_provision`, `acs_registry` = **on** (conferido em `tenant_features`). Chave do Edge vista pela nuvem: `seal_key_state = pending`. Logs de 1 min sem erro; `/api/livez` e `/login` 200; telas protegidas 307 (login).
+- **Falta (humano):** abrir a tela da OLT/Frota, **comparar a impressão digital acima** com a do host do Edge (`fibercore-edge seal-fingerprint`) e confirmar; só então a entrega cifrada é liberada. Depois de cadastrar uma OLT pelo formulário único, rodar `fibercore-edge managed-trust <nome>` no host do Edge (compara a impressão digital do host SSH da OLT). Nenhuma OLT gerenciada foi cadastrada nem confiada.
+- **Reversão das flags:** `feature-set <tenant> <flag> off` (via `migrate`, que tem a conexão admin). Edge: restaurar `config.json.pre-managed` e `pkill -x fibercore-edge`.
