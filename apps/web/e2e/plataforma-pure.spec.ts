@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { cursorQuery, decodeFlash, encodeFlash, inviteLabel, invitePath, orgError, ORG_ERRORS, stepUpError } from "../src/lib/platform";
+import { ACTION_LABEL, cursorQuery, decodeFlash, encodeFlash, FEATURE_FORMAT, featureChoices, healthText, historyText, inviteLabel, invitePath, orgError, ORG_ERRORS, ORG_FLASH, stepUpError } from "../src/lib/platform";
 
 // Organizações da plataforma (ADR-0046 D1): mapa de erros, cookie de aviso do link do convite e textos. Funções puras: sem navegador nem API.
 const TOKEN = "A".repeat(43);
@@ -54,4 +54,34 @@ test("o cursor da lista só passa instante e id no formato certo", () => {
   expect(cursorQuery(`2026-11-12T10:00:00.123456+00:00~${id}`)).toBe(`before_at=2026-11-12T10%3A00%3A00.123456%2B00%3A00&before_id=${id}`);
   expect(cursorQuery(`2026-11-12T10:00:00Z~${id}`)).toContain("before_at=2026-11-12T10%3A00%3A00Z");
   for (const bad of ["", "lixo", `2026-11-12~${id}`, `2026-11-12T10:00:00Z~nao-e-uuid`, `2026-11-12T10:00:00Z&x=1~${id}`, `2026-11-12T10:00:00Z~${id}&y=2`]) expect(cursorQuery(bad)).toBe("");
+});
+
+test("erros novos do ciclo de vida viram código curto e todo código tem texto em português", () => {
+  expect(orgError(404, { detail: "organization_not_found" })).toBe("naoencontrada");
+  expect(orgError(422, { detail: "organization_reason_invalid" })).toBe("motivo");
+  expect(orgError(422, { detail: [{ type: "string_too_short", loc: ["body", "reason"], msg: "x" }] })).toBe("motivo");
+  expect(orgError(422, { detail: "unknown_feature" })).toBe("flag");
+  expect(orgError(422, { detail: "feature_state_invalid" })).toBe("flag");
+  expect(orgError(422, { detail: "feature_precondition" })).toBe("precondicao");
+  expect(orgError(403, { detail: "owner_only_feature" })).toBe("somentedono");
+  expect(orgError(403, { detail: "forbidden" })).toBe("permissao");
+  for (const code of ["naoencontrada", "motivo", "flag", "somentedono", "precondicao"]) expect(ORG_ERRORS[code]).toMatch(/\S/);
+  for (const code of ["suspensa", "reativada", "renomeada", "flagok", "semmudanca"]) expect(ORG_FLASH[code]).toMatch(/\S/);
+  expect(Object.values(ORG_ERRORS).join(" ") + Object.values(ORG_FLASH).join(" ")).not.toMatch(/organization_|owner_only|feature_|unknown_/);
+});
+
+test("recursos que escrevem na rede só oferecem desligar; os demais oferecem tudo", () => {
+  expect(featureChoices({ owner_only: true })).toEqual(["off", "default"]);
+  expect(featureChoices({ owner_only: false })).toEqual(["on", "off", "default"]);
+  expect(FEATURE_FORMAT.test("onu_discovery")).toBe(true);
+  for (const bad of ["", "A", "x", "1abc", "a-b", "a b", "a/../b", `a${"b".repeat(64)}`]) expect(FEATURE_FORMAT.test(bad)).toBe(false);
+});
+
+test("saúde e histórico viram texto curto, só com chaves conhecidas", () => {
+  expect(healthText({ edges_online: 1, edges_total: 2, olts_stale: 0 })).toBe("1/2 Edges online · 0 OLTs sem coleta");
+  expect(healthText({ edges_online: 1, edges_total: 1, olts_stale: 1 })).toBe("1/1 Edge online · 1 OLT sem coleta");
+  expect(historyText({ at: "x", action: "platform.organization.suspended", actor: "Ana", detail: { from: "active", to: "suspended", reason: "Contrato encerrado" } })).toBe("ativa → suspensa · motivo: Contrato encerrado");
+  expect(historyText({ at: "x", action: "platform.feature.set", actor: null, detail: { feature: "onu_discovery", from: "default", to: "on", reason: "Piloto" } })).toBe("onu_discovery: padrão → ligado · motivo: Piloto");
+  expect(historyText({ at: "x", action: "platform.organization.created", actor: "Ana", detail: { name: "Provedor X" } })).toBe("Provedor X");
+  expect(ACTION_LABEL["platform.organization.suspended"]).toBe("Suspensa");
 });

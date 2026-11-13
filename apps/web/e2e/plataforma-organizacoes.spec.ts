@@ -9,9 +9,9 @@ const SUFFIX = String(Date.now()).slice(-6);
 const NAME = `Provedor E2E ${SUFFIX}`;
 const BASE = process.env.WEB_URL ?? "http://127.0.0.1:3000";
 
-async function operatorLogin(page: Page, code?: string) {
+async function operatorLogin(page: Page, code?: string, email: string = OPERATOR) {
   await page.goto("/login");
-  await page.getByLabel("E-mail").fill(OPERATOR);
+  await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Senha").fill(PASSWORD);
   await page.getByRole("button", { name: "Entrar" }).click();
   if (code) {
@@ -37,6 +37,7 @@ test("quem não é operador não vê o item e recebe 404 na tela e 403 na API", 
 });
 
 let recovery: string[] = [];
+let jsInvite = "";    // token do convite da organização criada com JavaScript (a pessoa convidada vira administradora dela no último teste)
 
 test("operador sem segundo fator recente: a tela pede o código (formulário comum) e só depois mostra a lista", async ({ page, request }) => {
   await operatorLogin(page);                                    // ainda sem MFA: a sessão não tem prova do segundo fator
@@ -125,6 +126,7 @@ test("criar organização sem JavaScript: link do convite uma vez, lista com con
   await page.getByTestId("org-criar").click();
   await expect(page.getByTestId("org-criada")).toContainText(`${NAME} JS`);
   await expect(page.getByTestId("org-convite-link")).toHaveValue(new RegExp(`^${BASE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/convite/[A-Za-z0-9_-]{43}$`));
+  jsInvite = (await page.getByTestId("org-convite-link").inputValue()).split("/").pop()!;
   await expect(page.getByTestId("org-convite-copiar")).toBeVisible();
   await expect(page.getByTestId("org-convite-sem-js")).toHaveCount(0);
 });
@@ -147,4 +149,96 @@ test("limite de 5 por hora: a sexta é recusada em português", async ({ page, r
   await page.getByTestId("org-criar").click();
   await expect(page.getByTestId("org-erro")).toContainText("Limite de 5 organizações por hora");
   await expect(page.getByTestId("org-linha").filter({ hasText: `Sexta E2E ${SUFFIX}` })).toHaveCount(0);
+});
+
+test("ciclo de vida: detalhe, recursos, renomear, suspender (o usuário vê o aviso e a API bloqueia) e reativar", async ({ browser, page, request }) => {
+  const ADMIN = `js.${SUFFIX}@exemplo.com.br`;       // o e-mail do convite da organização criada com JavaScript
+  const acc = await request.post(`${API_URL}/v1/invites/${jsInvite}/accept`, { data: { name: "Ana JS", password: PASSWORD } });
+  expect(acc.status(), await acc.text()).toBeLessThan(300);
+  const org = `${NAME} JS`;
+  await operatorLogin(page, recovery[4]);
+  await page.goto("/plataforma/organizacoes");
+  await page.getByTestId("org-linha").filter({ hasText: org }).getByTestId("org-detalhe-link").click();
+  await expect(page.getByRole("heading", { name: org })).toBeVisible();
+  await expect(page.getByTestId("org-estado")).toContainText("Ativa");
+  await expect(page.getByTestId("org-saude")).toContainText("Edges online");
+  const ax = async (scope?: string) => (await (scope ? new AxeBuilder({ page: page as never }).include(scope) : new AxeBuilder({ page: page as never })).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze())
+    .violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(" || ")}`);
+  await page.setViewportSize({ width: 1280, height: 2600 });
+  expect(await ax()).toEqual([]);
+  await page.emulateMedia({ colorScheme: "dark" });
+  expect(await ax("main")).toEqual([]);      // o item ativo do menu no escuro é do AppShell (fora desta entrega): aqui só o conteúdo da tela
+  await page.emulateMedia({ colorScheme: "light" });
+
+  // recursos: um recurso comum liga e desliga com motivo; um que escreve na rede não oferece "Ligar"
+  const row = (f: string) => page.locator(`[data-testid="org-recurso"][data-feature="${f}"]`);
+  const owner = row("bench_writes");
+  await expect(owner.getByTestId("org-recurso-dono")).toContainText("Só o dono liga");
+  await expect(owner.locator("select option")).toHaveText(["Desligar", "Voltar ao padrão"]);
+  await expect(row("onu_discovery").getByTestId("org-recurso-atual")).toHaveText("Desligado");
+  await row("onu_discovery").locator("select").selectOption("on");
+  await row("onu_discovery").getByLabel(/Motivo da mudança/).fill("Piloto do cliente");
+  await row("onu_discovery").getByRole("button", { name: "Aplicar" }).click();
+  await expect(page.getByTestId("org-flash")).toContainText("Recurso atualizado");
+  await expect(row("onu_discovery").getByTestId("org-recurso-atual")).toHaveText("Ligado");
+  await row("onu_discovery").locator("select").selectOption("off");
+  await row("onu_discovery").getByLabel(/Motivo da mudança/).fill("Fim do piloto");
+  await row("onu_discovery").getByRole("button", { name: "Aplicar" }).click();
+  await expect(row("onu_discovery").getByTestId("org-recurso-atual")).toHaveText("Desligado");
+
+  // renomear
+  await page.getByLabel(/Novo nome/).fill(`${org} Renomeada`);
+  await page.getByTestId("org-nome-enviar").click();
+  await expect(page.getByTestId("org-flash")).toContainText("Nome da organização alterado");
+  await expect(page.getByRole("heading", { name: `${org} Renomeada` })).toBeVisible();
+
+  // a pessoa da organização entra (organização ativa)
+  // o administrador da organização precisa de MFA (política do ambiente): ativa pela API e entra em duas etapas, como a tela de Conta → Segurança faz
+  const at = (await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: ADMIN, password: PASSWORD } })).json()).access_token as string;
+  const ah = { Authorization: `Bearer ${at}` };
+  const enr = await request.post(`${API_URL}/v1/auth/mfa/enroll`, { headers: ah, data: { password: PASSWORD } });
+  expect(enr.status(), `${await enr.text()} (token: ${at ? "ok" : "vazio"})`).toBe(200);
+  const sec = (await enr.json()).secret as string;
+  const { totp } = await import("./helpers");
+  const act = await request.post(`${API_URL}/v1/auth/mfa/activate`, { headers: ah, data: { code: totp(sec) } });
+  expect(act.status()).toBe(200);
+  const codes = (await act.json()).recovery_codes as string[];
+  const ctx = await browser.newContext({ baseURL: BASE });
+  const up = await ctx.newPage();
+  await operatorLogin(up, codes[0], ADMIN);
+  await expect(up.getByRole("heading", { name: "Visão Geral" })).toBeVisible();
+  // suspender com motivo
+  await page.getByTestId("org-acao-estado").getByLabel(/Motivo/).fill("Contrato encerrado");
+  await page.getByTestId("org-estado-enviar").click();
+  await expect(page.getByTestId("org-flash")).toContainText("Organização suspensa");
+  await expect(page.getByTestId("org-estado")).toContainText("Suspensa");
+  await page.goto("/plataforma/organizacoes");
+  await expect(page.getByTestId("org-linha").filter({ hasText: `${org} Renomeada` }).getByTestId("org-estado-linha")).toContainText("Suspensa");
+  // o usuário da organização vê o aviso; o motivo não aparece
+  await up.goto("/");
+  await expect(up.getByTestId("org-suspensa-aviso")).toContainText("Organização suspensa");
+  await expect(up.locator("main, body").first()).not.toContainText("Contrato encerrado");
+  const t2 = await (await request.post(`${API_URL}/v1/auth/token`, { data: { email: ADMIN, password: PASSWORD } })).json();
+  const v2 = await request.post(`${API_URL}/v1/auth/mfa/verify`, { data: { mfa_token: t2.mfa_token, code: codes[1] } });
+  expect(v2.status()).toBe(200);
+  const blocked = await request.get(`${API_URL}/v1/edges`, { headers: { Authorization: `Bearer ${(await v2.json()).access_token}` } });
+  expect(blocked.status()).toBe(403);                                                          // o token da API também
+  expect(await blocked.json()).toEqual({ detail: "organization_suspended" });
+  // reativar
+  await page.goto("/plataforma/organizacoes");
+  await page.getByTestId("org-linha").filter({ hasText: `${org} Renomeada` }).getByTestId("org-detalhe-link").click();
+  await page.getByTestId("org-acao-estado").getByLabel(/Motivo/).fill("Voltou a pagar");
+  await page.getByTestId("org-estado-enviar").click();
+  await expect(page.getByTestId("org-flash")).toContainText("Organização reativada");
+  await expect(page.getByTestId("org-estado")).toContainText("Ativa");
+  await up.goto("/");
+  await expect(up.getByRole("heading", { name: "Visão Geral" })).toBeVisible();      // sem novo login
+  await expect(up.getByTestId("org-suspensa-aviso")).toHaveCount(0);
+  await ctx.close();
+  // histórico: quem, o quê e o motivo
+  const hist = page.getByTestId("org-historico");
+  await expect(hist).toContainText("Suspensa");
+  await expect(hist).toContainText("motivo: Contrato encerrado");
+  await expect(hist).toContainText("onu_discovery: padrão → ligado");
+  await expect(hist).toContainText("Renomeada");
 });

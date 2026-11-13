@@ -2,9 +2,16 @@
 export type PlatformStatus = { operator: boolean; mfa_recent: boolean };
 export type PlatformOrg = {
   id: string; name: string; status: string; created_at: string; edges: number; olts: number; onus: number;
+  edges_total: number; edges_online: number; olts_stale: number; last_heartbeat_at: string | null; flags_on: number;
   created_by: string | null; created_via: "screen" | "cli"; invite_state: "pending" | "accepted" | "expired" | "revoked" | null; api_trail: boolean | null;
 };
 export type PlatformOrgList = { total: number; next: { before_at: string; before_id: string } | null; items: PlatformOrg[] };
+export type OrgFeature = { feature: string; default: boolean; enabled: boolean; source: "tenant" | "default"; owner_only: boolean };
+export type OrgHistory = { at: string; action: string; actor: string | null; detail: { reason?: string; from?: string; to?: string; feature?: string; name?: string } };
+export type PlatformOrgDetail = {
+  tenant_id: string; name: string; status: string; created_at: string; edges: number; edges_total: number; edges_online: number; olts: number; olts_stale: number; onus: number;
+  last_heartbeat_at: string | null; flags_on: number; catalog: OrgFeature[]; history: OrgHistory[]; unknown_overrides: string[];
+};
 export type CreatedOrg = { tenant_id: string; name: string; invite: { id: string; state: string; role: string; email: string; expires_at: string; token: string } };
 
 export const FLASH_COOKIE = "fc_org_flash";   // o link do convite aparece UMA vez, num cookie HttpOnly de 2 minutos preso a /plataforma (a URL nunca o carrega)
@@ -25,22 +32,35 @@ export const ORG_ERRORS: Record<string, string> = {
   semmfa: "Esta conta ainda não ativou o MFA. Ative em Conta → Segurança e volte aqui.",
   tentativas: "Muitas tentativas. Aguarde alguns minutos.",
   falha: "Não foi possível concluir. Nada foi criado; tente novamente.",
+  naoencontrada: "Organização não encontrada.",
+  motivo: "Informe o motivo, de 3 a 200 caracteres, sem caracteres de controle.",
+  flag: "Recurso desconhecido ou estado inválido.",
+  somentedono: "Este recurso escreve na rede ou usa IA: só o dono do sistema o liga, pela linha de comando. Aqui só é possível desligar.",
+  precondicao: "Este recurso ainda não tem o suporte do Edge necessário para ser ligado.",
 };
-export const ORG_FLASH: Record<string, string> = { mfaok: "Segundo fator confirmado.", oculto: "Link do convite ocultado." };
+export const ORG_FLASH: Record<string, string> = {
+  mfaok: "Segundo fator confirmado.", oculto: "Link do convite ocultado.", suspensa: "Organização suspensa. Usuários e Edge dela recebem bloqueio até a reativação.",
+  reativada: "Organização reativada. O acesso volta na hora, sem novo login.", renomeada: "Nome da organização alterado.", flagok: "Recurso atualizado.",
+  semmudanca: "Nada mudou: já estava nesse estado.",
+};
 
 /** Erro da API → código curto da tela. Nunca repassa texto da API (só um código estável). */
 export function orgError(status: number, json: unknown): string {
   const detail = (json as { detail?: unknown } | null)?.detail;
-  if (status === 403) return detail === "mfa_recent_required" ? "mfa" : "permissao";
+  if (status === 403) return detail === "mfa_recent_required" ? "mfa" : detail === "owner_only_feature" ? "somentedono" : "permissao";
+  if (status === 404) return "naoencontrada";
   if (status === 409) return detail === "organization_name_taken" ? "duplicada" : "falha";
   if (status === 429) return "limite";
   if (status === 422) {
     if (detail === "organization_name_invalid") return "nome";
     if (detail === "organization_email_invalid") return "email";
     if (detail === "organization_admin_name_invalid") return "admin";
+    if (detail === "organization_reason_invalid") return "motivo";
+    if (detail === "unknown_feature" || detail === "feature_invalid" || detail === "feature_state_invalid") return "flag";
+    if (detail === "feature_precondition") return "precondicao";
     if (Array.isArray(detail)) {
       const field = (detail[0] as { loc?: unknown[] } | undefined)?.loc?.[1];
-      return field === "name" ? "nome" : field === "admin_email" ? "email" : field === "admin_name" ? "admin" : "invalido";
+      return field === "name" ? "nome" : field === "admin_email" ? "email" : field === "admin_name" ? "admin" : field === "reason" ? "motivo" : field === "state" ? "flag" : "invalido";
     }
     return "invalido";
   }
@@ -82,3 +102,28 @@ export function cursorQuery(raw: string): string {
   if (!at || !id || !ISO.test(at) || !UUID_RE.test(id)) return "";
   return new URLSearchParams({ before_at: at, before_id: id }).toString();
 }
+
+export const UUID_FORMAT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const FEATURE_FORMAT = /^[a-z][a-z0-9_]{1,63}$/;
+export const FEATURE_STATES = ["on", "off", "default"] as const;
+export type FeatureState = (typeof FEATURE_STATES)[number];
+export const FEATURE_STATE_LABEL: Record<FeatureState, string> = { on: "Ligar", off: "Desligar", default: "Voltar ao padrão" };
+/** Estados que a tela oferece para um recurso: os que escrevem na rede ou usam IA só podem ser desligados aqui. */
+export const featureChoices = (f: { owner_only: boolean }): FeatureState[] => (f.owner_only ? ["off", "default"] : ["on", "off", "default"]);
+/** Avisos curtos de recursos que dependem da configuração LOCAL do Edge (a nuvem não a enxerga). */
+export const FEATURE_NOTES: Record<string, string> = {
+  fleet_provision: "Exige a seção managed_olts no Edge.", acs_registry: "Exige nbi_cloud_id no config do Edge.",
+};
+export const ACTION_LABEL: Record<string, string> = {
+  "platform.organization.created": "Criada", "platform.organization.suspended": "Suspensa", "platform.organization.reactivated": "Reativada",
+  "platform.organization.renamed": "Renomeada", "platform.feature.set": "Recurso",
+};
+const STATE_WORD: Record<string, string> = { on: "ligado", off: "desligado", default: "padrão", active: "ativa", suspended: "suspensa" };
+/** Linha do histórico → texto curto (motivo e de→para). Só chaves conhecidas; nada de HTML. */
+export function historyText(h: OrgHistory): string {
+  const d = h.detail ?? {};
+  const change = d.from !== undefined && d.to !== undefined ? `${d.feature ? `${d.feature}: ` : ""}${STATE_WORD[d.from] ?? d.from} → ${STATE_WORD[d.to] ?? d.to}` : d.name ?? "";
+  return [change, d.reason ? `motivo: ${d.reason}` : ""].filter(Boolean).join(" · ");
+}
+export const healthText = (o: { edges_online: number; edges_total: number; olts_stale: number }) =>
+  `${o.edges_online}/${o.edges_total} Edge${o.edges_total === 1 ? "" : "s"} online · ${o.olts_stale} OLT${o.olts_stale === 1 ? "" : "s"} sem coleta`;

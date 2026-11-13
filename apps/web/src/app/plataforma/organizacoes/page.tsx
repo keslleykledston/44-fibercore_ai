@@ -6,7 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { OrgInviteLink } from "@/components/OrgInviteLink";
 import { EmptyState, ErrorState, PageHeader } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
-import { FLASH_COOKIE, ORG_ERRORS, ORG_FLASH, ORG_STATUS, type PlatformOrgList, cursorQuery, decodeFlash, inviteLabel, invitePath } from "@/lib/platform";
+import { FLASH_COOKIE, ORG_ERRORS, ORG_FLASH, ORG_STATUS, type PlatformOrgList, cursorQuery, decodeFlash, healthText, inviteLabel, invitePath } from "@/lib/platform";
 import { platformStatus } from "@/lib/platformStatus";
 
 const field = "min-h-touch rounded-btn border border-line bg-bg px-3";
@@ -69,18 +69,20 @@ export default async function Organizacoes({ searchParams }: { searchParams: Pro
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Organizações ({list.data ? list.data.total : items.length})</h2>
         {list.data === null ? <ErrorState title="Falha ao carregar as organizações" hint="Tente de novo em instantes." /> : items.length === 0 ? <EmptyState title="Nenhuma organização" /> : (
           <div className="panel overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="w-full min-w-[980px] text-sm">
               <caption className="sr-only">Organizações da plataforma: nome, estado, quantidade de Edges, OLTs e ONUs, quem e quando criou e o estado do convite do primeiro administrador</caption>
               <thead className="text-left text-muted"><tr>
                 <th scope="col" className="p-3 font-medium">Organização</th><th scope="col" className="p-3 font-medium">Estado</th><th scope="col" className="p-3 text-right font-medium">Edges</th>
-                <th scope="col" className="p-3 text-right font-medium">OLTs</th><th scope="col" className="p-3 text-right font-medium">ONUs</th><th scope="col" className="p-3 font-medium">Criada</th><th scope="col" className="p-3 font-medium">Convite</th>
+                <th scope="col" className="p-3 text-right font-medium">OLTs</th><th scope="col" className="p-3 text-right font-medium">ONUs</th><th scope="col" className="p-3 font-medium">Saúde</th><th scope="col" className="p-3 font-medium">Criada</th><th scope="col" className="p-3 font-medium">Convite</th>
               </tr></thead>
               <tbody className="divide-y divide-line">
                 {items.map((o) => (
                   <tr key={o.id} data-testid="org-linha">
-                    <th scope="row" className="p-3 text-left font-medium">{o.name}</th>
-                    <td className="p-3"><span aria-hidden>{o.status === "active" ? "●" : "▲"} </span>{ORG_STATUS[o.status] ?? o.status}</td>
-                    <td className="tabular p-3 text-right">{o.edges}</td><td className="tabular p-3 text-right">{o.olts}</td><td className="tabular p-3 text-right">{o.onus}</td>
+                    <th scope="row" className="p-3 text-left font-medium"><Link href={`/plataforma/organizacoes/${o.id}`} data-testid="org-detalhe-link" className="inline-block py-1 text-accent hover:underline">{o.name}</Link></th>
+                    <td className="p-3"><span data-testid="org-estado-linha" className={o.status === "active" ? "" : "rounded-btn bg-warn-soft px-2 py-0.5 font-medium text-warn"}><span aria-hidden>{o.status === "active" ? "●" : "▲"} </span>{ORG_STATUS[o.status] ?? o.status}</span></td>
+                    <td className="tabular p-3 text-right">{o.edges}</td>
+                    <td className="tabular p-3 text-right">{o.olts}</td><td className="tabular p-3 text-right">{o.onus}</td>
+                    <td className="p-3 text-xs" data-testid="org-saude-linha">{healthText(o)}{o.flags_on > 0 ? ` · ${o.flags_on} recurso${o.flags_on === 1 ? "" : "s"} ligado${o.flags_on === 1 ? "" : "s"}` : ""}</td>
                     <td className="p-3"><time dateTime={o.created_at}>{when(o.created_at)}</time>
                       <span className="block text-xs text-muted">{o.created_via === "screen" ? `pela tela, por ${o.created_by ?? "conta alegada"} (alegado)` : "pela linha de comando do dono"}</span>
                       {o.api_trail === false && <span className="block text-xs text-warn" data-testid="org-sem-par">Sem o par de auditoria da API: revisar.</span>}
@@ -96,7 +98,7 @@ export default async function Organizacoes({ searchParams }: { searchParams: Pro
             className="inline-flex min-h-touch items-center rounded-btn border border-line px-3 text-sm hover:bg-bg">Ver organizações mais antigas</Link></p>
         )}
         {antes && <p className="mt-2"><Link href="/plataforma/organizacoes" className="inline-flex min-h-touch items-center rounded-btn px-3 text-sm text-accent hover:underline">← Voltar às mais recentes</Link></p>}
-        <p className="mt-2 text-xs text-muted">Só contagens e rótulos: nenhum dado de assinante, de OLT ou de ONU aparece aqui. Suspender ou reativar uma organização é feito pelo dono do sistema.</p>
+        <p className="mt-2 text-xs text-muted">Só contagens e rótulos: nenhum dado de assinante, de OLT ou de ONU aparece aqui. Para suspender, reativar, renomear ou mudar recursos, abra a organização.</p>
       </section>
       <section aria-label="Nova organização" className="panel p-4" data-testid="org-nova">
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Nova organização</h2>

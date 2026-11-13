@@ -12,6 +12,7 @@ export default async function Overview() {
   if (!token) redirect("/login");
   const inc = await apiSafe<IncidentList>("/v1/incidents?status=open&limit=3");
   if (inc.status === 400 || (!workspace && inc.status === 404)) return <WorkspacePicker />;
+  if (inc.status === 403 && inc.detail === "organization_suspended") return <SuspendedOrg />;
   if (inc.status === 403) return <Forbidden />;
   const [onus, olts, edges] = await Promise.all([
     apiSafe<Onu[]>("/v1/onus?limit=1000"), apiSafe<Olt[]>("/v1/olts?limit=200"), apiSafe<Edge[]>("/v1/edges"),
@@ -56,6 +57,23 @@ export default async function Overview() {
   );
 }
 
+/** Botões de workspace: os de organização suspensa aparecem desabilitados e rotulados (ADR-0047 D1). */
+function WorkspaceButtons({ ws }: { ws: Workspace[] }) {
+  return (
+    <>
+      {ws.map((w) => w.suspended ? (
+        <button key={w.tenant_id} type="button" disabled aria-disabled="true" data-testid="workspace-suspenso" className="min-h-touch cursor-not-allowed rounded-btn border border-line px-3 text-left text-sm text-muted opacity-70">
+          {w.name} <span>· Suspensa</span>
+        </button>
+      ) : (
+        <button key={w.tenant_id} name="workspace" value={w.tenant_id} className="min-h-touch rounded-btn border border-line px-3 text-left text-sm hover:bg-bg">
+          {w.name} <span className="text-muted">· {w.role}</span>
+        </button>
+      ))}
+    </>
+  );
+}
+
 async function WorkspacePicker() {
   const ws = await api<Workspace[]>("/v1/auth/workspaces");
   return (
@@ -63,14 +81,30 @@ async function WorkspacePicker() {
       <LoginSteps current="workspace" />
       <h1 className="text-2xl font-semibold">Escolha o workspace</h1>
       <form action="/bff/workspace" method="post" className="panel grid gap-2 p-4" data-testid="workspace-picker">
-        {ws.map((w) => (
-          <button key={w.tenant_id} name="workspace" value={w.tenant_id} className="min-h-touch rounded-btn border border-line px-3 text-left text-sm hover:bg-bg">
-            {w.name} <span className="text-muted">· {w.role}</span>
-          </button>
-        ))}
+        <WorkspaceButtons ws={ws} />
         {ws.length === 0 && <EmptyState title="Você não pertence a nenhum workspace" />}
       </form>
     </main>
+  );
+}
+
+/** A organização escolhida está suspensa: a pessoa vê o motivo de nada abrir (sem o motivo da suspensão) e pode trocar de workspace. */
+async function SuspendedOrg() {
+  const ws = await apiSafe<Workspace[]>("/v1/auth/workspaces");
+  const list = ws.data ?? [];
+  return (
+    <AppShell active="/" user="1">
+      <section className="panel mx-auto grid max-w-md gap-3 p-4" data-testid="org-suspensa-aviso" role="alert">
+        <h1 className="text-lg font-semibold">Organização suspensa</h1>
+        <p className="text-sm text-muted">O acesso desta organização está suspenso. Fale com quem administra a plataforma.</p>
+        {list.some((w) => !w.suspended) && (
+          <form action="/bff/workspace" method="post" className="grid gap-2" data-testid="workspace-picker">
+            <p className="text-sm">Trocar de workspace:</p>
+            <WorkspaceButtons ws={list} />
+          </form>
+        )}
+      </section>
+    </AppShell>
   );
 }
 
