@@ -282,3 +282,69 @@ test("centro de OLT: Telnet é só inventário (sem senha, sem entrega) e a API 
   await expect(page.getByTestId("frota-prontidao-detalhe")).toHaveAttribute("data-stage", "registered");
   await expect(page.getByTestId("conn-form")).toBeVisible();
 });
+
+test("formulário único: cadastra, entrega a conexão e a credencial em sequência, com progresso; só texto cifrado sai do navegador; o Edge simulado abre as duas entregas", async ({ page, request }) => {
+  test.skip(!creds(), "defina E2E_EDGE_CREDS_FILE (seed_demo.py/scripts/e2e.sh) e ligue as flags fleet_provision e fleet_secrets");
+  const E = await prepareEdge(request);
+  const ADDR_U = "10.99.7.6", PW_U = `Senh@-Unica-${SUFFIX}-ç`, USER_U = `adm-u-${SUFFIX}`;
+  const sent: { url: string; method: string; body: string | null; headers: string }[] = [];
+  const consoleLines: string[] = [];
+  page.on("request", (r: Request) => sent.push({ url: r.url(), method: r.method(), body: r.postData(), headers: JSON.stringify(r.headers()) }));
+  page.on("console", (m) => consoleLines.push(`${m.type()}: ${m.text()}`));
+  page.on("pageerror", (e) => consoleLines.push(`pageerror: ${e.message}`));
+  await login(page);
+  const name = `E2E-UNI-${SUFFIX}`;
+  const form = await register(page, name, { protocol: "telnet", address: ADDR_U });
+  // Telnet: sem campo de segredo e sem o botão de envio completo
+  await expect(page.getByTestId("frota-segredos")).toHaveCount(0);
+  await expect(page.getByTestId("frota-cadastrar-tudo")).toHaveCount(0);
+  await form.getByLabel("Protocolo de acesso").selectOption("ssh");
+  await form.getByLabel("Impressão digital do host SSH").fill(HK);
+  await expect(page.getByTestId("frota-segredos")).toBeVisible();
+  await expect(page.getByTestId("frota-login")).toBeVisible();
+  // SNMP troca login+senha pela community
+  await form.getByLabel("Transporte da coleta").selectOption("snmp");
+  await expect(page.getByTestId("frota-community")).toBeVisible();
+  await expect(page.getByTestId("frota-login")).toHaveCount(0);
+  await form.getByLabel("Transporte da coleta").selectOption("cli");
+  // sem login/senha: recusa local, nada foi cadastrado
+  const before = sent.filter((r) => r.method === "POST" && r.url.endsWith("/bff/frota/olts")).length;
+  await page.getByTestId("frota-cadastrar-tudo").click();
+  await expect(page.getByTestId("frota-cadastro-msg")).toContainText("O login é obrigatório");
+  expect(sent.filter((r) => r.method === "POST" && r.url.endsWith("/bff/frota/olts")).length).toBe(before);
+  await page.getByTestId("frota-login").fill(USER_U);
+  await page.getByTestId("frota-senha").fill(PW_U);
+  await page.getByTestId("frota-cadastrar-tudo").click();
+  const prog = page.getByTestId("frota-progresso");
+  await expect(page.getByTestId("frota-progresso-fim")).toBeVisible({ timeout: 30_000 });
+  for (const k of ["cadastro", "conexao", "credencial"]) await expect(prog.getByTestId(`frota-progresso-${k}`)).toHaveAttribute("data-state", "ok");
+  await expect(prog.getByTestId("frota-progresso-confirmacao")).toHaveAttribute("data-state", "run");
+  await expect(page.getByTestId("frota-progresso-comando")).toHaveText(`fibercore-edge managed-trust ${name}`);
+  await expect(page.getByTestId("frota-login")).toHaveValue("");                                    // os campos são apagados
+  await expect(page.getByTestId("frota-senha")).toHaveValue("");
+  const oltId = ((await page.getByTestId("frota-progresso-fim").getByRole("link").first().getAttribute("href")) ?? "").match(/frota\/([0-9a-f-]{36})/)![1];
+
+  // o Edge simulado abre as duas entregas (a ordem não importa) e confere o texto claro
+  const seen: Record<string, unknown> = {};
+  for (let i = 0; i < 2; i++) {
+    const n = await request.get(`${API_URL}/v1/edge/secret-deliveries/next`, { headers: E.edgeH });
+    expect(n.status()).toBe(200);
+    const d = await n.json();
+    seen[d.kind] = JSON.parse(openBlob(E.edge, d.sealed, aadOf(E, name, d.kind, d), d.key_id));
+    expect((await request.post(`${API_URL}/v1/edge/secret-deliveries/${d.id}/result`, { headers: E.edgeH, data: { lease_token: d.lease_token, outcome: "applied", ...(d.kind === "olt_connection" ? { code: "awaiting_local_trust" } : {}) } })).status()).toBe(204);
+  }
+  expect(seen.olt_connection).toEqual({ kind: "olt_connection", action: "set", address: ADDR_U, port: 22, protocol: "ssh", vendor: "huawei", transport: "cli", snmp_port: 161, host_key_sha256: HK, legacy_ssh: false, ssh_mode: "exec", cloud_id: oltId });
+  expect(seen.ssh_login).toEqual({ kind: "ssh_login", username: USER_U, password: PW_U });
+  await page.goto(`/rede/frota/${oltId}#passos`);
+  await expect(page.getByTestId("frota-prontidao-detalhe")).toHaveAttribute("data-stage", "awaiting_trust");
+  await expect(page.getByTestId("passo-3")).toContainText("Credencial aplicada");
+
+  // login e senha NUNCA saíram em claro em nenhuma requisição, URL, cabeçalho, console ou armazenamento; o endereço só no corpo do cadastro (passo 1)
+  for (const secret of [PW_U, USER_U]) {
+    const variants = [secret, encodeURIComponent(secret), Buffer.from(secret).toString("base64"), Buffer.from(secret).toString("base64url")];
+    for (const r of sent) for (const v of variants) { expect(r.url).not.toContain(v); expect(r.headers).not.toContain(v); expect(r.body ?? "").not.toContain(v); }
+    expect(consoleLines.join("\n")).not.toContain(secret);
+  }
+  for (const r of sent.filter((x) => x.method === "POST" && !x.url.endsWith("/bff/frota/olts"))) expect(r.body ?? "").not.toContain(ADDR_U);
+  expect(await page.evaluate(() => JSON.stringify({ l: { ...localStorage }, s: { ...sessionStorage } }))).not.toContain(PW_U);
+});

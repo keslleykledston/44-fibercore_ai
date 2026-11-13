@@ -1,5 +1,5 @@
 "use client";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { DEFAULT_PORT, defaultPortFor, HOST_KEY_HELP, PROTOCOLS, SSH_MODES, TELNET_WARNING, TRANSPORTS } from "@/lib/oltConnection";
 
 type Defaults = { protocol: string | null; port: number | null; transport: string | null; snmp_port: number | null; host_key_sha256: string | null; ssh_mode: string | null; legacy_ssh: boolean };
@@ -10,12 +10,13 @@ const field = "min-h-touch rounded-btn border border-line bg-bg px-3";
  * Nada aqui é secreto. Telnet é só inventário: esconde impressão digital, modo e SSH legado e mostra o aviso. Os campos têm `name`: funcionam num envio nativo (sem JavaScript) e no cadastro com JavaScript.
  * `mgmt_port_original` leva a porta que a OLT tinha, para o servidor só enviar a porta se ela mudou (assim trocar o protocolo usa a porta padrão do novo protocolo).
  */
-export function ConnectionFields({ defaults }: { defaults: Defaults }) {
+export function ConnectionFields({ defaults, onChange }: { defaults: Defaults; onChange?: (v: { protocol: string; transport: string }) => void }) {
   const base = useId();
   const [protocol, setProtocol] = useState(defaults.protocol ?? "");
   const [port, setPort] = useState(defaults.port !== null ? String(defaults.port) : "");
   const [transport, setTransport] = useState(defaults.transport ?? "cli");
   const id = (s: string) => `${base}-${s}`;
+  useEffect(() => { onChange?.({ protocol, transport }); }, [protocol, transport, onChange]);   // o formulário único precisa saber o protocolo e o transporte para mostrar os campos de credencial certos
   function onProtocol(next: string) {
     const prevDefault = defaultPortFor(protocol);
     if (port === "" || (prevDefault !== null && port === String(prevDefault))) setPort(defaultPortFor(next) !== null ? String(DEFAULT_PORT[next]) : "");   // o preset acompanha o protocolo enquanto a porta é a padrão do anterior
