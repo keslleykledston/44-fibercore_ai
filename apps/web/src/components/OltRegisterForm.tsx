@@ -25,6 +25,7 @@ export function OltRegisterForm({ edges, pops, secretsOn, provisionOn }: { edges
   const router = useRouter();
   const [vendor, setVendor] = useState("huawei");
   const [busy, setBusy] = useState(false);
+  const lock = useRef(false);   // trava síncrona: dois envios antes de o React renderizar `busy` não passam
   const [err, setErr] = useState<string | null>(null);
   const none = edges.length === 0;
   const [sealOk, setSealOk] = useState(false);
@@ -71,7 +72,7 @@ export function OltRegisterForm({ edges, pops, secretsOn, provisionOn }: { edges
    * e só o texto cifrado sai do navegador; os campos são apagados antes de a requisição de credencial sair. Se um passo falha, o que já foi feito fica e cada passo pode ser reenviado na página da OLT sem refazer os outros.
    */
   async function runAll(fd: FormData) {
-    if (busy) return;
+    if (busy || lock.current) return;
     const f = (k: string) => String(fd.get(k) ?? "").trim();
     const address = f("mgmt_address"), edgeId = f("edge_id"), vendorName = f("vendor"), oltName = f("name");
     const port = f("mgmt_port") || String(DEFAULT_PORT.ssh);
@@ -97,6 +98,7 @@ export function OltRegisterForm({ edges, pops, secretsOn, provisionOn }: { edges
       { key: "confirmacao", label: "Confirmação no Edge (feita por quem administra o Edge)", state: "wait" },
     ];
     const set = (key: string, state: StepState, note?: string) => { const i = steps.findIndex((x) => x.key === key); steps[i] = { ...steps[i], state, note }; setProg([...steps]); };
+    lock.current = true;
     setBusy(true);
     setProg([...steps]);
     try {
@@ -136,9 +138,10 @@ export function OltRegisterForm({ edges, pops, secretsOn, provisionOn }: { edges
       setDone({ id, name: oltName, trust: true });
       router.refresh();
     } catch {
-      setErr(FLEET_FLASH.falha);
+      setErr(`${FLEET_FLASH.falha} Se a resposta se perdeu, a OLT pode ter sido cadastrada: confira na lista antes de tentar de novo (o nome não pode repetir).`);
     } finally {
       clearSecrets();   // aconteça o que acontecer, o texto claro não fica nos campos
+      lock.current = false;
       setBusy(false);
     }
   }
