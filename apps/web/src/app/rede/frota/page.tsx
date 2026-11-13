@@ -23,7 +23,7 @@ export default async function Frota({ searchParams }: { searchParams: Promise<{ 
   const list = olts.data?.items ?? [], popList = pops.data?.items ?? [], edgeList = edges.data ?? [];
   return (
     <AppShell active="/rede" user="1">
-      <PageHeader title="Frota de OLTs" subtitle="Cadastro, POP e identificação das OLTs. Somente leitura: nada é enviado à OLT. Login, senha e community seguem cifrados até o Edge e nunca ficam em claro na nuvem." helpSlug="rede/frota-de-olts">
+      <PageHeader title="Frota de OLTs" subtitle="Cadastro, POP e identificação das OLTs. Somente leitura. Login, senha e community seguem cifrados até o Edge." helpSlug="rede/frota-de-olts">
         <Link href="/rede/homologacao" data-testid="frota-homologacao-link" className="inline-flex min-h-touch items-center rounded-btn border border-line px-3 text-sm hover:bg-bg">Homologação</Link>
         <Link href="/rede/conhecimento" data-testid="frota-conhecimento-link" className="inline-flex min-h-touch items-center rounded-btn border border-line px-3 text-sm hover:bg-bg">Base de conhecimento</Link>
         <Link href="/rede" className="inline-flex min-h-touch items-center rounded-btn px-3 text-sm text-accent hover:underline">← Voltar para Rede</Link>
@@ -50,7 +50,7 @@ export default async function Frota({ searchParams }: { searchParams: Promise<{ 
         </section>
         <section aria-label="Cadastrar OLT" className="panel p-4" data-testid="frota-cadastro">
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Cadastrar OLT</h2>
-          <p className="mb-3 text-sm text-muted">O cadastro só cria o registro na nuvem. Sem a entrega da conexão (assistente), a OLT também precisa estar na configuração do Edge (feita por quem administra o Edge), com o mesmo nome. O teste de conexão e a primeira leitura preenchem o modelo e o firmware.</p>
+          <p className="mb-3 text-sm text-muted">Cria o registro na nuvem. A OLT também precisa estar na configuração do Edge, com o mesmo nome, ou ser entregue pelo assistente.</p>
           <OltRegisterForm edges={edgeList} pops={popList} secretsOn={secrets} provisionOn={provision} />
         </section>
         <section aria-label="POPs" className="panel p-4" data-testid="frota-pops">

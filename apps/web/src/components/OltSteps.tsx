@@ -29,7 +29,7 @@ export function OltSteps({ olt, secretsOn, deliveries, sealKey, edgeOk }: { olt:
   const items = deliveries ?? [];
   const conn = latest(items, "olt_connection");
   const keyConfirmed = sealKey?.state === "confirmed";
-  const blocked = (why: string): Pick<Step, "state" | "tone" | "body"> => ({ state: telnet ? "Aguardando suporte a Telnet" : "Indisponível", tone: "off", body: <p className="text-sm text-muted">{why}</p> });
+  const blocked = (why: string): Pick<Step, "state" | "tone" | "body"> => ({ state: telnet ? "Aguardando suporte a Telnet" : "Indisponível", tone: "off", body: <p className="text-xs text-muted">{why}</p> });
   const steps: Step[] = [];
 
   // 1 Cadastro
@@ -37,8 +37,8 @@ export function OltSteps({ olt, secretsOn, deliveries, sealKey, edgeOk }: { olt:
     n: 1, title: "Cadastrar", state: "Feito", tone: "ok",
     body: (
       <>
-        <p className="text-sm">A OLT está cadastrada na nuvem{olt.registered ? "" : " (criada pela primeira coleta do Edge)"}. Fabricante {olt.vendor}, Edge {olt.edge.name}, endereço {olt.mgmt_address_masked ?? "não informado"}.
-          {simple ? " O protocolo não foi informado (cadastro simples): escolha SSH ou Telnet em " : " Protocolo " + (c.protocol ?? "").toUpperCase() + `, porta ${c.port ?? "—"}. Para mudar, edite em `}
+        <p className="text-sm">Cadastrada na nuvem{olt.registered ? "" : " (criada pela primeira coleta do Edge)"}.
+          {simple ? " Protocolo não informado: escolha SSH ou Telnet em " : " " + (c.protocol ?? "").toUpperCase() + `, porta ${c.port ?? "—"}. Para mudar, edite em `}
           <a href="#cadastro" className="text-accent underline underline-offset-2">Cadastro</a>.</p>
         {!simple && !telnet && !c.host_key_sha256 && <p className="mt-1 text-xs text-danger" data-testid="passo-sem-impressao">Falta a impressão digital do host SSH. Obtenha-a na rede da OLT com <code>{HOST_KEY_HELP}</code> e salve em Cadastro.</p>}
       </>
@@ -98,16 +98,16 @@ export function OltSteps({ olt, secretsOn, deliveries, sealKey, edgeOk }: { olt:
   }
 
   return (
-    <section id="passos" className="panel p-4 md:col-span-2" aria-label="Assistente de cadastro" data-testid="frota-passos">
+    <section id="passos" className="panel p-3 md:col-span-2" aria-label="Assistente de cadastro" data-testid="frota-passos">
       <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Assistente de cadastro</h2>
-      <div className="mb-3 grid gap-1"><p className="text-sm">Prontidão: <strong data-testid="frota-prontidao-texto">{stageText(r)}</strong></p><OltReadiness r={r} testId="frota-prontidao-detalhe" /></div>
+      <div className="mb-2 grid gap-1"><p className="text-sm">Prontidão: <strong data-testid="frota-prontidao-texto">{stageText(r)}</strong></p><OltReadiness r={r} testId="frota-prontidao-detalhe" /></div>
       {c.applied && c.trust_state === "awaiting_local_trust" && (
         <p className="mb-3 rounded-btn border border-accent px-3 py-2 text-sm" data-testid="passos-comando">Aguardando confirmação no Edge. No servidor do Edge rode: <code className="select-all break-all font-mono text-xs">{TRUST_COMMAND(olt.name)}</code></p>
       )}
       {telnet && <p role="note" className="mb-3 rounded-btn border border-line px-3 py-2 text-sm" data-testid="passos-telnet">{TELNET_WARNING}</p>}
-      <ol className="grid gap-3">
+      <ol className="grid gap-2">
         {steps.map((s) => (
-          <li key={s.n} data-testid={`passo-${s.n}`} className="rounded-btn border border-line p-3">
+          <li key={s.n} data-testid={`passo-${s.n}`} className="rounded-btn border border-line px-3 py-2">
             <h3 className="mb-1 flex flex-wrap items-baseline gap-x-3 text-sm font-semibold"><span>{s.n}. {s.title}</span>
               <span className={`text-xs font-medium ${toneCls[s.tone]}`} data-testid="passo-estado"><span aria-hidden>{toneMark[s.tone]} </span>{s.state}</span></h3>
             {s.body}

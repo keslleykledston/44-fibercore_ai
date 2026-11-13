@@ -5,6 +5,7 @@ import { DeviceThumb } from "@/components/DeviceThumb";
 import { DataFreshness, ErrorState, PageHeader, StatusPill } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
 import { featuresOn } from "@/lib/features";
+import { FormHelp } from "@/components/FormHelp";
 import { PopCombobox } from "@/components/PopCombobox";
 import { ConnectionFields } from "@/components/ConnectionFields";
 import { OltCredentialsCard } from "@/components/OltCredentialsCard";
@@ -33,45 +34,51 @@ export default async function FrotaOlt({ params, searchParams }: { params: Promi
   const msg = ok && FLEET_FLASH[ok] ? FLEET_FLASH[ok] : erro && FLEET_FLASH[erro] ? FLEET_FLASH[erro] : null;
   return shell(
     <>
-      <PageHeader title={o.name} subtitle="Cadastro e identificação da OLT. Somente leitura: nada é enviado à OLT." helpSlug="rede/frota-de-olts">
+      <PageHeader title={o.name} subtitle="Cadastro e identificação da OLT. Somente leitura." helpSlug="rede/frota-de-olts">
         <Link href="/rede/frota" className="inline-flex min-h-touch items-center rounded-btn px-3 text-sm text-accent hover:underline">← Voltar para a Frota</Link>
       </PageHeader>
       {msg && <p role={erro ? "alert" : "status"} data-testid="frota-flash" className={`mb-4 rounded-btn border px-3 py-2 text-sm ${erro ? "border-danger text-danger" : "border-ok text-ok"}`}>{msg}</p>}
       <div className="grid gap-4 md:grid-cols-2" data-testid="frota-detalhe">
-        {provisionOn && sealKey?.data && <OltSteps olt={o} secretsOn={secretsOn} deliveries={deliveries?.data?.items ?? null} sealKey={sealKey.data} edgeOk />}
-        <section className="panel flex gap-4 p-4" aria-label="Identificação">
-          {assets && <DeviceThumb category="olt" vendor={o.vendor} model={o.model} width={120} label />}
-          <dl className="grid gap-1 text-sm">
+        <section className="panel flex items-start gap-4 p-4 md:col-span-2" aria-label="Identificação">
+          {assets && <DeviceThumb category="olt" vendor={o.vendor} model={o.model} width={72} label />}
+          <dl className="grid flex-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div><dt className="text-xs text-muted">Fabricante · modelo</dt><dd>{o.vendor} {o.model ?? "— (ainda não lido pelo Edge)"}</dd></div>
             <div><dt className="text-xs text-muted">Firmware</dt><dd>{o.firmware ?? "—"}</dd></div>
             <div><dt className="text-xs text-muted">Nível do driver</dt><dd><StatusPill value={o.support_level} /></dd></div>
             <div><dt className="text-xs text-muted">Última coleta</dt><dd>{o.observed_at ? <DataFreshness freshness="fresh" observedAt={o.observed_at} /> : "Ainda não coletada"}</dd></div>
             <div><dt className="text-xs text-muted">Edge</dt><dd>{o.edge.name}</dd></div>
-            <div><dt className="text-xs text-muted">Endereço de gerência · SNMP</dt><dd data-testid="frota-endereco">{o.mgmt_address_masked ?? "Não informado"} · {o.snmp_version ? `SNMP ${o.snmp_version}` : "versão do SNMP não informada"}</dd></div>
+            <div><dt className="text-xs text-muted">Endereço de gerência · SNMP</dt><dd data-testid="frota-endereco">{o.mgmt_address_masked ?? "Não informado"} · {o.snmp_version ? `SNMP ${o.snmp_version}` : "SNMP não informado"}</dd></div>
             {o.connection.protocol && <div><dt className="text-xs text-muted">Acesso · prontidão</dt><dd data-testid="frota-acesso">{o.connection.protocol.toUpperCase()} · porta {o.connection.port ?? "—"}<div className="mt-1"><OltReadiness r={o.readiness} testId="frota-prontidao" /></div></dd></div>}
-            <div><dt className="text-xs text-muted">Credencial</dt><dd data-testid="frota-credencial">{o.has_credential_ref ? "Informada (o nome não é mostrado)" : "Não informada"}</dd></div>
-            {o.collected && <div><dt className="text-xs text-muted">ONUs</dt><dd><Link href={`/rede?olt=${o.id}`} className="inline-block py-1 text-accent underline underline-offset-2">Ver as ONUs desta OLT</Link></dd></div>}
+            <div><dt className="text-xs text-muted">Credencial</dt><dd data-testid="frota-credencial">{o.has_credential_ref ? "Informada" : "Não informada"}</dd></div>
+            {o.collected && <div><dt className="text-xs text-muted">ONUs</dt><dd><Link href={`/rede?olt=${o.id}`} className="text-accent underline underline-offset-2">Ver as ONUs desta OLT</Link></dd></div>}
           </dl>
         </section>
-        <section id="cadastro" className="panel p-4" aria-label="Cadastro">
+        {provisionOn && sealKey?.data && <OltSteps olt={o} secretsOn={secretsOn} deliveries={deliveries?.data?.items ?? null} sealKey={sealKey.data} edgeOk />}
+        <section id="cadastro" className="panel p-4 md:col-span-2" aria-label="Cadastro">
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Cadastro</h2>
-          <form method="post" action={`/bff/frota/olts/${o.id}`} className="grid gap-3">
-            <PopCombobox pops={(pops.data?.items ?? []).map((p) => ({ id: p.id, name: p.name }))} defaultName={o.pop?.name ?? ""} />
-            <label className="grid gap-1 text-sm">{o.mgmt_address_masked ? "Substituir o endereço de gerência" : "Endereço de gerência"}<input name="mgmt_address" maxLength={45} autoComplete="off" spellCheck={false} className={`${field} font-mono`} placeholder={o.mgmt_address_masked ? "deixe vazio para manter o atual" : "ex.: 10.20.30.40"} />
-              <span className="text-xs text-muted">{ADDRESS_HELP} O endereço já salvo não é mostrado por inteiro.</span></label>
-            {o.mgmt_address_masked && <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="remover_endereco" value="1" /> Remover o endereço</label>}
-            <label className="grid gap-1 text-sm">Versão do SNMP<select name="snmp_version" defaultValue={o.snmp_version ?? ""} className={field}><option value="">Não informar</option>{SNMP_VERSIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+          <form method="post" action={`/bff/frota/olts/${o.id}`} className="grid gap-x-3 gap-y-2 md:grid-cols-6">
+            <div className="md:col-span-2"><PopCombobox pops={(pops.data?.items ?? []).map((p) => ({ id: p.id, name: p.name }))} defaultName={o.pop?.name ?? ""} /></div>
+            <label className="grid gap-1 text-sm md:col-span-2">Rótulo<input name="label" defaultValue={o.label ?? ""} maxLength={80} className={field} /></label>
+            <label className="grid gap-1 text-sm md:col-span-2">Versão do SNMP<select name="snmp_version" defaultValue={o.snmp_version ?? ""} className={field}><option value="">Não informar</option>{SNMP_VERSIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+            <div className="grid content-start gap-1 md:col-span-3">
+              <label className="grid gap-1 text-sm">{o.mgmt_address_masked ? "Substituir o endereço de gerência" : "Endereço de gerência"}<input name="mgmt_address" maxLength={45} autoComplete="off" spellCheck={false} className={`${field} font-mono`} placeholder={o.mgmt_address_masked ? "vazio = manter o atual" : "ex.: 10.20.30.40"} /></label>
+              {o.mgmt_address_masked && <label className="flex items-center gap-2 text-xs text-muted"><input type="checkbox" name="remover_endereco" value="1" /> Remover o endereço</label>}
+            </div>
+            <div className="grid content-start gap-1 md:col-span-3">
+              <label className="grid gap-1 text-sm">{o.has_credential_ref ? "Substituir o nome da credencial no Edge" : "Nome da credencial no Edge"}<input name="credential_ref" defaultValue="" maxLength={64} autoComplete="off" spellCheck={false} placeholder={o.has_credential_ref ? "vazio = manter a atual" : "ex.: olt-centro-01"} className={`${field} font-mono`} /></label>
+              {o.has_credential_ref && <label className="flex items-center gap-2 text-xs text-muted"><input type="checkbox" name="remover_credencial" value="1" /> Remover o nome da credencial</label>}
+            </div>
             <ConnectionFields defaults={{ protocol: o.connection.protocol, port: o.connection.port, transport: o.connection.transport, snmp_port: o.connection.snmp_port, host_key_sha256: o.connection.host_key_sha256, ssh_mode: o.connection.ssh_mode, legacy_ssh: o.connection.legacy_ssh }} />
-            <label className="grid gap-1 text-sm">Rótulo<input name="label" defaultValue={o.label ?? ""} maxLength={80} className={field} /></label>
-            <label className="grid gap-1 text-sm">{o.has_credential_ref ? "Substituir o nome da credencial no Edge" : "Nome da credencial no Edge"}<input name="credential_ref" defaultValue="" maxLength={64} autoComplete="off" spellCheck={false} placeholder={o.has_credential_ref ? "deixe vazio para manter a atual" : "ex.: olt-centro-01"} className={`${field} font-mono`} />
-              <span className="text-xs text-muted">{CRED_HELP} O nome já informado não é mostrado de volta.</span></label>
-            {o.has_credential_ref && <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="remover_credencial" value="1" /> Remover o nome da credencial</label>}
-            <div><button type="submit" data-testid="frota-salvar" className="min-h-touch rounded-btn border border-line px-4 text-sm hover:bg-bg">Salvar</button></div>
+            <FormHelp>
+              <p><strong>Endereço.</strong> {ADDRESS_HELP} O endereço já salvo não é mostrado por inteiro.</p>
+              <p><strong>Credencial.</strong> {CRED_HELP} O nome já informado não é mostrado de volta.</p>
+            </FormHelp>
+            <div className="md:col-span-6"><button type="submit" data-testid="frota-salvar" className="min-h-touch rounded-btn border border-line px-4 text-sm hover:bg-bg">Salvar</button></div>
           </form>
         </section>
         <section id="teste" className="panel p-4 md:col-span-2" aria-label="Teste de conexão" data-testid="frota-teste">
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Teste de conexão</h2>
-          <p className="mb-3 text-sm text-muted">O Edge lê a identidade da OLT (modelo e firmware) na próxima janela de coleta, <strong>somente leitura</strong>: nada é configurado. Limite: 1 teste a cada 15 minutos e 4 por hora por OLT. Um resultado recente já guardado responde sem consultar a OLT.</p>
+          <p className="mb-3 text-sm text-muted">Leitura de modelo e firmware pelo Edge na próxima janela de coleta (somente leitura). Limite: 1 teste a cada 15 minutos e 4 por hora por OLT.</p>
           {tests.data === null ? <p className="text-sm text-muted">O histórico de testes não está disponível agora.</p> : (
             <div className="grid gap-4 md:grid-cols-2">
               <div>

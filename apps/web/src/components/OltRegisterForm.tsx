@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ConnectionFields } from "@/components/ConnectionFields";
+import { FormHelp } from "@/components/FormHelp";
 import { PopCombobox } from "@/components/PopCombobox";
 import { ADDRESS_HELP, CRED_HELP, FLEET_FLASH, FLEET_VENDORS, SNMP_VERSIONS, type Pop } from "@/lib/fleet";
 import { connectionPlain, DEFAULT_PORT, EDGE_VENDORS, hostKeyProblem, ipLiteralProblem, portProblem, TRUST_COMMAND, VENDOR_WARNING } from "@/lib/oltConnection";
@@ -149,34 +150,36 @@ export function OltRegisterForm({ edges, pops, secretsOn, provisionOn }: { edges
   }
 
   return (
-    <form method="post" action="/bff/frota/olts" onSubmit={(e) => void onSubmit(e)} className="grid gap-3 md:grid-cols-2">
-      <label className="grid gap-1 text-sm">Nome da OLT<input name="name" required minLength={2} maxLength={60} className={field} placeholder="ex.: OLT-CENTRO-01" /></label>
-      <label className="grid gap-1 text-sm">Fabricante<select name="vendor" required value={vendor} onChange={(e) => setVendor(e.target.value)} className={field}>{FLEET_VENDORS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-        {!EDGE_VENDORS.includes(vendor) && <span className="text-xs text-muted" data-testid="frota-fabricante-aviso">{VENDOR_WARNING}</span>}</label>
-      <label className="grid gap-1 text-sm">Edge que vai coletar<select name="edge_id" required className={field}>{edges.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></label>
-      <PopCombobox pops={pops.map((p) => ({ id: p.id, name: p.name }))} />
-      <label className="grid gap-1 text-sm">Endereço de gerência (opcional)<input name="mgmt_address" maxLength={45} autoComplete="off" spellCheck={false} inputMode="text" className={`${field} font-mono`} placeholder="ex.: 10.20.30.40" />
-        <span className="text-xs text-muted">{ADDRESS_HELP}</span></label>
-      <label className="grid gap-1 text-sm">Versão do SNMP (opcional)<select name="snmp_version" className={field}><option value="">Não informar</option>{SNMP_VERSIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+    <form method="post" action="/bff/frota/olts" onSubmit={(e) => void onSubmit(e)} className="grid gap-x-3 gap-y-2 md:grid-cols-6">
+      <label className="grid gap-1 text-sm md:col-span-2">Nome da OLT<input name="name" required minLength={2} maxLength={60} className={field} placeholder="ex.: OLT-CENTRO-01" /></label>
+      <label className="grid gap-1 text-sm md:col-span-2">Fabricante<select name="vendor" required value={vendor} onChange={(e) => setVendor(e.target.value)} className={field}>{FLEET_VENDORS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+      <label className="grid gap-1 text-sm md:col-span-2">Edge que vai coletar<select name="edge_id" required className={field}>{edges.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></label>
+      {!EDGE_VENDORS.includes(vendor) && <p className="text-xs text-muted md:col-span-6" data-testid="frota-fabricante-aviso">{VENDOR_WARNING}</p>}
+      <div className="md:col-span-2"><PopCombobox pops={pops.map((p) => ({ id: p.id, name: p.name }))} /></div>
+      <label className="grid gap-1 text-sm md:col-span-2">Endereço de gerência (opcional)<input name="mgmt_address" maxLength={45} autoComplete="off" spellCheck={false} inputMode="text" className={`${field} font-mono`} placeholder="ex.: 10.20.30.40" /></label>
+      <label className="grid gap-1 text-sm md:col-span-2">Versão do SNMP (opcional)<select name="snmp_version" className={field}><option value="">Não informar</option>{SNMP_VERSIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
       <ConnectionFields onChange={onConn} defaults={{ protocol: null, port: null, transport: "cli", snmp_port: null, host_key_sha256: null, ssh_mode: "exec", legacy_ssh: false }} />
       {showSecrets && (
-        <fieldset className="grid gap-3 md:col-span-2 md:grid-cols-2" data-testid="frota-segredos">
+        <fieldset className="grid gap-x-3 gap-y-2 md:col-span-6 md:grid-cols-6" data-testid="frota-segredos">
           <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">{snmpSelected ? "Community SNMP" : "Login e senha"} (cifrados neste navegador antes de sair)</legend>
           {snmpSelected ? (
-            <label className="grid gap-1 text-sm">Community SNMP (v2c)<input ref={commRef} type="password" autoComplete="off" spellCheck={false} maxLength={64} data-lpignore="true" data-1p-ignore data-testid="frota-community" className={`${field} font-mono`} /></label>
+            <label className="grid gap-1 text-sm md:col-span-3">Community SNMP (v2c)<input ref={commRef} type="password" autoComplete="off" spellCheck={false} maxLength={64} data-lpignore="true" data-1p-ignore data-testid="frota-community" className={`${field} font-mono`} /></label>
           ) : (
             <>
-              <label className="grid gap-1 text-sm">Login da OLT<input ref={userRef} type="password" autoComplete="off" spellCheck={false} maxLength={64} data-lpignore="true" data-1p-ignore data-testid="frota-login" className={`${field} font-mono`} /></label>
-              <label className="grid gap-1 text-sm">Senha da OLT<input ref={passRef} type="password" autoComplete="new-password" spellCheck={false} maxLength={128} data-lpignore="true" data-1p-ignore data-testid="frota-senha" className={`${field} font-mono`} /></label>
+              <label className="grid gap-1 text-sm md:col-span-3">Login da OLT<input ref={userRef} type="password" autoComplete="off" spellCheck={false} maxLength={64} data-lpignore="true" data-1p-ignore data-testid="frota-login" className={`${field} font-mono`} /></label>
+              <label className="grid gap-1 text-sm md:col-span-3">Senha da OLT<input ref={passRef} type="password" autoComplete="new-password" spellCheck={false} maxLength={128} data-lpignore="true" data-1p-ignore data-testid="frota-senha" className={`${field} font-mono`} /></label>
             </>
           )}
-          <p className="text-xs text-muted md:col-span-2">Cifrado com a chave pública do Edge: a nuvem só guarda e repassa texto cifrado e nunca o devolve. Os campos são apagados ao enviar. Isto <strong>não troca a senha na OLT</strong>; só entrega a cópia que o Edge usa. Telnet não tem senha aqui.</p>
         </fieldset>
       )}
-      <label className="grid gap-1 text-sm">Rótulo (opcional)<input name="label" maxLength={80} className={field} /></label>
-      <label className="grid gap-1 text-sm">Nome da credencial no Edge (opcional)<input name="credential_ref" maxLength={64} autoComplete="off" spellCheck={false} className={`${field} font-mono`} placeholder="ex.: olt-centro-01" />
-        <span className="text-xs text-muted">{CRED_HELP}</span></label>
-      <div className="flex flex-wrap items-center gap-3 md:col-span-2">
+      <label className="grid gap-1 text-sm md:col-span-3">Rótulo (opcional)<input name="label" maxLength={80} className={field} /></label>
+      <label className="grid gap-1 text-sm md:col-span-3">Nome da credencial no Edge (opcional)<input name="credential_ref" maxLength={64} autoComplete="off" spellCheck={false} className={`${field} font-mono`} placeholder="ex.: olt-centro-01" /></label>
+      <FormHelp>
+        <p><strong>Endereço.</strong> {ADDRESS_HELP}</p>
+        <p><strong>Credencial.</strong> {CRED_HELP}</p>
+        {showSecrets && <p><strong>Login, senha e community.</strong> Cifrados com a chave pública do Edge: a nuvem só guarda e repassa texto cifrado e nunca o devolve. Os campos são apagados ao enviar. Isto não troca a senha na OLT; só entrega a cópia que o Edge usa. Telnet não tem senha aqui.</p>}
+      </FormHelp>
+      <div className="flex flex-wrap items-center gap-2 md:col-span-6">
         {provisionOn && sealOk && sshSelected && <button type="submit" name="acao" value="tudo" data-testid="frota-cadastrar-tudo" className="min-h-touch rounded-btn bg-accent px-4 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60" disabled={none || busy}>{busy ? "Enviando…" : secretsOn ? "Cadastrar e enviar tudo ao Edge" : "Cadastrar e enviar a conexão ao Edge"}</button>}
         {provisionOn && <button type="submit" name="acao" value="assistente" data-testid="frota-cadastrar-continuar" className="min-h-touch rounded-btn border border-accent px-4 text-sm font-medium text-accent hover:bg-bg disabled:opacity-60" disabled={none || busy}>{busy ? "Cadastrando…" : "Cadastrar e continuar"}</button>}
         <button type="submit" data-testid="frota-cadastrar" className="min-h-touch rounded-btn border border-line px-4 text-sm hover:bg-bg disabled:opacity-60" disabled={none || busy}>Cadastrar OLT</button>
@@ -185,7 +188,7 @@ export function OltRegisterForm({ edges, pops, secretsOn, provisionOn }: { edges
         {none && <span className="ml-3 text-xs text-muted">Nenhum Edge disponível.</span>}
       </div>
       {prog && (
-        <ol className="grid gap-1 rounded-btn border border-line p-3 text-sm md:col-span-2" aria-label="Progresso do cadastro" data-testid="frota-progresso">
+        <ol className="grid gap-1 rounded-btn border border-line p-3 text-sm md:col-span-6" aria-label="Progresso do cadastro" data-testid="frota-progresso">
           {prog.map((p, n) => (
             <li key={p.key} data-testid={`frota-progresso-${p.key}`} data-state={p.state}>
               <span className={`font-medium ${TONE[p.state]}`}><span aria-hidden>{MARK[p.state]} </span>{n + 1}. {p.label}</span>
@@ -193,15 +196,15 @@ export function OltRegisterForm({ edges, pops, secretsOn, provisionOn }: { edges
             </li>))}
         </ol>
       )}
-      {failedId && !busy && <p className="text-sm md:col-span-2" data-testid="frota-progresso-abrir">A OLT foi cadastrada. <Link href={`/rede/frota/${failedId}#passos`} className="text-accent underline underline-offset-2">Abrir a OLT</Link> para reenviar o passo que faltou, sem refazer os outros.</p>}
+      {failedId && !busy && <p className="text-sm md:col-span-6" data-testid="frota-progresso-abrir">A OLT foi cadastrada. <Link href={`/rede/frota/${failedId}#passos`} className="text-accent underline underline-offset-2">Abrir a OLT</Link> para reenviar o passo que faltou, sem refazer os outros.</p>}
       {done && (
-        <div className="grid gap-1 rounded-btn border border-accent px-3 py-2 text-sm md:col-span-2" data-testid="frota-progresso-fim">
+        <div className="grid gap-1 rounded-btn border border-accent px-3 py-2 text-sm md:col-span-6" data-testid="frota-progresso-fim">
           <p><strong>Tudo enviado.</strong> Falta só a confirmação no Edge. No servidor do Edge, quem o administra roda:</p>
           <code className="select-all break-all rounded-btn bg-bg px-2 py-1 font-mono text-xs" data-testid="frota-progresso-comando">{TRUST_COMMAND(done.name)}</code>
           <p className="text-xs text-muted">Depois disso o Edge conecta e a OLT sai de “Aguardando confirmação”. Acompanhe e teste em <Link href={`/rede/frota/${done.id}#passos`} className="text-accent underline underline-offset-2">{done.name}</Link>.</p>
         </div>
       )}
-      <div aria-live="polite" className="md:col-span-2" data-testid="frota-cadastro-msg">{err && <p role="alert" className="rounded-btn border border-danger px-3 py-2 text-sm text-danger">{err}</p>}</div>
+      <div aria-live="polite" className="md:col-span-6" data-testid="frota-cadastro-msg">{err && <p role="alert" className="rounded-btn border border-danger px-3 py-2 text-sm text-danger">{err}</p>}</div>
     </form>
   );
 }

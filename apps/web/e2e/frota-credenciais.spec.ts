@@ -101,6 +101,7 @@ test("credenciais: o texto claro nunca sai do navegador; o Edge de teste abre o 
     expect(await passwordInputs.nth(i).getAttribute("autocomplete")).toMatch(/^(off|new-password)$/);
   }
   expect(await page.locator("form[data-testid=cred-form]").getAttribute("action")).toBeNull();
+  await page.setViewportSize({ width: 1280, height: 2600 });   // a análise vê a página inteira: um campo na borda da janela de 720 px não conta como "parcialmente coberto"
   const axeForm = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
   expect(axeForm.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(" || ")}`)).toEqual([]);
   for (const el of await form.locator("input, button").all()) {   // alvos >= 24 px (WCAG 2.2 AA)

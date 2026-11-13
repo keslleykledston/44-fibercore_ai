@@ -39,8 +39,8 @@ export function PopCombobox({ pops, defaultName = "", label = "Site / POP", test
             <li key={o.key} id={`${base}-o${i}`} role="option" aria-selected={i === active} data-testid={o.add ? "pop-adicionar" : "pop-opcao"}
               onMouseDown={(e) => { e.preventDefault(); o.pick(); }} className={`flex min-h-touch cursor-pointer items-center px-3 py-2 ${i === active ? "bg-surface-2" : ""} ${o.add ? "font-medium text-accent" : ""}`}>{o.label}</li>))}
       </ul>
-      <span className="text-xs text-muted" data-testid="pop-estado" aria-live="polite">
-        {!text.trim() ? "Sem site." : choice.id ? "Site existente." : choice.create ? `Novo site: “${choice.typed}” será criado ao salvar.` : ""}
+      <span className="text-xs text-muted empty:hidden" data-testid="pop-estado" aria-live="polite">
+        {!text.trim() ? "" : choice.id ? "Site existente." : choice.create ? `Novo site: “${choice.typed}” será criado ao salvar.` : ""}
       </span>
     </div>
   );
