@@ -264,7 +264,7 @@ def test_the_list_has_counts_and_labels_only(client, operator, migrated, seed, i
     assert ls.status_code == 200 and ls.headers["cache-control"] == "no-store"
     items = ls.json()["items"]
     mine = next(i for i in items if i["id"] == tid)
-    assert set(mine) == {"id", "name", "status", "created_at", "edges", "olts", "onus", "created_by", "created_via", "invite_state", "api_trail"}
+    assert set(mine) == {"id", "name", "status", "created_at", "edges", "olts", "onus", "edges_total", "edges_online", "olts_stale", "last_heartbeat_at", "flags_on", "created_by", "created_via", "invite_state", "api_trail"}
     assert (mine["name"], mine["status"], mine["edges"], mine["olts"], mine["onus"], mine["invite_state"], mine["created_via"], mine["api_trail"]) == (body["name"], "active", 0, 0, 0, "pending", "screen", True)
     assert mine["created_by"] == f"Pessoa {operator['email'][:6]}"
     cli = next(i for i in items if i["name"].startswith("Pelo CLI"))
@@ -274,7 +274,7 @@ def test_the_list_has_counts_and_labels_only(client, operator, migrated, seed, i
     blob = str(ls.json())
     assert "@" not in blob, "no e-mail address (member, invitee or subscriber) is ever listed"
     for tenant_key in ("A", "B"):
-        assert all(k in {"id", "name", "status", "created_at", "edges", "olts", "onus", "created_by", "created_via", "invite_state", "api_trail"} for k in next(i for i in items if i["id"] == str(seed[tenant_key])))
+        assert all(k in {"id", "name", "status", "created_at", "edges", "olts", "onus", "edges_total", "edges_online", "olts_stale", "last_heartbeat_at", "flags_on", "created_by", "created_via", "invite_state", "api_trail"} for k in next(i for i in items if i["id"] == str(seed[tenant_key])))
 
 
 def test_platform_status_tells_only_the_callers_own_standing(client, make, operator, inv):

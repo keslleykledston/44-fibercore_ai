@@ -590,7 +590,7 @@ def test_the_platform_list_is_the_only_cross_organization_view_and_has_labels_an
     for o in (a, b):
         row = mine[str(o.tid)]
         assert (row["edges"], row["olts"], row["onus"]) == (1, 2, 2)
-        assert set(row) == {"id", "name", "status", "created_at", "edges", "olts", "onus", "created_by", "created_via", "invite_state", "api_trail"}
+        assert set(row) == {"id", "name", "status", "created_at", "edges", "olts", "onus", "edges_total", "edges_online", "olts_stale", "last_heartbeat_at", "flags_on", "created_by", "created_via", "invite_state", "api_trail"}
     blob = json.dumps(ls.json())
     for o in (a, b):       # no serial, e-mail, address, OLT name or id of the inside of an organization
         assert "HWTC" not in blob and f"adm.{o.tag}" not in blob and o.snap_olt not in blob and o.fleet_olt not in blob and "10.70.0.9" not in blob and "10.71.0.9" not in blob

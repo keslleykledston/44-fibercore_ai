@@ -249,6 +249,10 @@
 | GET | `/v1/platform/modules` | (sessão válida, sem permissão) |
 | GET | `/v1/platform/organizations` | `platform:organizations` |
 | POST | `/v1/platform/organizations` | `platform:organizations` |
+| GET | `/v1/platform/organizations/{tenant_id}` | `platform:organizations` |
+| PUT | `/v1/platform/organizations/{tenant_id}/features/{feature}` | `platform:organizations` |
+| POST | `/v1/platform/organizations/{tenant_id}/rename` | `platform:organizations` |
+| POST | `/v1/platform/organizations/{tenant_id}/status` | `platform:organizations` |
 | GET | `/v1/platform/status` | (autentica o token da própria conta) |
 | GET | `/v1/platform/versions` | (sessão válida, sem permissão) |
 | GET | `/v1/pops` | `fleet:read` |

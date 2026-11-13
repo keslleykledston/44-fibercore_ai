@@ -37,6 +37,9 @@ STATUS = {
     "organization_name_taken": (409, "organization_name_taken"), "organization_rate_limited": (429, "organization_rate_limited"),
     "organization_name_invalid": (422, "organization_name_invalid"), "organization_email_invalid": (422, "organization_email_invalid"),
     "organization_admin_name_invalid": (422, "organization_admin_name_invalid"), "organization_cursor_invalid": (422, "organization_cursor_invalid"),
+    # ADR-0047 (migration 0054)
+    "organization_not_found": (404, "organization_not_found"), "organization_status_invalid": (422, "organization_status_invalid"),
+    "organization_reason_invalid": (422, "organization_reason_invalid"), "feature_invalid": (422, "feature_invalid"), "feature_state_invalid": (422, "feature_state_invalid"),
 }
 
 
@@ -122,5 +125,102 @@ def list_organizations(response: Response, limit: int = Query(100, ge=1, le=200)
         raise mapped from exc
     return {"total": res["total"], "next": res["next"], "items": [{
         "id": r["tenant_id"], "name": r["name"], "status": r["status"], "created_at": r["created_at"], "edges": r["edges"], "olts": r["olts"], "onus": r["onus"],
+        "edges_total": r["edges_total"], "edges_online": r["edges_online"], "olts_stale": r["olts_stale"], "last_heartbeat_at": r["last_heartbeat_at"], "flags_on": r["flags_on"],
         "created_by": r["created_by_name"], "created_via": r["created_via"], "invite_state": r["invite_state"], "api_trail": r["api_trail"],
     } for r in res["items"]]}
+
+
+
+# ---- ADR-0047 fatia A: ciclo de vida, flags e detalhe -------------------------------------------------------------------------------------------------------------------------------
+
+# Flags that WRITE to the network or hand decisions to an AI: the screen shows them and can switch them OFF (or back to the default, which is off), never ON. The owner's CLI turns them on.
+OWNER_ONLY_FEATURES = frozenset({"bench_writes", "smart_diagnostics_active_tests", "smart_diagnostics_remediation", "quality_active_tests", "smart_diagnostics_copilot"})
+
+
+class StatusIn(BaseModel):
+    status: str = Field(pattern="^(active|suspended)$")
+    reason: str = Field(min_length=1, max_length=400)       # the database function trims and enforces 3-200
+
+
+class RenameIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+
+
+class FeatureIn(BaseModel):
+    state: str = Field(pattern="^(on|off|default)$")
+    reason: str = Field(min_length=1, max_length=400)
+
+
+def _call(op: PlatformOperator, kind: str, route: str, tenant_id: UUID, sql: str, params: dict, request_id: UUID) -> dict:
+    """One platform change: the database function (the only writer), then, in the SAME transaction and inside the organization's own scope, the route's half of the audit pair."""
+    try:
+        with scoped_connection(get_engine(), user_id=op.id) as conn:
+            res = conn.execute(text(sql), {"a": op.id, "t": tenant_id, "r": request_id, **params}).scalar_one()
+            conn.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(tenant_id)})
+            conn.execute(
+                text("INSERT INTO audit_log (tenant_id, actor_id, action, target_type, target_id, evidence_redacted) "
+                     "VALUES (:t, :a, 'platform.change.requested', 'tenant', :ti, CAST(:e AS jsonb))"),
+                {"t": tenant_id, "a": op.id, "ti": str(tenant_id), "e": json.dumps({"request_id": str(request_id), "kind": kind, "route": route})},
+            )
+    except DBAPIError as exc:
+        mapped = _map(exc)
+        if mapped is None:
+            raise
+        raise mapped from exc
+    return res
+
+
+@router.get("/v1/platform/organizations/{tenant_id}")
+def organization_detail(tenant_id: UUID, response: Response, op: PlatformOperator = Depends(require_platform_operator(PERM))) -> dict:
+    """State, health, flag overrides and the platform history of ONE organization. Counts and labels only (same rule as the list)."""
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        with scoped_connection(get_engine(), user_id=op.id) as conn:
+            res = conn.execute(text("SELECT public.platform_organization_detail(:a, :t)"), {"a": op.id, "t": tenant_id}).scalar_one()
+    except DBAPIError as exc:
+        mapped = _map(exc)
+        if mapped is None:
+            raise
+        raise mapped from exc
+    from app.core.features import FEATURES
+    over = {f["feature"]: f for f in res["features"]}
+    res["catalog"] = [{"feature": name, "default": default, "enabled": over[name]["enabled"] if name in over else default, "source": "tenant" if name in over else "default",
+                       "owner_only": name in OWNER_ONLY_FEATURES} for name, default in FEATURES.items()]
+    res["unknown_overrides"] = sorted(n for n in over if n not in FEATURES)
+    return res
+
+
+@router.post("/v1/platform/organizations/{tenant_id}/status")
+def organization_status(tenant_id: UUID, body: StatusIn, response: Response, op: PlatformOperator = Depends(require_platform_operator(PERM))) -> dict:
+    response.headers["Cache-Control"] = "no-store"
+    return _call(op, "status", "POST /v1/platform/organizations/{id}/status", tenant_id, "SELECT public.platform_set_organization_status(:a, :t, :s, :why, :r)",
+                 {"s": body.status, "why": body.reason}, uuid4())
+
+
+@router.post("/v1/platform/organizations/{tenant_id}/rename")
+def organization_rename(tenant_id: UUID, body: RenameIn, response: Response, op: PlatformOperator = Depends(require_platform_operator(PERM))) -> dict:
+    response.headers["Cache-Control"] = "no-store"
+    return _call(op, "rename", "POST /v1/platform/organizations/{id}/rename", tenant_id, "SELECT public.platform_rename_organization(:a, :t, :n, :r)", {"n": body.name}, uuid4())
+
+
+@router.put("/v1/platform/organizations/{tenant_id}/features/{feature}")
+def organization_feature(tenant_id: UUID, feature: str, body: FeatureIn, response: Response, op: PlatformOperator = Depends(require_platform_operator(PERM))) -> dict:
+    """Switch one flag of one organization. The catalog lives in code (the function only checks the shape): unknown name 422; the write-to-network flags (`OWNER_ONLY_FEATURES`) can be turned
+    OFF here but never ON (403 `owner_only_feature`); a flag whose Edge-side support does not exist yet is refused exactly like the owner's CLI refuses it."""
+    from app.core.features import FEATURES
+    response.headers["Cache-Control"] = "no-store"
+    if feature not in FEATURES:
+        raise HTTPException(422, "unknown_feature")
+    if body.state == "on":
+        if feature in OWNER_ONLY_FEATURES:
+            raise HTTPException(403, "owner_only_feature")
+        if feature == "bench_writes":
+            from app.core import bench
+            if not bench.EDGE_SUPPORT:
+                raise HTTPException(422, "feature_precondition")
+        if feature == "olt_query":
+            from app.core import olt_query
+            if not olt_query.EDGE_SUPPORT:
+                raise HTTPException(422, "feature_precondition")
+    return _call(op, "feature", "PUT /v1/platform/organizations/{id}/features/{feature}", tenant_id,
+                 "SELECT public.platform_set_feature(:a, :t, :f, :s, :why, :r)", {"f": feature, "s": body.state, "why": body.reason}, uuid4())

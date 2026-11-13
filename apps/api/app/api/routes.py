@@ -187,8 +187,9 @@ def my_workspaces(
     uid = authenticated_user_id(authorization, settings)
     with scoped_connection(get_engine(), user_id=uid) as conn:
         roles = active_roles(conn, uid)  # memberships + live platform delegations
-        rows = conn.execute(text("SELECT id, name FROM tenants WHERE id = ANY(:ids) AND status = 'active' ORDER BY name"), {"ids": list(roles)})
-        return [{"tenant_id": str(r.id), "name": r.name, "role": roles[r.id]} for r in rows]
+        rows = conn.execute(text("SELECT id, name, status FROM tenants WHERE id = ANY(:ids) ORDER BY name"), {"ids": list(roles)})
+        # ADR-0047 D1: a suspended organization stays in the list, flagged, so the person sees WHY nothing opens (every /v1 call of it answers 403 `organization_suspended`)
+        return [{"tenant_id": str(r.id), "name": r.name, "role": roles[r.id], "suspended": r.status != "active"} for r in rows]
 
 
 @router.get("/v1/auth/me")

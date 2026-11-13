@@ -64,6 +64,14 @@ def authenticated_user_id(authorization: str | None, settings: Settings) -> UUID
     return claims.sub
 
 
+def _assert_org_active(conn, tenant_id: UUID) -> None:
+    """ADR-0047 D1: a suspended organization answers nothing (users AND the Edge's service account), checked on EVERY request, so a reactivation applies at once and no token is revoked.
+    A missing row counts as not active (fail closed). Login stays open (the account is not suspended, the organization is)."""
+    status = conn.execute(text("SELECT status FROM tenants WHERE id = :t"), {"t": tenant_id}).scalar()
+    if status != "active":
+        raise HTTPException(403, "organization_suspended")
+
+
 def get_principal(
     request: Request,
     authorization: str | None = Header(default=None),
@@ -86,6 +94,8 @@ def get_principal(
                 text("SELECT role, is_active, edge_id FROM service_accounts WHERE id = :i AND tenant_id = :t"),
                 {"i": claims.sub, "t": claims.tenant_id},
             ).first()
+            if row and row.is_active:
+                _assert_org_active(conn, claims.tenant_id)
         if not row or not row.is_active:
             raise _unauth()
         return Principal(claims.sub, "service", claims.tenant_id, row.role, row.edge_id)
@@ -109,6 +119,8 @@ def get_principal(
         raise HTTPException(400, "X-Workspace-ID required")
     if tid not in memberships:
         raise HTTPException(404, "tenant not found")
+    with scoped_connection(engine, user_id=claims.sub, tenant_id=tid) as conn:   # only after the membership was validated above (scoped_connection's own rule)
+        _assert_org_active(conn, tid)
     return Principal(claims.sub, "user", tid, memberships[tid], mfa_at=claims.mfa_at)
 
 

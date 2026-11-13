@@ -81,6 +81,8 @@ def main(argv: list[str] | None = None) -> None:
     otf.add_argument("tenant_id"); otf.add_argument("olt_id")
     fs = sub.add_parser("feature-set", help="turn a per-tenant feature flag on/off (owner-only; overrides the code default)")
     fs.add_argument("tenant_id"); fs.add_argument("feature"); fs.add_argument("state", choices=["on", "off", "default"])
+    os_ = sub.add_parser("org-status", help="ADR-0047 break-glass: suspend/reactivate an organization from the host (owner-only; the screen does the same for the platform operator)")
+    os_.add_argument("tenant_id"); os_.add_argument("status", choices=["active", "suspended"]); os_.add_argument("--reason", required=True, help="3-200 characters; goes to the audit trail")
     oc = sub.add_parser("ont-config-mock", help="ADR-0034: write a SYNTHETIC configuration profile for a CPE (source 'mock', labelled synthetic; lab/demo only; owner-only)")
     oc.add_argument("tenant_id"); oc.add_argument("cpe_id"); oc.add_argument("profile", help="dualband | multi_ssid | no_wifi | inactive_5g | clear")
     ob = sub.add_parser("olt-board-mock", help="SYNTHETIC board inventory (`olt.board`, source 'mock') for a DEMO OLT so the front-panel screen can be shown without equipment (demo/e2e only: refuses any tenant that is not the demonstration tenant and any OLT that already has an inventory read from the equipment; owner-only)")
@@ -516,6 +518,25 @@ def main(argv: list[str] | None = None) -> None:
                 {"t": a.tenant_id, "p": json.dumps({"feature": a.feature, "state": a.state})},
             )
             print(f"feature {a.feature}: {a.state}")
+        elif a.cmd == "org-status":
+            reason = " ".join(a.reason.split())
+            if not 3 <= len(reason) <= 200:
+                sys.exit("reason must have 3 to 200 characters")
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            cur = c.execute(text("SELECT status FROM tenants WHERE id = :t FOR UPDATE"), {"t": a.tenant_id}).scalar()
+            if cur is None:
+                sys.exit("no such organization")
+            if cur == a.status:
+                print(f"organization already {cur}")
+            else:
+                c.execute(text("UPDATE tenants SET status = :s WHERE id = :t"), {"s": a.status, "t": a.tenant_id})
+                c.execute(
+                    text("INSERT INTO audit_log (tenant_id, actor_id, action, target_type, target_id, evidence_redacted) "
+                         "VALUES (:t, NULL, :act, 'tenant', :t, CAST(:e AS jsonb))"),
+                    {"t": a.tenant_id, "act": "platform.organization.suspended" if a.status == "suspended" else "platform.organization.reactivated",
+                     "e": json.dumps({"reason": reason, "from": cur, "to": a.status, "via": "cli"})},
+                )
+                print(f"organization {cur} -> {a.status}")
         elif a.cmd == "set-password":
             h = hash_secret(_password(a.password_env))
             uid = c.execute(text("SELECT id FROM users_global WHERE lower(email)=lower(:e)"), {"e": a.email}).scalar()
