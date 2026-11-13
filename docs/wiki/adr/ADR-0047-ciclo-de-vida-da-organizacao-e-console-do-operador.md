@@ -1,0 +1,83 @@
+# ADR-0047: Ciclo de vida da organização, console do operador e roadmap multi-organização (sem revenda, sem cobrança)
+
+Status: Accepted para a **fatia A** (D1 e D2); **Proposed** para as fatias B a F, que exigem ADR ou emenda própria antes da construção | Data: 2026-11-13 | Owner: Claude Code (implementação), Codex (revisão)
+
+Origem: levantamento de lacunas multi-organização (2026-11-13) e decisões do responsável no mesmo dia: **revenda NÃO; cobrança NÃO (por enquanto)**; ordem "escreva o ADR, faça push e aplique". Estende o ADR-0046 D1 (organização como limite de isolamento, criada por operador da plataforma) e fecha o que ele deixou "fora desta fatia" (suspensão de organização pela tela). Não altera o ADR-0031 (RBAC); a fatia D só o reabre.
+
+## Contexto
+
+Fatos do código (verificados em 2026-11-13):
+- **Organização = tenant**, RLS forçada, criada pela tela do operador (`is_platform_operator`, MFA recente, função `SECURITY DEFINER`, migração 0053). Existe isolamento provado por suíte de duas organizações.
+- **`tenants.status` já existe** (`active|suspended`, migração 0001), mas **nada o impõe**: só a lista de workspaces do usuário filtra `status = 'active'`. Uma organização "suspensa" continua autenticando, ingerindo do Edge e executando jobs. Suspender é hoje "do dono (CLI)" e, na prática, não faz nada.
+- **Flags por organização** (`tenant_features`, 24 recursos) só mudam pela CLI do dono (`feature-set`), que recusa `bench_writes` e `olt_query` enquanto o suporte do Edge não existe.
+- **Console do operador**: a lista (`platform_list_organizations`) mostra nome, estado, nº de Edges, OLTs e ONUs, criador e estado do convite. Não mostra saúde (Edge sem heartbeat, OLT sem coleta) nem as flags.
+- Sem planos, cotas, faturamento, e-mail, SSO, tokens de API, webhooks ou white-label (zero no código).
+
+## Decisão
+
+### D0 — Fora de escopo (decisão do responsável)
+- **Revenda / hierarquia de organizações: NÃO.** O modelo continua plano (uma organização não tem mãe nem filhas). Nenhuma coluna, rota ou tela prepara isso.
+- **Cobrança, planos comerciais e medição para faturamento: NÃO, por enquanto.** Revisitar só por ADR próprio. Limites técnicos de proteção (D3) **não** são planos.
+
+### D1 — Suspender, reativar e renomear organização, com imposição real (fatia A)
+- **Imposição por requisição.** `get_principal` passa a recusar com **403 `organization_suspended`** qualquer chamada (usuário **e** conta de serviço do Edge) cuja organização selecionada tenha `status <> 'active'`, **depois** de resolver a organização e **antes** de devolver o principal (a checagem lê `tenants` na mesma conexão; sem cache, então a reativação vale na hora). Consequências: login continua possível (o usuário vê o estado), mas nada de `/v1` da organização responde; o Edge recebe 403 e retém a fila local, retomando sozinho ao reativar; nenhum token precisa ser revogado. A lista de workspaces já esconde a organização suspensa; passa a trazer `suspended` para o usuário ver o motivo "organização suspensa" em vez de um erro mudo.
+- **Quem pode:** só operador da plataforma, conta ativa, **MFA recente**, permissão `platform:organizations`, por **funções `SECURITY DEFINER`** no mesmo padrão da 0053 (dona = dona do esquema, `search_path` fixo, `REVOKE ALL FROM PUBLIC`, `GRANT EXECUTE` só à role da aplicação, ator rechecado dentro da função): `platform_set_organization_status(p_actor, p_tenant, p_status, p_reason, p_request)` e `platform_rename_organization(p_actor, p_tenant, p_name, p_request)`. A role da aplicação **não** ganha `UPDATE` em `tenants`.
+- **Motivo obrigatório** (3 a 200 caracteres, texto livre sem dado de cliente) para suspender e reativar. **Idempotência:** suspender uma suspensa (ou reativar uma ativa) responde `200` com `changed:false` e não grava auditoria nova. Organização inexistente: `404` sem revelar nada além disso.
+- **Auditoria em par** (padrão 0053): a função grava `platform.organization.suspended|reactivated|renamed` na trilha **da organização** (`actor_id` = operador, motivo, `request_id`, estado antes e depois) e a rota grava `platform.organization.status_requested` no mesmo `request_id`; a métrica `fibercore_organizations_without_api_trail` passa a contar também esses pares.
+- **Rename:** o nome segue as regras de 2 a 60 caracteres e unicidade (sem diferenciar caixa) da criação. O `id` é imutável.
+- **O que a suspensão NÃO faz:** não apaga nem altera dado; não derruba conexões já abertas além do próximo pedido; não para workers internos (relay, sweeper) que só movem o que já existe; não desativa contas. Jobs em andamento terminam por TTL/sweeper, porque o Edge deixa de puxar trabalho.
+- **Encerrar organização (exportar e apagar, LGPD): FORA desta fatia** (fatia E). Exige ADR próprio (formato e assinatura do pacote, janela de retenção, irreversibilidade, o que acontece com a trilha de auditoria).
+- **Reserva de segurança (quebra-vidro):** CLI `org-status <tenant> active|suspended --reason …` do dono, para o caso de nenhum operador conseguir entrar (mesma função, ator = conta operadora nomeada).
+
+### D2 — Console do operador: saúde, flags e histórico por organização (fatia A)
+- **Lista** (`/plataforma/organizacoes`): ganha por organização `edges_online` e `edges_total` (regra de heartbeat já usada em `/v1/edges`), `olts_stale` (OLTs sem coleta dentro de 2 ciclos), `last_heartbeat_at`, `flags_on` (contagem) e o estado (`active|suspended`) com o botão de suspender/reativar. **Somente contagens e rótulos**: nunca linha de cliente final, assinante, ONU, serial, endereço ou nome de OLT.
+- **Detalhe** (`/plataforma/organizacoes/{id}`): estado e histórico de mudanças de estado/nome/flags (da trilha de auditoria, só ações `platform.*`), tabela de flags da organização (nome, padrão, valor atual, origem `default|tenant`) com ligar, desligar e "voltar ao padrão".
+- **Flags pela tela:** função `platform_set_feature(p_actor, p_tenant, p_feature, p_state, p_reason, p_request)` (`SECURITY DEFINER`, mesmas travas, motivo obrigatório, auditoria em par `platform.feature.set`). O nome da flag é validado **no código** contra `FEATURES` (a função não conhece o catálogo; a rota é o único caminho e recusa nome desconhecido com `422`). **Duas listas no código:**
+  - `OWNER_ONLY_FEATURES` = flags de **escrita em rede ou de IA**: `bench_writes`, `smart_diagnostics_active_tests`, `smart_diagnostics_remediation`, `quality_active_tests`, `smart_diagnostics_copilot`. A tela **mostra** o valor e **nunca** liga; quem liga é a CLI do dono (como hoje). Tentar por API: `403 owner_only_feature`.
+  - Pré-condições do código (hoje `bench_writes` e `olt_query` dependem de `EDGE_SUPPORT`) valem **também** pela tela, com a mesma mensagem da CLI. As flags de pré-requisito de operação (`fleet_provision` exige `managed_olts` no Edge, `acs_registry` exige `nbi_cloud_id`) só ganham **aviso** na tela (a nuvem não enxerga a configuração local do Edge).
+- **Permissões:** `platform:organizations` cobre ler e agir (R3, nenhum papel de organização a tem). Leitura da lista/detalhe exige conta operadora ativa; **agir exige MFA recente**.
+- **Sem acesso a dados da organização:** o console não vira porta lateral. Entrar numa organização continua sendo só por membro real ou por delegação com prazo (ADR-0031 item 5).
+
+### D3 — Limites técnicos por organização, sem plano nem preço (fatia B, Proposed)
+Tabela `tenant_limits (tenant_id, max_edges, max_olts, max_members, updated_by, updated_at)` com **padrão no código** (ajustável pelo operador, nunca pela organização). Excedido ⇒ `409 limit_reached` em registrar Edge, cadastrar OLT e convidar membro; **nunca** apaga nem bloqueia o que já existe. Proteção do servidor e justiça de carga, não cobrança. Inclui rate limit de ingest **por organização** (hoje há só o global).
+
+### D4 — E-mail transacional (fatia C, Proposed; exige ADR/emenda de risco)
+SMTP configurado por **ambiente da plataforma**, não por organização. Eventos: convite, reset de senha e de MFA (aviso ao alvo), suspensão/reativação (aviso aos administradores). Sai pelo outbox (reaproveita relay), com modelo de texto fixo e **sem** dado de cliente final. O link de uso único (convite/reset) por e-mail precisa de decisão de risco própria (hoje é mostrado uma vez na tela). Sem alerta por e-mail até haver política de ruído.
+
+### D5 — RBAC com escopo por site/OLT (fatia D; reabre o ADR-0031 item 3)
+A decisão de 2026-10-30 ("DEPOIS") passa a ter posição na fila: **depois de A, B e C**. Papéis customizados continuam **NÃO** (ADR-0031 decisão 1). O desenho do item 3 (escopo como predicado de RLS, `app.scope`, inventário de rotas) vale sem mudança; esta ADR não o altera.
+
+### D6 — Política de segurança por organização (fatia D/E, Proposed)
+`tenant_security_policy` (MFA obrigatório por papel e duração de sessão) que **só pode apertar**, nunca afrouxar, o piso global (`FIBERCORE_MFA_REQUIRED_ROLES`, TTLs do ambiente). Falha fechada se a linha for ilegível.
+
+### D7 — API com tokens por organização, webhooks e SSO (fatia F, Proposed; ADR próprio cada)
+Fora desta decisão. **White-label: não planejado** (só se alguém pedir).
+
+## Ordem e fatias
+| Fatia | Conteúdo | Estado |
+|---|---|---|
+| **A** | D1 suspensão/reativação/renome com imposição + D2 console (saúde, flags, histórico) | **Accepted, construir agora** |
+| B | D3 limites técnicos por organização | Proposed |
+| C | D4 e-mail transacional | Proposed |
+| D | D5 escopo por site/OLT; D6 política por organização | Proposed |
+| E | Encerrar organização (exportar e apagar) | Proposed, ADR próprio |
+| F | API com tokens, webhooks, SSO | Proposed, ADR próprio |
+
+## Alternativas descartadas
+- **Impor a suspensão por política de RLS em todas as tabelas:** invasivo (dezenas de políticas) e deixa o login mudo; a checagem central em `get_principal` cobre usuário e Edge com um ponto só e mensagem clara. A RLS continua sendo a defesa de isolamento entre organizações; a suspensão é política de acesso.
+- **Revogar tokens ao suspender:** exige varrer sessões e contas de serviço e não é reversível sem novo login; a checagem por requisição é imediata nos dois sentidos.
+- **Dar `UPDATE` em `tenants` e `tenant_features` à role da aplicação:** uma falha da API permitiria alterar qualquer organização; as funções estreitas mantêm o contrato do ADR-0046 D1.
+- **Ligar flags de escrita pela tela:** uma sessão de operador comprometida ligaria escrita em rede; essas ficam só com a CLI do dono.
+- **Hierarquia/revenda e faturamento:** decisão do responsável (D0).
+
+## Riscos declarados
+- **R-A1 (herdado, ADR-0046 R-3):** o banco não prova que o operador iniciou a chamada; quem controla a API pode escolher `p_actor`. A auditoria em par e o MFA recente mitigam, não eliminam.
+- **R-A2:** um operador (ou conta de operador comprometida) pode **suspender qualquer organização** (disponibilidade). Mitigação: MFA recente, motivo obrigatório, auditoria visível ao administrador da organização, reversão imediata, quebra-vidro pela CLI. Aceito por ser o papel do operador.
+- **R-A3:** uma consulta a mais por requisição (`tenants.status`). Custo pequeno (chave primária); medir no p95 do e2e e na LAB.
+
+## Consequências e provas exigidas (fatia A)
+- Migração **0054** (3 funções `SECURITY DEFINER`, estendendo `platform_list_organizations` com saúde, sem `UPDATE` direto em `tenants`/`tenant_features` para a role da aplicação). Reversível (`DROP FUNCTION`; nenhuma coluna nova de dados).
+- Testes: suspensão bloqueia **usuário e Edge** (`403 organization_suspended`) e **não** afeta a outra organização (suíte de isolamento estendida); reativação restaura sem novo login; idempotência; motivo ausente `422`; não operador `403`; sem MFA recente `403`; role da aplicação sem `UPDATE`/`INSERT` em `tenants` e `tenant_features`; par de auditoria; renome duplicado `409`; flag desconhecida `422`; flag `OWNER_ONLY` `403` e pré-condição de `EDGE_SUPPORT` recusada; lista sem dado de cliente final (varredura de impressões digitais, como na suíte de isolamento).
+- Web: lista com estado e saúde, detalhe com flags e histórico, diálogo de motivo; `axe` e e2e; how-to da Central de Ajuda; aviso claro ao usuário de organização suspensa.
+- Rollback: reativar a organização (tela ou CLI); `alembic downgrade 0053` remove as funções; nada muda nos dados das organizações.
+- Fora desta fatia: tudo de B a F e a encerração de organização.
