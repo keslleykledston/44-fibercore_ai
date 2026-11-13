@@ -95,6 +95,9 @@ BEGIN
 END $$;
 """
 
+OWNER_ONLY = ("bench_writes", "smart_diagnostics_active_tests", "smart_diagnostics_remediation", "quality_active_tests", "smart_diagnostics_copilot")
+OWNER_ONLY_SQL = ", ".join(f"'{f}'" for f in OWNER_ONLY)
+
 SET_FEATURE = rf"""
 CREATE FUNCTION platform_set_feature(p_actor uuid, p_tenant uuid, p_feature text, p_state text, p_reason text, p_request_id uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
@@ -104,6 +107,9 @@ BEGIN
   IF p_request_id IS NULL THEN RAISE EXCEPTION 'request_id_required'; END IF;
   IF p_feature IS NULL OR p_feature !~ '^[a-z][a-z0-9_]{{1,63}}$' THEN RAISE EXCEPTION 'feature_invalid'; END IF;   -- the catalog of names lives in the route; only the shape is checked here
   IF p_state IS NULL OR p_state NOT IN ('on', 'off', 'default') THEN RAISE EXCEPTION 'feature_state_invalid'; END IF;
+  -- the flags that WRITE to the network or hand decisions to an AI are never turned ON from here, whoever calls (Codex r1, HIGH): the owner's CLI is the only way. Keep in step with
+  -- OWNER_ONLY_FEATURES in app/api/platform_orgs.py (a test compares the two lists)
+  IF p_state = 'on' AND p_feature IN ({OWNER_ONLY_SQL}) THEN RAISE EXCEPTION 'owner_only_feature'; END IF;
 {REASON_CHECK}
   prev := current_setting('app.tenant_id', true);
   PERFORM set_config('app.tenant_id', COALESCE(p_tenant::text, ''), true);

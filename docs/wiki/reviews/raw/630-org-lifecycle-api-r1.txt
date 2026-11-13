@@ -1,0 +1,53 @@
+Revisão adversarial — commit b066ec41
+Repositório: /data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore
+Escopo: ADR-0047 fatia A, arquivos solicitados e caminhos relacionados no código atual.
+Base comparada: git show b066ec41; código atual lido em 2026-11-13.
+Modo: somente leitura; nenhum teste executado.
+
+ACHADOS (severidade decrescente)
+
+1. HIGH — apps/api/alembic/versions/0054_platform_org_lifecycle.py:105, 228-229; apps/api/app/api/platform_orgs.py:136-137, 206-225
+Cenário concreto: quem consegue executar SQL como fibercore_app chama diretamente public.platform_set_feature(actor, tenant, 'bench_writes', 'on', reason, request_id). A função aceita qualquer nome com formato válido e concede EXECUTE à role da aplicação; a lista OWNER_ONLY_FEATURES só é aplicada na rota HTTP. A validação de ator na função consulta se o UUID informado é de uma operadora ativa com sessão/MFA recente, mas, conforme R-3 herdado e documentado na migration 0053 (linha 151-154), não prova que aquela pessoa iniciou esta chamada. Assim, SQLi/comprometimento do processo pode reaproveitar um ator válido e contornar a restrição da tela. O teste em test_platform_org_lifecycle.py:155-169 só demonstra que ator não operador falha; não testa uma chamada direta com ator operador. Fato: a função não conhece o catálogo e não impede esses nomes. Hipótese/condição: exploração exige execução SQL pelo principal da aplicação e satisfazer/forjar o argumento de ator conforme o limite R-3.
+Correção sugerida: mover catálogo e restrição owner-only para validação no banco, ou não conceder à role da API a operação privilegiada que deve ser exclusiva do CLI do owner. Se mantiver o desenho por risco aceito, documentar explicitamente que “owner-only” significa apenas “não pela tela”, e adicionar teste da chamada direta com ator operador para fixar o comportamento.
+
+2. MEDIUM — apps/api/app/cli.py:116-117; apps/api/alembic/versions/0054_platform_org_lifecycle.py:76-86
+Cenário concreto: enquanto uma renomeação valida nome sob o advisory lock global e atualiza o tenant, o comando legado create-tenant insere diretamente em tenants sem adquirir esse lock e sem validar o nome. Como a unicidade usada pela função é verificada por consulta (não há índice global de nome; índices vistos são por tenant/tabela), os dois caminhos podem criar organizações com nomes iguais, violando a regra de unicidade prometida pela renomeação/criação da tela. O lock coordena platform_create_organization e rename, mas não esse caminho de CLI.
+Correção sugerida: fazer create-tenant compartilhar o mesmo lock e a mesma normalização/verificação de nome (ou encaminhar criação para uma função comum); idealmente impor unicidade global normalizada no banco.
+
+3. MEDIUM — apps/api/app/cli.py:521-539; apps/api/alembic/versions/0054_platform_org_lifecycle.py:38-63
+Cenário concreto: org-status, caminho de quebra-vidro, não chama platform_set_organization_status: atualiza tenants diretamente, grava audit com actor_id NULL e evidência via=cli sem request_id e não insere events_outbox. Portanto, a transição por CLI não tem o mesmo contrato de auditoria/evento da função usada pela tela, nem fica atribuída à conta operadora nomeada como diz ADR-0047:31. A suspensão ainda é efetivada e a row lock serializa a alteração, mas consumidores do outbox e a trilha perdem a origem/ator; repetir estado igual não cria auditoria, conforme comportamento idempotente esperado.
+Correção sugerida: chamar a função SQL a partir da CLI e passar um ator explícito de quebra-vidro, com evidência de origem CLI; ou implementar e testar deliberadamente um contrato CLI equivalente que registre ator, request_id e evento.
+
+4. LOW — apps/api/app/api/routes.py:160-179; apps/api/app/api/deps.py:91-101
+Cenário concreto: depois de suspenso, quem possui o segredo válido de uma service account ainda pode chamar POST /v1/auth/service-token e receber um token 200. O token não permite avançar nas rotas operacionais: get_principal lê a organização e retorna 403 organization_suspended para service token antes de devolver o Principal. É uma emissão inútil durante a suspensão e pode confundir monitoramento/cliente Edge; não encontrei um bypass para rotas Edge por isso.
+Correção sugerida: se a intenção for impedir emissão enquanto suspensa, conferir status em service_login (sem mudar o login humano/workspaces que precisa exibir a suspensão).
+
+RESUMO POR ITEM SOLICITADO
+
+1. Isolamento, search_path, RLS e histórico:
+- Fato verificado: funções 0054 usam SECURITY DEFINER com SET search_path = pg_catalog, public e referências a objetos public qualificadas; EXECUTE é revogado de PUBLIC e concedido a fibercore_app. A função platform_set_feature fixa p_tenant em app.tenant_id para as escritas e restaura o valor anterior nos caminhos de retorno normal e idempotente (linhas 108-129). Falha SQL aborta a transação, e o uso via scoped_connection encerra/rollbacka a transação.
+- platform_scan adiciona SELECT em tenant_features à role que roda a migration (linha 222); consultas da função também filtram tenant_id nos dados dependentes. Não achei vazamento cross-tenant por search_path ou app.tenant_id nos caminhos examinados. O padrão de atribuição/ator falso segue a limitação R-3 da 0053, explicitamente herdada (0054 linhas 3-6).
+- História da função detail seleciona apenas ações platform.* definidas e constrói detail com reason/from/to/feature/name (linhas 157-165); não retorna as demais chaves de evidence_redacted como admin_email, request_id ou session_user. A lista e o detalhe retornam contagens/rótulos, não linhas de cliente.
+
+2. Contorno da suspensão:
+- get_principal aplica _assert_org_active tanto para service account quanto usuário (deps.py:91-124). As rotas /v1/edge encontradas usam require/get_principal, inclusive heartbeat, ingestão, jobs, secret delivery e relatórios Edge. Nenhum endpoint Edge protegido examinado evita o gate.
+- /v1/auth/token e /v1/auth/* são caminhos de conta/sessão sem seleção de workspace e permanecem acessíveis; /v1/auth/workspaces deliberadamente lista a organização marcada como suspensa (routes.py:131-192). service-token também emite token durante suspensão (achado LOW acima), mas esse token não passa do gate nas rotas por tenant.
+- Jobs já entregues ao Edge podem continuar a ser executados localmente: next_job emite envelope assinado e faz transição para DISPATCHED (jobs.py:330-461); suspender não cancela envelopes/dispatched ou conexões em voo. A chamada seguinte do Edge é negada e novos jobs não são entregues. O ADR-0047:29 aceita explicitamente que jobs em andamento terminem por TTL/sweeper; portanto tratei como limite aceito, não como achado.
+- Relay/outbox continua publicando eventos já persistidos (workers/relay.py:35-74), conforme o ADR diz que workers internos continuam; não encontrei nesse caminho uma execução de job de rede. A divergência relevante é que o CLI org-status não grava o evento (achado MEDIUM).
+- Delegação platform_support é resolvida a cada request (deps.py:105); a suspensão do tenant escolhido bloqueia o delegado igualmente. Não vi bypass pela delegação.
+
+3. Injeção, validação, corridas e idempotência:
+- Nome/motivo têm comprimento, trim/colapso de espaços e rejeitam caracteres de controle. UUIDs chegam tipados nas rotas e como uuid nos parâmetros das funções; estado tem lista fechada. Não achei interpolação SQL de input nesses novos caminhos.
+- Status e feature travam linha do tenant; rename trava a linha e um advisory lock compartilhado com a criação da tela. As mudanças de status/rename/feature se serializam pela row lock. A corrida com o create-tenant legado não é coberta, achado MEDIUM.
+- Idempotência de status/rename/feature é baseada no estado atual e retorna changed:false sem nova auditoria para estado já igual. request_id é obrigatório na função mas não é registrado como chave única/deduplicadora. Uma repetição antiga depois de uma transição inversa pode aplicar a ação novamente; não encontrei promessa de idempotência por request_id.
+- CLI status usa sua própria checagem e escrita, não a função comum; achado MEDIUM.
+
+4. OWNER_ONLY_FEATURES:
+- A rota impede ligar qualquer item do conjunto OWNER_ONLY_FEATURES (platform_orgs.py:214-216); permite desligar/default e rejeita nome desconhecido pela tela.
+- Não é impossível ligar pela role da aplicação: função é EXECUTE para fibercore_app (migration:228-229) e valida apenas regex/state (linha 105-106), sem consultar catálogo/OWNER_ONLY_FEATURES. A conclusão de aceitabilidade depende do threat model: se SQL direto como role de app estiver fora do limite (e R-3 for aceito), pode ser risco aceito; se “somente CLI owner” for garantia de segurança, o banco hoje não a sustenta. Achado HIGH condicionado a acesso SQL/comprometimento do app.
+
+5. Regressão de comportamento dos workspaces:
+- API retorna suspensas com suspended bool em routes.py:182-192; consumidores encontrados na página inicial mostram suspensas desabilitadas/rotuladas e a página de organização suspensa busca workspaces para trocar de workspace (apps/web/src/app/page.tsx:60-105). Tipo Workspace declara suspended opcional em apps/web/src/lib/types.ts:10. Teste de ciclo de vida cobre o campo. Não encontrei consumidor atual que assuma que a lista exclui suspensas.
+- Limitação: versão atual desses arquivos web tem alterações locais não commitadas no workspace; não foram editadas nem atribuídas ao commit sob revisão.
+
+VEREDITO: needs-attention

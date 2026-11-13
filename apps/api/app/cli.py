@@ -10,6 +10,7 @@ import json
 import os
 import secrets
 import sys
+from uuid import uuid4
 
 from sqlalchemy import text
 
@@ -114,7 +115,11 @@ def main(argv: list[str] | None = None) -> None:
     eng = _engine()
     with eng.begin() as c:
         if a.cmd == "create-tenant":
-            print(c.execute(text("INSERT INTO tenants(name, demo) VALUES (:n, :d) RETURNING id"), {"n": a.name, "d": bool(a.demo)}).scalar())
+            # the same critical section and name rule as the screen (migration 0053/0054): no two organizations with the same name, whatever the way in
+            c.execute(text("SELECT pg_advisory_xact_lock(hashtextextended('platform-organization-create', 0))"))
+            if c.execute(text("SELECT 1 FROM tenants WHERE lower(btrim(name)) = lower(btrim(:n))"), {"n": " ".join(a.name.split())}).first():
+                sys.exit("an organization with that name already exists")
+            print(c.execute(text("INSERT INTO tenants(name, demo) VALUES (:n, :d) RETURNING id"), {"n": " ".join(a.name.split()), "d": bool(a.demo)}).scalar())
         elif a.cmd == "create-user":
             h = hash_secret(_password(a.password_env))
             print(c.execute(
@@ -534,7 +539,12 @@ def main(argv: list[str] | None = None) -> None:
                     text("INSERT INTO audit_log (tenant_id, actor_id, action, target_type, target_id, evidence_redacted) "
                          "VALUES (:t, NULL, :act, 'tenant', :t, CAST(:e AS jsonb))"),
                     {"t": a.tenant_id, "act": "platform.organization.suspended" if a.status == "suspended" else "platform.organization.reactivated",
-                     "e": json.dumps({"reason": reason, "from": cur, "to": a.status, "via": "cli"})},
+                     "e": json.dumps({"reason": reason, "from": cur, "to": a.status, "via": "cli", "request_id": str(uuid4())})},
+                )
+                c.execute(
+                    text("INSERT INTO events_outbox (tenant_id, aggregate_type, aggregate_id, event_type, schema_version, payload) "
+                         "VALUES (:t,'tenant',:t,'platform.organization.status_changed','1',CAST(:p AS jsonb))"),
+                    {"t": a.tenant_id, "p": json.dumps({"by": None, "via": "cli", "to": a.status})},
                 )
                 print(f"organization {cur} -> {a.status}")
         elif a.cmd == "set-password":

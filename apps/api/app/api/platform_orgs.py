@@ -40,6 +40,7 @@ STATUS = {
     # ADR-0047 (migration 0054)
     "organization_not_found": (404, "organization_not_found"), "organization_status_invalid": (422, "organization_status_invalid"),
     "organization_reason_invalid": (422, "organization_reason_invalid"), "feature_invalid": (422, "feature_invalid"), "feature_state_invalid": (422, "feature_state_invalid"),
+    "owner_only_feature": (403, "owner_only_feature"),   # the database refuses it too (migration 0054), not only the route
 }
 
 

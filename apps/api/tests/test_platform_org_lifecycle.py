@@ -253,3 +253,22 @@ def test_the_list_carries_health_and_state(client, org, operator, migrated):
         c.execute(text("UPDATE edges SET last_heartbeat_at = now() - interval '10 minutes' WHERE id = :e"), {"e": org["edge"]})
     row = next(i for i in client.get("/v1/platform/organizations?limit=200", headers=_h(operator["token"])).json()["items"] if i["id"] == str(org["id"]))
     assert row["edges_online"] == 0 and row["edges_total"] == 1
+
+
+def test_the_database_itself_refuses_to_turn_owner_only_flags_on_and_the_two_lists_agree(client, org, operator, app_engine):
+    """Codex r1 HIGH: the route is not the only gate. A direct call of the function by an ACTIVE operator (the actor the application role may pick, R-3) is refused for the same names."""
+    import importlib.util
+    import pathlib
+
+    from app.api.platform_orgs import OWNER_ONLY_FEATURES
+    spec = importlib.util.spec_from_file_location("m0054", pathlib.Path(__file__).resolve().parents[1] / "alembic" / "versions" / "0054_platform_org_lifecycle.py")
+    mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+    assert set(mod.OWNER_ONLY) == set(OWNER_ONLY_FEATURES)
+    for name in sorted(OWNER_ONLY_FEATURES):
+        with pytest.raises(DBAPIError) as ei:
+            with app_engine.begin() as c:
+                c.execute(text("SELECT public.platform_set_feature(:a, :t, :f, 'on', 'teste direto', :r)"), {"a": operator["id"], "t": org["id"], "f": name, "r": uuid4()})
+        assert "owner_only_feature" in str(ei.value), name
+    with app_engine.begin() as c:     # turning it OFF, and any other flag ON, still work through the function
+        r = c.execute(text("SELECT public.platform_set_feature(:a, :t, 'onu_discovery', 'on', 'teste direto', :r)"), {"a": operator["id"], "t": org["id"], "r": uuid4()}).scalar_one()
+    assert r["changed"] is True
