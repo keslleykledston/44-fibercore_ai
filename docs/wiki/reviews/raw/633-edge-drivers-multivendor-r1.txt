@@ -1,0 +1,16 @@
+## Achado
+
+- **MEDIUM — `nat_shared_ip` pode permitir duas entradas para o mesmo equipamento físico.** A validação compara entradas com `natHost` apenas quando o transporte não é SNMP ([config.go](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/agents/edge/internal/config/config.go:528)). Já `DeviceID()` inclui a porta para uma entrada CLI com `nat_shared_ip`, mas a identidade SNMP continua sendo apenas o host ([config.go](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/agents/edge/internal/config/config.go:644)). Assim, uma OLT CLI em `IP:porta` com `nat_shared_ip: true` e outra entrada SNMP para o mesmo IP podem receber identidades distintas e passar pela checagem de duplicidade. Isso pode separar o bloqueio e o pacing do mesmo equipamento.
+
+## Verificações do escopo
+
+- **Allowlist e escrita:** não encontrei bypass nos caminhos revisados. `SafeCommand` admite apenas o sufixo literal ` | nomore`; os drivers continuam limitados por allowlists exatas. `enable` só é aceito pelo driver MA5800, após identificar um firmware suportado.
+- **Telnet:** exige `transport: telnet` e `allow_telnet: true` na configuração estática. O caminho de OLTs gerenciadas não aceita Intelbras/Telnet; a política limita os fabricantes gerenciados a Huawei, ZTE e Datacom.
+- **Completude de PON:** os drivers novos permanecem em nível `identified`, e o coletor só marca uma PON como completa em nível `observed` com fim de comando comprovado ou `Verified`. Datacom marca `Verified` após parsear a listagem, mas isso não torna a PON completa no snapshot enquanto o nível continuar `identified`.
+- **Credenciais em logs, erros e banner:** não encontrei exposição de senha nos caminhos revisados. O Telnet remove a senha de saída e erros; o banner é usado para extrair o modelo, sem ser registrado pelo driver.
+- **Orçamento de comandos:** a estimativa para portas descobertas reserva margem para até 128 PONs; não identifiquei bypass do limite de comandos ou do limite independente de bytes.
+
+Revisão baseada no diff `59259400..HEAD` em `agents/edge` e no [ADR-0052](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/docs/wiki/adr/ADR-0052-drivers-multivendor-telnet-e-enable-huawei.md). Não editei arquivos nem executei testes.
+
+Codex session ID: 01a1dacc-ed92-7260-8bd2-d50d5fc85357
+Resume in Codex: codex resume 01a1dacc-ed92-7260-8bd2-d50d5fc85357
