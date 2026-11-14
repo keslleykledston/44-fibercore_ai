@@ -1,0 +1,5 @@
+Chassis/Slot  Product model      Role     Status        Firmware version
+------------  -----------------  -------  ------------  ----------------------
+1             DM4612             -        -             Not available
+1/1           8GPON+2GT+2XS      Active   Ready         7.2.0-013-1-g1b8f1c9398
+1/PSU1        PSU85              None     Ready         Not available

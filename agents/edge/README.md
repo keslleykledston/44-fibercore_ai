@@ -22,6 +22,13 @@ Pendências: mTLS (ADR-0011), assinatura/anti-replay de jobs (Sprint 3), SNMP/SS
 ```
 `legacy_ssh` habilita DH group1/14-SHA1, `ssh-rsa` e AES-CBC **só para esta OLT** (a MA5608T R015 não oferece mais nada); a host key fixada continua obrigatória.
 
+## Exemplo: OLT Datacom DmOS (DM46xx; valores fictícios; segredo em arquivo 0600, host key fixada)
+```json
+{"name":"olt-datacom-exemplo","vendor":"datacom","address":"192.0.2.20:22","username":"leitura",
+ "secret_file":"/etc/fibercore-edge/olt-datacom-exemplo.secret","host_key_sha256":"SHA256:...","pon_ports":["1/1/1","1/1/2"]}
+```
+SSH `exec` (padrão, sem pty). `pon_ports` vazio = o driver descobre as PONs por `show interface gpon | nomore`. A host key fixada continua obrigatória; SNMP não existe para este vendor. Somente leitura: comandos exatos em `docs/engineering/DRIVER_SDK_INTERFACE.md` (seção Datacom DmOS). O nível declarado é `identified`.
+
 ## Exemplo: OLT por SNMP (v2c, somente leitura; valores fictícios)
 ```json
 {"name":"olt-exemplo-snmp","vendor":"huawei","transport":"snmp","snmp_address":"192.0.2.10:161",

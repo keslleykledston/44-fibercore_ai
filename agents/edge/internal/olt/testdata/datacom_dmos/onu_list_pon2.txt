@@ -1,0 +1,13 @@
+  Itf     ONU ID   Serial Number   Oper State   Software Download State      Name
+--------  ------   -------------   ----------   --------------------------   ------------------------------------------------
+1/1/2     0        ITBS00001013    Up           None                                                                         
+1/1/2     1        DACM00001014    Down         None                                                                         
+1/1/2     2        HWTC00001015    Up           None                                                                         
+1/1/2     3        HWTC00001016    Up           None                                                                         
+1/1/2     4        HWTC00001017    Up           None                                                                         
+1/1/2     5        HWTC00001018    Up           None                                                                         
+1/1/2     6        HWTC00001019    Up           None                                                                         
+1/1/2     10       ITBS0000101A    Up           None                                                                         
+1/1/2     12       HWTC0000101B    Up           None                                                                         
+1/1/2     14       HWTC0000101C    Up           None                                                                         
+1/1/2     17       HWTC0000101D    Up           None                                                                         

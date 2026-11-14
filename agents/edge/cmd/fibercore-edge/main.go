@@ -162,8 +162,11 @@ func main() {
 				continue
 			}
 			var drv olt.Driver = olt.Huawei{}
-			if o.Vendor == "zte" {
+			switch o.Vendor {
+			case "zte":
 				drv = olt.ZTE{}
+			case "datacom":
+				drv = olt.Datacom{}
 			}
 			if o.Profile == "huawei_ma56_r015" {
 				enabled := map[string]bool{} // supervised captures (ADR-0032): ONLY the listed IDs are enabled on this driver, so the session allowlist admits exactly them

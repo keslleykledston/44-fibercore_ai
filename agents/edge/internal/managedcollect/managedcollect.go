@@ -213,8 +213,11 @@ func (b *Builder) source(e managedolts.Entry, list *allowlist.List) collector.OL
 		return src
 	}
 	var drv olt.Driver = olt.Huawei{}
-	if e.Vendor == "zte" {
+	switch e.Vendor {
+	case "zte":
 		drv = olt.ZTE{}
+	case "datacom":
+		drv = olt.Datacom{}
 	}
 	src.Driver = drv
 	src.Open = func(ctx context.Context) (olt.Session, func(), error) {

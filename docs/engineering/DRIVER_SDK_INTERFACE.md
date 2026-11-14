@@ -91,3 +91,26 @@ Mapeamento de causa para o status da ONU (proposto, ainda sem driver): `13 → d
 - **Estado e causa**: `46.1.15` 1→online, 2→offline; offline + `46.1.24`: 13→`dying_gasp`, 2→`los`, resto→`offline`. Rx = `51.1.4`/100 dBm só para online (`2147483647` = sem leitura).
 - **LIMITE OPERACIONAL MEDIDO (importante)**: o agente SNMP da MA5608T **limita a taxa**. Responde em 20–200 ms, mas depois de ~17 pedidos em ~20 s **para de responder a qualquer pedido por mais de 1 minuto**. Isso pode afetar outros clientes SNMP da mesma community (ex.: monitoramento). Por isso há um **piso de 1 pedido/s** (não é um ritmo provadamente seguro, só o mínimo defensável com a medição que existe), orçamento de pacotes por ciclo (cada retransmissão consome pace e orçamento; o deadline do ciclo interrompe uma chamada bloqueada) e **resfriamento de 5 min por OLT depois de qualquer falha de SNMP** (o Edge não toca no agente mudo); uma PON de 12 ONTs custa ~7 pedidos, uma de 60 ONTs ~20. Para cobrir as 32 PONs o CLI continua sendo a via principal; o SNMP serve a poucas PONs/ciclos espaçados até que o limite do agente (ou a configuração da OLT) seja conhecido.
 - **Validação ao vivo**: PON 0/0/14 lida pelo driver Go: 12 ONTs, 3 online, `Verified=true`, igual ao CLI. As PONs grandes (60 e 53 ONTs) **não** puderam ser lidas por SNMP: o agente deixou de responder (limite acima). O teste ao vivo é opt-in (`R015_SNMP_ADDR`, `R015_SNMP_COMMUNITY_FILE`, `R015_SNMP_PONS`).
+
+## Datacom DmOS (DM4610/DM4612/DM4615) — driver somente leitura, nível `identified`
+Origem: captura real de bancada de 2026-11-14, somente leitura, sanitizada (`agents/edge/internal/olt/testdata/datacom_dmos/`: serial de ONU sintético com prefixo de 4 letras, chassi zerado, nenhum IP/MAC/hostname real). Firmwares vistos: 5.8.x (DM4610 HW2), 7.2.x e 9.6.x (DM4612), 8.2.x (DM4615). Código: `agents/edge/internal/olt/datacom.go`.
+
+**Transporte:** SSH `exec` (sem pty), `vendor: "datacom"`, host key fixada obrigatória, sem SNMP. O DmOS é um CLI tipo ConfD: o pager some com o sufixo ` | nomore`.
+
+**Allowlist exata (3 comandos, montados por builders internos, nenhum texto livre):**
+| Comando | Uso |
+|---|---|
+| `show platform` | `Identify`: modelo do chassi (linha `1`) e firmware do slot `Active`/`Ready` |
+| `show interface gpon \| nomore` | descoberta das PONs e estado do link (`Physical link is Up/Down`) quando `pon_ports` está vazio |
+| `show interface gpon 1/1/N onu \| nomore` | ONUs da PON, N de 1 a 24 |
+
+`SafeCommand` aceita **somente** o sufixo literal ` | nomore`, uma vez, no fim; qualquer outro `|` (grep, include, segundo `nomore`) continua negado. Porta fora de `1/1/1..24`, `show running-config`, qualquer escrita: negados (`datacom_test.go`).
+
+**Formato da lista de ONU:** cabeçalho `Itf  ONU ID  Serial Number  Oper State  Software Download State  Name`, linha de traços, uma linha por ONU. `Up` → `online`, `Down` → `offline` (a listagem **não** diz LOS nem dying gasp; a causa nunca é inventada). IDs salteados são normais. PON sem ONU responde só `% No entries found.`.
+
+**Completude (falha fechada):** a PON é `Verified` só quando a saída é cabeçalho + linhas todas parseadas (porta certa, ID 0..127, sem repetição) ou o `% No entries found.` isolado. Erro de sintaxe (`syntax error: element does not exist`), saída vazia, pager, sem cabeçalho, linha cortada ou de outra PON dão **erro**, nunca PON completa nem vazia.
+
+**Limites da v1 (pendências):**
+- `RxDBm` e `LastDownAt` ficam `nil`: o optical-info é por ONU e estoura o orçamento de comandos por coleta. Se for necessário, entra atrás de uma opção própria (`read_optical`, desligada), com captura do comando exato antes.
+- Nível `identified`. Para `observed` falta a captura de: PON cuja listagem pagina/trunca, e ONU com causas de queda (LOS, dying gasp). Não há firmware mais novo que 9.6.x visto.
+- Um único slot `1/1` (todos os modelos capturados); chassi com mais slots precisa de captura antes.

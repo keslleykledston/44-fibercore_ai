@@ -135,7 +135,7 @@ func (d BenchDeviceConfig) ID() string { return d.OUI + "-" + d.ProductClass + "
 // OLTConfig describes one OLT the Edge may READ. Its address must also be listed in `allowlist`.
 type OLTConfig struct {
 	Name       string `json:"name"`
-	Vendor     string `json:"vendor"` // huawei | zte
+	Vendor     string `json:"vendor"` // huawei | zte | datacom
 	Address    string `json:"address"`
 	Username   string `json:"username"`
 	SecretFile string `json:"secret_file"`
@@ -464,8 +464,8 @@ func (c *Config) Validate() error {
 			errs = append(errs, fmt.Errorf("%s: name required, unique, <=128 chars", p))
 		}
 		seen[o.Name] = true
-		if o.Vendor != "huawei" && o.Vendor != "zte" {
-			errs = append(errs, fmt.Errorf("%s: vendor must be huawei or zte", p))
+		if o.Vendor != "huawei" && o.Vendor != "zte" && o.Vendor != "datacom" {
+			errs = append(errs, fmt.Errorf("%s: vendor must be huawei, zte or datacom", p))
 		}
 		if o.Transport != "snmp" {
 			if _, _, err := net.SplitHostPort(o.Address); err != nil || !allowed[strings.ToLower(o.Address)] {

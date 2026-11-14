@@ -98,6 +98,12 @@ var Registry = []Homologation{
 	// same limits as the CLI entry above: stays identified.
 	{"huawei", "MA5600", "MA5600V800R015", LevelIdentified, "SNMP identity (family+release); see MA5608T entry"},
 	{"zte", "C300", "V2.1", LevelIdentified, "synthetic fixtures only (testdata/zte_c300/V2.1); NOT captured from a device"},
+	// Datacom DmOS: real captures 2026-11-14, read-only, sanitised (testdata/datacom_dmos). Parsers are golden against them, but the checklist for
+	// "observed" is not met: a PON whose listing pages/truncates and ONUs with offline causes were never captured.
+	{"datacom", "DM46", "7.2.", LevelIdentified, "real capture 2026-11-14, read-only; parser golden; NOT enough for observed (checklist: PON paginada, ONU com causas de queda)"},
+	{"datacom", "DM46", "8.2.", LevelIdentified, "real capture 2026-11-14, read-only; parser golden; NOT enough for observed (checklist: PON paginada, ONU com causas de queda)"},
+	{"datacom", "DM46", "9.6.", LevelIdentified, "real capture 2026-11-14, read-only; parser golden; NOT enough for observed (checklist: PON paginada, ONU com causas de queda)"},
+	{"datacom", "DM46", "5.8.", LevelIdentified, "real capture 2026-11-14, read-only (DM4610 HW2); parser golden; NOT enough for observed (checklist: PON paginada, ONU com causas de queda)"},
 }
 
 // Lookup returns the level for an identity, or ErrUnsupportedFirmware when the firmware has no fixture coverage.
@@ -131,9 +137,17 @@ func (r ReadOnlySession) Run(ctx context.Context, cmd string) (string, error) {
 	return out, nil
 }
 
+// pagerOff is the ONLY pipe the Edge admits: the literal suffix " | nomore" (DmOS), once, at the very end. It only turns the pager off;
+// any other pipe (grep, include, redirect...) stays denied.
+const pagerOff = " | nomore"
+
 // SafeCommand rejects control characters and shell/CLI chaining metacharacters before any allowlist match.
 func SafeCommand(cmd string) bool {
 	if cmd == "" || len(cmd) > 128 {
+		return false
+	}
+	cmd = strings.TrimSuffix(cmd, pagerOff) // at most one; a second "| nomore" leaves a "|" and is denied below
+	if cmd == "" {
 		return false
 	}
 	for _, c := range cmd {

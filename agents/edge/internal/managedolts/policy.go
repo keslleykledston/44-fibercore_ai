@@ -47,14 +47,14 @@ const (
 )
 
 // SupportedVendors are the OLT vendors this Edge build can read. SNMP is implemented for huawei only (config.Validate says the same for the static entries).
-var SupportedVendors = []string{"huawei", "zte"}
+var SupportedVendors = []string{"huawei", "zte", "datacom"}
 
 // VendorSupported says whether this Edge can read that vendor over that transport.
 func VendorSupported(vendor, transport string) bool {
 	switch vendor {
 	case "huawei":
 		return true
-	case "zte":
+	case "zte", "datacom":
 		return transport != TransportSNMP
 	}
 	return false

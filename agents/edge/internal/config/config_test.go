@@ -143,6 +143,24 @@ func TestOLTProfileAndPagerSpaceValidation(t *testing.T) {
 	}
 }
 
+func TestDatacomVendorConfig(t *testing.T) {
+	olt := func(extra string) string {
+		return `,"allowlist":["192.0.2.9:22"],"olts":[{"name":"D","vendor":"datacom","address":"192.0.2.9:22","username":"ro","secret_file":"/s"` + extra + `,"pon_ports":["1/1/1"]}]`
+	}
+	if cfg, err := Load(write(t, 0o600, good(olt(`,"host_key_sha256":"SHA256:abc"`))), "v"); err != nil || cfg.OLTs[0].Vendor != "datacom" {
+		t.Fatalf("datacom over pinned SSH must load: %v", err)
+	}
+	for name, body := range map[string]string{
+		"host key is mandatory": olt(``),
+		"no huawei profile":     olt(`,"host_key_sha256":"SHA256:abc","profile":"huawei_ma56_r015"`),
+		"no snmp":               `,"allowlist":["192.0.2.9:161"],"olts":[{"name":"D","vendor":"datacom","pon_ports":["1/1/1"],"transport":"snmp","snmp_address":"192.0.2.9:161","snmp_community_file":"/c"}]`,
+	} {
+		if _, err := Load(write(t, 0o600, good(body)), "v"); err == nil {
+			t.Errorf("%s: must be rejected", name)
+		}
+	}
+}
+
 func TestTwoOLTNamesCannotShareOneSNMPAgent(t *testing.T) {
 	both := func(a, b string) string {
 		mk := func(name, addr string) string {

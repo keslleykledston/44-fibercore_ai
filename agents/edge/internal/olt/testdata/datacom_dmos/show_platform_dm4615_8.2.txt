@@ -1,0 +1,6 @@
+Chassis/Slot  Product model      Role     Status        Firmware version
+------------  -----------------  -------  ------------  ----------------------
+1             DM4615             -        -             Not available
+1/1           16GPON+4GT+4XS     Active   Ready         8.2.2-003-1-g2df4ad7b5a
+1/FAN         DM4610-FAN         None     Ready         Not available
+1/PSU1        PSU-125-AC         None     Ready         Not available

@@ -1,0 +1,128 @@
+
+Physical interface   :  gpon 1/1/1, Enabled, Physical link is Up
+Link-level type      :  GPON
+Logical reach        :  0-40 km
+Downstream FEC       :  Enabled
+Upstream FEC         :  Enabled
+Transceiver type     :  sps-43-48h-hp-cde
+Allocated upstream bandwidth
+    Fixed + Assured  :  0          kbit/s
+    Fixed            :  0          kbit/s
+    Assured          :  0          kbit/s
+    Max              :  73058304   kbit/s
+    Overhead         :  2178       kbit/s (66 ONUs)
+Available upstream bandwidth
+    CBR   BW         :  611328     kbit/s
+    Total BW         :  1049536    kbit/s
+
+Physical interface   :  gpon 1/1/2, Enabled, Physical link is Up
+Link-level type      :  GPON
+Logical reach        :  0-40 km
+Downstream FEC       :  Enabled
+Upstream FEC         :  Enabled
+Transceiver type     :  sps-43-48h-hp-cde
+Allocated upstream bandwidth
+    Fixed + Assured  :  0          kbit/s
+    Fixed            :  0          kbit/s
+    Assured          :  0          kbit/s
+    Max              :  16604160   kbit/s
+    Overhead         :  495        kbit/s (15 ONUs)
+Available upstream bandwidth
+    CBR   BW         :  611328     kbit/s
+    Total BW         :  1188672    kbit/s
+
+Physical interface   :  gpon 1/1/3, Enabled, Physical link is Up
+Link-level type      :  GPON
+Logical reach        :  0-40 km
+Downstream FEC       :  Enabled
+Upstream FEC         :  Enabled
+Transceiver type     :  sps-43-48h-hp-cde
+Allocated upstream bandwidth
+    Fixed + Assured  :  0          kbit/s
+    Fixed            :  0          kbit/s
+    Assured          :  0          kbit/s
+    Max              :  60881920   kbit/s
+    Overhead         :  1815       kbit/s (55 ONUs)
+Available upstream bandwidth
+    CBR   BW         :  611328     kbit/s
+    Total BW         :  1079552    kbit/s
+
+Physical interface   :  gpon 1/1/4, Enabled, Physical link is Up
+Link-level type      :  GPON
+Logical reach        :  0-40 km
+Downstream FEC       :  Enabled
+Upstream FEC         :  Enabled
+Transceiver type     :  sps-43-48h-hp-cde
+Allocated upstream bandwidth
+    Fixed + Assured  :  0          kbit/s
+    Fixed            :  0          kbit/s
+    Assured          :  0          kbit/s
+    Max              :  25459712   kbit/s
+    Overhead         :  759        kbit/s (23 ONUs)
+Available upstream bandwidth
+    CBR   BW         :  611328     kbit/s
+    Total BW         :  1166848    kbit/s
+
+Physical interface   :  gpon 1/1/5, Enabled, Physical link is Up
+Link-level type      :  GPON
+Logical reach        :  0-40 km
+Downstream FEC       :  Enabled
+Upstream FEC         :  Enabled
+Transceiver type     :  sps-43-48h-hp-cde
+Allocated upstream bandwidth
+    Fixed + Assured  :  0          kbit/s
+    Fixed            :  0          kbit/s
+    Assured          :  0          kbit/s
+    Max              :  42063872   kbit/s
+    Overhead         :  1254       kbit/s (38 ONUs)
+Available upstream bandwidth
+    CBR   BW         :  611328     kbit/s
+    Total BW         :  1127872    kbit/s
+
+Physical interface   :  gpon 1/1/6, Enabled, Physical link is Up
+Link-level type      :  GPON
+Logical reach        :  0-40 km
+Downstream FEC       :  Enabled
+Upstream FEC         :  Enabled
+Transceiver type     :  sps-43-48h-hp-cde
+Allocated upstream bandwidth
+    Fixed + Assured  :  0          kbit/s
+    Fixed            :  0          kbit/s
+    Assured          :  0          kbit/s
+    Max              :  21031936   kbit/s
+    Overhead         :  627        kbit/s (19 ONUs)
+Available upstream bandwidth
+    CBR   BW         :  611328     kbit/s
+    Total BW         :  1177728    kbit/s
+
+Physical interface   :  gpon 1/1/7, Enabled, Physical link is Up
+Link-level type      :  GPON
+Logical reach        :  0-40 km
+Downstream FEC       :  Enabled
+Upstream FEC         :  Enabled
+Transceiver type     :  sps-43-48h-hp-cde
+Allocated upstream bandwidth
+    Fixed + Assured  :  0          kbit/s
+    Fixed            :  0          kbit/s
+    Assured          :  0          kbit/s
+    Max              :  27673600   kbit/s
+    Overhead         :  825        kbit/s (25 ONUs)
+Available upstream bandwidth
+    CBR   BW         :  611328     kbit/s
+    Total BW         :  1164096    kbit/s
+
+Physical interface   :  gpon 1/1/8, Enabled, Physical link is Up
+Link-level type      :  GPON
+Logical reach        :  0-40 km
+Downstream FEC       :  Enabled
+Upstream FEC         :  Enabled
+Transceiver type     :  sps-43-48h-hp-cde
+Allocated upstream bandwidth
+    Fixed + Assured  :  0          kbit/s
+    Fixed            :  0          kbit/s
+    Assured          :  0          kbit/s
+    Max              :  19924992   kbit/s
+    Overhead         :  594        kbit/s (18 ONUs)
+Available upstream bandwidth
+    CBR   BW         :  611328     kbit/s
+    Total BW         :  1183168    kbit/s

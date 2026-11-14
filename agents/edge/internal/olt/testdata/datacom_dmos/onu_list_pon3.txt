@@ -1,0 +1,17 @@
+  Itf     ONU ID   Serial Number   Oper State   Software Download State      Name
+--------  ------   -------------   ----------   --------------------------   ------------------------------------------------
+1/1/3     0        HWTC0000101E    Down         None                                                                         
+1/1/3     1        ZTEG0000101F    Up           None                                                                         
+1/1/3     2        HWTC00001020    Up           None                                                                         
+1/1/3     4        HWTC00001021    Up           None                                                                         
+1/1/3     5        DACM00001022    Up           None                                                                         
+1/1/3     6        ITBS00001023    Up           None                                                                         
+1/1/3     7        HWTC00001024    Up           None                                                                         
+1/1/3     9        HWTC00001025    Up           None                                                                         
+1/1/3     10       ITBS00001026    Up           None                                                                         
+1/1/3     11       DACM00001027    Up           None                                                                         
+1/1/3     12       HWTC00001028    Up           None                                                                         
+1/1/3     13       HWTC00001029    Up           None                                                                         
+1/1/3     15       ZTEG0000102A    Up           None                                                                         
+1/1/3     17       HWTC0000102B    Up           None                                                                         
+1/1/3     18       HWTC0000102C    Up           None                                                                         

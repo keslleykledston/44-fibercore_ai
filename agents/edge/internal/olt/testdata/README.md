@@ -7,3 +7,5 @@ Se o formato real divergir, os parsers devem ser corrigidos com a fixture real, 
 
 **Exceção (captura REAL):** `huawei_ma5608t/MA5600V800R015C00/display_version.txt` vem de equipamento real (ver `lab_run.md` ao lado).
 Valida só `Identify` e o transporte; o driver permanece `identified` porque os parsers de ONT continuam sintéticos.
+
+**Exceção (captura REAL sanitizada):** `datacom_dmos/` vem de OLTs Datacom DmOS reais (2026-11-14, somente leitura). Seriais de ONU trocados por sintéticos (prefixo de 4 letras + contador), chassi zerado; sem IP, MAC nem hostname. Os parsers são golden contra esses arquivos; o nível segue `identified` (faltam PON paginada e ONU com causas de queda).
