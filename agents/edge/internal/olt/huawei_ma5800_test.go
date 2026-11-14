@@ -518,3 +518,24 @@ func TestMA58FixturesAreSanitized(t *testing.T) {
 		}
 	}
 }
+
+func TestMA58PortWithNoOntIsAnEmptyUnverifiedPonNotAFailure(t *testing.T) {
+	dev := ma58Device(t)
+	dev.out["display ont info summary 0/1/2"] = "display ont info summary 0/1/2 \r\n{ <cr>||<K> }: \r\n\r\n  Command:\r\n          display ont info summary 0/1/2\r\n  Failure: The ONT does not exist\r\n\r\n" + ma58Priv
+	snap, err := ma58Snap(t, dev, ma58Zone, "0/1/0", "0/1/2")
+	if err != nil {
+		t.Fatalf("an empty port must not fail the collection: %v", err)
+	}
+	if len(snap.PONs) != 2 || snap.PONs[1].Path != "0/1/2" || snap.PONs[1].Verified || snap.PONs[1].Status != "unknown" {
+		t.Fatalf("pons %+v", snap.PONs)
+	}
+	for _, sent := range dev.sent {
+		if sent == "display ont info 0 1 2 all" {
+			t.Fatal("the serial listing of an empty port must not be asked for")
+		}
+	}
+	// "This board does not exist" stays a failure
+	if _, err := ma58Snap(t, ma58Device(t), ma58Zone, "0/2/0"); err == nil {
+		t.Fatal("a missing board must still fail")
+	}
+}

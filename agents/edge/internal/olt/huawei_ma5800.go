@@ -43,6 +43,8 @@ var (
 	ma58Hex16   = regexp.MustCompile(`^[0-9A-Fa-f]{16}$`)
 	ma58Vendor  = regexp.MustCompile(`^[0-9A-Za-z]{4}[0-9A-Fa-f]{8}$`)
 	// device-side rejection of a command ("Failure: This board does not exist", "% Unknown command ...")
+	// the device's own answer for a port that exists but has no ONT (distinct from "This board does not exist", which stays a failure)
+	ma58NoOnt    = regexp.MustCompile(`(?mi)^\s*Failure\s*:\s*The ONT does not exist\s*$`)
 	ma58CLIError = regexp.MustCompile(`(?m)^\s*%\s|^\s*Failure\s*:|Unknown command|Parameter error|Too many parameters|Incomplete command`)
 )
 
@@ -110,9 +112,18 @@ func (h HuaweiMA58) Snapshot(ctx context.Context, s Session, ports []string) (Sn
 		return Snapshot{}, fmt.Errorf("huawei ma58: enable did not reach the privileged view (denied or unexpected answer); nothing else was sent")
 	}
 	for _, p := range ports {
-		sum, err := run("display ont info summary " + p)
+		sum, err := s.Run(ctx, "display ont info summary "+p)
 		if err != nil {
 			return Snapshot{}, err
+		}
+		if ma58NoOnt.MatchString(sum) {
+			// Real MA5800 R022/R024 (2026-11-14): a port of an existing board with no ONT answers "Failure: The ONT does not exist". That is an empty PON, not a failed collection.
+			// Never Verified: a shell cannot prove the end of a listing, and an empty answer is not the header-count proof; it carries no ONU, so nothing is lost.
+			snap.PONs = append(snap.PONs, PON{Path: p, Status: "unknown"})
+			continue
+		}
+		if ma58CLIError.MatchString(sum) {
+			return Snapshot{}, fmt.Errorf("huawei ma58: device rejected %q%s", "display ont info summary "+p, rejection(sum))
 		}
 		f := strings.Split(p, "/")
 		all, err := run("display ont info 0 " + f[1] + " " + f[2] + " all")
