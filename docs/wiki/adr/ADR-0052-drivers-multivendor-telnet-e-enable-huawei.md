@@ -15,7 +15,11 @@ Origem: cadastro de seis organizações com dez OLTs reais (Huawei, Datacom, Int
 
 **D5 — Identidade da ONU.** A chave na nuvem é (organização, OLT, serial). A Intelbras mostra só 8 hex do serial e o mesmo valor pode aparecer em duas PONs: quando repetido no mesmo instantâneo, o serial vira `<8 hex>@<pon>`; quando único, fica como a OLT mostra.
 
-**D6 — Fora desta decisão.** Escrita em qualquer OLT; SNMP novo; teste de conexão e consulta `olt_query` pela nuvem para fabricantes além da Huawei (a nuvem ainda responde `protocol_not_supported`/catálogo só Huawei: ajuste próprio); VSOL (credencial recusada, driver não escrito); promover qualquer perfil a `observed`.
+**D6 — Dispositivos reais atrás de um IP (`nat_shared_ip`).** O Edge identifica o equipamento físico pelo IP (trava, intervalo e cooldown por equipamento), e recusa duas entradas do mesmo IP. Provedores reais expõem várias OLTs por um IP público com portas diferentes (WA TELECOM e ARAUJO). A entrada declara `"nat_shared_ip": true` e então a **porta entra na identidade**; **todas** as entradas daquele IP (inclusive SNMP) precisam declarar, senão a configuração é recusada (Codex r1, MEDIUM: entrada SNMP no mesmo IP). Só CLI (ssh/telnet), nunca com `last_down`.
+
+**D7 — Achados do primeiro uso real (2026-11-14).** (a) Datacom sem `pon_ports` descobre as PONs (a validação bloqueava); o orçamento de comandos com PONs descobertas passa a cobrir 128 PONs. (b) O modelo da Intelbras vem de texto impresso **antes** do login (`olt8820plus login:`): esse texto agora faz parte do banner. (c) MA5800: porta de placa existente sem ONT responde `Failure: The ONT does not exist` e é PON **vazia, não verificada**; `This board does not exist` segue falha. (d) A chave de host fixada é a que o cliente Go negocia: ECDSA quando existe, senão ED25519/RSA conforme o equipamento (RSA nas duas Huawei).
+
+**D8 — Fora desta decisão.** Escrita em qualquer OLT; SNMP novo; teste de conexão e consulta `olt_query` pela nuvem para fabricantes além da Huawei (a nuvem ainda responde `protocol_not_supported`/catálogo só Huawei: ajuste próprio); VSOL (credencial recusada, driver não escrito); promover qualquer perfil a `observed`.
 
 ## Riscos declarados
 - **R-1:** Telnet expõe credencial na rede. Mitigação: opt-in por OLT, só estático, uso restrito a rede privada.

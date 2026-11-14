@@ -786,3 +786,12 @@ func TestNATSharedIPMakesThePortPartOfTheDeviceIdentity(t *testing.T) {
 		t.Fatal("nat_shared_ip with snmp must be rejected")
 	}
 }
+
+func TestNATSharedIPHostCannotAlsoHaveAnSNMPEntry(t *testing.T) {
+	body := `,"allowlist":["192.0.2.9:20322","192.0.2.9:161"],"olts":[` +
+		`{"name":"A","vendor":"datacom","address":"192.0.2.9:20322","username":"ro","secret_file":"/s","host_key_sha256":"SHA256:abc","nat_shared_ip":true},` +
+		`{"name":"B","vendor":"huawei","pon_ports":["0/0/14"],"transport":"snmp","snmp_address":"192.0.2.9:161","snmp_community_file":"/c"}]`
+	if _, err := Load(write(t, 0o600, good(body)), "v"); err == nil {
+		t.Fatal("an SNMP entry on the IP of a nat_shared_ip CLI entry must be rejected (two identities of one device)")
+	}
+}

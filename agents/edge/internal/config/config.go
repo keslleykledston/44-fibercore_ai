@@ -525,7 +525,7 @@ func (c *Config) Validate() error {
 		if o.NATSharedIP && (o.Transport == "snmp" || o.LastDown != nil) {
 			errs = append(errs, fmt.Errorf("%s: nat_shared_ip only applies to CLI transports (ssh, telnet) without last_down", p))
 		}
-		if o.Transport != "snmp" && devAddr != "" {
+		if devAddr != "" { // SNMP entries count too: an SNMP agent on a host whose CLI entries are nat_shared_ip is the same physical-device question
 			hk := DeviceKey(devAddr)
 			if prev, ok := natHost[hk]; ok && prev != o.NATSharedIP {
 				errs = append(errs, fmt.Errorf("%s: %s is shared with another olt entry: either every entry of that IP sets nat_shared_ip or none does", p, hk))
