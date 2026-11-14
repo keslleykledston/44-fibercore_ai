@@ -1,0 +1,8 @@
+## Achados
+
+- **MEDIUM — Falha ao enfileirar aviso de redefinição de MFA desfaz a redefinição.** Em [members.py](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/apps/api/app/api/members.py:118), `queue_notice` roda na mesma transação que remove o MFA e revoga sessões. Se a inserção na fila falhar — por exemplo, por indisponibilidade do banco durante o `INSERT` — a exceção não é isolada e a transação pode ser revertida. Assim, uma falha no aviso impede a mudança solicitada. O gancho de suspensão protege a mudança com savepoint em `platform_orgs.py`; este fluxo não faz o mesmo.
+
+Não encontrei outros achados reproduzíveis de severidade CRITICAL, HIGH ou LOW no escopo solicitado. Examinei os caminhos de criação e aceitação de convites, imposição dos limites, montagem e entrega dos e-mails, políticas RLS e regras de MFA. Os arquivos modificados fora do escopo, inclusive as alterações locais não commitadas, não foram considerados.
+
+Codex session ID: 01a1da71-c4ec-7d70-ba30-b9041823c6ab
+Resume in Codex: codex resume 01a1da71-c4ec-7d70-ba30-b9041823c6ab

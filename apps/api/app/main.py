@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app import __version__
 from app.api.acs import router as acs_router
+from app.api.api_tokens import router as api_tokens_router
 from app.api.bench_authorizations import router as bench_auth_router
 from app.api.context import router as context_router
 from app.api.cpe_state import router as cpe_state_router
@@ -38,6 +39,7 @@ from app.api.routes import router
 from app.api.session import router as session_router
 from app.api.speed import router as speed_router
 from app.api.team import router as team_router
+from app.api.webhooks import router as webhooks_router
 from app.api.tenant_policy import router as tenant_policy_router
 from app.core.metrics import MetricsMiddleware
 from app.core.settings import get_settings, required_mfa_roles
@@ -87,6 +89,8 @@ app.include_router(noc_router)
 app.include_router(jobs_router)
 app.include_router(members_router)
 app.include_router(team_router)
+app.include_router(api_tokens_router)
+app.include_router(webhooks_router)
 app.include_router(tenant_policy_router)
 app.include_router(delegations_router)
 app.include_router(bench_auth_router)

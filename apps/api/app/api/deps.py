@@ -11,7 +11,10 @@ from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy import Connection, text
 
 from app.core.db import get_engine, scoped_connection
+from app.core import api_tokens
+from app.core import scope as scope_mod
 from app.core import security_policy
+from app.core.memberships import PLATFORM_ROLE as PLATFORM_ROLE_NAME
 from app.core.memberships import active_roles
 from app.core.permissions import CATALOG, require_known
 from app.core.ratelimit import TokenBucketLimiter
@@ -29,8 +32,14 @@ class Principal:
     role: str
     edge_id: UUID | None = None
     mfa_at: float | None = None  # epoch s of the last second factor proved in this session (users only); see mfa_is_recent
+    scope: frozenset[UUID] | None = None  # ADR-0049 D2: None = the whole provider; otherwise the OLT ids this person may see (resolved from the database on EVERY request)
+    grants: frozenset[str] | None = None  # ADR-0051: an API token holds EXACTLY the permissions it was given (never a role's)
 
     def can(self, perm: str) -> bool:
+        if self.kind == "api_token":
+            return perm in (self.grants or frozenset())
+        if self.scope is not None and perm not in scope_mod.SCOPED_ALLOWED_PERMISSIONS:
+            return False   # a scoped principal holds the role's permissions INTERSECTED with the closed read-only list
         return perm in ROLE_PERMISSIONS.get(self.role, frozenset())
 
 
@@ -73,6 +82,28 @@ def _assert_org_active(conn, tenant_id: UUID) -> None:
         raise HTTPException(403, "organization_suspended")
 
 
+_TOKEN_LIMITERS: dict[tuple[int, int], TokenBucketLimiter] = {}
+
+
+def _api_token_principal(bearer: str, settings: Settings) -> Principal:
+    """ADR-0051: an `fcat_` bearer. Any malformed, unknown, revoked or expired token is the SAME 401 (nothing says which). The organization must be active (checked now, like every request)
+    and the token is rate limited on its own bucket (429 + Retry-After)."""
+    if not api_tokens.TOKEN_RE.match(bearer):
+        raise _unauth()
+    with scoped_connection(get_engine()) as conn:
+        row = conn.execute(text("SELECT tenant_id, id, permissions FROM app_api_token_lookup(:h)"), {"h": api_tokens.digest(bearer)}).first()
+    if row is None:
+        raise _unauth()
+    with scoped_connection(get_engine(), user_id=row.id, tenant_id=row.tenant_id) as conn:
+        _assert_org_active(conn, row.tenant_id)
+    key = (api_tokens.DEFAULT_BURST, api_tokens.DEFAULT_PER_MINUTE)
+    lim = _TOKEN_LIMITERS.get(key) or _TOKEN_LIMITERS.setdefault(key, TokenBucketLimiter(burst=key[0], per_minute=key[1]))
+    wait = lim.take(f"tok:{row.id}")
+    if wait > 0:
+        raise HTTPException(429, "token_rate_limited", headers={"Retry-After": str(lim.retry_after(wait))})
+    return Principal(row.id, "api_token", row.tenant_id, "api_token", grants=frozenset(row.permissions))
+
+
 def get_principal(
     request: Request,
     authorization: str | None = Header(default=None),
@@ -83,8 +114,11 @@ def get_principal(
     memberships the user really has; anything else is a 404 that does not reveal existence."""
     if not authorization or not authorization.lower().startswith("bearer "):
         raise _unauth()
+    bearer = authorization[7:].strip()
+    if api_tokens.looks_like_token(bearer):
+        return _api_token_principal(bearer, settings)
     try:
-        claims = decode_token(settings, authorization[7:].strip())
+        claims = decode_token(settings, bearer)
     except (jwt.PyJWTError, ValueError) as exc:
         raise _unauth() from exc
 
@@ -121,7 +155,9 @@ def get_principal(
         raise HTTPException(404, "tenant not found")
     with scoped_connection(engine, user_id=claims.sub, tenant_id=tid) as conn:   # only after the membership was validated above (scoped_connection's own rule)
         _assert_org_active(conn, tid)
-    return Principal(claims.sub, "user", tid, memberships[tid], mfa_at=claims.mfa_at)
+        # a platform delegate is never scoped (its role is not a membership); a member with a `member_scopes` row is, whatever the role they hold now
+        scope = scope_mod.resolve(conn, tid, claims.sub) if memberships[tid] != PLATFORM_ROLE_NAME else None
+    return Principal(claims.sub, "user", tid, memberships[tid], mfa_at=claims.mfa_at, scope=scope)
 
 
 def mfa_is_recent(p: Principal, settings: Settings) -> bool:
@@ -210,7 +246,7 @@ def require_platform_operator(perm: str):
 def tenant_conn(p: Principal = Depends(get_principal)) -> Iterator[Connection]:
     """Always use TENANT_CONN (Depends(tenant_conn, scope="function")): the transaction must COMMIT before the response is sent. With the
     default request scope the commit runs after the client already has its 2xx, so a follow-up call (read-your-writes) can race it."""
-    with scoped_connection(get_engine(), user_id=p.id, tenant_id=p.tenant_id) as conn:
+    with scoped_connection(get_engine(), user_id=p.id, tenant_id=p.tenant_id, scope=scope_mod.to_setting(p.scope)) as conn:
         yield conn
 
 

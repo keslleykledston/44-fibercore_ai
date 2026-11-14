@@ -36,7 +36,7 @@ def make_engine(dsn: str) -> Engine:
 
 @contextmanager
 def scoped_connection(
-    engine: Engine, *, user_id: UUID | None = None, tenant_id: UUID | None = None
+    engine: Engine, *, user_id: UUID | None = None, tenant_id: UUID | None = None, scope: str = ""
 ) -> Iterator[Connection]:
     """One transaction with RLS context bound via transaction-local settings (SET LOCAL semantics).
 
@@ -44,7 +44,7 @@ def scoped_connection(
     """
     with engine.begin() as conn:
         conn.execute(
-            text("SELECT set_config('app.user_id', :u, true), set_config('app.tenant_id', :t, true)"),
-            {"u": str(user_id) if user_id else "", "t": str(tenant_id) if tenant_id else ""},
+            text("SELECT set_config('app.user_id', :u, true), set_config('app.tenant_id', :t, true), set_config('app.scope', :s, true)"),
+            {"u": str(user_id) if user_id else "", "t": str(tenant_id) if tenant_id else "", "s": scope},   # scope: ADR-0049 D2, see app.core.scope.to_setting ('' = no restriction)
         )
         yield conn

@@ -80,6 +80,7 @@ services:
       SMTP_FROM: ${FIBERCORE_SMTP_FROM:-}
       SMTP_FROM_NAME: ${FIBERCORE_SMTP_FROM_NAME:-FiberCore}
       PUBLIC_BASE_URL: ${FIBERCORE_PUBLIC_BASE_URL:-}  # the origin people open the app on (https://host, or http://localhost[:port]); the origin of every e-mailed link, never taken from a request
+      WEBHOOK_ENCRYPTION_KEY: ${FIBERCORE_WEBHOOK_ENCRYPTION_KEY:-}  # ADR-0051 D2: Fernet key for the HMAC secret of outbound webhooks; empty => webhooks do not exist (the API answers 503)
     ports:
       - "127.0.0.1:${FIBERCORE_API_PORT:-18420}:8000"
     depends_on:
@@ -160,6 +161,29 @@ services:
       SMTP_FROM: ${FIBERCORE_SMTP_FROM:-}
       SMTP_FROM_NAME: ${FIBERCORE_SMTP_FROM_NAME:-FiberCore}
       PUBLIC_BASE_URL: ${FIBERCORE_PUBLIC_BASE_URL:-}  # the origin people open the app on (https://host, or http://localhost[:port]); the origin of every e-mailed link, never taken from a request
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    networks: [control]
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.core.heartbeat", "/tmp/hb", "60"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+  webhooks:
+    # ADR-0051 D2: signs and delivers outbound webhooks. Role fibercore_worker (no grant on the tables; four SECURITY DEFINER functions). Needs outbound HTTPS. Idles when WEBHOOK_ENCRYPTION_KEY is empty.
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    command: ["python", "-m", "app.workers.webhooks"]
+    environment:
+      WORKER_DATABASE_URL: postgresql://fibercore_worker:${FIBERCORE_WORKER_DB_PASSWORD}@postgres:5432/fibercore
+      HEARTBEAT_FILE: /tmp/hb
+      WEBHOOK_ENCRYPTION_KEY: ${FIBERCORE_WEBHOOK_ENCRYPTION_KEY:-}
     depends_on:
       migrate: {condition: service_completed_successfully}
     networks: [control]

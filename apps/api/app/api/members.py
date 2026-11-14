@@ -7,6 +7,8 @@ every use is audited, and the target's refresh tokens are revoked so a stolen se
 """
 from __future__ import annotations
 
+import logging
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -18,12 +20,14 @@ from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import _client_ip, _gate, _record, _throttled, audit
 from app.api.session import _check_second_factor, _mfa_required, _reauth
 from app.core import mail, role_policy
+from app.core import scope as scope_mod
 from app.core.db import get_engine, get_rbac_engine, scoped_connection
 from app.core.permissions import CATALOG
 from app.core.security import ROLE_PERMISSIONS
 from app.core.settings import Settings, get_settings
 from app.events import outbox
 
+log = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -116,9 +120,13 @@ def reset_member_mfa(
     outbox.enqueue(conn, tenant_id=p.tenant_id, aggregate_type="user", aggregate_id=user_id, event_type="member.mfa_reset",
                    payload={"by": str(p.id), "revoked_sessions": revoked})
     if mail.enabled(settings):   # ADR-0048: the person is told (no secret in it); the address is the member's own account's
-        to = conn.execute(text("SELECT lower(email) FROM users_global WHERE id = :u"), {"u": user_id}).scalar()
-        if to:
-            mail.queue_notice(conn, p.tenant_id, "mfa_reset_notice", to, p.id)
+        try:
+            with conn.begin_nested():   # a notice that cannot be queued must NEVER undo the reset the administrator just did (Codex r1, MEDIUM)
+                to = conn.execute(text("SELECT lower(email) FROM users_global WHERE id = :u"), {"u": user_id}).scalar()
+                if to:
+                    mail.queue_notice(conn, p.tenant_id, "mfa_reset_notice", to, p.id)
+        except Exception:   # noqa: BLE001
+            log.warning("mfa reset notice could not be queued (reset kept)")
     return {"status": "reset", "revoked_sessions": revoked}
 
 
@@ -152,7 +160,7 @@ ROLE_CHANGE_STATUS = {
 
 
 @router.put("/v1/members/{user_id}/role")
-def change_member_role(user_id: UUID, body: RoleChangeIn, p: Principal = Depends(require("members:manage"))) -> dict:
+def change_member_role(user_id: UUID, body: RoleChangeIn, p: Principal = Depends(require("members:manage")), conn: Connection = TENANT_CONN) -> dict:
     """Changes a member's system role (ADR-0031). The whole change — validation of actor and transition, the write, ending the member's sessions, the
     audit record and the event — is ONE database function (`app_change_member_role`) that only the dedicated `fibercore_rbac` connection may execute:
     the application's normal database role cannot change a role at all, not even with forged session settings. The rules mirror role_policy (tested
@@ -162,6 +170,8 @@ def change_member_role(user_id: UUID, body: RoleChangeIn, p: Principal = Depends
     engine = get_rbac_engine()
     if engine is None:
         raise HTTPException(503, "rbac_unavailable")   # fail closed: no dedicated connection configured, no role change
+    if body.role not in scope_mod.SCOPABLE_ROLES and conn.execute(text("SELECT 1 FROM member_scopes WHERE user_id = :u"), {"u": user_id}).first():
+        raise HTTPException(409, "clear_scope_first")   # ADR-0049 D2: a role that cannot carry a scope must not inherit one (it would silently narrow an administrator)
     try:
         with engine.begin() as c:
             res = c.execute(text("SELECT app_change_member_role(:a, :t, :u, :r, :why)"),

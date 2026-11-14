@@ -46,6 +46,8 @@
 | `acs:read` | R0 | não | não | Ver os ACS cadastrados do provedor (nome, tipo, Edge, estado informado pelo Edge); a URL e a senha do ACS nunca estão na nuvem |
 | `acs:manage` | R2 | não | não | Cadastrar, renomear, ativar e desativar o ACS de um Edge (só o cadastro: a URL e o segredo do NBI ficam no Edge) |
 | `tenant:security_policy` | R3 | sim | não | Exigir segundo fator de mais papéis na própria organização (só aperta o piso do ambiente; nunca afrouxa) |
+| `tokens:manage` | R3 | sim | não | Criar e revogar tokens de API de LEITURA da organização (o token é mostrado uma vez; só lê; nunca cliente final, equipe nem escrita) |
+| `webhooks:manage` | R3 | sim | não | Registrar, testar e desligar os webhooks de saída da organização (https, eventos de um catálogo fechado, segredo mostrado uma vez; nunca dado de cliente final) |
 | `members:read` | R1 | não | não | Ver os membros do provedor e o estado do MFA de cada um |
 | `members:manage` | R3 | sim | não | Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite) |
 | `platform:delegate` | R3 | sim | não | Conceder e revogar o acesso temporário (até 8 h, com motivo) do suporte da plataforma a este provedor |
@@ -100,6 +102,8 @@
 | `acs:read` | ✔ | ✔ | ✔ |  |  | ✔ |  |  |  |
 | `acs:manage` | ✔ |  |  |  |  |  |  |  |  |
 | `tenant:security_policy` | ✔ |  |  |  |  |  |  |  |  |
+| `tokens:manage` | ✔ |  |  |  |  |  |  |  |  |
+| `webhooks:manage` | ✔ |  |  |  |  |  |  |  |  |
 | `members:read` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `members:manage` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `platform:delegate` | ✔ |  |  |  |  |  |  |  |  |
@@ -121,6 +125,9 @@
 | POST | `/v1/acs` | `acs:manage` |
 | GET | `/v1/acs/{acs_id}` | `acs:read` |
 | PATCH | `/v1/acs/{acs_id}` | `acs:manage` |
+| GET | `/v1/api-tokens` | `tokens:manage` |
+| POST | `/v1/api-tokens` | `tokens:manage` |
+| DELETE | `/v1/api-tokens/{token_id}` | `tokens:manage` |
 | GET | `/v1/associations` | `customers:read` |
 | POST | `/v1/associations/{assoc_id}/approve` | `associations:review` |
 | POST | `/v1/associations/{assoc_id}/reject` | `associations:review` |
@@ -248,10 +255,13 @@
 | GET | `/v1/platform-delegations` | `members:read` |
 | POST | `/v1/platform-delegations` | `platform:delegate` |
 | DELETE | `/v1/platform-delegations/{delegation_id}` | `platform:delegate` |
+| GET | `/v1/platform/closures` | `platform:organizations` |
 | GET | `/v1/platform/modules` | (sessão válida, sem permissão) |
 | GET | `/v1/platform/organizations` | `platform:organizations` |
 | POST | `/v1/platform/organizations` | `platform:organizations` |
 | GET | `/v1/platform/organizations/{tenant_id}` | `platform:organizations` |
+| POST | `/v1/platform/organizations/{tenant_id}/closure` | `platform:organizations` |
+| POST | `/v1/platform/organizations/{tenant_id}/closure/cancel` | `platform:organizations` |
 | PUT | `/v1/platform/organizations/{tenant_id}/features/{feature}` | `platform:organizations` |
 | PUT | `/v1/platform/organizations/{tenant_id}/limits` | `platform:organizations` |
 | POST | `/v1/platform/organizations/{tenant_id}/rename` | `platform:organizations` |
@@ -283,6 +293,16 @@
 | POST | `/v1/team/invites/{invite_id}/renew` | `members:manage` |
 | POST | `/v1/team/members/{user_id}/password-reset` | `members:manage` |
 | POST | `/v1/team/members/{user_id}/remove` | `members:manage` |
+| DELETE | `/v1/team/members/{user_id}/scope` | `members:manage` |
+| GET | `/v1/team/members/{user_id}/scope` | `members:read` |
+| PUT | `/v1/team/members/{user_id}/scope` | `members:manage` |
 | GET | `/v1/tenant` | `tenant:read` |
 | GET | `/v1/tenant/features` | `tenant:read` |
+| GET | `/v1/webhooks` | `webhooks:manage` |
+| POST | `/v1/webhooks` | `webhooks:manage` |
+| DELETE | `/v1/webhooks/{webhook_id}` | `webhooks:manage` |
+| PATCH | `/v1/webhooks/{webhook_id}` | `webhooks:manage` |
+| GET | `/v1/webhooks/{webhook_id}/deliveries` | `webhooks:manage` |
+| POST | `/v1/webhooks/{webhook_id}/rotate-secret` | `webhooks:manage` |
+| POST | `/v1/webhooks/{webhook_id}/test` | `webhooks:manage` |
 | GET | `/version` | (pública ou usa credencial no corpo) |

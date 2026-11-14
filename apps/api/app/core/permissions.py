@@ -64,6 +64,8 @@ CATALOG: dict[str, Permission] = dict([
     _p("acs:read", "Ver os ACS cadastrados do provedor (nome, tipo, Edge, estado informado pelo Edge); a URL e a senha do ACS nunca estão na nuvem", "R0"),
     _p("acs:manage", "Cadastrar, renomear, ativar e desativar o ACS de um Edge (só o cadastro: a URL e o segredo do NBI ficam no Edge)", "R2"),
     _p("tenant:security_policy", "Exigir segundo fator de mais papéis na própria organização (só aperta o piso do ambiente; nunca afrouxa)", "R3", mfa_recent=True),
+    _p("tokens:manage", "Criar e revogar tokens de API de LEITURA da organização (o token é mostrado uma vez; só lê; nunca cliente final, equipe nem escrita)", "R3", mfa_recent=True),
+    _p("webhooks:manage", "Registrar, testar e desligar os webhooks de saída da organização (https, eventos de um catálogo fechado, segredo mostrado uma vez; nunca dado de cliente final)", "R3", mfa_recent=True),
     _p("members:read", "Ver os membros do provedor e o estado do MFA de cada um", "R1"),
     _p("members:manage", "Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite)", "R3", mfa_recent=True),
     _p("platform:delegate", "Conceder e revogar o acesso temporário (até 8 h, com motivo) do suporte da plataforma a este provedor", "R3", mfa_recent=True),

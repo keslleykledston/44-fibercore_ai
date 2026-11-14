@@ -73,6 +73,8 @@ class Settings(BaseSettings):
     smtp_from_name: str = Field(default="FiberCore", max_length=60)
     # where the people open the app: the origin of every e-mailed link
     public_base_url: str = Field(default="", pattern=r"^$|^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?$|^http://(localhost|127\.0\.0\.1)(:[0-9]{1,5})?$")
+    # ADR-0051 D2: Fernet key that encrypts the HMAC secret of each outbound webhook. Empty => webhooks do not exist (fail closed).
+    webhook_encryption_key: str = Field(default="", repr=False)
     pii_hmac_key: str = Field(default="", repr=False)  # HMAC key for customer documents; import fails closed without it
     # ADR-0043: bearer token that opens GET /metrics (Prometheus scrape). Empty (default) => the route answers 404 as if it did not exist (fail closed).
     metrics_token: str = Field(default="", repr=False)

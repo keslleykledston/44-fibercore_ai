@@ -1,6 +1,6 @@
 # ADR-0047: Ciclo de vida da organização, console do operador e roadmap multi-organização (sem revenda, sem cobrança)
 
-Status: Accepted e construídas as **fatias A** (D1 e D2), **B** (D3) e **C** (D4, ADR-0048); **Proposed** para D a F, que exigem ADR ou emenda própria antes da construção | Data: 2026-11-13 | Owner: Claude Code (implementação), Codex (revisão)
+Status: Accepted e construídas as **fatias A** (D1 e D2), **B** (D3), **C** (D4, ADR-0048) **D** (D5 e D6, ADR-0049), **E** (ADR-0050) e **F** parcial (F1 tokens e F2 webhooks, ADR-0051); **Proposed** só o SSO (F3), que exigem ADR ou emenda própria antes da construção | Data: 2026-11-13 | Owner: Claude Code (implementação), Codex (revisão)
 
 Origem: levantamento de lacunas multi-organização (2026-11-13) e decisões do responsável no mesmo dia: **revenda NÃO; cobrança NÃO (por enquanto)**; ordem "escreva o ADR, faça push e aplique". Estende o ADR-0046 D1 (organização como limite de isolamento, criada por operador da plataforma) e fecha o que ele deixou "fora desta fatia" (suspensão de organização pela tela). Não altera o ADR-0031 (RBAC); a fatia D só o reabre.
 
@@ -64,9 +64,9 @@ Fora desta decisão. **White-label: não planejado** (só se alguém pedir).
 | **A** | D1 suspensão/reativação/renome com imposição + D2 console (saúde, flags, histórico) | **Accepted, construir agora** |
 | B | D3 limites técnicos por organização | **Accepted, construída** |
 | C | D4 e-mail transacional (ADR-0048) | **Accepted, construída** |
-| D | D5 escopo por site/OLT; D6 política por organização | Proposed |
-| E | Encerrar organização (exportar e apagar) | Proposed, ADR próprio |
-| F | API com tokens, webhooks, SSO | Proposed, ADR próprio |
+| D | D5 escopo por site/OLT; D6 política por organização (ADR-0049) | **Accepted, construída** (escopo v1 só leitura; sem duração de sessão) |
+| E | Encerrar organização (exportar e apagar) | **Accepted, construída** (ADR-0050): operador pede, dono exporta e apaga |
+| F | API com tokens, webhooks, SSO | F1 tokens e F2 webhooks **construídos** (ADR-0051); **F3 SSO proposto, não construído** (precisa de IdP real) |
 
 ## Alternativas descartadas
 - **Impor a suspensão por política de RLS em todas as tabelas:** invasivo (dezenas de políticas) e deixa o login mudo; a checagem central em `get_principal` cobre usuário e Edge com um ponto só e mensagem clara. A RLS continua sendo a defesa de isolamento entre organizações; a suspensão é política de acesso.

@@ -197,8 +197,10 @@ def me(p: Principal = Depends(get_principal), settings: Settings = Depends(get_s
     """Who the caller is and what their role may do (from the permission catalog: ADR-0031). Only the caller's OWN role is described."""
     from app.core.permissions import CATALOG
     from app.core.security import ROLE_PERMISSIONS
-    mine = ROLE_PERMISSIONS.get(p.role, frozenset())
+    base = p.grants if p.kind == "api_token" and p.grants else ROLE_PERMISSIONS.get(p.role, frozenset())   # an API token holds exactly what it was given (ADR-0051)
+    mine = {n for n in base if p.can(n)}   # `can` already narrows a scoped person to the closed read-only list (ADR-0049 D2)
     return {"id": str(p.id), "kind": p.kind, "tenant_id": str(p.tenant_id), "role": p.role,
+            "scope": {"restricted": p.scope is not None, "olts": len(p.scope) if p.scope is not None else None},
             "mfa_recent": {"enforced": settings.mfa_recent_enforce, "window_seconds": settings.mfa_recent_seconds,
                            "satisfied": mfa_is_recent(p, settings)},
             "permissions": [{"name": n, "risk": c.risk, "description": c.description} for n, c in CATALOG.items() if n in mine]}

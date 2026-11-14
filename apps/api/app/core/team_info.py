@@ -69,7 +69,7 @@ CAPABILITIES: list[tuple[str, str, tuple[str, ...]]] = [
     ("approve", "Aprovar mudanças", ("jobs:approve",)),
     ("bench", "Autorizar manobras de bancada", ("bench:authorize",)),
     ("import", "Importar clientes e revisar vínculos", ("customers:import", "associations:review")),
-    ("people", "Gerenciar pessoas e funções", ("members:manage", "members:mfa_reset", "platform:delegate")),
+    ("people", "Gerenciar pessoas e funções", ("members:manage", "members:mfa_reset", "platform:delegate", "tenant:security_policy", "tokens:manage", "webhooks:manage")),
     ("audit", "Ver pessoas e atividade", ("members:read", "audit:read", "roles:read")),
 ]
 

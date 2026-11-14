@@ -43,6 +43,8 @@ STATUS = {
     "organization_not_found": (404, "organization_not_found"), "organization_status_invalid": (422, "organization_status_invalid"),
     "organization_reason_invalid": (422, "organization_reason_invalid"), "feature_invalid": (422, "feature_invalid"), "feature_state_invalid": (422, "feature_state_invalid"),
     "limits_invalid": (422, "limits_invalid"),   # ADR-0047 D3 (migration 0055)
+    "organization_is_demo": (409, "organization_is_demo"), "organization_not_suspended": (409, "organization_not_suspended"),   # ADR-0050 (migration 0059)
+    "closure_exists": (409, "closure_exists"), "closure_not_found": (404, "closure_not_found"),
     "owner_only_feature": (403, "owner_only_feature"),   # the database refuses it too (migration 0054), not only the route
 }
 
@@ -211,6 +213,14 @@ def organization_detail(tenant_id: UUID, response: Response, op: PlatformOperato
         if mapped is None:
             raise
         raise mapped from exc
+    try:
+        with scoped_connection(get_engine(), user_id=op.id) as conn:
+            res["closure"] = conn.execute(text("SELECT public.platform_closure_state(:a, :t)"), {"a": op.id, "t": tenant_id}).scalar_one()["closure"]
+    except DBAPIError as exc:
+        mapped = _map(exc)
+        if mapped is None:
+            raise
+        raise mapped from exc
     from app.core import limits as _limits
     dflt = _limits.defaults()
     values = {k: v for k, v in lim["limits"].items() if k != "updated_at"}
@@ -226,6 +236,12 @@ def organization_status(tenant_id: UUID, body: StatusIn, response: Response, op:
     from app.core import mail
 
     def notify(conn, res: dict) -> None:   # ADR-0048: tell the organization's administrators (no secret, no reason text: the reason is for the audit trail)
+        if res.get("changed") and body.status == "active":   # ADR-0050: an organization that is active again is no longer being closed
+            try:
+                with conn.begin_nested():
+                    conn.execute(text("SELECT public.platform_cancel_organization_closure(:a, :t, 'Organização reativada', :r)"), {"a": op.id, "t": tenant_id, "r": uuid4()})
+            except DBAPIError:   # no open closure: nothing to cancel
+                pass
         if res.get("changed") and mail.enabled():
             kind = "organization_suspended" if body.status == "suspended" else "organization_reactivated"
             for to in mail.admin_addresses(conn, tenant_id):
@@ -270,3 +286,35 @@ def organization_limits(tenant_id: UUID, body: LimitsIn, response: Response, op:
     response.headers["Cache-Control"] = "no-store"
     return _call(op, "limits", "PUT /v1/platform/organizations/{id}/limits", tenant_id, "SELECT public.platform_set_limits(:a, :t, CAST(:l AS jsonb), :why, :r)",
                  {"l": json.dumps(body.limits), "why": body.reason}, uuid4())
+
+
+class ClosureIn(BaseModel):
+    reason: str = Field(min_length=1, max_length=400)
+
+
+@router.post("/v1/platform/organizations/{tenant_id}/closure", status_code=201)
+def request_closure(tenant_id: UUID, body: ClosureIn, response: Response, op: PlatformOperator = Depends(require_platform_operator(PERM))) -> dict:
+    """ADR-0050: ASK to close a SUSPENDED organization (not a demo one). It deletes nothing: it opens a 7-day grace period; the owner, on the host, exports the data and then closes it
+    (`org-export`, `org-close`). Reactivating the organization cancels the request."""
+    response.headers["Cache-Control"] = "no-store"
+    return _call(op, "closure_request", "POST /v1/platform/organizations/{id}/closure", tenant_id, "SELECT public.platform_request_organization_closure(:a, :t, :why, :r)", {"why": body.reason}, uuid4())
+
+
+@router.post("/v1/platform/organizations/{tenant_id}/closure/cancel")
+def cancel_closure(tenant_id: UUID, body: ClosureIn, response: Response, op: PlatformOperator = Depends(require_platform_operator(PERM))) -> dict:
+    response.headers["Cache-Control"] = "no-store"
+    return _call(op, "closure_cancel", "POST /v1/platform/organizations/{id}/closure/cancel", tenant_id, "SELECT public.platform_cancel_organization_closure(:a, :t, :why, :r)", {"why": body.reason}, uuid4())
+
+
+@router.get("/v1/platform/closures")
+def list_closures(response: Response, op: PlatformOperator = Depends(require_platform_operator(PERM))) -> dict:
+    """The permanent record of closures, including organizations that no longer exist (name, reason, who/when, export hash, rows deleted; no personal data)."""
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        with scoped_connection(get_engine(), user_id=op.id) as conn:
+            return conn.execute(text("SELECT public.platform_list_closures(:a)"), {"a": op.id}).scalar_one()
+    except DBAPIError as exc:
+        mapped = _map(exc)
+        if mapped is None:
+            raise
+        raise mapped from exc

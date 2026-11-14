@@ -77,7 +77,10 @@ def _tenant_tables(migrated) -> list[str]:
     with migrated.connect() as c:
         _TABLES.extend(r[0] for r in c.execute(text(
             "SELECT c.table_name FROM information_schema.columns c JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name "
-            "WHERE c.table_schema = 'public' AND c.column_name = 'tenant_id' AND t.table_type = 'BASE TABLE' ORDER BY 1")))
+            "WHERE c.table_schema = 'public' AND c.column_name = 'tenant_id' AND t.table_type = 'BASE TABLE' "
+            # organization_closures (ADR-0050) is the platform's permanent ledger of closed organizations: no foreign key and no row security ON PURPOSE (it must outlive the organization),
+            # and the application role has no privilege on it at all (a test in test_org_closure.py proves that)
+            "AND c.table_name <> 'organization_closures' ORDER BY 1")))
     return _TABLES
 
 

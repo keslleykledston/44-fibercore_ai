@@ -39,6 +39,46 @@ def _enforce_limit(c, tenant_id: str, resource: str, exclude_email: str | None =
         sys.exit(f"{exc}; raise it with: limits-set {tenant_id} --max-{resource} N --reason ...")
 
 
+def _org_close(c, a) -> None:
+    """ADR-0050: every check, then the deletion in this ONE transaction (the caller's `begin()`): any failure rolls the whole thing back."""
+    import getpass as _gp
+    from app.core import org_close
+    t = a.tenant_id
+    c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": t})
+    org = c.execute(text("SELECT id, name, status, demo FROM tenants WHERE id = :t FOR UPDATE"), {"t": t}).first()
+    if org is None:
+        sys.exit("no such organization")
+    if org.demo:
+        sys.exit("refused: a demonstration organization is never closed by this command")
+    if org.status != "suspended":
+        sys.exit("refused: the organization must be suspended first")
+    cl = c.execute(text("SELECT state, requested_at, earliest_close_at, export_at, export_sha256, export_rows FROM organization_closures WHERE tenant_id = :t"), {"t": t}).first()
+    if cl is None or cl.state != "requested":
+        sys.exit("refused: there is no open closure request (the platform operator asks for it on the organization's screen)")
+    if c.execute(text("SELECT now() < :d"), {"d": cl.earliest_close_at}).scalar():
+        sys.exit(f"refused: the grace period ends at {cl.earliest_close_at.isoformat()}")
+    if a.confirm_name != org.name:
+        sys.exit("refused: --confirm-name is not the organization's exact name")
+    if cl.export_sha256 is None or cl.export_at is None or cl.export_at < cl.requested_at:
+        sys.exit("refused: no export made after the request: run org-export first")
+    if not os.path.isfile(a.export_file) or org_close.file_sha256(a.export_file) != cl.export_sha256:
+        sys.exit("refused: the file is not the archive org-export recorded (sha256 differs or it is missing)")
+    tables = org_close.data_tables(c)
+    now_rows = org_close.count_rows(c, t, tables)
+    if now_rows != (cl.export_rows or {}):
+        sys.exit("refused: the organization's data changed after the export: run org-export again")
+    total = sum(now_rows.values())
+    if a.dry_run:
+        print(f"dry-run: every check passed; would delete {total} rows in {sum(1 for v in now_rows.values() if v)} tables and the organization {org.name!r}")
+        return
+    members = c.execute(text("SELECT user_id FROM tenant_memberships WHERE tenant_id = :t"), {"t": t}).scalars().all()
+    deleted = org_close.delete_everything(c, t, tables)
+    orphans = org_close.deactivate_orphans(c, list(members))
+    c.execute(text("UPDATE organization_closures SET state = 'closed', closed_at = now(), closed_by = :u, deleted_rows = CAST(:d AS jsonb) WHERE tenant_id = :t"),
+              {"u": f"os:{_gp.getuser()}", "d": json.dumps(deleted), "t": t})
+    print(f"organization {org.name!r} closed: {sum(deleted.values())} rows deleted, {orphans} account(s) deactivated (they belonged to no other organization)")
+
+
 def _password(env_name: str | None) -> str:
     pw = os.environ.get(env_name, "") if env_name else getpass.getpass("Password: ")
     if len(pw) < 12:
@@ -96,6 +136,12 @@ def main(argv: list[str] | None = None) -> None:
     fs.add_argument("tenant_id"); fs.add_argument("feature"); fs.add_argument("state", choices=["on", "off", "default"])
     os_ = sub.add_parser("org-status", help="ADR-0047 break-glass: suspend/reactivate an organization from the host (owner-only; the screen does the same for the platform operator)")
     os_.add_argument("tenant_id"); os_.add_argument("status", choices=["active", "suspended"]); os_.add_argument("--reason", required=True, help="3-200 characters; goes to the audit trail")
+    ox = sub.add_parser("org-export", help="ADR-0050: export ALL the data of an organization to a .tar.gz (0600; contains end-customer personal data, never a secret hash/token/blob). Owner-only, on the host")
+    ox.add_argument("tenant_id"); ox.add_argument("--out", required=True, help="path of the archive to create (must not exist)")
+    oc_ = sub.add_parser("org-close", help="ADR-0050: DELETE an organization and all its data, irreversibly. Needs a suspended, non-demo organization with a closure request past its 7-day grace period, "
+                                           "the exact name, and the archive made by org-export. Owner-only, on the host")
+    oc_.add_argument("tenant_id"); oc_.add_argument("--confirm-name", required=True, help="the organization's exact name"); oc_.add_argument("--export-file", required=True)
+    oc_.add_argument("--dry-run", action="store_true", help="run every check and print what would be deleted; delete nothing")
     ls_ = sub.add_parser("limits-set", help="ADR-0047 D3: set/clear the technical limits of an organization (owner-only; the screen does the same for the operator). `default` clears an override")
     ls_.add_argument("tenant_id"); ls_.add_argument("--reason", required=True, help="3-200 characters; goes to the audit trail")
     for _k in ("max-edges", "max-olts", "max-members", "ingest-per-minute", "ingest-burst"):
@@ -147,6 +193,20 @@ def main(argv: list[str] | None = None) -> None:
             if n != 1:
                 sys.exit("no such account")
             print("platform operator " + ("removed" if a.off else "set"))
+        elif a.cmd == "org-export":
+            from app.core import org_close
+            c.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))   # one consistent snapshot for every table
+            try:
+                res = org_close.export_archive(c, a.tenant_id, a.out)
+            except ValueError as exc:
+                sys.exit(str(exc))
+            except FileExistsError:
+                sys.exit("the output file already exists: refusing to overwrite")
+            c.execute(text("UPDATE organization_closures SET export_at = now(), export_sha256 = :h, export_bytes = :b, export_rows = CAST(:r AS jsonb) WHERE tenant_id = :t AND state = 'requested'"),
+                      {"h": res["sha256"], "b": res["bytes"], "r": json.dumps(res["rows"]), "t": a.tenant_id})
+            print(f"exported {sum(res['rows'].values())} rows from {len(res['manifest']['tables'])} tables\nfile: {a.out}\nsha256: {res['sha256']}\nbytes: {res['bytes']}")
+        elif a.cmd == "org-close":
+            _org_close(c, a)
         elif a.cmd == "limits-set":
             from app.core.limits import defaults as _limit_defaults
             reason = " ".join(a.reason.split())

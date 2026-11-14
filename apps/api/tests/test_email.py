@@ -211,6 +211,24 @@ def test_resetting_someones_mfa_tells_them(client, org, make, smtp_on, migrated)
     assert len(q) == 1 and q[0].to_address == victim["email"].lower() and "http" not in q[0].body
 
 
+def test_a_notice_or_link_that_cannot_be_queued_never_undoes_the_act_and_the_link_is_still_shown(client, org, make, smtp_on, migrated, monkeypatch):
+    """Codex r1 (MEDIUM): the MFA-reset notice failing must not roll the reset back; a link that cannot be queued still comes back on screen with `emailed: false`."""
+    def boom(*_a, **_k):
+        raise RuntimeError("queue insert failed")
+    monkeypatch.setattr(mail, "queue_notice", boom)
+    monkeypatch.setattr(mail, "queue_link", boom)
+    sess = _with_mfa_session(client, org["admin"])
+    h = _h(sess["access_token"])
+    victim = make(role="support", tenant_id=org["id"])
+    r = client.post(f"/v1/members/{victim['id']}/mfa/reset", json={"password": PW, "code": org["admin"]["codes"][0]}, headers=h)
+    assert r.status_code == 200 and r.json()["status"] == "reset"
+    inv = client.post("/v1/team/invites", json={"email": "falha.fila@example.com", "role": "support", "send_email": True}, headers=h)
+    assert inv.status_code == 201 and inv.json()["emailed"] is False and inv.json()["token"]
+    rst = client.post(f"/v1/team/members/{victim['id']}/password-reset?send_email=true", headers=h)
+    assert rst.status_code == 201 and rst.json()["emailed"] is False and rst.json()["token"]
+    assert [x for x in _queue(migrated, org["id"]) if x.kind in ("member_invite", "password_reset", "mfa_reset_notice")] == []
+
+
 # ============================================================ the worker
 def _enqueue(migrated, tid, kind="member_invite", to="alvo@example.com", body="Corpo com link https://olt.example.com/convite/tok", ttl="1 hour"):
     with migrated.begin() as c:

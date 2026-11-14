@@ -6,6 +6,7 @@ chooses their own password, and nobody ever sees it."""
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import secrets
 from uuid import UUID
@@ -18,10 +19,12 @@ from sqlalchemy.exc import DBAPIError
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import _client_ip, _gate, _record, _throttled, audit
 from app.core import limits, mail, role_policy, team_info
+from app.core import scope as scope_mod
 from app.core.db import get_engine, get_rbac_engine, scoped_connection
 from app.core.security import ROLE_PERMISSIONS, hash_secret, verify_secret
 from app.core.settings import Settings, get_settings
 
+log = logging.getLogger(__name__)
 router = APIRouter()
 
 INVITE_HOURS = 72
@@ -31,6 +34,7 @@ STATUS = {
     "member_not_found": 404, "invite_not_found": 404, "password_changed": 409,
     "already_member": 409, "invite_not_open": 409, "last_isp_admin": 409, "account_shared": 409, "account_exists": 409, "account_inactive": 409,
     "invite_used": 409, "invite_revoked": 409, "invite_expired": 410, "invite_invalid": 404, "reset_not_allowed": 409,
+    "cannot_scope_self": 403, "role_not_scopable": 409, "scope_invalid": 422, "scope_target_not_found": 404,   # ADR-0049 D2 (migration 0058)
     "email_invalid": 422, "name_invalid": 422, "validity_invalid": 422, "reason_required": 422, "details_required": 422,
 }
 
@@ -64,8 +68,10 @@ def _call(sql: str, args: dict) -> dict:
 def team(p: Principal = Depends(require("members:read")), conn: Connection = TENANT_CONN) -> dict:
     mine = role_policy.ASSIGNABLE_BY.get(p.role, frozenset()) if p.can("members:manage") else frozenset()
     members = conn.execute(
-        text("SELECT m.user_id, u.email, u.display_name, m.role, COALESCE(mf.enabled, false) AS mfa_enabled "
+        text("SELECT m.user_id, u.email, u.display_name, m.role, COALESCE(mf.enabled, false) AS mfa_enabled, "
+             "s.user_id IS NOT NULL AS scoped, COALESCE(cardinality(s.pop_ids), 0) AS scope_pops, COALESCE(cardinality(s.olt_ids), 0) AS scope_olts "
              "FROM tenant_memberships m JOIN users_global u ON u.id = m.user_id LEFT JOIN user_mfa mf ON mf.user_id = m.user_id "
+             "LEFT JOIN member_scopes s ON s.tenant_id = m.tenant_id AND s.user_id = m.user_id "
              "WHERE m.tenant_id = :t AND u.is_active ORDER BY lower(u.display_name), u.email"), {"t": p.tenant_id}).all()
     invites = conn.execute(
         text("SELECT i.id, i.email, i.display_name, i.role, i.created_at, i.expires_at, u.display_name AS by_name, i.expires_at <= now() AS expired "
@@ -79,6 +85,8 @@ def team(p: Principal = Depends(require("members:read")), conn: Connection = TEN
         "can_change_role": can_manage and role_policy.can_change_any(p.role, m.role, is_self=m.user_id == p.id),
         "can_remove": can_manage and m.user_id != p.id and (p.role == "isp_admin" or m.role not in role_policy.PROTECTED_TARGETS),
         "can_reset_password": can_manage and m.user_id != p.id and (p.role == "isp_admin" or m.role not in role_policy.PROTECTED_TARGETS),
+        "scope": {"restricted": m.scoped, "pops": m.scope_pops, "olts": m.scope_olts},
+        "can_scope": can_manage and m.user_id != p.id and m.role in scope_mod.SCOPABLE_ROLES and (p.role == "isp_admin" or m.role not in role_policy.PROTECTED_TARGETS),
     } for m in members]
     return {
         "me": {"id": str(p.id), "role": p.role, "role_label": team_info.LABEL.get(p.role, p.role), "can_manage": can_manage,
@@ -135,15 +143,25 @@ def _want_email(send_email: bool) -> None:
         raise HTTPException(409, "email_not_configured")
 
 
+def _try_queue(conn: Connection, queue) -> bool:
+    """Queue a message in a savepoint: if it cannot be queued the link is STILL returned on screen (the act already happened) and `emailed` says false, instead of a 500 that would hide the link."""
+    try:
+        with conn.begin_nested():
+            queue()
+        return True
+    except Exception:   # noqa: BLE001
+        log.warning("e-mail could not be queued (the link is still shown on screen)")
+        return False
+
+
 def _create_invite(p: Principal, email: str, name: str | None, role: str, mail_conn: Connection | None = None) -> dict:
     raw, digest = _token()
     res = _call("SELECT app_invite_create(:a, :t, :e, :n, :r, :h, :hours)",
                 {"a": p.id, "t": p.tenant_id, "e": email, "n": name, "r": role, "h": digest, "hours": INVITE_HOURS})
     out = {"id": res["id"], "email": res["email"], "role": res["role"], "role_label": team_info.LABEL.get(res["role"], res["role"]), "expires_at": res["expires_at"], "token": raw}
     if mail_conn is not None:   # queued in the request's transaction: sent only if it commits; the audit line names the kind and the address, never the link
-        mail.queue_link(mail_conn, p.tenant_id, "member_invite", res["email"], raw, INVITE_HOURS, p.id)
-        audit(mail_conn, p, "member.invite.emailed", "invite", str(res["id"]), {"email": res["email"]})
-        out["emailed"] = True
+        out["emailed"] = _try_queue(mail_conn, lambda: (mail.queue_link(mail_conn, p.tenant_id, "member_invite", res["email"], raw, INVITE_HOURS, p.id),
+                                                        audit(mail_conn, p, "member.invite.emailed", "invite", str(res["id"]), {"email": res["email"]})))
     return out
 
 
@@ -190,10 +208,43 @@ def password_reset_link(user_id: UUID, send_email: bool = Query(False), p: Princ
                           {"t": p.tenant_id, "u": user_id}).scalar()
         if to is None:
             raise HTTPException(404, "member_not_found")
-        mail.queue_link(conn, p.tenant_id, "password_reset", to, raw, RESET_HOURS, p.id)
-        audit(conn, p, "member.password_reset.emailed", "user", str(user_id), {})
-        out["emailed"] = True
+        out["emailed"] = _try_queue(conn, lambda: (mail.queue_link(conn, p.tenant_id, "password_reset", to, raw, RESET_HOURS, p.id),
+                                                   audit(conn, p, "member.password_reset.emailed", "user", str(user_id), {})))
     return out
+
+
+class ScopeIn(BaseModel):
+    pop_ids: list[UUID] = Field(default_factory=list, max_length=200)
+    olt_ids: list[UUID] = Field(default_factory=list, max_length=200)
+
+
+@router.get("/v1/team/members/{user_id}/scope")
+def member_scope(user_id: UUID, p: Principal = Depends(require("members:read")), conn: Connection = TENANT_CONN) -> dict:
+    """The scope of ONE member plus what an administrator may pick (the sites and OLTs of the organization). Names only."""
+    row = conn.execute(text("SELECT m.role, s.pop_ids, s.olt_ids FROM tenant_memberships m LEFT JOIN member_scopes s ON s.tenant_id = m.tenant_id AND s.user_id = m.user_id "
+                            "WHERE m.tenant_id = :t AND m.user_id = :u"), {"t": p.tenant_id, "u": user_id}).first()
+    if row is None:
+        raise HTTPException(404, "member_not_found")
+    pops = conn.execute(text("SELECT id, name FROM pops ORDER BY lower(name)")).all()
+    olts = conn.execute(text("SELECT id, name, pop_id FROM olts ORDER BY lower(name)")).all()
+    return {"scopable": row.role in scope_mod.SCOPABLE_ROLES, "role": row.role, "restricted": row.pop_ids is not None,
+            "pop_ids": [str(x) for x in (row.pop_ids or [])], "olt_ids": [str(x) for x in (row.olt_ids or [])],
+            "options": {"pops": [{"id": str(x.id), "name": x.name} for x in pops], "olts": [{"id": str(x.id), "name": x.name, "pop_id": str(x.pop_id) if x.pop_id else None} for x in olts]}}
+
+
+@router.put("/v1/team/members/{user_id}/scope")
+def set_member_scope(user_id: UUID, body: ScopeIn, p: Principal = Depends(require("members:manage"))) -> dict:
+    """Restrict a member to some sites and/or OLTs (ADR-0049 D2). One database function (only the dedicated rbac connection may run it) checks the actor, the target's role and that
+    every id exists in THIS organization. An empty list is refused: to give the whole provider back use DELETE."""
+    res = _call("SELECT app_member_scope_set(:a, :t, :u, CAST(:p AS uuid[]), CAST(:o AS uuid[]))",
+                {"a": p.id, "t": p.tenant_id, "u": user_id, "p": [str(x) for x in body.pop_ids], "o": [str(x) for x in body.olt_ids]})
+    return {"restricted": True, **res}
+
+
+@router.delete("/v1/team/members/{user_id}/scope")
+def clear_member_scope(user_id: UUID, p: Principal = Depends(require("members:manage"))) -> dict:
+    res = _call("SELECT app_member_scope_clear(:a, :t, :u)", {"a": p.id, "t": p.tenant_id, "u": user_id})
+    return {"restricted": False, **res}
 
 
 class RemoveIn(BaseModel):
