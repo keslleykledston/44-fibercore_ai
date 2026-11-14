@@ -1,0 +1,8 @@
+## MEDIUM
+
+- **O encerramento pode apagar dados que não estão no arquivo exportado.** Após `org-export`, basta atualizar um registro existente da organização sem alterar a quantidade de linhas — por exemplo, mudar o estado de um incidente. `org-close` compara apenas as contagens por tabela com `export_rows`; elas continuam iguais, então a conferência passa e a organização é apagada, embora o arquivo não contenha a versão atualizada. Isso também deixa passar alterações concorrentes entre a contagem e a exclusão. [org_close.py](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/apps/api/app/core/org_close.py:65) [cli.py](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/apps/api/app/cli.py:66)
+
+Não encontrei outros achados reproduzíveis no escopo solicitado.
+
+Codex session ID: 01a1da89-8845-7a23-b0ab-844a4e8a272b
+Resume in Codex: codex resume 01a1da89-8845-7a23-b0ab-844a4e8a272b

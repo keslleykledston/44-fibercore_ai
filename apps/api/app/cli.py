@@ -67,6 +67,12 @@ def _org_close(c, a) -> None:
     now_rows = org_close.count_rows(c, t, tables)
     if now_rows != (cl.export_rows or {}):
         sys.exit("refused: the organization's data changed after the export: run org-export again")
+    try:
+        changed = org_close.content_differences(c, t, org_close.read_manifest(a.export_file), now_rows)
+    except (OSError, ValueError, KeyError) as exc:
+        sys.exit(f"refused: the archive cannot be read ({type(exc).__name__})")
+    if changed:
+        sys.exit(f"refused: the content of these tables changed after the export (same row counts, different rows): {', '.join(changed)}; run org-export again")
     total = sum(now_rows.values())
     if a.dry_run:
         print(f"dry-run: every check passed; would delete {total} rows in {sum(1 for v in now_rows.values() if v)} tables and the organization {org.name!r}")
@@ -206,6 +212,8 @@ def main(argv: list[str] | None = None) -> None:
                       {"h": res["sha256"], "b": res["bytes"], "r": json.dumps(res["rows"]), "t": a.tenant_id})
             print(f"exported {sum(res['rows'].values())} rows from {len(res['manifest']['tables'])} tables\nfile: {a.out}\nsha256: {res['sha256']}\nbytes: {res['bytes']}")
         elif a.cmd == "org-close":
+            # REPEATABLE READ: the content check and the deletion see ONE snapshot; a writer that touches a row we then delete makes the DELETE fail (serialization) and everything rolls back
+            c.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
             _org_close(c, a)
         elif a.cmd == "limits-set":
             from app.core.limits import defaults as _limit_defaults

@@ -193,6 +193,12 @@ def test_the_owner_cli_refuses_until_every_condition_holds(client, pair, migrate
         c.execute(text("INSERT INTO tenant_features (tenant_id, feature, enabled) VALUES (:t,'acs_registry',false)"), {"t": t})
     with pytest.raises(SystemExit, match="data changed after the export"):
         cli.main(["org-close", t, "--confirm-name", name, "--export-file", arch])
+    with migrated.begin() as c:                                    # Codex r1 (MEDIUM): same row counts, different content must be refused too
+        c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": t})
+        c.execute(text("DELETE FROM tenant_features WHERE feature = 'acs_registry'"))
+        c.execute(text("UPDATE tenant_limits SET max_olts = 10"))
+    with pytest.raises(SystemExit, match="different rows\\): tenant_limits"):
+        cli.main(["org-close", t, "--confirm-name", name, "--export-file", arch])
     assert sum(_rows(migrated, t).values()) > 0                    # nothing was deleted by any refusal
 
 

@@ -72,6 +72,28 @@ def _columns(conn: Connection, table: str) -> list[str]:
     return [c for c in cols if c not in SECRET_COLUMNS]
 
 
+def _jsonl(conn: Connection, table: str, tenant_id: str, cols: list[str]):
+    """The rows of one table exactly as the export writes them (ONE definition: the export and the content check of `org-close` cannot drift apart)."""
+    sel = ", ".join(f'"{c}"' for c in cols)
+    stmt = text(f'SELECT row_to_json(x)::text FROM (SELECT {sel} FROM "{table}" WHERE tenant_id = :t ORDER BY 1) x').execution_options(stream_results=True)  # noqa: S608 - names come from pg_class
+    for r in conn.execute(stmt, {"t": tenant_id}):
+        yield (r[0] + "\n").encode()
+
+
+def content_differences(conn: Connection, tenant_id: str, manifest: dict, counts: dict[str, int]) -> list[str]:
+    """Tables whose CONTENT is no longer what the archive holds (Codex r1, MEDIUM: equal row counts do not prove equal rows). Exported tables are compared by the sha256 of their
+    rows; the tables the export skips (queue/bus internals) by count only."""
+    bad = []
+    for t, info in manifest["tables"].items():
+        h = hashlib.sha256()
+        for line in _jsonl(conn, t, tenant_id, info["columns"]):
+            h.update(line)
+        if h.hexdigest() != info["sha256"]:
+            bad.append(t)
+    bad += [t for t in SKIP_TABLES if t in counts and counts[t] != manifest.get("skipped_counts", {}).get(t, counts[t])]
+    return sorted(bad)
+
+
 def export_archive(conn: Connection, tenant_id: str, out_path: str) -> dict:
     """Write the archive; return {sha256, bytes, rows (per table, ALL data tables), manifest}. `conn` must be a REPEATABLE READ read of the organization (the caller opens it)."""
     row = conn.execute(text("SELECT id, name FROM tenants WHERE id = :t"), {"t": tenant_id}).first() if _set_tenant(conn, tenant_id) else None
@@ -80,7 +102,7 @@ def export_archive(conn: Connection, tenant_id: str, out_path: str) -> dict:
     tables = data_tables(conn)
     counts = count_rows(conn, tenant_id, tables)
     manifest: dict = {"format": 1, "tenant_id": str(row.id), "name": row.name, "exported_at": datetime.now(UTC).isoformat(), "secret_columns_never_exported": sorted(SECRET_COLUMNS),
-                      "skipped_tables": sorted(SKIP_TABLES), "tables": {}}
+                      "skipped_tables": sorted(SKIP_TABLES), "skipped_counts": {t: counts[t] for t in SKIP_TABLES if t in counts}, "tables": {}}
     out = Path(out_path)
     fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)   # never overwrite, never world-readable
     with os.fdopen(fd, "wb") as raw, tarfile.open(fileobj=raw, mode="w:gz") as tar, tempfile.TemporaryDirectory() as tmp:
@@ -91,10 +113,7 @@ def export_archive(conn: Connection, tenant_id: str, out_path: str) -> dict:
             path = Path(tmp) / f"{t}.jsonl"
             h, n = hashlib.sha256(), 0
             with open(path, "wb") as f:
-                sel = ", ".join(f'"{c}"' for c in cols)
-                stmt = text(f'SELECT row_to_json(x)::text FROM (SELECT {sel} FROM "{t}" WHERE tenant_id = :t ORDER BY 1) x').execution_options(stream_results=True)  # noqa: S608 - names come from pg_class
-                for r in conn.execute(stmt, {"t": tenant_id}):
-                    line = (r[0] + "\n").encode()
+                for line in _jsonl(conn, t, tenant_id, cols):
                     f.write(line)
                     h.update(line)
                     n += 1
@@ -112,6 +131,14 @@ def export_archive(conn: Connection, tenant_id: str, out_path: str) -> dict:
 def _set_tenant(conn: Connection, tenant_id: str) -> bool:
     conn.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": tenant_id})
     return True
+
+
+def read_manifest(path: str) -> dict:
+    with tarfile.open(path) as tar:
+        member = tar.extractfile("manifest.json")
+        if member is None:
+            raise ValueError("the archive has no manifest")
+        return json.load(member)
 
 
 def file_sha256(path: str) -> str:
