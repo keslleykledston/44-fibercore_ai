@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/olt"
+	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/oltquery"
 )
 
 // ibFileSession serves the sanitized Intelbras 8820 fixtures and, like the Telnet session, carries the login banner.
@@ -84,5 +85,47 @@ func TestCommandBudgetCoversDiscoveredPONs(t *testing.T) {
 	}
 	if commandBudget(2) != 16 {
 		t.Fatalf("listed ports keep the tight budget: %d", commandBudget(2))
+	}
+}
+
+// ADR-0053: a driver without the query catalog answers ONLY the connection test, with its own identity read, in the collection's session.
+func TestConnectionTestOnADriverWithoutTheCatalogReturnsTheIdentityOnly(t *testing.T) {
+	raw := &ibFileSession{}
+	store := &oltquery.Store{Path: filepath.Join(t.TempDir(), "q.json")}
+	src := OLTSource{Name: "OLT-IB", Driver: olt.Intelbras{}, CloudID: qCloud,
+		Open: func(context.Context) (olt.Session, func(), error) { return raw, func() {}, nil }}
+	c := &OLT{EdgeID: "e1", Sources: []OLTSource{src}, Queries: &Queries{Store: store, Lease: fakeLease{qCloud: 1}}}
+	enqueue(t, store, "job-conn", oltquery.TestQueryID)
+	enqueue(t, store, "job-board", "olt.board")
+	if items, err := c.Collect(context.Background()); err != nil || len(items) != 1 {
+		t.Fatalf("the collection must be unaffected: %d %v", len(items), err)
+	}
+	e, ok, _ := store.Get("job-conn")
+	if !ok || e.State != oltquery.Executed {
+		t.Fatalf("connection test: %+v", e)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(e.Result, &got); err != nil || got["product"] != "OLT8820PLUS" || got["version"] != "2.112" || got["patch"] != nil || got["uptime_seconds"] != nil || len(got) != 4 {
+		t.Fatalf("typed result = %v (%v)", got, err)
+	}
+	// another query is refused alone and nothing extra is sent to the device
+	if b, ok, _ := store.Get("job-board"); !ok || b.State == oltquery.Executed {
+		t.Fatalf("an olt.board query must not run on this driver: %+v", b)
+	}
+	for _, cmd := range raw.sent {
+		if !olt.IntelbrasAllowed(cmd) {
+			t.Fatalf("non allowlisted command %q", cmd)
+		}
+	}
+}
+
+func TestConnectionIdentityRefusesWhatTheCloudWouldNotAccept(t *testing.T) {
+	if _, err := ConnectionIdentity(olt.Identity{Model: "DM4610 HW2", Firmware: "5.8.0-065-r1"}); err != nil {
+		t.Fatalf("a model with a space is real (DM4610 HW2): %v", err)
+	}
+	for _, id := range []olt.Identity{{Model: "", Firmware: "2.112"}, {Model: "OLT8820", Firmware: ""}, {Model: "OLT;8820", Firmware: "2.112"}, {Model: "OLT8820", Firmware: "2.1\n12"}} {
+		if _, err := ConnectionIdentity(id); err == nil {
+			t.Fatalf("%+v must be refused", id)
+		}
 	}
 }

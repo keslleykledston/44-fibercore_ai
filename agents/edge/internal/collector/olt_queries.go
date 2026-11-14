@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"regexp"
 	"time"
 
 	"github.com/keslleykledston/44-fibercore_ai/agents/edge/internal/jobs"
@@ -156,6 +157,30 @@ func (q *Queries) Drain(ctx context.Context, src OLTSource, raw olt.Session, clo
 			}
 			return 0
 		}
+		if !queryCatalogDriver(src.Driver) {
+			// Datacom, Intelbras and Huawei MA5800 have no `olt_query` catalog: they answer ONLY the connection test, with the identity their own driver already reads
+			// (allowlisted, read-only, the same read the collection starts with). Any other query ends alone and nothing is sent.
+			if e.Intent.QueryID != oltquery.TestQueryID {
+				_ = q.Store.Fail(e.JobID, "query_not_enabled")
+				continue
+			}
+			runCtx, stop := context.WithDeadline(ctx, leaseEnd)
+			id, err := src.Driver.Identify(runCtx, sess)
+			stop()
+			var typed json.RawMessage
+			if err == nil {
+				typed, err = ConnectionIdentity(id)
+			}
+			if err != nil {
+				fail(err)
+				return ran
+			}
+			if err := q.persistResult(e.JobID, typed); err != nil {
+				_, _ = q.Store.AbortBatch(cloudID, "olt_busy")
+				return ran
+			}
+			continue
+		}
 		if q.Run == nil || !olt.HasParser(e.Intent.QueryID) {
 			if q.Run == nil {
 				_ = q.Store.Fail(e.JobID, "no_driver")
@@ -189,4 +214,25 @@ func (q *Queries) Drain(ctx context.Context, src OLTSource, raw olt.Session, clo
 			return ran
 		}
 	}
+}
+
+// queryCatalogDriver: only the Huawei MA5600 R015 driver carries the `olt_query` catalog.
+func queryCatalogDriver(d olt.Driver) bool {
+	_, ok := d.(olt.HuaweiR015)
+	return ok
+}
+
+var (
+	connProduct = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/ -]{1,39}$`)
+	connRelease = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._ -]{1,39}$`)
+)
+
+// ConnectionIdentity is the typed result of the connection test for a driver without the query catalog: exactly the keys the Cloud checks (`olt.connection`), with
+// `patch` and `uptime_seconds` null because these CLIs do not give them in the identity read. A model or firmware that does not fit the Cloud's shape is a bad
+// output (never trimmed or guessed).
+func ConnectionIdentity(id olt.Identity) (json.RawMessage, error) {
+	if !connProduct.MatchString(id.Model) || !connRelease.MatchString(id.Firmware) {
+		return nil, olt.ErrBadOutput
+	}
+	return json.Marshal(map[string]any{"product": id.Model, "version": id.Firmware, "patch": nil, "uptime_seconds": nil})
 }

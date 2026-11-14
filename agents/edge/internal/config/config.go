@@ -411,9 +411,13 @@ func (c *Config) Validate() error {
 			if o.CloudID != "" && o.Transport != "snmp" && o.Profile == "huawei_ma56_r015" && len(o.PonPorts) > 0 { // the queries follow the collection, which must have entered config mode
 				eligible++
 			}
+			// ADR-0053: Datacom, Intelbras and Huawei MA5800 answer only the connection test (their own identity read); they need cloud_id too
+			if o.CloudID != "" && o.Transport != "snmp" && (o.Vendor == "datacom" || o.Vendor == "intelbras" || o.Profile == "huawei_ma58_r02x") {
+				eligible++
+			}
 		}
 		if !c.JobsEnabled || !withOpt || eligible == 0 {
-			errs = append(errs, errors.New("olt_query_enabled needs jobs_enabled, \"olt_query\" in allowed_operations and at least one huawei_ma56_r015 CLI olt with cloud_id"))
+			errs = append(errs, errors.New("olt_query_enabled needs jobs_enabled, \"olt_query\" in allowed_operations and at least one CLI olt with cloud_id (huawei_ma56_r015, huawei_ma58_r02x, datacom or intelbras)"))
 		}
 	}
 	for i, o := range c.OLTs {
@@ -455,8 +459,8 @@ func (c *Config) Validate() error {
 		if o.CloudID == "" {
 			continue
 		}
-		if !cloudIDRe.MatchString(o.CloudID) || cloudIDs[o.CloudID] || o.Transport == "snmp" || o.Profile != "huawei_ma56_r015" {
-			errs = append(errs, fmt.Errorf("olts[%d]: cloud_id must be a unique lower-case UUID, on a huawei_ma56_r015 CLI olt", i))
+		if !cloudIDRe.MatchString(o.CloudID) || cloudIDs[o.CloudID] || o.Transport == "snmp" || !(o.Profile == "huawei_ma56_r015" || o.Profile == "huawei_ma58_r02x" || o.Vendor == "datacom" || o.Vendor == "intelbras") {
+			errs = append(errs, fmt.Errorf("olts[%d]: cloud_id must be a unique lower-case UUID, on a CLI olt of huawei_ma56_r015, huawei_ma58_r02x, datacom or intelbras", i))
 		}
 		cloudIDs[o.CloudID] = true
 	}

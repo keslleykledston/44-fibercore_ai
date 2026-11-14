@@ -795,3 +795,23 @@ func TestNATSharedIPHostCannotAlsoHaveAnSNMPEntry(t *testing.T) {
 		t.Fatal("an SNMP entry on the IP of a nat_shared_ip CLI entry must be rejected (two identities of one device)")
 	}
 }
+
+// ADR-0053: Datacom, Intelbras and Huawei MA5800 take the connection test (cloud_id), nothing else.
+func TestConnectionTestOnDatacomIntelbrasAndMA58(t *testing.T) {
+	cid := "8f14e45f-ceea-467a-9a36-4a1b5c3d2e10"
+	mk := func(olt string) string {
+		return `,"jobs_enabled":true,"job_public_key":"k","allowlist":["10.0.0.1:22","10.0.0.1:23"],"allowed_operations":["collect","olt_query"],"olt_query_enabled":true,"olts":[` + olt + `]`
+	}
+	dm := `{"name":"D","vendor":"datacom","address":"10.0.0.1:22","username":"u","secret_file":"/s","host_key_sha256":"SHA256:abc","cloud_id":"` + cid + `"}`
+	ib := `{"name":"I","vendor":"intelbras","transport":"telnet","allow_telnet":true,"address":"10.0.0.1:23","username":"u","secret_file":"/s","cloud_id":"` + cid + `"}`
+	ma := `{"name":"M","vendor":"huawei","profile":"huawei_ma58_r02x","address":"10.0.0.1:22","username":"u","secret_file":"/s","host_key_sha256":"SHA256:abc","pon_ports":["0/1/0"],"ssh_mode":"shell","cloud_id":"` + cid + `"}`
+	for name, o := range map[string]string{"datacom": dm, "intelbras": ib, "ma58": ma} {
+		if _, err := Load(write(t, 0o600, good(mk(o))), "v"); err != nil {
+			t.Errorf("%s with cloud_id must load: %v", name, err)
+		}
+	}
+	generic := `{"name":"G","vendor":"huawei","address":"10.0.0.1:22","username":"u","secret_file":"/s","host_key_sha256":"SHA256:abc","pon_ports":["0/1/0"],"cloud_id":"` + cid + `"}`
+	if _, err := Load(write(t, 0o600, good(mk(generic))), "v"); err == nil {
+		t.Error("a generic huawei entry (no profile) keeps no cloud_id")
+	}
+}
