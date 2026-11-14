@@ -159,10 +159,10 @@ type OLTConfig struct {
 	// AllowTelnet: explicit per-OLT opt-in to the CLEAR-TEXT Telnet transport (transport "telnet"; vendors that only speak Telnet, today intelbras). Default false: a telnet entry without it
 	// is refused at validation. There is no host key to pin: the destination is an IP literal in `allowlist`, and the login crosses the network unprotected.
 	AllowTelnet bool `json:"allow_telnet"`
-	// NATSharedIP: explicit per-OLT declaration that this IP literal is a NAT/port-forward front of SEVERAL physical OLTs and the PORT tells them apart (e.g. one public IP with
+	// SharedIPNAT: explicit per-OLT declaration that this IP literal is a NAT/port-forward front of SEVERAL physical OLTs and the PORT tells them apart (e.g. one public IP with
 	// 20322 and 20422). Only then is the port part of the device identity (lock, interval, cooldown); otherwise the identity stays the host alone, so one OLT can never be
 	// configured twice under another port. Every entry that shares the IP must set it. CLI transports only (ssh, telnet); not with last_down.
-	NATSharedIP bool `json:"nat_shared_ip"`
+	SharedIPNAT bool `json:"nat_shared_ip"`
 	// LastDown (CLI huawei entries only): also read the OLT's own "last down time" of the offline ONUs over SNMP (read-only), at most every
 	// EverySeconds, and add it to the snapshots this entry sends. It never changes which OLT the snapshot belongs to.
 	LastDown *LastDownConfig `json:"last_down"`
@@ -526,15 +526,15 @@ func (c *Config) Validate() error {
 		if o.Transport == "snmp" {
 			devAddr = o.SNMPAddress
 		}
-		if o.NATSharedIP && (o.Transport == "snmp" || o.LastDown != nil) {
+		if o.SharedIPNAT && (o.Transport == "snmp" || o.LastDown != nil) {
 			errs = append(errs, fmt.Errorf("%s: nat_shared_ip only applies to CLI transports (ssh, telnet) without last_down", p))
 		}
 		if devAddr != "" { // SNMP entries count too: an SNMP agent on a host whose CLI entries are nat_shared_ip is the same physical-device question
 			hk := DeviceKey(devAddr)
-			if prev, ok := natHost[hk]; ok && prev != o.NATSharedIP {
+			if prev, ok := natHost[hk]; ok && prev != o.SharedIPNAT {
 				errs = append(errs, fmt.Errorf("%s: %s is shared with another olt entry: either every entry of that IP sets nat_shared_ip or none does", p, hk))
 			}
-			natHost[hk] = o.NATSharedIP
+			natHost[hk] = o.SharedIPNAT
 		}
 		if devAddr != "" {
 			if k := o.DeviceID(); deviceSeen[k] {
@@ -651,7 +651,7 @@ func (o OLTConfig) DeviceID() string {
 	if o.Transport == "snmp" {
 		addr = o.SNMPAddress
 	}
-	return deviceKey(addr, o.NATSharedIP && o.Transport != "snmp")
+	return deviceKey(addr, o.SharedIPNAT && o.Transport != "snmp")
 }
 
 func deviceKey(addr string, withPort bool) string {

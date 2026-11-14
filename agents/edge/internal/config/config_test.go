@@ -755,7 +755,7 @@ func TestDatacomDiscoversPONsWhenNoneListed(t *testing.T) {
 	}
 }
 
-func TestNATSharedIPMakesThePortPartOfTheDeviceIdentity(t *testing.T) {
+func TestSharedIPNATMakesThePortPartOfTheDeviceIdentity(t *testing.T) {
 	two := func(natA, natB string) string {
 		mk := func(name, port, nat string) string {
 			return `{"name":"` + name + `","vendor":"datacom","address":"192.0.2.9:` + port + `","username":"ro","secret_file":"/s","host_key_sha256":"SHA256:abc"` + nat + `}`
@@ -787,7 +787,7 @@ func TestNATSharedIPMakesThePortPartOfTheDeviceIdentity(t *testing.T) {
 	}
 }
 
-func TestNATSharedIPHostCannotAlsoHaveAnSNMPEntry(t *testing.T) {
+func TestSharedIPNATHostCannotAlsoHaveAnSNMPEntry(t *testing.T) {
 	body := `,"allowlist":["192.0.2.9:20322","192.0.2.9:161"],"olts":[` +
 		`{"name":"A","vendor":"datacom","address":"192.0.2.9:20322","username":"ro","secret_file":"/s","host_key_sha256":"SHA256:abc","nat_shared_ip":true},` +
 		`{"name":"B","vendor":"huawei","pon_ports":["0/0/14"],"transport":"snmp","snmp_address":"192.0.2.9:161","snmp_community_file":"/c"}]`

@@ -21,4 +21,4 @@ Origem: o responsável pediu o teste de conexão pela plataforma nas OLTs reais 
 - **R-3:** a nuvem não conhece o perfil do Edge: uma consulta de catálogo a uma Huawei MA5800 passa pela nuvem e é recusada pelo Edge.
 
 ## Provas
-`apps/api/tests/test_connection_multivendor.py` (formato do resultado, Datacom/Intelbras/Telnet testáveis, `vendor_not_supported`), `test_olt_center.py` (Telnet não é mais recusado); Edge: `TestConnectionTestOnADriverWithoutTheCatalogReturnsTheIdentityOnly`, `TestConnectionIdentityRefusesWhatTheCloudWouldNotAccept`, `TestConnectionTestOnDatacomIntelbrasAndMA58`.
+`apps/api/tests/test_olt_connection_multivendor.py` (formato do resultado, Datacom/Intelbras/Telnet testáveis, `vendor_not_supported`), `test_olt_center.py` (Telnet não é mais recusado); Edge: `TestConnectionTestOnADriverWithoutTheCatalogReturnsTheIdentityOnly`, `TestConnectionIdentityRefusesWhatTheCloudWouldNotAccept`, `TestConnectionTestOnDatacomIntelbrasAndMA58`.
