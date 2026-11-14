@@ -158,7 +158,23 @@ func (Intelbras) Snapshot(ctx context.Context, s Session, ponPorts []string) (Sn
 		}
 		snap.PONs = append(snap.PONs, p)
 	}
+	disambiguateSerials(snap.ONUs)
 	return snap, nil
+}
+
+// disambiguateSerials: the 8820 shows only 8 hex digits of the serial and the SAME 8 digits can appear on two PONs of one OLT (seen in the real capture). The cloud keys an ONU by
+// (organization, OLT, serial), so a repeated serial would silently overwrite the other ONU. Every ONU whose serial is repeated inside this snapshot gets the PON appended
+// (`<8 hex>@<pon>`); a serial that is unique stays exactly as the OLT shows it. Deterministic for a given snapshot.
+func disambiguateSerials(onus []ONU) {
+	count := map[string]int{}
+	for _, o := range onus {
+		count[o.Serial]++
+	}
+	for i := range onus {
+		if count[onus[i].Serial] > 1 {
+			onus[i].Serial = onus[i].Serial + "@" + onus[i].PonPath
+		}
+	}
 }
 
 // parseIntelbrasPorts reads `olt show port`. The status column is the transceiver "End Of Life Status", not a link state, so the PON status stays "unknown".

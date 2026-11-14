@@ -233,3 +233,12 @@ func TestIntelbrasOverTelnetThroughReadOnlyAndBudget(t *testing.T) {
 		t.Fatalf("device saw %v, want %v", got, want)
 	}
 }
+
+
+func TestDisambiguateSerialsOnlyWhenRepeated(t *testing.T) {
+	onus := []ONU{{Serial: "AAAA0001", PonPath: "1"}, {Serial: "BBBB0002", PonPath: "1"}, {Serial: "AAAA0001", PonPath: "2"}}
+	disambiguateSerials(onus)
+	if onus[0].Serial != "AAAA0001@1" || onus[2].Serial != "AAAA0001@2" || onus[1].Serial != "BBBB0002" {
+		t.Fatalf("got %+v", onus)
+	}
+}
