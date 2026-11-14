@@ -84,7 +84,14 @@ func ponComplete(level olt.Level, raw olt.Session, p olt.PON) bool {
 	return level == olt.LevelObserved && (olt.EndProven(raw) || p.Verified)
 }
 
-func commandBudget(ports int) int { return 4*ports + 8 }
+// commandBudget bounds the commands of one collection. With no ports listed in the config the driver discovers them (datacom, intelbras): the allowance is then sized
+// for the largest chassis (128 PONs) instead of for zero, so discovery is not starved; the byte budget stays the second, independent bound.
+func commandBudget(ports int) int {
+	if ports == 0 {
+		ports = 128
+	}
+	return 4*ports + 8
+}
 
 // downTimesCommands is the extra command allowance of the last-down reads: the reads plus the interface enter/quit of every slot they touch.
 func downTimesCommands(d *DownTimesSource) int {

@@ -77,3 +77,12 @@ func TestOLTIntelbrasSnapshotIsIdentifiedNeverComplete(t *testing.T) {
 		}
 	}
 }
+
+func TestCommandBudgetCoversDiscoveredPONs(t *testing.T) {
+	if got := commandBudget(0); got < 128 {
+		t.Fatalf("budget with discovered PONs = %d, must cover a full chassis", got)
+	}
+	if commandBudget(2) != 16 {
+		t.Fatalf("listed ports keep the tight budget: %d", commandBudget(2))
+	}
+}

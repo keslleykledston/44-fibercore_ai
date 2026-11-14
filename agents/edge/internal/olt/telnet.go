@@ -221,7 +221,7 @@ func (s *TelnetSession) login(ctx context.Context) error {
 		case loginFailed.MatchString(text):
 			return fmt.Errorf("%w: the device refused the credentials", ErrTelnetLogin)
 		case s.prompt.MatchString(text) && (sentPass || !sentUser):
-			s.banner = s.redact(text)
+			s.banner = s.redact(seen.String() + text) // the model name is printed BEFORE the login prompt ("olt8820plus login:"), so the pre-login text belongs to the banner
 			s.pend = nil
 			return nil
 		case !sentUser && loginPrompt.MatchString(tail):

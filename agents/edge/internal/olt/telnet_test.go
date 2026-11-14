@@ -440,3 +440,21 @@ func TestPlainRemovesANSICursorAndBell(t *testing.T) {
 		t.Fatalf("plain = %q", got)
 	}
 }
+
+// Real 8820i (2026-11-14): after the login the banner is only ASCII art and "Intelbras S.A."; the model ("olt8820plus") is printed BEFORE the login prompt. The pre-login text must be
+// part of the banner, otherwise the driver cannot read the model.
+func TestTelnetBannerKeepsThePreLoginModelLine(t *testing.T) {
+	f := newFakeTelnetOLT(t)
+	f.banner = "\n  _____ _   _ _______\n\nIntelbras S.A.\nIndustria de Telecomunicacao Eletronica Brasileira\n\n"
+	s := openFake(t, f)
+	if !strings.Contains(s.Banner(), "olt8820plus") {
+		t.Fatalf("the model printed before the login prompt is missing from the banner: %q", s.Banner())
+	}
+	if strings.Contains(s.Banner(), fakePass) {
+		t.Fatal("password in the banner")
+	}
+	id, err := Intelbras{}.Identify(context.Background(), s)
+	if err != nil || id.Model != "OLT8820PLUS" {
+		t.Fatalf("identify = %+v, %v", id, err)
+	}
+}
