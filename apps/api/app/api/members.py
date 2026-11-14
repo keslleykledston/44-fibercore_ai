@@ -17,7 +17,7 @@ from sqlalchemy.exc import DBAPIError
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import _client_ip, _gate, _record, _throttled, audit
 from app.api.session import _check_second_factor, _mfa_required, _reauth
-from app.core import role_policy
+from app.core import mail, role_policy
 from app.core.db import get_engine, get_rbac_engine, scoped_connection
 from app.core.permissions import CATALOG
 from app.core.security import ROLE_PERMISSIONS
@@ -115,6 +115,10 @@ def reset_member_mfa(
         "enrolment_now_required": _mfa_required(conn, settings, user_id)})
     outbox.enqueue(conn, tenant_id=p.tenant_id, aggregate_type="user", aggregate_id=user_id, event_type="member.mfa_reset",
                    payload={"by": str(p.id), "revoked_sessions": revoked})
+    if mail.enabled(settings):   # ADR-0048: the person is told (no secret in it); the address is the member's own account's
+        to = conn.execute(text("SELECT lower(email) FROM users_global WHERE id = :u"), {"u": user_id}).scalar()
+        if to:
+            mail.queue_notice(conn, p.tenant_id, "mfa_reset_notice", to, p.id)
     return {"status": "reset", "revoked_sessions": revoked}
 
 

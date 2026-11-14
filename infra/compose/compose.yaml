@@ -71,6 +71,15 @@ services:
       JWT_SECRET_PREVIOUS: ${FIBERCORE_JWT_SECRET_PREVIOUS:-}
       JWT_KID_PREVIOUS: ${FIBERCORE_JWT_KID_PREVIOUS:-}
       METRICS_TOKEN: ${FIBERCORE_METRICS_TOKEN:-}  # ADR-0043: empty => GET /metrics answers 404 (off); >=32 chars => Prometheus (profile "observability") may scrape it with this bearer token
+      # ADR-0048: transactional e-mail. Off unless SMTP_HOST, SMTP_FROM and PUBLIC_BASE_URL are ALL set (the mailer service then idles and the API answers 409 email_not_configured to "send by e-mail"). TLS always.
+      SMTP_HOST: ${FIBERCORE_SMTP_HOST:-}
+      SMTP_PORT: ${FIBERCORE_SMTP_PORT:-587}
+      SMTP_SECURITY: ${FIBERCORE_SMTP_SECURITY:-starttls}  # starttls | ssl (there is no plaintext option)
+      SMTP_USER: ${FIBERCORE_SMTP_USER:-}
+      SMTP_PASSWORD: ${FIBERCORE_SMTP_PASSWORD:-}
+      SMTP_FROM: ${FIBERCORE_SMTP_FROM:-}
+      SMTP_FROM_NAME: ${FIBERCORE_SMTP_FROM_NAME:-FiberCore}
+      PUBLIC_BASE_URL: ${FIBERCORE_PUBLIC_BASE_URL:-}  # the origin people open the app on (https://host, or http://localhost[:port]); the origin of every e-mailed link, never taken from a request
     ports:
       - "127.0.0.1:${FIBERCORE_API_PORT:-18420}:8000"
     depends_on:
@@ -130,6 +139,37 @@ services:
     healthcheck:
       test: ["CMD", "python", "-m", "app.core.heartbeat", "/tmp/hb", "180"]
       interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+  mailer:
+    # ADR-0048: delivers email_queue by SMTP. Role fibercore_worker (no grant on the table; three SECURITY DEFINER functions). Idles (heartbeat only) when e-mail is not configured.
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    command: ["python", "-m", "app.workers.mailer"]
+    environment:
+      WORKER_DATABASE_URL: postgresql://fibercore_worker:${FIBERCORE_WORKER_DB_PASSWORD}@postgres:5432/fibercore
+      HEARTBEAT_FILE: /tmp/hb
+      # ADR-0048: transactional e-mail. Off unless SMTP_HOST, SMTP_FROM and PUBLIC_BASE_URL are ALL set (the mailer service then idles and the API answers 409 email_not_configured to "send by e-mail"). TLS always.
+      SMTP_HOST: ${FIBERCORE_SMTP_HOST:-}
+      SMTP_PORT: ${FIBERCORE_SMTP_PORT:-587}
+      SMTP_SECURITY: ${FIBERCORE_SMTP_SECURITY:-starttls}  # starttls | ssl (there is no plaintext option)
+      SMTP_USER: ${FIBERCORE_SMTP_USER:-}
+      SMTP_PASSWORD: ${FIBERCORE_SMTP_PASSWORD:-}
+      SMTP_FROM: ${FIBERCORE_SMTP_FROM:-}
+      SMTP_FROM_NAME: ${FIBERCORE_SMTP_FROM_NAME:-FiberCore}
+      PUBLIC_BASE_URL: ${FIBERCORE_PUBLIC_BASE_URL:-}  # the origin people open the app on (https://host, or http://localhost[:port]); the origin of every e-mailed link, never taken from a request
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    networks: [control]
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.core.heartbeat", "/tmp/hb", "60"]
+      interval: 20s
       timeout: 5s
       retries: 3
       start_period: 40s

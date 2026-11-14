@@ -13,13 +13,14 @@ The operator does NOT become a member of the organization created; the first adm
 from __future__ import annotations
 
 import json
+import logging
 import time
 from datetime import datetime
 from uuid import UUID, uuid4
 
 import jwt
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, StrictInt
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
@@ -28,6 +29,7 @@ from app.core.db import get_engine, scoped_connection
 from app.core.security import decode_token
 from app.core.settings import Settings, get_settings
 
+log = logging.getLogger(__name__)
 router = APIRouter()
 PERM = "platform:organizations"
 
@@ -40,6 +42,7 @@ STATUS = {
     # ADR-0047 (migration 0054)
     "organization_not_found": (404, "organization_not_found"), "organization_status_invalid": (422, "organization_status_invalid"),
     "organization_reason_invalid": (422, "organization_reason_invalid"), "feature_invalid": (422, "feature_invalid"), "feature_state_invalid": (422, "feature_state_invalid"),
+    "limits_invalid": (422, "limits_invalid"),   # ADR-0047 D3 (migration 0055)
     "owner_only_feature": (403, "owner_only_feature"),   # the database refuses it too (migration 0054), not only the route
 }
 
@@ -152,7 +155,13 @@ class FeatureIn(BaseModel):
     reason: str = Field(min_length=1, max_length=400)
 
 
-def _call(op: PlatformOperator, kind: str, route: str, tenant_id: UUID, sql: str, params: dict, request_id: UUID) -> dict:
+class LimitsIn(BaseModel):
+    """Key present with a number = set; present with null = back to the code default; absent = untouched. The keys and ranges are checked by the database function too."""
+    limits: dict[str, StrictInt | None] = Field(min_length=1, max_length=5)
+    reason: str = Field(min_length=1, max_length=400)
+
+
+def _call(op: PlatformOperator, kind: str, route: str, tenant_id: UUID, sql: str, params: dict, request_id: UUID, after=None) -> dict:
     """One platform change: the database function (the only writer), then, in the SAME transaction and inside the organization's own scope, the route's half of the audit pair."""
     try:
         with scoped_connection(get_engine(), user_id=op.id) as conn:
@@ -163,6 +172,12 @@ def _call(op: PlatformOperator, kind: str, route: str, tenant_id: UUID, sql: str
                      "VALUES (:t, :a, 'platform.change.requested', 'tenant', :ti, CAST(:e AS jsonb))"),
                 {"t": tenant_id, "a": op.id, "ti": str(tenant_id), "e": json.dumps({"request_id": str(request_id), "kind": kind, "route": route})},
             )
+            if after is not None:   # same transaction, organization scope already set: e.g. the notice e-mails (queued only if everything commits)
+                try:
+                    with conn.begin_nested():   # a failing notice must NEVER undo the change the operator asked for
+                        after(conn, res)
+                except Exception:   # noqa: BLE001
+                    log.warning("platform change %s: the after-hook failed (change kept)", kind, exc_info=False)
     except DBAPIError as exc:
         mapped = _map(exc)
         if mapped is None:
@@ -188,14 +203,35 @@ def organization_detail(tenant_id: UUID, response: Response, op: PlatformOperato
     res["catalog"] = [{"feature": name, "default": default, "enabled": over[name]["enabled"] if name in over else default, "source": "tenant" if name in over else "default",
                        "owner_only": name in OWNER_ONLY_FEATURES} for name, default in FEATURES.items()]
     res["unknown_overrides"] = sorted(n for n in over if n not in FEATURES)
+    try:
+        with scoped_connection(get_engine(), user_id=op.id) as conn:
+            lim = conn.execute(text("SELECT public.platform_organization_limits(:a, :t)"), {"a": op.id, "t": tenant_id}).scalar_one()
+    except DBAPIError as exc:
+        mapped = _map(exc)
+        if mapped is None:
+            raise
+        raise mapped from exc
+    from app.core import limits as _limits
+    dflt = _limits.defaults()
+    values = {k: v for k, v in lim["limits"].items() if k != "updated_at"}
+    res["limits"] = {"values": values, "defaults": dflt, "effective": {k: (values.get(k) if values.get(k) is not None else dflt[k]) for k in dflt},
+                     "usage": lim["usage"], "updated_at": lim["limits"].get("updated_at")}
+    res["history"] = sorted([*res["history"], *lim["history"]], key=lambda h: h["at"], reverse=True)[:60]
     return res
 
 
 @router.post("/v1/platform/organizations/{tenant_id}/status")
 def organization_status(tenant_id: UUID, body: StatusIn, response: Response, op: PlatformOperator = Depends(require_platform_operator(PERM))) -> dict:
     response.headers["Cache-Control"] = "no-store"
+    from app.core import mail
+
+    def notify(conn, res: dict) -> None:   # ADR-0048: tell the organization's administrators (no secret, no reason text: the reason is for the audit trail)
+        if res.get("changed") and mail.enabled():
+            kind = "organization_suspended" if body.status == "suspended" else "organization_reactivated"
+            for to in mail.admin_addresses(conn, tenant_id):
+                mail.queue_notice(conn, tenant_id, kind, to, op.id)
     return _call(op, "status", "POST /v1/platform/organizations/{id}/status", tenant_id, "SELECT public.platform_set_organization_status(:a, :t, :s, :why, :r)",
-                 {"s": body.status, "why": body.reason}, uuid4())
+                 {"s": body.status, "why": body.reason}, uuid4(), after=notify)
 
 
 @router.post("/v1/platform/organizations/{tenant_id}/rename")
@@ -225,3 +261,12 @@ def organization_feature(tenant_id: UUID, feature: str, body: FeatureIn, respons
                 raise HTTPException(422, "feature_precondition")
     return _call(op, "feature", "PUT /v1/platform/organizations/{id}/features/{feature}", tenant_id,
                  "SELECT public.platform_set_feature(:a, :t, :f, :s, :why, :r)", {"f": feature, "s": body.state, "why": body.reason}, uuid4())
+
+
+@router.put("/v1/platform/organizations/{tenant_id}/limits")
+def organization_limits(tenant_id: UUID, body: LimitsIn, response: Response, op: PlatformOperator = Depends(require_platform_operator(PERM))) -> dict:
+    """ADR-0047 D3: technical limits of ONE organization (Edges, OLTs, members, intake budget). Server protection, not billing. Lowering a limit below the current use only stops NEW
+    creations; nothing existing is removed or blocked. Unknown key or out-of-range value 422 `limits_invalid`."""
+    response.headers["Cache-Control"] = "no-store"
+    return _call(op, "limits", "PUT /v1/platform/organizations/{id}/limits", tenant_id, "SELECT public.platform_set_limits(:a, :t, CAST(:l AS jsonb), :why, :r)",
+                 {"l": json.dumps(body.limits), "why": body.reason}, uuid4())

@@ -38,6 +38,7 @@ from app.api.routes import router
 from app.api.session import router as session_router
 from app.api.speed import router as speed_router
 from app.api.team import router as team_router
+from app.api.tenant_policy import router as tenant_policy_router
 from app.core.metrics import MetricsMiddleware
 from app.core.settings import get_settings, required_mfa_roles
 
@@ -86,6 +87,7 @@ app.include_router(noc_router)
 app.include_router(jobs_router)
 app.include_router(members_router)
 app.include_router(team_router)
+app.include_router(tenant_policy_router)
 app.include_router(delegations_router)
 app.include_router(bench_auth_router)
 app.include_router(device_actions_router)

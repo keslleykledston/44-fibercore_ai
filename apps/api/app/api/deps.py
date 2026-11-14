@@ -11,11 +11,12 @@ from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy import Connection, text
 
 from app.core.db import get_engine, scoped_connection
+from app.core import security_policy
 from app.core.memberships import active_roles
 from app.core.permissions import CATALOG, require_known
 from app.core.ratelimit import TokenBucketLimiter
 from app.core.security import ROLE_PERMISSIONS, decode_token
-from app.core.settings import Settings, get_settings, required_mfa_roles
+from app.core.settings import Settings, get_settings
 
 log = logging.getLogger(__name__)
 
@@ -103,8 +104,7 @@ def get_principal(
     with scoped_connection(engine, user_id=claims.sub) as conn:
         assert_user_token_current(conn, claims)
         memberships = active_roles(conn, claims.sub)  # memberships + live platform delegations, resolved on EVERY request
-        required = required_mfa_roles(settings)
-        if required and required & set(memberships.values()):
+        if security_policy.mfa_required(conn, settings, memberships):   # the environment's floor plus what each organization added (ADR-0049 D1)
             has_mfa = conn.execute(text("SELECT enabled FROM user_mfa WHERE user_id = :u"), {"u": claims.sub}).scalar()
             if not has_mfa:  # policy: finish MFA enrolment first (the /v1/auth/* routes stay open so the user can)
                 raise HTTPException(403, "mfa_enrolment_required")
@@ -219,6 +219,30 @@ TENANT_CONN = Depends(tenant_conn, scope="function")
 _INGEST_LIMITERS: dict[tuple[int, int], TokenBucketLimiter] = {}
 
 
+_ORG_BUDGETS: dict[UUID, tuple[float, tuple[int, int]]] = {}   # tenant -> (read at, (burst, per_minute))
+ORG_BUDGET_TTL = 30.0   # seconds: an operator's change reaches the intake routes within this; one tiny query per organization per TTL
+
+
+def _org_budget(p: Principal, settings: Settings) -> tuple[int, int]:
+    """The organization's intake budget: its override in `tenant_limits` over the code default. A read failure falls back to the default (never blocks the intake)."""
+    now = time.monotonic()
+    hit = _ORG_BUDGETS.get(p.tenant_id)
+    if hit is not None and now - hit[0] < ORG_BUDGET_TTL:
+        return hit[1]
+    budget = (settings.org_ingest_burst, settings.org_ingest_per_minute)
+    try:
+        from app.core import limits
+        with scoped_connection(get_engine(), user_id=p.id, tenant_id=p.tenant_id) as conn:
+            eff = limits.effective(conn, p.tenant_id, settings)
+        budget = (eff["ingest_burst"], eff["ingest_per_minute"])
+    except Exception:   # noqa: BLE001 - fail open to the default, but say so
+        log.warning("organization intake budget unreadable (tenant %s): default used", p.tenant_id)
+    if len(_ORG_BUDGETS) >= 10_000:
+        _ORG_BUDGETS.clear()
+    _ORG_BUDGETS[p.tenant_id] = (now, budget)
+    return budget
+
+
 EDGE_BACKOFF_HEADER = "X-Edge-Backoff"   # value "retry-after": this agent treats 429 as "wait for Retry-After; the item is not failed"
 
 
@@ -237,4 +261,13 @@ def edge_ingest_limit(request: Request, p: Principal = Depends(get_principal), s
     if wait > 0:
         log.warning("edge intake rate-limited (tenant %s, agent %s)", p.tenant_id, p.edge_id or p.id)
         raise HTTPException(429, "edge_rate_limited", headers={"Retry-After": str(lim.retry_after(wait))})
+    # ADR-0047 D3: one more bucket per ORGANIZATION (all its agents together), so a provider with many agents cannot starve the others. Same answer to the Edge (429, keep and resend).
+    org_key = _org_budget(p, settings)
+    org_lim = _INGEST_LIMITERS.get(org_key)
+    if org_lim is None:
+        org_lim = _INGEST_LIMITERS.setdefault(org_key, TokenBucketLimiter(burst=org_key[0], per_minute=org_key[1]))
+    wait = org_lim.take(f"org:{p.tenant_id}")
+    if wait > 0:
+        log.warning("organization intake rate-limited (tenant %s)", p.tenant_id)
+        raise HTTPException(429, "organization_rate_limited", headers={"Retry-After": str(org_lim.retry_after(wait))})
 

@@ -27,6 +27,18 @@ def _engine():
     return make_engine(dsn)
 
 
+def _enforce_limit(c, tenant_id: str, resource: str, exclude_email: str | None = None) -> None:
+    """ADR-0047 D3: the owner's CLI obeys the same technical limit as the screen (raise it with `limits-set`, with a reason in the audit trail, if it must grow)."""
+    from uuid import UUID
+
+    from app.core.limits import LimitReached, check_capacity
+    c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": tenant_id})
+    try:
+        check_capacity(c, UUID(tenant_id), resource, exclude_email=exclude_email)
+    except LimitReached as exc:
+        sys.exit(f"{exc}; raise it with: limits-set {tenant_id} --max-{resource} N --reason ...")
+
+
 def _password(env_name: str | None) -> str:
     pw = os.environ.get(env_name, "") if env_name else getpass.getpass("Password: ")
     if len(pw) < 12:
@@ -84,6 +96,10 @@ def main(argv: list[str] | None = None) -> None:
     fs.add_argument("tenant_id"); fs.add_argument("feature"); fs.add_argument("state", choices=["on", "off", "default"])
     os_ = sub.add_parser("org-status", help="ADR-0047 break-glass: suspend/reactivate an organization from the host (owner-only; the screen does the same for the platform operator)")
     os_.add_argument("tenant_id"); os_.add_argument("status", choices=["active", "suspended"]); os_.add_argument("--reason", required=True, help="3-200 characters; goes to the audit trail")
+    ls_ = sub.add_parser("limits-set", help="ADR-0047 D3: set/clear the technical limits of an organization (owner-only; the screen does the same for the operator). `default` clears an override")
+    ls_.add_argument("tenant_id"); ls_.add_argument("--reason", required=True, help="3-200 characters; goes to the audit trail")
+    for _k in ("max-edges", "max-olts", "max-members", "ingest-per-minute", "ingest-burst"):
+        ls_.add_argument(f"--{_k}", metavar="N|default")
     oc = sub.add_parser("ont-config-mock", help="ADR-0034: write a SYNTHETIC configuration profile for a CPE (source 'mock', labelled synthetic; lab/demo only; owner-only)")
     oc.add_argument("tenant_id"); oc.add_argument("cpe_id"); oc.add_argument("profile", help="dualband | multi_ssid | no_wifi | inactive_5g | clear")
     ob = sub.add_parser("olt-board-mock", help="SYNTHETIC board inventory (`olt.board`, source 'mock') for a DEMO OLT so the front-panel screen can be shown without equipment (demo/e2e only: refuses any tenant that is not the demonstration tenant and any OLT that already has an inventory read from the equipment; owner-only)")
@@ -131,6 +147,47 @@ def main(argv: list[str] | None = None) -> None:
             if n != 1:
                 sys.exit("no such account")
             print("platform operator " + ("removed" if a.off else "set"))
+        elif a.cmd == "limits-set":
+            from app.core.limits import defaults as _limit_defaults
+            reason = " ".join(a.reason.split())
+            if not 3 <= len(reason) <= 200:
+                sys.exit("reason must have 3 to 200 characters")
+            ranges = {"max_edges": (0, 10000), "max_olts": (0, 100000), "max_members": (0, 10000), "ingest_per_minute": (1, 60000), "ingest_burst": (1, 10000)}
+            wanted: dict[str, int | None] = {}
+            for k, (lo, hi) in ranges.items():
+                v = getattr(a, k)
+                if v is None:
+                    continue
+                if v == "default":
+                    wanted[k] = None
+                elif v.isdigit() and lo <= int(v) <= hi:
+                    wanted[k] = int(v)
+                else:
+                    sys.exit(f"--{k.replace('_', '-')} must be `default` or an integer between {lo} and {hi}")
+            if not wanted:
+                sys.exit("nothing to set: give at least one --max-* / --ingest-* option")
+            c.execute(text("SELECT set_config('app.tenant_id', :t, true)"), {"t": a.tenant_id})
+            if c.execute(text("SELECT 1 FROM tenants WHERE id = :t FOR UPDATE"), {"t": a.tenant_id}).first() is None:
+                sys.exit("no such organization")
+            row = c.execute(text("SELECT max_edges, max_olts, max_members, ingest_per_minute, ingest_burst FROM tenant_limits WHERE tenant_id = :t FOR UPDATE"), {"t": a.tenant_id}).mappings().first()
+            cur = dict(row) if row else dict.fromkeys(ranges)
+            nxt = {**cur, **wanted}
+            if nxt == cur:
+                print("limits unchanged")
+            else:
+                c.execute(
+                    text("INSERT INTO tenant_limits (tenant_id, max_edges, max_olts, max_members, ingest_per_minute, ingest_burst, updated_by, updated_at) "
+                         "VALUES (:t,:max_edges,:max_olts,:max_members,:ingest_per_minute,:ingest_burst,NULL,now()) ON CONFLICT (tenant_id) DO UPDATE SET "
+                         "max_edges=EXCLUDED.max_edges, max_olts=EXCLUDED.max_olts, max_members=EXCLUDED.max_members, ingest_per_minute=EXCLUDED.ingest_per_minute, "
+                         "ingest_burst=EXCLUDED.ingest_burst, updated_by=NULL, updated_at=EXCLUDED.updated_at"), {"t": a.tenant_id, **nxt})
+                c.execute(
+                    text("INSERT INTO audit_log (tenant_id, actor_id, action, target_type, target_id, evidence_redacted) "
+                         "VALUES (:t, NULL, 'platform.limits.set', 'tenant', :ti, CAST(:e AS jsonb))"),
+                    {"t": a.tenant_id, "ti": a.tenant_id, "e": json.dumps({"reason": reason, "from": cur, "to": nxt, "via": "cli", "request_id": str(uuid4())})})
+                c.execute(
+                    text("INSERT INTO events_outbox (tenant_id, aggregate_type, aggregate_id, event_type, schema_version, payload) "
+                         "VALUES (:t,'tenant',:t,'platform.limits.changed','1',CAST(:p AS jsonb))"), {"t": a.tenant_id, "p": json.dumps({"by": None, "via": "cli"})})
+                print("limits set: " + ", ".join(f"{k}={'default' if v is None else v}" for k, v in nxt.items()) + f"  (defaults: {_limit_defaults()})")
         elif a.cmd == "add-member":
             # same per-account lock as the administrator MFA reset: a membership cannot appear between that route's
             # "only this workspace" check and its DELETE
@@ -139,6 +196,7 @@ def main(argv: list[str] | None = None) -> None:
                      "FROM users_global WHERE lower(email)=lower(:e)"),
                 {"e": a.email},
             )
+            _enforce_limit(c, a.tenant_id, "members", a.email)
             c.execute(
                 text("INSERT INTO tenant_memberships(tenant_id,user_id,role) "
                      "SELECT :t, id, :r FROM users_global WHERE lower(email)=lower(:e)"),
@@ -537,8 +595,8 @@ def main(argv: list[str] | None = None) -> None:
                 c.execute(text("UPDATE tenants SET status = :s WHERE id = :t"), {"s": a.status, "t": a.tenant_id})
                 c.execute(
                     text("INSERT INTO audit_log (tenant_id, actor_id, action, target_type, target_id, evidence_redacted) "
-                         "VALUES (:t, NULL, :act, 'tenant', :t, CAST(:e AS jsonb))"),
-                    {"t": a.tenant_id, "act": "platform.organization.suspended" if a.status == "suspended" else "platform.organization.reactivated",
+                         "VALUES (:t, NULL, :act, 'tenant', :ti, CAST(:e AS jsonb))"),
+                    {"t": a.tenant_id, "ti": a.tenant_id, "act": "platform.organization.suspended" if a.status == "suspended" else "platform.organization.reactivated",
                      "e": json.dumps({"reason": reason, "from": cur, "to": a.status, "via": "cli", "request_id": str(uuid4())})},
                 )
                 c.execute(
@@ -611,6 +669,7 @@ def main(argv: list[str] | None = None) -> None:
                 done_users += 1
             print(f"deactivated {done_sa} service account(s) and ended {done_users} membership(s)")
         elif a.cmd == "register-edge":
+            _enforce_limit(c, a.tenant_id, "edges")
             print(c.execute(text("INSERT INTO edges(tenant_id,name,site_name) VALUES (:t,:n,:s) RETURNING id"),
                             {"t": a.tenant_id, "n": a.name, "s": a.site}).scalar())
         elif a.cmd == "create-service-account":

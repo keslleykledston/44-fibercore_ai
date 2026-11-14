@@ -16,8 +16,8 @@ from sqlalchemy import Connection, text
 from sqlalchemy.exc import DBAPIError
 
 from app.api.deps import TENANT_CONN, Principal, require
-from app.api.routes import _client_ip, _gate, _record, _throttled
-from app.core import role_policy, team_info
+from app.api.routes import _client_ip, _gate, _record, _throttled, audit
+from app.core import limits, mail, role_policy, team_info
 from app.core.db import get_engine, get_rbac_engine, scoped_connection
 from app.core.security import ROLE_PERMISSIONS, hash_secret, verify_secret
 from app.core.settings import Settings, get_settings
@@ -83,6 +83,7 @@ def team(p: Principal = Depends(require("members:read")), conn: Connection = TEN
     return {
         "me": {"id": str(p.id), "role": p.role, "role_label": team_info.LABEL.get(p.role, p.role), "can_manage": can_manage,
                "assignable_roles": [r for r in team_info.HUMAN_ROLES if r in mine]},
+        "email_enabled": mail.enabled(),   # ADR-0048: the screen offers "send by e-mail" only when the platform can
         "summary": {"active": len(rows), "pending_invites": sum(1 for i in invites if not i.expired), "without_mfa": sum(1 for r in rows if not r["mfa_enabled"])},
         "members": rows,
         "invites": [{"id": str(i.id), "email": i.email, "name": i.display_name, "role": i.role, "role_label": team_info.LABEL.get(i.role, i.role),
@@ -126,32 +127,47 @@ class InviteIn(BaseModel):
     email: EmailStr
     name: str | None = Field(default=None, min_length=1, max_length=100)
     role: str = Field(min_length=1, max_length=32)
+    send_email: bool = False   # ADR-0048: an explicit act of the administrator, never automatic; 409 `email_not_configured` when the platform has no SMTP
 
 
-def _create_invite(p: Principal, email: str, name: str | None, role: str) -> dict:
+def _want_email(send_email: bool) -> None:
+    if send_email and not mail.enabled():
+        raise HTTPException(409, "email_not_configured")
+
+
+def _create_invite(p: Principal, email: str, name: str | None, role: str, mail_conn: Connection | None = None) -> dict:
     raw, digest = _token()
     res = _call("SELECT app_invite_create(:a, :t, :e, :n, :r, :h, :hours)",
                 {"a": p.id, "t": p.tenant_id, "e": email, "n": name, "r": role, "h": digest, "hours": INVITE_HOURS})
-    return {"id": res["id"], "email": res["email"], "role": res["role"], "role_label": team_info.LABEL.get(res["role"], res["role"]),
-            "expires_at": res["expires_at"], "token": raw}
+    out = {"id": res["id"], "email": res["email"], "role": res["role"], "role_label": team_info.LABEL.get(res["role"], res["role"]), "expires_at": res["expires_at"], "token": raw}
+    if mail_conn is not None:   # queued in the request's transaction: sent only if it commits; the audit line names the kind and the address, never the link
+        mail.queue_link(mail_conn, p.tenant_id, "member_invite", res["email"], raw, INVITE_HOURS, p.id)
+        audit(mail_conn, p, "member.invite.emailed", "invite", str(res["id"]), {"email": res["email"]})
+        out["emailed"] = True
+    return out
 
 
 @router.post("/v1/team/invites", status_code=201)
-def invite(body: InviteIn, p: Principal = Depends(require("members:manage"))) -> dict:
+def invite(body: InviteIn, p: Principal = Depends(require("members:manage")), conn: Connection = TENANT_CONN) -> dict:
     """Creates an invite and returns its token ONCE: the screen builds the link from it. Nothing is sent by e-mail."""
     if body.role not in ROLE_PERMISSIONS:
         raise HTTPException(422, "unknown role")
-    return _create_invite(p, str(body.email), body.name, body.role)
+    # ADR-0047 D3: members + open invites against the organization's limit. `conn` (the request's transaction) keeps the per-organization lock until the response, so two parallel invites
+    # cannot both pass while the invite itself is written by the dedicated connection below
+    limits.enforce(conn, p.tenant_id, "members", exclude_email=str(body.email))
+    _want_email(body.send_email)
+    return _create_invite(p, str(body.email), body.name, body.role, conn if body.send_email else None)
 
 
 @router.post("/v1/team/invites/{invite_id}/renew", status_code=201)
-def renew_invite(invite_id: UUID, p: Principal = Depends(require("members:manage")), conn: Connection = TENANT_CONN) -> dict:
+def renew_invite(invite_id: UUID, send_email: bool = Query(False), p: Principal = Depends(require("members:manage")), conn: Connection = TENANT_CONN) -> dict:
     """A new link for a pending invite (the old one stops working). The data comes from the stored invite, never from the caller."""
     i = conn.execute(text("SELECT email, display_name, role FROM member_invites WHERE id = :i AND purpose = 'invite' AND accepted_at IS NULL AND revoked_at IS NULL"),
                      {"i": invite_id}).first()
     if i is None:
         raise HTTPException(404, "invite_not_found")
-    return _create_invite(p, i.email, i.display_name, i.role)
+    _want_email(send_email)
+    return _create_invite(p, i.email, i.display_name, i.role, conn if send_email else None)
 
 
 @router.delete("/v1/team/invites/{invite_id}")
@@ -162,12 +178,22 @@ def cancel_invite(invite_id: UUID, p: Principal = Depends(require("members:manag
 
 # ---------------------------------------------------------------- people
 @router.post("/v1/team/members/{user_id}/password-reset", status_code=201)
-def password_reset_link(user_id: UUID, p: Principal = Depends(require("members:manage"))) -> dict:
+def password_reset_link(user_id: UUID, send_email: bool = Query(False), p: Principal = Depends(require("members:manage")), conn: Connection = TENANT_CONN) -> dict:
     """A link (24 h, once) so the person chooses a new password. Refused when the account also belongs to another provider: no administrator of one
     provider may take a person over in somebody else's."""
+    _want_email(send_email)
     raw, digest = _token()
     res = _call("SELECT app_reset_create(:a, :t, :u, :h, :hours)", {"a": p.id, "t": p.tenant_id, "u": user_id, "h": digest, "hours": RESET_HOURS})
-    return {"id": res["id"], "expires_at": res["expires_at"], "token": raw}
+    out = {"id": res["id"], "expires_at": res["expires_at"], "token": raw}
+    if send_email:   # the address comes from the member's own account (read in this organization's scope), never from the request
+        to = conn.execute(text("SELECT lower(u.email) FROM tenant_memberships m JOIN users_global u ON u.id = m.user_id WHERE m.tenant_id = :t AND m.user_id = :u AND u.is_active"),
+                          {"t": p.tenant_id, "u": user_id}).scalar()
+        if to is None:
+            raise HTTPException(404, "member_not_found")
+        mail.queue_link(conn, p.tenant_id, "password_reset", to, raw, RESET_HOURS, p.id)
+        audit(conn, p, "member.password_reset.emailed", "user", str(user_id), {})
+        out["emailed"] = True
+    return out
 
 
 class RemoveIn(BaseModel):

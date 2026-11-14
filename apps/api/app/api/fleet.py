@@ -22,7 +22,7 @@ from sqlalchemy import Connection, text
 
 from app.api.deps import TENANT_CONN, Principal, require
 from app.api.routes import audit
-from app.core import features, fleet, olt_secrets
+from app.core import features, fleet, limits, olt_secrets
 
 router = APIRouter()
 LIST_LIMIT = 500
@@ -311,6 +311,7 @@ def register_olt(body: OltIn, p: Principal = Depends(require("fleet:manage")), c
         raise HTTPException(404, "edge not found")
     cx = _merged({}, body, body.snmp_version)   # 422 with a stable code when the fields contradict each other (e.g. a fingerprint for Telnet)
     pop_id = _resolve_pop(conn, p, body.pop_id, body.pop_name)
+    limits.enforce(conn, p.tenant_id, "olts")   # ADR-0047 D3: 409 limit_reached; what already exists is never touched
     new_id = conn.execute(
         text("INSERT INTO olts (tenant_id, edge_id, name, vendor, support_level, credential_secret_ref, pop_id, label, mgmt_address, snmp_version, registered_by, registered_at, "
              "mgmt_protocol, mgmt_port, mgmt_transport, snmp_port, host_key_sha256, ssh_mode, legacy_ssh) "

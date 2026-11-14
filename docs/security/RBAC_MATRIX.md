@@ -45,6 +45,7 @@
 | `fleet:provision` | R3 | sim | não | Entregar ao Edge a CONEXÃO de uma OLT (endereço, porta, protocolo, impressão digital do host), cifrada no navegador, dentro da política local do Edge; a confiança no host é dada no próprio Edge |
 | `acs:read` | R0 | não | não | Ver os ACS cadastrados do provedor (nome, tipo, Edge, estado informado pelo Edge); a URL e a senha do ACS nunca estão na nuvem |
 | `acs:manage` | R2 | não | não | Cadastrar, renomear, ativar e desativar o ACS de um Edge (só o cadastro: a URL e o segredo do NBI ficam no Edge) |
+| `tenant:security_policy` | R3 | sim | não | Exigir segundo fator de mais papéis na própria organização (só aperta o piso do ambiente; nunca afrouxa) |
 | `members:read` | R1 | não | não | Ver os membros do provedor e o estado do MFA de cada um |
 | `members:manage` | R3 | sim | não | Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite) |
 | `platform:delegate` | R3 | sim | não | Conceder e revogar o acesso temporário (até 8 h, com motivo) do suporte da plataforma a este provedor |
@@ -98,6 +99,7 @@
 | `fleet:provision` | ✔ |  |  |  |  |  |  |  |  |
 | `acs:read` | ✔ | ✔ | ✔ |  |  | ✔ |  |  |  |
 | `acs:manage` | ✔ |  |  |  |  |  |  |  |  |
+| `tenant:security_policy` | ✔ |  |  |  |  |  |  |  |  |
 | `members:read` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `members:manage` | ✔ |  |  |  |  |  |  |  | ✔ |
 | `platform:delegate` | ✔ |  |  |  |  |  |  |  |  |
@@ -251,6 +253,7 @@
 | POST | `/v1/platform/organizations` | `platform:organizations` |
 | GET | `/v1/platform/organizations/{tenant_id}` | `platform:organizations` |
 | PUT | `/v1/platform/organizations/{tenant_id}/features/{feature}` | `platform:organizations` |
+| PUT | `/v1/platform/organizations/{tenant_id}/limits` | `platform:organizations` |
 | POST | `/v1/platform/organizations/{tenant_id}/rename` | `platform:organizations` |
 | POST | `/v1/platform/organizations/{tenant_id}/status` | `platform:organizations` |
 | GET | `/v1/platform/status` | (autentica o token da própria conta) |
@@ -270,6 +273,8 @@
 | GET | `/v1/profile-revisions/{revision_id}` | `profiles:read` |
 | GET | `/v1/profile-snapshots/{snapshot_id}` | `profiles:read` |
 | GET | `/v1/roles` | `roles:read` |
+| GET | `/v1/security-policy` | `tenant:read` |
+| PUT | `/v1/security-policy` | `tenant:security_policy` |
 | GET | `/v1/speed/health` | `inventory:read` |
 | GET | `/v1/team` | `members:read` |
 | GET | `/v1/team/activity` | `audit:read` |

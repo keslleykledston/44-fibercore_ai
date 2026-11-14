@@ -272,3 +272,19 @@ def test_the_database_itself_refuses_to_turn_owner_only_flags_on_and_the_two_lis
     with app_engine.begin() as c:     # turning it OFF, and any other flag ON, still work through the function
         r = c.execute(text("SELECT public.platform_set_feature(:a, :t, 'onu_discovery', 'on', 'teste direto', :r)"), {"a": operator["id"], "t": org["id"], "r": uuid4()}).scalar_one()
     assert r["changed"] is True
+
+
+def test_the_cli_org_status_break_glass_suspends_reactivates_and_audits(client, org, migrated, admin_url, monkeypatch):
+    """Regression: the CLI's audit INSERT used one parameter as uuid and as text (it failed on the first real use). Break-glass must work and leave the trail."""
+    from app import cli
+    monkeypatch.setenv("ADMIN_DATABASE_URL", admin_url)
+    t = str(org["id"])
+    cli.main(["org-status", t, "suspended", "--reason", "Quebra-vidro de teste"])
+    assert client.get("/v1/edges", headers=_admin_h(client, org)).status_code == 403
+    cli.main(["org-status", t, "suspended", "--reason", "De novo, nada muda"])            # idempotent: no second trail entry
+    cli.main(["org-status", t, "active", "--reason", "Quebra-vidro encerrado"])
+    assert client.get("/v1/edges", headers=_admin_h(client, org)).status_code == 200
+    sus, rea = _audit(migrated, org["id"], "platform.organization.suspended"), _audit(migrated, org["id"], "platform.organization.reactivated")
+    assert len(sus) == 1 and len(rea) == 1 and sus[0][1]["via"] == "cli" and sus[0][1]["reason"] == "Quebra-vidro de teste"
+    with pytest.raises(SystemExit, match="no such organization"):
+        cli.main(["org-status", str(uuid4()), "active", "--reason", "organização inexistente"])

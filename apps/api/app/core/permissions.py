@@ -63,6 +63,7 @@ CATALOG: dict[str, Permission] = dict([
        "a confiança no host é dada no próprio Edge", "R3", mfa_recent=True),
     _p("acs:read", "Ver os ACS cadastrados do provedor (nome, tipo, Edge, estado informado pelo Edge); a URL e a senha do ACS nunca estão na nuvem", "R0"),
     _p("acs:manage", "Cadastrar, renomear, ativar e desativar o ACS de um Edge (só o cadastro: a URL e o segredo do NBI ficam no Edge)", "R2"),
+    _p("tenant:security_policy", "Exigir segundo fator de mais papéis na própria organização (só aperta o piso do ambiente; nunca afrouxa)", "R3", mfa_recent=True),
     _p("members:read", "Ver os membros do provedor e o estado do MFA de cada um", "R1"),
     _p("members:manage", "Atribuir e alterar o papel dos membros (dentro do que o papel de quem atribui permite)", "R3", mfa_recent=True),
     _p("platform:delegate", "Conceder e revogar o acesso temporário (até 8 h, com motivo) do suporte da plataforma a este provedor", "R3", mfa_recent=True),

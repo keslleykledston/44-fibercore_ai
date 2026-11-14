@@ -1,6 +1,6 @@
 # ADR-0047: Ciclo de vida da organização, console do operador e roadmap multi-organização (sem revenda, sem cobrança)
 
-Status: Accepted para a **fatia A** (D1 e D2); **Proposed** para as fatias B a F, que exigem ADR ou emenda própria antes da construção | Data: 2026-11-13 | Owner: Claude Code (implementação), Codex (revisão)
+Status: Accepted e construídas as **fatias A** (D1 e D2), **B** (D3) e **C** (D4, ADR-0048); **Proposed** para D a F, que exigem ADR ou emenda própria antes da construção | Data: 2026-11-13 | Owner: Claude Code (implementação), Codex (revisão)
 
 Origem: levantamento de lacunas multi-organização (2026-11-13) e decisões do responsável no mesmo dia: **revenda NÃO; cobrança NÃO (por enquanto)**; ordem "escreva o ADR, faça push e aplique". Estende o ADR-0046 D1 (organização como limite de isolamento, criada por operador da plataforma) e fecha o que ele deixou "fora desta fatia" (suspensão de organização pela tela). Não altera o ADR-0031 (RBAC); a fatia D só o reabre.
 
@@ -39,11 +39,15 @@ Fatos do código (verificados em 2026-11-13):
 - **Permissões:** `platform:organizations` cobre ler e agir (R3, nenhum papel de organização a tem). Leitura da lista/detalhe exige conta operadora ativa; **agir exige MFA recente**.
 - **Sem acesso a dados da organização:** o console não vira porta lateral. Entrar numa organização continua sendo só por membro real ou por delegação com prazo (ADR-0031 item 5).
 
-### D3 — Limites técnicos por organização, sem plano nem preço (fatia B, Proposed)
-Tabela `tenant_limits (tenant_id, max_edges, max_olts, max_members, updated_by, updated_at)` com **padrão no código** (ajustável pelo operador, nunca pela organização). Excedido ⇒ `409 limit_reached` em registrar Edge, cadastrar OLT e convidar membro; **nunca** apaga nem bloqueia o que já existe. Proteção do servidor e justiça de carga, não cobrança. Inclui rate limit de ingest **por organização** (hoje há só o global).
+### D3 — Limites técnicos por organização, sem plano nem preço (fatia B, **Accepted e construída**, migração 0055)
+Tabela `tenant_limits (tenant_id PK, max_edges, max_olts, max_members, ingest_per_minute, ingest_burst, updated_by, updated_at)`; **coluna NULL = padrão do código** (`Settings`: 25 Edges, 250 OLTs, 200 membros, ingestão da organização 300 de rajada e 1200/min), então a linha só existe quando o operador ajustou algo. A role da aplicação só **lê** (política por organização); o único caminho de escrita é `platform_set_limits` (mesmo contrato da 0054: `SECURITY DEFINER`, `platform_assert_actor`, motivo, `request_id`, faixas validadas no banco, idempotente, trilha `platform.limits.set` de/para em par com `platform.change.requested`). Pela CLI do dono: `limits-set`.
+- **Imposição** em `app/core/limits.py`, ao **criar**: OLT pela tela (`POST /v1/fleet/olts`) e OLT nova vinda do Edge (`/v1/edge/olt-snapshots`; OLT já conhecida continua reportando), Edge e membro pela CLI do dono (não há rota HTTP que crie Edge ou membro). `409 limit_reached` com `X-Limit-Resource/Max/Current`. O teste é "já tenho >= máximo", sob trava consultiva por (organização, recurso): criações simultâneas não passam do máximo. **Nunca** apaga nem bloqueia o que existe; reduzir abaixo do uso só impede novos.
+- **Ingestão por organização**: um balde por organização (todos os agentes juntos) **além** do balde por agente; `429 organization_rate_limited` com `Retry-After`; o orçamento da organização é lido de `tenant_limits` com cache de 30 s (falha de leitura usa o padrão e registra). Mesma regra de versão: só se aplica a Edge que anuncia entender 429.
+- Console: o detalhe mostra uso, limite efetivo, selo padrão/ajustado e o histórico; a organização **não** altera o próprio limite.
+- Não é cobrança: sem plano, preço, medição histórica ou fatura (D0).
 
-### D4 — E-mail transacional (fatia C, Proposed; exige ADR/emenda de risco)
-SMTP configurado por **ambiente da plataforma**, não por organização. Eventos: convite, reset de senha e de MFA (aviso ao alvo), suspensão/reativação (aviso aos administradores). Sai pelo outbox (reaproveita relay), com modelo de texto fixo e **sem** dado de cliente final. O link de uso único (convite/reset) por e-mail precisa de decisão de risco própria (hoje é mostrado uma vez na tela). Sem alerta por e-mail até haver política de ruído.
+### D4 — E-mail transacional (fatia C, **Accepted e construída**; decisão de risco no ADR-0048, migração 0056)
+SMTP do ambiente da plataforma (nunca por organização), TLS sempre; fila `email_queue` + worker `mailer`. Convite e troca de senha por e-mail são **ato explícito** do administrador (`send_email=true`; a tela continua mostrando o link); avisos sem segredo (segundo fator redefinido; organização suspensa/reativada, aos `isp_admin`) saem sozinhos. Link só de `PUBLIC_BASE_URL`, corpo apagado ao enviar, aplicação não lê o corpo, auditoria sem o link. Sem alerta por e-mail. Detalhes, riscos R-C1 a R-C3 e provas: `ADR-0048-email-transacional.md`.
 
 ### D5 — RBAC com escopo por site/OLT (fatia D; reabre o ADR-0031 item 3)
 A decisão de 2026-10-30 ("DEPOIS") passa a ter posição na fila: **depois de A, B e C**. Papéis customizados continuam **NÃO** (ADR-0031 decisão 1). O desenho do item 3 (escopo como predicado de RLS, `app.scope`, inventário de rotas) vale sem mudança; esta ADR não o altera.
@@ -58,8 +62,8 @@ Fora desta decisão. **White-label: não planejado** (só se alguém pedir).
 | Fatia | Conteúdo | Estado |
 |---|---|---|
 | **A** | D1 suspensão/reativação/renome com imposição + D2 console (saúde, flags, histórico) | **Accepted, construir agora** |
-| B | D3 limites técnicos por organização | Proposed |
-| C | D4 e-mail transacional | Proposed |
+| B | D3 limites técnicos por organização | **Accepted, construída** |
+| C | D4 e-mail transacional (ADR-0048) | **Accepted, construída** |
 | D | D5 escopo por site/OLT; D6 política por organização | Proposed |
 | E | Encerrar organização (exportar e apagar) | Proposed, ADR próprio |
 | F | API com tokens, webhooks, SSO | Proposed, ADR próprio |

@@ -10,12 +10,12 @@ from sqlalchemy import text
 
 from app.api.deps import authenticated_user_id
 from app.api.routes import _client_ip, _gate, _record, _throttled
-from app.core import mfa
+from app.core import mfa, security_policy
 from app.core.db import get_engine, scoped_connection
 from app.core.memberships import active_roles
 from app.core.security import decode_mfa_challenge, hash_secret, issue_token, verify_secret
 from app.core.sessions import hash_refresh, issue_session, mfa_enabled
-from app.core.settings import Settings, get_settings, required_mfa_roles
+from app.core.settings import Settings, get_settings
 
 router = APIRouter()
 
@@ -230,10 +230,7 @@ def _reauth(conn, request: Request, settings: Settings, user_id: UUID, password:
 
 
 def _mfa_required(conn, settings: Settings, user_id: UUID) -> bool:
-    roles = required_mfa_roles(settings)
-    if not roles:
-        return False
-    return bool(roles & set(active_roles(conn, user_id).values()))
+    return security_policy.mfa_required(conn, settings, active_roles(conn, user_id))   # floor + the organizations' own additions (ADR-0049 D1)
 
 
 class PasswordIn(BaseModel):

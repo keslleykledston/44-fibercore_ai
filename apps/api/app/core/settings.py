@@ -55,6 +55,24 @@ class Settings(BaseSettings):
     # "wait, do not count an attempt"); an older Edge would count the 429 as a failed attempt and could dead-letter good data, so it is never limited. "all": every agent (set it once every Edge is
     # updated and verified). "off": no limit.
     edge_ingest_limit: str = Field(default="capable", pattern="^(off|capable|all)$")
+    # ADR-0047 D3 (fatia B): technical limits per organization. These are the DEFAULTS; the platform operator overrides them per organization (table tenant_limits). Server protection, not billing.
+    limit_default_edges: int = Field(default=25, ge=0, le=10000)
+    limit_default_olts: int = Field(default=250, ge=0, le=100000)
+    limit_default_members: int = Field(default=200, ge=0, le=10000)
+    # One bucket per ORGANIZATION on the intake routes (all its Edges together), on top of the per-agent one above: a tenant with many agents cannot starve the others.
+    org_ingest_burst: int = Field(default=300, ge=1, le=10000)
+    org_ingest_per_minute: int = Field(default=1200, ge=1, le=60000)
+    # ADR-0048 (fatia C): transactional e-mail, configured by the PLATFORM environment (never per organization). All three of host, from and public base URL must be set, else e-mail does not exist
+    # (the API behaves as before: the link is shown on screen). TLS is always on (STARTTLS or implicit SSL); there is no plaintext option.
+    smtp_host: str = ""
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_security: str = Field(default="starttls", pattern="^(starttls|ssl)$")
+    smtp_user: str = ""
+    smtp_password: str = Field(default="", repr=False)
+    smtp_from: str = Field(default="", pattern=r"^$|^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    smtp_from_name: str = Field(default="FiberCore", max_length=60)
+    # where the people open the app: the origin of every e-mailed link
+    public_base_url: str = Field(default="", pattern=r"^$|^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?$|^http://(localhost|127\.0\.0\.1)(:[0-9]{1,5})?$")
     pii_hmac_key: str = Field(default="", repr=False)  # HMAC key for customer documents; import fails closed without it
     # ADR-0043: bearer token that opens GET /metrics (Prometheus scrape). Empty (default) => the route answers 404 as if it did not exist (fail closed).
     metrics_token: str = Field(default="", repr=False)

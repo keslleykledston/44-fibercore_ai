@@ -16,7 +16,7 @@ from app.api.acs import active_acs_id
 from app.api.deps import TENANT_CONN, Principal, edge_ingest_limit, require
 from app.api.noc import evaluate_pons
 from app.api.routes import audit
-from app.core import features
+from app.core import features, limits
 from app.core.capabilities import catalog_for
 from app.events import outbox
 
@@ -139,6 +139,7 @@ def ingest_olt_snapshot(
             {"v": body.vendor, "m": body.model, "f": body.firmware, "l": level, "o": body.observed_at, "i": olt_id},
         )
     else:
+        limits.enforce(conn, p.tenant_id, "olts")   # ADR-0047 D3: only a NEW OLT counts; an OLT already known keeps reporting whatever the limit is
         created = conn.execute(
             text(
                 "INSERT INTO olts (tenant_id, edge_id, name, vendor, model, firmware, support_level, observed_at) "
