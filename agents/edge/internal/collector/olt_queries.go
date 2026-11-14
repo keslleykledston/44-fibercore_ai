@@ -102,6 +102,12 @@ func failureReason(err error) string {
 // Drain runs the waiting queries of this OLT on `raw` (the session of the collection, allowlist and budget applied here again). It returns how many ran.
 // `session` identifies this CLI session: the per-session budget is counted against it.
 func (q *Queries) Drain(ctx context.Context, src OLTSource, raw olt.Session, cloudID, session string) (ran int) {
+	return q.DrainWith(ctx, src, raw, cloudID, session, olt.Identity{})
+}
+
+// DrainWith is Drain with the identity the collection ALREADY read at the start of this very session (the snapshot's own). A driver without the query catalog answers the connection
+// test with it, so nothing more is sent to the device and a profile whose snapshot ends the session (Huawei MA5800: `quit`) is still testable. A zero identity makes the driver read it.
+func (q *Queries) DrainWith(ctx context.Context, src OLTSource, raw olt.Session, cloudID, session string, ident olt.Identity) (ran int) {
 	if q == nil || q.Store == nil || cloudID == "" {
 		return 0
 	}
@@ -165,7 +171,10 @@ func (q *Queries) Drain(ctx context.Context, src OLTSource, raw olt.Session, clo
 				continue
 			}
 			runCtx, stop := context.WithDeadline(ctx, leaseEnd)
-			id, err := src.Driver.Identify(runCtx, sess)
+			id, err := ident, error(nil)
+			if id == (olt.Identity{}) {
+				id, err = src.Driver.Identify(runCtx, sess)
+			}
 			stop()
 			var typed json.RawMessage
 			if err == nil {

@@ -129,3 +129,41 @@ func TestConnectionIdentityRefusesWhatTheCloudWouldNotAccept(t *testing.T) {
 		}
 	}
 }
+
+// A profile whose snapshot ends the session (MA5800 sends `quit`) must still answer the connection test: it uses the identity the snapshot already read, with no new command.
+func TestConnectionTestUsesTheIdentityTheSnapshotAlreadyRead(t *testing.T) {
+	raw := &ibFileSession{}
+	store := &oltquery.Store{Path: filepath.Join(t.TempDir(), "q.json")}
+	src := OLTSource{Name: "OLT-IB", Driver: olt.Intelbras{}, CloudID: qCloud,
+		Open: func(context.Context) (olt.Session, func(), error) { return raw, func() {}, nil }}
+	c := &OLT{EdgeID: "e1", Sources: []OLTSource{src}, Queries: &Queries{Store: store, Lease: fakeLease{qCloud: 1}}}
+	enqueue(t, store, "job-conn", oltquery.TestQueryID)
+	if _, err := c.Collect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	cards := 0
+	for _, cmd := range raw.sent {
+		if cmd == "card stats" {
+			cards++
+		}
+	}
+	if e, ok, _ := store.Get("job-conn"); !ok || e.State != oltquery.Executed {
+		t.Fatalf("%+v", e)
+	}
+	base := &ibFileSession{} // the same collection with no query waiting: the query must have added no command at all
+	plain := &OLT{EdgeID: "e1", Sources: []OLTSource{{Name: "OLT-IB", Driver: olt.Intelbras{}, Open: func(context.Context) (olt.Session, func(), error) { return base, func() {}, nil }}}}
+	if _, err := plain.Collect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if cards != func() int {
+		n := 0
+		for _, cmd := range base.sent {
+			if cmd == "card stats" {
+				n++
+			}
+		}
+		return n
+	}() || len(raw.sent) != len(base.sent) {
+		t.Fatalf("the connection test sent extra commands: %v vs %v", raw.sent, base.sent)
+	}
+}

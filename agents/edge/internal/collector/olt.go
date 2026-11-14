@@ -289,7 +289,7 @@ func (o *OLT) collectCLI(ctx context.Context, src OLTSource, observed string) ([
 		// the snapshot is final: the queries run on the same open session with their own allowlist and budget, inside what is LEFT of this collection's time box
 		// (never beyond it), and cannot change this round's outcome
 		session := fmt.Sprintf("%s@%d", src.Name, o.now().UnixNano())
-		o.Queries.Drain(ctx, src, raw, src.CloudID, session)
+		o.Queries.DrainWith(ctx, src, raw, src.CloudID, session, snap.Identity)
 		o.Capture.Do(ctx, src, raw, src.CloudID, session) // nil-safe: no capture configured = nothing happens
 	}
 	return items, berr
