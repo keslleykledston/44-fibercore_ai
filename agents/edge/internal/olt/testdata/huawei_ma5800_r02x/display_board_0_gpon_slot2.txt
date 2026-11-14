@@ -1,0 +1,17 @@
+display board 0 
+{ <cr>||<K> }: 
+
+  Command:
+          display board 0
+  -------------------------------------------------------------------------
+  SlotID  BoardName  Status          SubType0 SubType1    Online/Offline
+  -------------------------------------------------------------------------
+  0       H901PISC   Normal                           
+  1     
+  2       H903GPSF   Normal                           
+  3       H901MPSG   Active_normal   CPCG             
+  4       H901MPSG   Standby_failed  CPCG                 Offline  
+  5       H901PISC   Normal                           
+  -------------------------------------------------------------------------
+
+MA5800-EXEMPLO#

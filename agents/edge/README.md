@@ -37,6 +37,13 @@ SSH `exec` (padrão, sem pty). `pon_ports` vazio = o driver descobre as PONs por
 - Só o driver `intelbras` declara Telnet; `huawei` e `zte` recusam `transport:"telnet"`, e `intelbras` recusa SSH/SNMP. Campos de SSH (`host_key_sha256`, `ssh_mode`, `legacy_ssh`...), `snmp_*`, `last_down` e `down_times` não valem aqui.
 - `pon_ports` é opcional (a OLT lista as próprias PONs em `olt show port`); quando informado é o número da PON (`"1"`, `"8"`), não `0/0/1`.
 - Uma sessão por coleta, e o Edge só envia o login, `card stats`, `olt show port`, `onu status` (lista exata, nenhum `?`) e `logout` ao fechar. Serial = 8 hex do `onu status`; Rx = "ONU Rx Power" quando existe. Nível `identified`: nenhuma PON é declarada completa (ver `docs/engineering/DRIVER_SDK_INTERFACE.md`).
+## Exemplo: OLT Huawei MA5800-X2 R022/R024 em modo `enable` (valores fictícios; somente leitura)
+```json
+{"name":"olt-exemplo-ma5800","vendor":"huawei","profile":"huawei_ma58_r02x","address":"192.0.2.20:22","username":"leitura",
+ "secret_file":"/etc/fibercore-edge/olt-exemplo-ma5800.secret","host_key_sha256":"SHA256:...","pon_ports":["0/1/0","0/1/1"],
+ "ssh_mode":"shell","ssh_pager_space":true,"clock_offset_minutes":-180}
+```
+`ssh_mode` precisa ser `shell`: a visão privilegiada só vive dentro de uma sessão interativa. A sessão faz `display version` (modo usuário), depois **`enable`** (a única elevação; sem `config`, `diagnose`, `undo`, `system-view` nem escrita) e, por PON, `display ont info summary 0/S/P` + `display ont info 0 S P all`; fecha com `quit` sem salvar nada. `pon_ports` no formato `0/S/P` (frame 0, slot 0..21, porta 0..15). `enable` negado (a OLT recusa ou o prompt continua `>`) encerra a coleta sem enviar mais nada. A OLT imprime "última queda" **sem fuso**: `clock_offset_minutes` (-720..840) diz o fuso do relógio dela; ausente = `last_down_at` **não** é enviado (nunca adivinhado). Nível `identified`: ver `docs/engineering/DRIVER_SDK_INTERFACE.md`.
 
 ## Exemplo: OLT por SNMP (v2c, somente leitura; valores fictícios)
 ```json

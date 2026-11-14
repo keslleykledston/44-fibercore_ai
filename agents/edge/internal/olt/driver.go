@@ -97,6 +97,12 @@ var Registry = []Homologation{
 	// Identity seen over SNMP carries only the family/release (ifDescr "Huawei-MA5600-V800R015-GPON_UNI"). Same evidence and
 	// same limits as the CLI entry above: stays identified.
 	{"huawei", "MA5600", "MA5600V800R015", LevelIdentified, "SNMP identity (family+release); see MA5608T entry"},
+	// MA5800-X2 R022/R024: real read-only captures in privileged (enable) mode, profile huawei_ma58_r02x (testdata/huawei_ma5800_r02x).
+	// Two devices, one PON with ONUs each: no empty PON, no second board with ONUs, no ONT-count mismatch ever seen -> stays identified.
+	{"huawei", "MA5800", "MA5800V100R022", LevelIdentified,
+		"real capture 2026-11-14 read-only, enable mode, 2 devices, 1 PON each with ONUs; NOT enough for observed"},
+	{"huawei", "MA5800", "MA5800V100R024", LevelIdentified,
+		"real capture 2026-11-14 read-only, enable mode, 2 devices, 1 PON each with ONUs; NOT enough for observed"},
 	{"zte", "C300", "V2.1", LevelIdentified, "synthetic fixtures only (testdata/zte_c300/V2.1); NOT captured from a device"},
 	// Datacom DmOS: real captures 2026-11-14, read-only, sanitised (testdata/datacom_dmos). Parsers are golden against them, but the checklist for
 	// "observed" is not met: a PON whose listing pages/truncates and ONUs with offline causes were never captured.

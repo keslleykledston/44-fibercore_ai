@@ -1,0 +1,8 @@
+display ont info summary 0/1/0 
+{ <cr>||<K> }: 
+
+  Command:
+          display ont info summary 0/1/0
+  Failure: This board does not exist
+
+MA5800-EXEMPLO#

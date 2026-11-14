@@ -52,6 +52,9 @@ func (h Huawei) Snapshot(ctx context.Context, s Session, ports []string) (Snapsh
 	if isMA56(id) { // the MA5600 family needs the CLI-mode profile; never guess commands for it
 		return Snapshot{}, fmt.Errorf("huawei: %s %s needs profile huawei_ma56_r015", id.Model, id.Firmware)
 	}
+	if isMA58R02x(id) { // these releases need `enable` and have no `optical-info`: only the profile knows the commands
+		return Snapshot{}, fmt.Errorf("huawei: %s %s needs profile huawei_ma58_r02x", id.Model, id.Firmware)
+	}
 	snap := Snapshot{Identity: id}
 	for _, p := range ports {
 		if !hwPort.MatchString(p) {

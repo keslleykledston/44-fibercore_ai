@@ -1,0 +1,131 @@
+[3D   [3Ddisplay ont info 0 1 0 all 
+{ <cr>||<K> }: 
+
+  Command:
+          display ont info 0 1 0 all
+  -----------------------------------------------------------------------------
+  F/S/P    ONT        SN         Control     Run      Config   Match    Protect
+           ID                    flag        state    state    state    side 
+  -----------------------------------------------------------------------------
+  0/ 1/0     0 ITBS00000001      active      online   normal   match    no 
+  0/ 1/0     1 420600000002      active      online   normal   match    no 
+  0/ 1/0     2 420600000003      active      online   normal   match    no 
+  0/ 1/0     3 420600000037      active      online   normal   match    no 
+  0/ 1/0     4 420600000004      active      online   normal   match    no 
+  0/ 1/0     5 420600000005      active      offline  initial  initial  no 
+  0/ 1/0     6 420600000006      active      online   normal   match    no 
+  0/ 1/0     7 420600000007      active      online   normal   match    no 
+  0/ 1/0     8 420600000008      active      online   normal   match    no 
+  0/ 1/0     9 ITBS00000009      active      online   normal   match    no 
+  0/ 1/0    10 ITBS0000000A      active      online   normal   match    no 
+  0/ 1/0    11 ITBS0000000B      active      online   normal   match    no 
+  0/ 1/0    12 ITBS0000000C      active      online   normal   match    no 
+  0/ 1/0    13 ITBS0000000D      active      online   normal   match    no 
+  0/ 1/0    14 ITBS0000000E      active      online   normal   match    no 
+  0/ 1/0    15 ITBS0000000F      active      online   normal   match    no 
+  0/ 1/0    16 ITBS00000010      active      online   normal   match    no 
+  0/ 1/0    17 ITBS00000011      active      online   normal   match    no 
+  0/ 1/0    18 ITBS00000012      active      online   normal   match    no 
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  0/ 1/0    19 ITBS00000013      active      online   normal   match    no 
+  0/ 1/0    20 ITBS00000014      active      online   normal   match    no 
+  0/ 1/0    21 ITBS00000015      active      online   normal   match    no 
+  0/ 1/0    22 SU2100000016      active      online   normal   match    no 
+  0/ 1/0    23 SUMC00000017      active      online   normal   match    no 
+  0/ 1/0    24 VSOL00000018      active      online   normal   match    no 
+  0/ 1/0    25 VSOL00000019      active      online   normal   match    no 
+  0/ 1/0    26 VSOL0000001A      active      online   normal   match    no 
+  0/ 1/0    27 VSOL00000038      active      online   normal   match    no 
+  0/ 1/0    28 VSOL0000001B      active      online   normal   match    no 
+  0/ 1/0    29 VSOL0000001C      active      online   normal   match    no 
+  0/ 1/0    30 SUMC0000001D      active      online   normal   match    no 
+  0/ 1/0    31 SUMC0000001E      active      online   normal   match    no 
+  0/ 1/0    32 SUMC0000001F      active      online   normal   match    no 
+  0/ 1/0    33 SUMC00000020      active      online   normal   match    no 
+  0/ 1/0    34 SU2100000021      active      online   normal   mismatch no 
+  0/ 1/0    35 ITBS00000022      active      online   normal   match    no 
+  0/ 1/0    36 VSOL00000023      active      online   normal   match    no 
+  0/ 1/0    37 VSOL00000024      active      online   normal   match    no 
+  0/ 1/0    38 VSOL00000025      active      online   normal   match    no 
+  0/ 1/0    39 VSOL00000026      active      online   normal   match    no 
+  0/ 1/0    40 VSOL00000027      active      online   normal   match    no 
+  0/ 1/0    41 VSOL00000028      active      online   normal   match    no 
+  0/ 1/0    42 VSOL00000029      active      online   normal   match    no 
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  0/ 1/0    43 VSOL0000002A      active      online   normal   match    no 
+  0/ 1/0    44 VSOL0000002B      active      online   normal   match    no 
+  0/ 1/0    45 VSOL0000002C      active      online   normal   match    no 
+  0/ 1/0    46 VSOL0000002D      active      online   normal   match    no 
+  0/ 1/0    47 ZTEG0000002E      active      online   normal   match    no 
+  0/ 1/0    48 VSOL0000002F      active      online   normal   match    no 
+  0/ 1/0    49 VSOL00000030      active      online   normal   match    no 
+  0/ 1/0    51 ZTEG00000031      active      online   normal   match    no 
+  0/ 1/0    52 ITBS00000039      active      online   normal   match    no 
+  0/ 1/0    53 ZTEG00000032      active      online   normal   match    no 
+  0/ 1/0    54 ZTEG00000033      active      online   normal   match    no 
+  0/ 1/0    55 ZTEG00000034      active      online   normal   match    no 
+  0/ 1/0    56 ZTEG00000035      active      online   normal   match    no 
+  0/ 1/0    57 VSOL00000036      active      online   normal   match    no 
+  -----------------------------------------------------------------------------
+  F/S/P   ONT-ID   Description
+  -----------------------------------------------------------------------------
+  0/ 1/0       0   CLIENTE_EXEMPLO
+  0/ 1/0       1   CLIENTE_EXEMPLO
+  0/ 1/0       2   CLIENTE_EXEMPLO
+  0/ 1/0       3   CLIENTE_EXEMPLO
+  0/ 1/0       4   CLIENTE_EXEMPLO
+  0/ 1/0       5   CLIENTE_EXEMPLO
+  0/ 1/0       6   CLIENTE_EXEMPLO
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  0/ 1/0       7   CLIENTE_EXEMPLO
+  0/ 1/0       8   CLIENTE_EXEMPLO
+  0/ 1/0       9   CLIENTE_EXEMPLO
+  0/ 1/0      10   CLIENTE_EXEMPLO
+  0/ 1/0      11   CLIENTE_EXEMPLO
+  0/ 1/0      12   CLIENTE_EXEMPLO
+  0/ 1/0      13   CLIENTE_EXEMPLO
+  0/ 1/0      14   CLIENTE_EXEMPLO
+  0/ 1/0      15   CLIENTE_EXEMPLO
+  0/ 1/0      16   CLIENTE_EXEMPLO
+  0/ 1/0      17   CLIENTE_EXEMPLO
+  0/ 1/0      18   CLIENTE_EXEMPLO
+  0/ 1/0      19   CLIENTE_EXEMPLO
+  0/ 1/0      20   CLIENTE_EXEMPLO
+  0/ 1/0      21   CLIENTE_EXEMPLO
+  0/ 1/0      22   CLIENTE_EXEMPLO
+  0/ 1/0      23   CLIENTE_EXEMPLO
+  0/ 1/0      24   CLIENTE_EXEMPLO
+  0/ 1/0      25   CLIENTE_EXEMPLO
+  0/ 1/0      26   CLIENTE_EXEMPLO
+  0/ 1/0      27   CLIENTE_EXEMPLO
+  0/ 1/0      28   CLIENTE_EXEMPLO
+  0/ 1/0      29   CLIENTE_EXEMPLO
+  0/ 1/0      30   CLIENTE_EXEMPLO
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  0/ 1/0      31   CLIENTE_EXEMPLO
+  0/ 1/0      32   CLIENTE_EXEMPLO
+  0/ 1/0      33   CLIENTE_EXEMPLO
+  0/ 1/0      34   CLIENTE_EXEMPLO
+  0/ 1/0      35   CLIENTE_EXEMPLO
+  0/ 1/0      36   CLIENTE_EXEMPLO
+  0/ 1/0      37   CLIENTE_EXEMPLO
+  0/ 1/0      38   CLIENTE_EXEMPLO
+  0/ 1/0      39   CLIENTE_EXEMPLO
+  0/ 1/0      40   CLIENTE_EXEMPLO
+  0/ 1/0      41   CLIENTE_EXEMPLO
+  0/ 1/0      42   CLIENTE_EXEMPLO
+  0/ 1/0      43   CLIENTE_EXEMPLO
+  0/ 1/0      44   CLIENTE_EXEMPLO
+  0/ 1/0      45   CLIENTE_EXEMPLO
+  0/ 1/0      46   CLIENTE_EXEMPLO
+  0/ 1/0      47   CLIENTE_EXEMPLO
+  0/ 1/0      48   CLIENTE_EXEMPLO
+  0/ 1/0      49   CLIENTE_EXEMPLO
+  0/ 1/0      51   CLIENTE_EXEMPLO
+  0/ 1/0      52   CLIENTE_EXEMPLO
+  0/ 1/0      53   CLIENTE_EXEMPLO
+  0/ 1/0      54   CLIENTE_EXEMPLO
+  0/ 1/0      55   CLIENTE_EXEMPLO
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  0/ 1/0      56   CLIENTE_EXEMPLO
+  0/ 1/0      57   CLIENTE_EXEMPLO
+  -----------------------------------------------------------------------------
+  In port 0/ 1/0 , the total of ONTs are: 57, online: 56
+  -----------------------------------------------------------------------------
+
+MA5800-EXEMPLO#     

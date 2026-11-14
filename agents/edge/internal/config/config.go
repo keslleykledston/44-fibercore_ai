@@ -165,6 +165,9 @@ type OLTConfig struct {
 	// DownTimes (CLI huawei entries with profile huawei_ma56_r015 only): read the OLT's own "last down time" of the offline ONUs over the CLI
 	// session of the collection itself (`display ont register-info`, read-only), a few ONUs per collection. Exclusive with last_down.
 	DownTimes *DownTimesConfig `json:"down_times"`
+	// ClockOffsetMinutes (profile huawei_ma58_r02x only): the OLT clock's offset from UTC in minutes (e.g. -180). The MA5800 prints its last
+	// down times without a zone; absent = they are NOT reported (never guessed). The status and the down cause are reported either way.
+	ClockOffsetMinutes *int `json:"clock_offset_minutes"`
 	// CloudID is the id of this OLT in the Cloud (lower-case UUID): what an olt_query job names. Only OLTs that have it take queries.
 	CloudID string `json:"cloud_id"`
 	// Capture (ADR-0032): supervised, ONE-TIME captures of queries that are not validated yet; the raw output stays on this host (captures/, 0700/0600, deleted after 24 h).
@@ -493,8 +496,14 @@ func (c *Config) Validate() error {
 		if o.SSHMode != "" && o.SSHMode != "exec" && o.SSHMode != "shell" {
 			errs = append(errs, fmt.Errorf("%s: ssh_mode must be exec or shell", p))
 		}
-		if o.Profile != "" && (o.Profile != "huawei_ma56_r015" || o.Vendor != "huawei") {
-			errs = append(errs, fmt.Errorf("%s: profile must be empty or huawei_ma56_r015 (huawei only)", p))
+		if o.Profile != "" && ((o.Profile != "huawei_ma56_r015" && o.Profile != "huawei_ma58_r02x") || o.Vendor != "huawei") {
+			errs = append(errs, fmt.Errorf("%s: profile must be empty, huawei_ma56_r015 or huawei_ma58_r02x (huawei only)", p))
+		}
+		if o.Profile == "huawei_ma58_r02x" && (o.Transport == "snmp" || o.SSHMode != "shell") {
+			errs = append(errs, fmt.Errorf("%s: profile huawei_ma58_r02x needs a CLI entry with ssh_mode shell (the privileged view only lives inside one interactive session)", p))
+		}
+		if o.ClockOffsetMinutes != nil && (o.Profile != "huawei_ma58_r02x" || *o.ClockOffsetMinutes < -720 || *o.ClockOffsetMinutes > 840) {
+			errs = append(errs, fmt.Errorf("%s: clock_offset_minutes needs profile huawei_ma58_r02x and a value in -720..840", p))
 		}
 		if o.SSHPagerSpace && o.SSHMode != "shell" {
 			errs = append(errs, fmt.Errorf("%s: ssh_pager_space requires ssh_mode shell", p))
@@ -601,6 +610,8 @@ func (c *Config) Validate() error {
 				errs = append(errs, fmt.Errorf("%s: invalid pon port %q", p, pp))
 			} else if o.Profile == "huawei_ma56_r015" && !olt.ValidR015Port(pp) {
 				errs = append(errs, fmt.Errorf("%s: pon port %q outside huawei_ma56_r015 limits (frame 0, slot 0..17, port 0..15)", p, pp))
+			} else if o.Profile == "huawei_ma58_r02x" && !olt.ValidMA58Port(pp) {
+				errs = append(errs, fmt.Errorf("%s: pon port %q outside huawei_ma58_r02x limits (frame 0, slot 0..21, port 0..15)", p, pp))
 			}
 		}
 	}

@@ -178,6 +178,13 @@ func main() {
 				}
 				drv = olt.HuaweiR015{DownTimes: o.DownTimes != nil, Queries: olt.QueryPolicy{Enabled: enabled}}
 			}
+			if o.Profile == "huawei_ma58_r02x" { // MA5800 R022/R024: privileged (enable) read-only view; the OLT clock zone only when the operator gave it
+				ma58 := olt.HuaweiMA58{}
+				if o.ClockOffsetMinutes != nil {
+					ma58.Zone = time.FixedZone("olt", *o.ClockOffsetMinutes*60)
+				}
+				drv = ma58
+			}
 			src := collector.OLTSource{
 				Name: o.Name, Driver: drv, Ports: o.PonPorts, AllowUnverified: o.AllowUnverifiedFirmware, CloudID: o.CloudID,
 				SNMPKey: config.DeviceKey(o.Address), Interval: o.OLTInterval(), Cooldown: o.OLTCooldown(),

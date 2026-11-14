@@ -1,0 +1,25 @@
+display version 
+{ <cr>|backplane<K>|frame<K>|frameid/slotid<S><Length 3-15>||<K> }: 
+
+  Command:
+          display version
+
+  VERSION : MA5800V100R022C11
+  PATCH   : SPC200
+  PRODUCT : MA5800-X2
+
+  Active Mainboard Running Area Information: 
+  --------------------------------------------------
+  Current Program Area : Area A 
+  Current Data Area : Area A 
+
+  Program Area A Version : MA5800V100R022C11 
+  Program Area B Version : MA5800V100R022C11 
+
+  Data Area A Version : MA5800V100R022C11 
+  Data Area B Version : MA5800V100R022C11 
+  --------------------------------------------------
+
+  Uptime is 412 day(s), 16 hour(s), 13 minute(s), 17 second(s)
+
+MA5800-EXEMPLO>

@@ -1,0 +1,120 @@
+[3D   [3Ddisplay ont info summary 0/1/1 
+{ <cr>||<K> }: 
+
+  Command:
+          display ont info summary 0/1/1
+  Command is being executed. Please wait
+  ------------------------------------------------------------------------------
+  In port 0/1/1, the total of ONTs are: 50, online: 49
+  ------------------------------------------------------------------------------
+  ONT  Run     Last                Last                Last                   
+  ID   State   UpTime              DownTime            DownCause
+  ------------------------------------------------------------------------------
+  0    online  09/11/2026 17:33:23 09/11/2026 17:25:59 dying-gasp               
+  1    online  09/11/2026 19:56:58 09/11/2026 17:25:59 dying-gasp               
+  2    online  11/11/2026 21:52:30 11/11/2026 21:50:29 dying-gasp               
+  3    online  12/11/2026 20:25:36 12/11/2026 20:24:35 dying-gasp               
+  4    online  09/11/2026 20:05:27 09/11/2026 20:04:37 dying-gasp               
+  5    online  09/11/2026 19:57:42 09/11/2026 17:25:59 dying-gasp               
+  6    online  04/11/2026 15:18:00 04/11/2026 15:17:18 dying-gasp               
+  7    online  14/11/2026 11:09:44 14/11/2026 11:09:19 LOSi/LOBi                
+  8    online  09/11/2026 19:56:41 09/11/2026 17:25:55 dying-gasp               
+  9    online  09/11/2026 20:01:20 09/11/2026 19:59:53 dying-gasp               
+  10   online  12/11/2026 23:25:18 12/11/2026 23:24:40 dying-gasp               
+  11   online  09/11/2026 19:56:45 09/11/2026 17:25:55 dying-gasp               
+  12   online  09/11/2026 19:56:49 09/11/2026 19:56:05 LOSi/LOBi                
+  13   online  09/11/2026 19:57:45 09/11/2026 17:25:59 dying-gasp               
+  14   online  09/11/2026 19:56:58 09/11/2026 17:25:59 dying-gasp               
+  15   online  09/11/2026 19:57:09 09/11/2026 17:25:59 dying-gasp               
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  16   online  09/11/2026 19:56:58 09/11/2026 17:25:59 dying-gasp               
+  17   online  09/11/2026 20:29:51 09/11/2026 20:26:20 dying-gasp               
+  18   online  12/11/2026 18:17:07 12/11/2026 18:12:19 dying-gasp               
+  19   online  09/11/2026 19:57:00 09/11/2026 17:25:59 dying-gasp               
+  20   online  09/11/2026 19:56:55 09/11/2026 17:25:58 dying-gasp               
+  21   online  11/11/2026 15:02:11 11/11/2026 15:00:19 dying-gasp               
+  22   online  09/11/2026 19:56:55 09/11/2026 17:25:58 dying-gasp               
+  23   online  09/11/2026 19:57:41 09/11/2026 17:25:59 dying-gasp               
+  24   online  09/11/2026 19:56:54 09/11/2026 17:25:58 dying-gasp               
+  25   online  30/10/2026 07:44:01 30/10/2026 06:09:56 dying-gasp               
+  26   online  09/11/2026 19:57:02 09/11/2026 17:25:59 dying-gasp               
+  27   online  11/11/2026 21:52:31 11/11/2026 21:50:29 dying-gasp               
+  28   online  10/11/2026 18:51:30 10/11/2026 18:48:40 dying-gasp               
+  29   online  09/11/2026 19:56:40 09/11/2026 17:25:59 dying-gasp               
+  30   online  13/11/2026 16:05:57 13/11/2026 16:05:39 LOSi/LOBi                
+  31   online  09/11/2026 17:44:14 09/11/2026 17:25:59 dying-gasp               
+  32   online  09/11/2026 19:57:35 09/11/2026 17:25:59 dying-gasp               
+  33   online  11/11/2026 21:20:16 11/11/2026 21:19:39 dying-gasp               
+  34   online  14/11/2026 07:43:58 14/11/2026 07:43:08 dying-gasp               
+  35   online  09/11/2026 19:57:29 09/11/2026 17:25:59 dying-gasp               
+  36   online  09/11/2026 19:56:40 09/11/2026 17:25:59 dying-gasp               
+  37   online  09/11/2026 19:56:40 09/11/2026 17:25:59 LOSi/LOBi                
+  38   online  09/11/2026 20:01:18 09/11/2026 19:59:53 dying-gasp               
+  39   online  09/11/2026 19:56:55 09/11/2026 17:25:59 dying-gasp               
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  40   online  09/11/2026 19:56:40 09/11/2026 17:25:59 dying-gasp               
+  41   online  09/11/2026 19:57:35 09/11/2026 17:25:59 dying-gasp               
+  42   online  09/11/2026 19:57:44 09/11/2026 17:25:59 dying-gasp               
+  43   online  09/11/2026 19:57:41 09/11/2026 17:25:59 dying-gasp               
+  44   online  09/11/2026 19:56:52 09/11/2026 17:25:58 dying-gasp               
+  45   online  09/11/2026 20:01:06 09/11/2026 19:59:53 dying-gasp               
+  46   online  10/11/2026 22:45:18 10/11/2026 07:33:35 LOSi/LOBi                
+  47   offline 13/11/2026 19:51:56 13/11/2026 19:58:45 dying-gasp               
+  48   online  09/11/2026 19:56:55 09/11/2026 17:25:58 dying-gasp               
+  49   online  13/11/2026 16:52:18 13/11/2026 16:51:27 dying-gasp               
+  ------------------------------------------------------------------------------
+  ONT        SN        Type          Distance  Rx/Tx power  Description
+  ID                                    (m)       (dBm)
+  ------------------------------------------------------------------------------
+  0   42060000003A     FD511G-X-F670    7297   -20.91/1.57  CLIENTE_EXEMPLO     
+  1   42060000003B     FD511G-X-F670    7098   -24.68/1.64  CLIENTE_EXEMPLO     
+  2   VSOL0000003C     VSOLV422         4252   -18.38/2.44  CLIENTE_EXEMPLO     
+  3   42060000003D     FD511G-X-F670    7658   -30.45/1.68  CLIENTE_EXEMPLO     
+  4   42060000003E     FD511G-X-F670    7590   -26.19/1.50  CLIENTE_EXEMPLO     
+  5   42060000003F     FD511G-X-F670    7715   -24.95/1.49  CLIENTE_EXEMPLO     
+  6   ITBS00000040     R1v2             7173   -18.89/2.75  CLIENTE_EXEMPLO     
+  7   ITBS00000041     R1v2             7058   -24.95/3.59  CLIENTE_EXEMPLO     
+  8   ITBS00000042     R1v2             5487   -24.43/3.69  CLIENTE_EXEMPLO     
+  9   420600000043     FD511G-X-F670    6645   -23.66/1.52  CLIENTE_EXEMPLO     
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  10  ITBS0000006A     R1v2             7568   -26.19/5.31  CLIENTE_EXEMPLO     
+  11  ITBS00000044     R1v2             5076   -26.19/2.61  CLIENTE_EXEMPLO     
+  12  ITBS00000045     110Gi            7265   -23.87/2.51  CLIENTE_EXEMPLO     
+  13  SUMC00000046     SM16101-GHZ-T10  6278   -22.67/1.99  CLIENTE_EXEMPLO     
+  14  SUMC00000047     SM16101-GHZ-T10  7229   -22.07/2.04  CLIENTE_EXEMPLO     
+  15  SUMC00000048     SM16101-GHZ-T10  4327   -18.60/1.79  CLIENTE_EXEMPLO     
+  16  SUMC00000049     SM16101-GHZ-T10  6981   -27.44/1.95  CLIENTE_EXEMPLO     
+  17  VSOL0000004A     VSOLV422         6723   -23.18/2.84  CLIENTE_EXEMPLO     
+  18  VSOL0000004B     VSOLV422         5767   -24.09/2.85  CLIENTE_EXEMPLO     
+  19  VSOL0000004C     VSOLV422         5062   -18.01/2.04  CLIENTE_EXEMPLO     
+  20  VSOL0000004D     VSOLV422         6945   -28.24/2.40  CLIENTE_EXEMPLO     
+  21  VSOL0000004E     VSOLV422         5512   -19.70/2.37  CLIENTE_EXEMPLO     
+  22  VSOL0000004F     VSOLV422         5131   -18.57/2.82  CLIENTE_EXEMPLO     
+  23  VSOL00000050     VSOLV422         6162   -22.84/2.43  CLIENTE_EXEMPLO     
+  24  VSOL00000051     VSOLV422         7060   -24.81/2.42  CLIENTE_EXEMPLO     
+  25  VSOL00000052     VSOLV422         5695   -18.73/2.35  CLIENTE_EXEMPLO     
+  26  VSOL00000053     VSOLV422         5144   -18.24/2.36  CLIENTE_EXEMPLO     
+  27  VSOL00000054     VSOLV422         4328   -18.63/2.31  CLIENTE_EXEMPLO     
+  28  VSOL00000055     VSOLV422         7158   -22.52/2.40  CLIENTE_EXEMPLO     
+  29  ZTEG00000056     F601V7.0         5519   -19.28/2.13  CLIENTE_EXEMPLO     
+  30  ZTEG00000057     F601V7.0         7077   -23.01/2.24  CLIENTE_EXEMPLO     
+  31  ZTEG00000058     F601V7.0         7675   -19.58/2.33  CLIENTE_EXEMPLO     
+  32  ZTEG00000059     F601V7.0         7298   -25.08/2.33  CLIENTE_EXEMPLO     
+  33  ZTEG0000005A     F601V7.0         7332   -22.07/2.29  CLIENTE_EXEMPLO     
+---- More ( Press 'Q' to break ) ----[37D                                     [37D  34  VSOL0000006B     VSOLV422         6899   -22.75/2.34  CLIENTE_EXEMPLO     
+  35  ZTEG0000005B     F601V7.0         6280   -22.44/2.40  CLIENTE_EXEMPLO     
+  36  ZTEG0000005C     F601V7.0         6279   -23.76/2.24  CLIENTE_EXEMPLO     
+  37  ZTEG0000005D     F601V7.0         6797   -29.20/2.24  CLIENTE_EXEMPLO     
+  38  VSOL0000005E     VSOLV422         6601   -22.44/2.39  CLIENTE_EXEMPLO     
+  39  ZTEG0000005F     F601V7.0         6601   -23.46/2.33  CLIENTE_EXEMPLO     
+  40  ZTEG00000060     F601V7.0         6774   -22.83/2.33  CLIENTE_EXEMPLO     
+  41  ZTEG00000061     F601V7.0         5064   -19.39/2.41  CLIENTE_EXEMPLO     
+  42  VSOL00000062     VSOLV422         5108   -18.18/2.36  CLIENTE_EXEMPLO     
+  43  VSOL00000063     VSOLV422         5133   -17.23/2.37  CLIENTE_EXEMPLO     
+  44  VSOL00000064     VSOLV422         7171   -21.94/2.33  CLIENTE_EXEMPLO     
+  45  ZTEG00000065     F601V7.0         6684   -22.29/2.22  CLIENTE_EXEMPLO     
+  46  ITBS00000066     110Gi            6343   -22.29/0.69  CLIENTE_EXEMPLO     
+  47  ZTEG00000067     F601V7.0         -      -/-          CLIENTE_EXEMPLO     
+  48  VSOL00000068     VSOLV422         7154   -24.20/2.76  CLIENTE_EXEMPLO     
+  49  VSOL00000069     VSOLV422         7003   -22.84/2.31  CLIENTE_EXEMPLO     
+  ------------------------------------------------------------------------------
+  
+
+MA5800-EXEMPLO#   
