@@ -15,6 +15,9 @@ Origem: pergunta do responsável (2026-11-14) sobre três capacidades nas OLTs q
 
 **D5 — `quit` deixa de ser enviado ao fim da coleta MA5800.** Ele é respondido com `Are you sure to log out? (y/n)[n]:` e o shell nunca responde pergunta: o prompt ficava pendente e se colaria ao próximo comando da mesma sessão (as consultas). Fechar o canal SSH encerra a sessão. `quit` saiu também da allowlist.
 
+## Decisão do responsável (2026-11-14)
+Neste momento **nada é removido nem autorizado pela plataforma**: quem atua é o agente humano, e a plataforma só **lista as ONUs candidatas** (fila de `rede/pendentes`, `authorization: not_available`). A flag `onu_discovery` foi ligada nas 5 organizações da LAB para isso. A leitura é por pedido (`olt.autofind`, depois "Atualizar a partir da última leitura do Edge"); uma leitura com mais de 1 h é recusada (`read_too_old`), então a lista só é atual quando alguém pede a leitura. Leitura periódica automática não foi construída.
+
 ## Fora desta decisão
 - Autorização de ONT e remoção/limpeza de PON (escrita em equipamento de cliente: política, preview, aprovação, pós-check, auditoria; ADR própria).
 - Autofind em Datacom e Intelbras (falta capturar o comando de ONU não provisionada de cada um).
