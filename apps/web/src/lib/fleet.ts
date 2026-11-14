@@ -32,7 +32,7 @@ export const CRED_HELP = "O NOME do segredo guardado no Edge (letras minúsculas
 /** Teste de conexão (parte B): leitura somente leitura da identidade da OLT pelo Edge, com orçamento de 1 por 15 min e 4 por hora por OLT. */
 export type ConnectionTests = {
   items: { id: string; outcome: "submitted" | "cached"; requested_at: string; job_status: string | null }[];
-  latest: { identity: { vendor: string; model: string; firmware: string; patch: string; uptime_seconds: number; matches_collected: boolean | null }; asked_at: string; age_seconds: number; stale: boolean } | null;
+  latest: { identity: { vendor: string; model: string; firmware: string; patch: string | null; uptime_seconds: number | null; matches_collected: boolean | null }; asked_at: string; age_seconds: number; stale: boolean } | null;
   budget: { used_last_hour: number; max_per_hour: number; gap_minutes: number; wait_seconds: number };
 };
 export const JOB_LABEL: Record<string, string> = {

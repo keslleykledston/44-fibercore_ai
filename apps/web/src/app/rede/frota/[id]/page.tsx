@@ -89,7 +89,7 @@ export default async function FrotaOlt({ params, searchParams }: { params: Promi
                 {tests.data.latest ? (
                   <dl className="grid gap-1 text-sm" data-testid="frota-identidade">
                     <div><dt className="text-xs text-muted">Lido pelo Edge há {Math.floor(tests.data.latest.age_seconds / 60)} min{tests.data.latest.stale ? " (leitura antiga)" : ""}</dt><dd className="font-medium">{tests.data.latest.identity.model} · {tests.data.latest.identity.firmware}</dd></div>
-                    <div><dt className="text-xs text-muted">Patch · tempo ligada</dt><dd>{tests.data.latest.identity.patch} · {uptimeText(tests.data.latest.identity.uptime_seconds)}</dd></div>
+                    <div><dt className="text-xs text-muted">Patch · tempo ligada</dt><dd>{tests.data.latest.identity.patch ?? "não informado"} · {tests.data.latest.identity.uptime_seconds == null ? "não informado" : uptimeText(tests.data.latest.identity.uptime_seconds)}</dd></div>
                     <div><dt className="text-xs text-muted">Fabricante (o do cadastro; a leitura não o informa)</dt><dd>{tests.data.latest.identity.vendor}</dd></div>
                     <div data-testid="frota-confere" className={tests.data.latest.identity.matches_collected === false ? "text-danger" : "text-muted"}>
                       {tests.data.latest.identity.matches_collected === true ? "Confere com a identidade que a coleta já tinha." : tests.data.latest.identity.matches_collected === false ? "DIVERGE da identidade que a coleta já tinha: confira o cadastro e a configuração do Edge." : "Ainda não há coleta para comparar."}

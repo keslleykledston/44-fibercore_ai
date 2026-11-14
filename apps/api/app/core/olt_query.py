@@ -134,11 +134,25 @@ def _is_slot(v) -> bool:
     return _is_int(v) and 0 <= v <= LIMITS["slot"]
 
 
+_CONN_PRODUCT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/ -]{1,39}$")   # a Datacom model is "DM4610 HW2": the space is real
+
+
+def catalog_supported(vendor: str | None) -> bool:
+    """ADR-0053: the `olt_query` catalog exists only for Huawei. Datacom and Intelbras answer only the connection test (a Huawei profile without the catalog, such as the
+    MA5800, is refused by the Edge itself as `query_not_enabled`: the cloud does not know the Edge's profile)."""
+    return (vendor or "").lower() == "huawei"
+
+
 def check_result(query_id: str, data) -> bool:
     """True only for the exact typed shape of a query that has a parser; anything else (extra keys, wrong types, free text) is refused."""
     if not isinstance(data, dict):
         return False
-    if query_id in ("olt.version", "olt.connection"):   # the connection test returns the very same typed identity
+    if query_id == "olt.connection":   # ADR-0053: the identity of ANY supported driver; patch and uptime may be null (those CLIs do not give them), never absent
+        return (set(data) == {"product", "version", "patch", "uptime_seconds"} and isinstance(data["product"], str) and bool(_CONN_PRODUCT.match(data["product"]))
+                and isinstance(data["version"], str) and bool(_RELEASE.match(data["version"]))
+                and (data["patch"] is None or (isinstance(data["patch"], str) and bool(_RELEASE.match(data["patch"]))))
+                and (data["uptime_seconds"] is None or (_is_int(data["uptime_seconds"]) and 0 <= data["uptime_seconds"] <= 10**9)))
+    if query_id == "olt.version":   # the connection test returns the very same typed identity
         return (set(data) == {"product", "version", "patch", "uptime_seconds"} and isinstance(data["product"], str) and bool(_PRODUCT.match(data["product"]))
                 and isinstance(data["version"], str) and bool(_RELEASE.match(data["version"])) and isinstance(data["patch"], str)
                 and bool(_RELEASE.match(data["patch"])) and _is_int(data["uptime_seconds"]) and 0 <= data["uptime_seconds"] <= 10**9)

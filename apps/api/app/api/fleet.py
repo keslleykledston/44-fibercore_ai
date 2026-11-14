@@ -426,8 +426,8 @@ def connection_test(olt_id: UUID, idempotency_key: str | None = Header(None, ali
     olt = conn.execute(text("SELECT id, vendor, model, firmware, mgmt_protocol FROM olts WHERE id = :i"), {"i": olt_id}).first()
     if olt is None:
         raise HTTPException(404, "olt not found")
-    if olt.mgmt_protocol == "telnet":   # ADR-0046 D3 (Codex r4): Telnet is inventory, nothing operational is asked of it (no protocol = the Edge's own config: still testable)
-        raise HTTPException(422, "protocol_not_supported")
+    # ADR-0053: the test sends no credential and asks nothing of the cloud-side registration: a Telnet OLT is read by the Edge's own static entry (ADR-0046 D3 only
+    # keeps Telnet out of the CREDENTIAL delivery of cloud-managed OLTs), so the old Telnet refusal is gone.
     reason = jobs._query_gate(conn, p.tenant_id, {"query_id": TEST_QUERY})   # the very gates of any olt_query: flag, rollout, Edge channel
     if reason is not None:
         raise HTTPException(409, reason)
