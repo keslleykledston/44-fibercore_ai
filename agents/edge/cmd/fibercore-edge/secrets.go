@@ -92,11 +92,7 @@ func setupSecrets(cfg *config.Config, gw *gateway.Client, log *slog.Logger) (*ol
 		rep := &oltsecrets.StateReporter{Store: mstore, Cloud: gw, Log: log}
 		static := make([]oltsecrets.StaticOLT, 0, len(cfg.OLTs))
 		for _, o := range cfg.OLTs {
-			addr := o.Address
-			if o.Transport == "snmp" {
-				addr = o.SNMPAddress
-			}
-			static = append(static, oltsecrets.StaticOLT{Name: o.Name, DeviceKey: config.DeviceKey(addr), CloudID: o.CloudID})
+			static = append(static, oltsecrets.StaticOLT{Name: o.Name, DeviceKey: o.DeviceID(), CloudID: o.CloudID})
 		}
 		proc.Managed = &oltsecrets.Managed{Policy: pol, Store: mstore, Static: static}
 		w.State = rep

@@ -743,3 +743,46 @@ func TestOLTTelnetTransportIsExplicitOptInAndOnlyForVendorsThatDeclareIt(t *test
 		t.Fatalf("the refusal must name allow_telnet and the clear-text risk: %v", err)
 	}
 }
+
+func TestDatacomDiscoversPONsWhenNoneListed(t *testing.T) {
+	body := `,"allowlist":["192.0.2.9:22"],"olts":[{"name":"D","vendor":"datacom","address":"192.0.2.9:22","username":"ro","secret_file":"/s","host_key_sha256":"SHA256:abc"}]`
+	if _, err := Load(write(t, 0o600, good(body)), "v"); err != nil {
+		t.Fatalf("datacom without pon_ports must load (the driver discovers the PONs): %v", err)
+	}
+	huawei := `,"allowlist":["192.0.2.9:22"],"olts":[{"name":"H","vendor":"huawei","address":"192.0.2.9:22","username":"ro","secret_file":"/s","host_key_sha256":"SHA256:abc"}]`
+	if _, err := Load(write(t, 0o600, good(huawei)), "v"); err == nil {
+		t.Fatal("huawei without pon_ports must still be rejected")
+	}
+}
+
+func TestNATSharedIPMakesThePortPartOfTheDeviceIdentity(t *testing.T) {
+	two := func(natA, natB string) string {
+		mk := func(name, port, nat string) string {
+			return `{"name":"` + name + `","vendor":"datacom","address":"192.0.2.9:` + port + `","username":"ro","secret_file":"/s","host_key_sha256":"SHA256:abc"` + nat + `}`
+		}
+		return `,"allowlist":["192.0.2.9:20322","192.0.2.9:20422"],"olts":[` + mk("A", "20322", natA) + `,` + mk("B", "20422", natB) + `]`
+	}
+	if _, err := Load(write(t, 0o600, good(two("", ""))), "v"); err == nil {
+		t.Fatal("same IP, two ports, without nat_shared_ip must be rejected (one entry per physical OLT)")
+	}
+	cfg, err := Load(write(t, 0o600, good(two(`,"nat_shared_ip":true`, `,"nat_shared_ip":true`))), "v")
+	if err != nil {
+		t.Fatalf("both entries declaring nat_shared_ip must load: %v", err)
+	}
+	if a, b := cfg.OLTs[0].DeviceID(), cfg.OLTs[1].DeviceID(); a == b || a != "192.0.2.9:20322" {
+		t.Fatalf("device ids must differ by port: %q %q", a, b)
+	}
+	if _, err := Load(write(t, 0o600, good(two(`,"nat_shared_ip":true`, ""))), "v"); err == nil {
+		t.Fatal("only one entry declaring it: the IP-only identity of the other collides, must be rejected")
+	}
+	same := `,"allowlist":["192.0.2.9:20322"],"olts":[` +
+		`{"name":"A","vendor":"datacom","address":"192.0.2.9:20322","username":"ro","secret_file":"/s","host_key_sha256":"SHA256:abc","nat_shared_ip":true},` +
+		`{"name":"B","vendor":"datacom","address":"192.0.2.9:20322","username":"ro","secret_file":"/s","host_key_sha256":"SHA256:abc","nat_shared_ip":true}]`
+	if _, err := Load(write(t, 0o600, good(same)), "v"); err == nil {
+		t.Fatal("the same ip:port twice is still the same device")
+	}
+	snmp := `,"allowlist":["192.0.2.9:161"],"olts":[{"name":"S","vendor":"huawei","pon_ports":["0/0/14"],"transport":"snmp","snmp_address":"192.0.2.9:161","snmp_community_file":"/c","nat_shared_ip":true}]`
+	if _, err := Load(write(t, 0o600, good(snmp)), "v"); err == nil {
+		t.Fatal("nat_shared_ip with snmp must be rejected")
+	}
+}

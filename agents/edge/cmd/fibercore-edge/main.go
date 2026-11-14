@@ -187,7 +187,7 @@ func main() {
 			}
 			src := collector.OLTSource{
 				Name: o.Name, Driver: drv, Ports: o.PonPorts, AllowUnverified: o.AllowUnverifiedFirmware, CloudID: o.CloudID,
-				SNMPKey: config.DeviceKey(o.Address), Interval: o.OLTInterval(), Cooldown: o.OLTCooldown(),
+				SNMPKey: o.DeviceID(), Interval: o.OLTInterval(), Cooldown: o.OLTCooldown(),
 				Open: func(ctx context.Context) (olt.Session, func(), error) {
 					if o.Transport == "telnet" { // CLEAR TEXT, explicit opt-in (config: allow_telnet); the login comes from the same 0600 file(s)
 						user, pw, err := o.SSHLogin()
@@ -244,11 +244,7 @@ func main() {
 			}
 			static := make([]managedcollect.Static, 0, len(cfg.OLTs))
 			for _, o := range cfg.OLTs {
-				addr := o.Address
-				if o.Transport == "snmp" {
-					addr = o.SNMPAddress
-				}
-				static = append(static, managedcollect.Static{Name: o.Name, DeviceKey: config.DeviceKey(addr)})
+				static = append(static, managedcollect.Static{Name: o.Name, DeviceKey: o.DeviceID()})
 			}
 			oc.Extra = (&managedcollect.Builder{Store: mstore, Policy: pol, Allow: al, Static: static, Log: log}).Sources
 		}

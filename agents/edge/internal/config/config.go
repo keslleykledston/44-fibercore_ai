@@ -159,6 +159,10 @@ type OLTConfig struct {
 	// AllowTelnet: explicit per-OLT opt-in to the CLEAR-TEXT Telnet transport (transport "telnet"; vendors that only speak Telnet, today intelbras). Default false: a telnet entry without it
 	// is refused at validation. There is no host key to pin: the destination is an IP literal in `allowlist`, and the login crosses the network unprotected.
 	AllowTelnet bool `json:"allow_telnet"`
+	// NATSharedIP: explicit per-OLT declaration that this IP literal is a NAT/port-forward front of SEVERAL physical OLTs and the PORT tells them apart (e.g. one public IP with
+	// 20322 and 20422). Only then is the port part of the device identity (lock, interval, cooldown); otherwise the identity stays the host alone, so one OLT can never be
+	// configured twice under another port. Every entry that shares the IP must set it. CLI transports only (ssh, telnet); not with last_down.
+	NATSharedIP bool `json:"nat_shared_ip"`
 	// LastDown (CLI huawei entries only): also read the OLT's own "last down time" of the offline ONUs over SNMP (read-only), at most every
 	// EverySeconds, and add it to the snapshots this entry sends. It never changes which OLT the snapshot belongs to.
 	LastDown *LastDownConfig `json:"last_down"`
@@ -470,6 +474,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateOLTSecrets()...)
 	errs = append(errs, c.validateManagedOLTs()...)
 	deviceSeen := map[string]bool{}
+	natHost := map[string]bool{} // host -> whether its entries declare nat_shared_ip (all or none)
 	for i, o := range c.OLTs {
 		p := fmt.Sprintf("olts[%d]", i)
 		if o.Name == "" || len(o.Name) > 128 || seen[o.Name] {
@@ -517,8 +522,18 @@ func (c *Config) Validate() error {
 		if o.Transport == "snmp" {
 			devAddr = o.SNMPAddress
 		}
+		if o.NATSharedIP && (o.Transport == "snmp" || o.LastDown != nil) {
+			errs = append(errs, fmt.Errorf("%s: nat_shared_ip only applies to CLI transports (ssh, telnet) without last_down", p))
+		}
+		if o.Transport != "snmp" && devAddr != "" {
+			hk := DeviceKey(devAddr)
+			if prev, ok := natHost[hk]; ok && prev != o.NATSharedIP {
+				errs = append(errs, fmt.Errorf("%s: %s is shared with another olt entry: either every entry of that IP sets nat_shared_ip or none does", p, hk))
+			}
+			natHost[hk] = o.NATSharedIP
+		}
 		if devAddr != "" {
-			if k := DeviceKey(devAddr); deviceSeen[k] {
+			if k := o.DeviceID(); deviceSeen[k] {
 				errs = append(errs, fmt.Errorf("%s: the device at %s is already configured by another olt entry (one entry per physical OLT)", p, devAddr))
 			} else {
 				deviceSeen[k] = true
@@ -598,7 +613,7 @@ func (c *Config) Validate() error {
 			(o.CooldownSeconds != 0 && (o.CooldownSeconds < 60 || o.CooldownSeconds > 86400)) {
 			errs = append(errs, fmt.Errorf("%s: collect_seconds/cooldown_seconds must be 0 (default) or 60..86400", p))
 		}
-		if (len(o.PonPorts) == 0 && o.Transport != "telnet") || len(o.PonPorts) > 256 { // telnet: the device lists its own PONs
+		if (len(o.PonPorts) == 0 && o.Transport != "telnet" && o.Vendor != "datacom") || len(o.PonPorts) > 256 { // telnet and datacom: the device lists its own PONs
 			errs = append(errs, fmt.Errorf("%s: pon_ports required (1..256)", p))
 		}
 		for _, pp := range o.PonPorts {
@@ -624,15 +639,30 @@ func (c *Config) Validate() error {
 // DeviceKey is the identity of one PHYSICAL device behind an address, whatever the transport or port: the IP literal in canonical
 // form, or the lower-cased host name. The collection lock, interval and cooldown are keyed by it, so an SSH entry and an SNMP
 // entry (or two aliases) of the same OLT share them instead of reaching the device concurrently.
-func DeviceKey(addr string) string {
-	h, _, err := net.SplitHostPort(addr)
+func DeviceKey(addr string) string { return deviceKey(addr, false) }
+
+// DeviceID is the device identity of ONE olt entry: DeviceKey of its address, plus the port when the entry declares nat_shared_ip.
+func (o OLTConfig) DeviceID() string {
+	addr := o.Address
+	if o.Transport == "snmp" {
+		addr = o.SNMPAddress
+	}
+	return deviceKey(addr, o.NATSharedIP && o.Transport != "snmp")
+}
+
+func deviceKey(addr string, withPort bool) string {
+	h, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		h = addr
 	}
+	k := strings.ToLower(h)
 	if ip := net.ParseIP(h); ip != nil {
-		return ip.String()
+		k = ip.String()
 	}
-	return strings.ToLower(h)
+	if withPort && port != "" {
+		return net.JoinHostPort(k, port)
+	}
+	return k
 }
 
 // StateFiles returns the single-instance lock and the OLT guard file of a state directory. They hang off the DIRECTORY of the queue

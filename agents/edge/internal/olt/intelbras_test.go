@@ -234,7 +234,6 @@ func TestIntelbrasOverTelnetThroughReadOnlyAndBudget(t *testing.T) {
 	}
 }
 
-
 func TestDisambiguateSerialsOnlyWhenRepeated(t *testing.T) {
 	onus := []ONU{{Serial: "AAAA0001", PonPath: "1"}, {Serial: "BBBB0002", PonPath: "1"}, {Serial: "AAAA0001", PonPath: "2"}}
 	disambiguateSerials(onus)
