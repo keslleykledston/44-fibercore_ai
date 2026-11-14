@@ -27,3 +27,6 @@ Todos os drivers estão em `identified` (ADR-0052). Nada é escrito nas OLTs.
 
 ## Telnet (ASANET)
 O usuário e a senha cruzam a rede em claro até a OLT. Só com `transport: telnet` e `allow_telnet: true` na entrada. Recomendado: VPN/rede privada até o cliente.
+
+## Teste de conexão pela plataforma (ADR-0053, 2026-11-14)
+As 7 OLTs passam no teste (`POST /v1/fleet/olts/{id}/connection-test`): identidade devolvida bate com a coleta (`matches_collected: true`); `patch` e `uptime_seconds` ficam "não informado". Para isso, em cada Edge: `jobs_enabled`, `job_public_key` (chave pública derivada da semente de assinatura da LAB, nunca a semente), `allowed_operations: ["collect","olt_query"]`, `olt_query_enabled: true` e `cloud_id` (id da OLT na nuvem) em cada OLT. Na nuvem: flag `olt_query` ligada nas 5 organizações (`feature-set <tenant> olt_query on`). O resultado só volta na próxima janela de coleta (até ~15 min); limite de 1 teste a cada 15 min e 4 por hora por OLT.
