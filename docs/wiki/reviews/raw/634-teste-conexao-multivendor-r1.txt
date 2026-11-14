@@ -1,0 +1,13 @@
+**Nenhum achado** no diff `c8eceb1b..HEAD` para os riscos listados.
+
+- Consultas diferentes de `olt.connection` são recusadas para drivers sem catálogo no Edge ([olt_queries.go](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/agents/edge/internal/collector/olt_queries.go:160)); a API também restringe consultas fora do catálogo por fabricante ([jobs.py](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/apps/api/app/api/jobs.py:193)).
+- Não encontrei caminho novo que envie comando fora da allowlist: a leitura de identidade usa a sessão protegida pelo driver.
+- O Edge emite `patch` e `uptime_seconds` nulos para esses fabricantes, e a nuvem aceita esses campos nulos apenas em `olt.connection`, com produto e versão validados ([olt_queries.go](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/agents/edge/internal/collector/olt_queries.go:230), [olt_query.py](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/apps/api/app/core/olt_query.py:150)). Os padrões de produto do Edge e da nuvem permitem espaço e `/`.
+- A recusa de Telnet foi removida apenas do teste de conexão. A rota de entrega de credenciais ainda recusa OLTs Telnet ([olt_secrets.py](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/apps/api/app/api/olt_secrets.py:345)).
+- Não vi regressão de isolamento por organização nos fluxos alterados; a consulta de destino continua usando a conexão com escopo de tenant.
+- A validação de `cloud_id` continua exigindo UUID minúsculo único e transporte CLI, ampliando os perfis aceitos para os fabricantes e modelos previstos ([config.go](/home/suporte/projects/44-FiberCore/agents/edge/internal/config/config.go:453)).
+
+**Severidade:** nenhum CRITICAL, HIGH, MEDIUM ou LOW. Revisão somente leitura; não executei testes.
+
+Codex session ID: 01a1db1b-5b4a-7b31-a48b-c2d8c3c38e4a
+Resume in Codex: codex resume 01a1db1b-5b4a-7b31-a48b-c2d8c3c38e4a
