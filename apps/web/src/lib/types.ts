@@ -77,7 +77,7 @@ export type EdgeRow = { id: string; name: string; site_name: string | null; vers
 export type PermissionInfo = { name: string; risk: "R0" | "R1" | "R2" | "R3"; description: string };
 export type RoleInfo = { role: string; label: string; assignable_by_me: boolean; permissions: PermissionInfo[] };
 export type RoleList = { roles: RoleInfo[] };
-export type MeInfo = { id: string; kind: string; tenant_id: string; role: string; mfa_recent?: { enforced: boolean; window_seconds: number; satisfied: boolean }; permissions: PermissionInfo[] };
+export type MeInfo = { id: string; kind: string; tenant_id: string; role: string; mfa_recent?: { enforced: boolean; window_seconds: number; satisfied: boolean }; permissions: PermissionInfo[]; scope?: { restricted: boolean; olts: number | null } };
 export type RoleChange = {
   id: string; at: string; from: string | null; to: string | null; reason: string | null; revoked_sessions: number | null;
   actor: { id: string | null; name: string | null; email: string | null }; target: { id: string; name: string | null; email: string | null };
@@ -105,10 +105,12 @@ export type BenchAuthorizations = { can_authorize: boolean; operations: string[]
 export type TeamMember = {
   user_id: string; email: string; name: string; role: string; role_label: string; role_summary: string; mfa_enabled: boolean; is_self: boolean;
   can_change_role: boolean; can_remove: boolean; can_reset_password: boolean;
+  scope?: { restricted: boolean; pops: number; olts: number }; can_scope?: boolean;   // ADR-0049 D2
 };
 export type TeamInvite = { id: string; email: string; name: string | null; role: string; role_label: string; created_at: string; expires_at: string; by: string | null; expired: boolean };
 export type TeamRole = { role: string; label: string; summary: string; can: string[]; cannot: string[]; assignable_by_me: boolean };
 export type Team = {
+  email_enabled?: boolean;   // ADR-0048: a plataforma sabe mandar e-mail
   me: { id: string; role: string; role_label: string; can_manage: boolean; assignable_roles: string[] };
   summary: { active: number; pending_invites: number; without_mfa: number };
   members: TeamMember[]; invites: TeamInvite[]; roles: TeamRole[];
@@ -128,3 +130,25 @@ export type OnuHistory = {
   summary: { window_days: number; offline_hours: number; drops: number; known_hours: number; availability_pct: number | null };
   events: { id: string; from: string | null; to: string; at: string; baseline: boolean }[];
 };
+
+// ADR-0049 D1: política de MFA por organização
+export type SecurityPolicy = {
+  floor: string[]; organization: string[]; effective: string[]; selectable: string[]; members_without_mfa: Record<string, number>;
+  mfa_available: boolean; can_edit: boolean; changed?: boolean;
+};
+// ADR-0049 D2: escopo por site/OLT
+export type MemberScope = {
+  scopable: boolean; role: string; restricted: boolean; pop_ids: string[]; olt_ids: string[];
+  options: { pops: { id: string; name: string }[]; olts: { id: string; name: string; pop_id: string | null }[] };
+};
+// ADR-0051 D1/D2: tokens de API e webhooks
+export type ApiToken = {
+  id: string; name: string; prefix: string; permissions: string[]; created_at: string; expires_at: string; last_used_at: string | null; revoked_at: string | null; state: "active" | "revoked" | "expired";
+};
+export type ApiTokenList = { items: ApiToken[]; allowed_permissions: string[]; max_active: number; max_days: number };
+export type Webhook = {
+  id: string; name: string; url: string; events: string[]; active: boolean; consecutive_failures: number; last_success_at: string | null; last_failure_at: string | null;
+  disabled_reason: string | null; created_at: string;
+};
+export type WebhookList = { items: Webhook[]; events: string[]; available: boolean; max_endpoints: number };
+export type WebhookDelivery = { id: string; event_type: string; created_at: string; attempts: number; state: "sent" | "failed" | "pending"; last_status: number | null; last_error: string | null };

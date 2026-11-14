@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 
 /** Mostra UMA vez um link (convite ou troca de senha) com botão de copiar. O link não fica guardado em lugar nenhum; depois dá para gerar outro. */
-export function SecretLink({ url, validity, title = "Link pronto" }: { url: string; validity: string; title?: string }) {
+export function SecretLink({ url, validity, title = "Link pronto", emailed }: { url: string; validity: string; title?: string; emailed?: boolean }) {
   const [copied, setCopied] = useState(false);
   const field = useRef<HTMLInputElement>(null);
   async function copy() {
@@ -22,7 +22,9 @@ export function SecretLink({ url, validity, title = "Link pronto" }: { url: stri
       </div>
       <p role="status" aria-live="polite" className="sr-only">{copied ? "Link copiado" : ""}</p>
       <ul className="list-disc pl-5 text-muted">
-        <li>Envie por WhatsApp ou e-mail. Nada é enviado por este painel.</li>
+        {emailed === true ? <li data-testid="emailed-yes">Enviamos este link por e-mail. Você também pode copiá-lo aqui.</li>
+          : emailed === false ? <li role="alert" data-testid="emailed-no" className="text-warn">Não foi possível enviar por e-mail agora; copie o link e envie você mesmo.</li>
+          : <li>Envie por WhatsApp ou e-mail. Nada é enviado por este painel.</li>}
         <li>Válido por {validity} e funciona uma vez só.</li>
         <li>O link aparece <strong>só agora</strong>. Se perder, gere outro.</li>
       </ul>

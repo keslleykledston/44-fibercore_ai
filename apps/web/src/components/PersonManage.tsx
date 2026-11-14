@@ -25,14 +25,15 @@ export function whatChanges(from: TeamRole | undefined, to: TeamRole | undefined
 type Act = () => Promise<void>;
 
 /** Tudo sobre UMA pessoa em um painel só: função, senha, verificação em duas etapas e remoção. Cada ação é pequena e diz o que vai acontecer. */
-export function PersonManage({ m, roles, canManage }: { m: TeamMember; roles: TeamRole[]; canManage: boolean }) {
+export function PersonManage({ m, roles, canManage, emailEnabled = false }: { m: TeamMember; roles: TeamRole[]; canManage: boolean; emailEnabled?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needStepUp, setNeedStepUp] = useState(false);
   const [newRole, setNewRole] = useState("");
-  const [link, setLink] = useState<{ token: string } | null>(null);
+  const [link, setLink] = useState<{ token: string; emailed?: boolean } | null>(null);
+  const [byEmail, setByEmail] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const retry = useRef<Act | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -55,7 +56,7 @@ export function PersonManage({ m, roles, canManage }: { m: TeamMember; roles: Te
 
   const changeRole = (fd: FormData) => guard(() => post(`/bff/members/${m.user_id}/role`, { role: newRole, reason: String(fd.get("reason") ?? "").trim() },
     () => { close(); router.refresh(); }, ROLE_CHANGE_ERROR));
-  const resetLink = () => guard(() => post(`/bff/team/members/${m.user_id}`, { action: "reset" }, (j) => setLink({ token: String(j.token) })));
+  const resetLink = () => guard(() => post(`/bff/team/members/${m.user_id}`, { action: "reset", send_email: emailEnabled && byEmail }, (j) => setLink({ token: String(j.token), emailed: emailEnabled && byEmail ? j.emailed === true : undefined })));
   const remove = (fd: FormData) => guard(() => post(`/bff/team/members/${m.user_id}`, { action: "remove", reason: String(fd.get("reason") ?? "").trim() }, () => { close(); router.refresh(); }));
   const mfaReset = (fd: FormData) => guard(() => post(`/bff/members/${m.user_id}/mfa-reset`, { password: fd.get("password"), code: fd.get("code") },
     () => { setNotice("Verificação em duas etapas redefinida. A pessoa cadastra de novo no próximo acesso."); router.refresh(); }, MFA_ERROR));
@@ -108,7 +109,10 @@ export function PersonManage({ m, roles, canManage }: { m: TeamMember; roles: Te
                   <summary className="cursor-pointer font-medium">Redefinir a senha</summary>
                   <div className="mt-2 grid gap-3">
                     <p className="text-muted">Você gera um link e envia à pessoa. Ela escolhe a nova senha; você nunca vê a senha. As sessões atuais dela terminam quando ela trocar.</p>
-                    {link ? <SecretLink url={`${window.location.origin}/convite/${link.token}`} validity="24 horas" title="Link para trocar a senha" /> : (
+                    {!link && emailEnabled && (
+                      <label className="flex items-center gap-2" data-testid="reset-email-option"><input type="checkbox" checked={byEmail} onChange={(e) => setByEmail(e.target.checked)} className="size-4" />Enviar também por e-mail (para o e-mail da conta dela)</label>
+                    )}
+                    {link ? <SecretLink url={`${window.location.origin}/convite/${link.token}`} validity="24 horas" title="Link para trocar a senha" emailed={link.emailed} /> : (
                       <button type="button" disabled={busy} onClick={() => void resetLink()} data-testid="reset-link"
                         className="min-h-touch rounded-btn border border-line px-4 hover:bg-bg disabled:opacity-60">Gerar link para trocar a senha</button>
                     )}

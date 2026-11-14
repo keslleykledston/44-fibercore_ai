@@ -9,25 +9,25 @@ import { TEAM_ERROR, inviteLink } from "@/lib/team";
 import type { TeamRole } from "@/lib/types";
 
 /** Convidar uma pessoa em dois passos: quem e qual função; depois o link para enviar. */
-export function InviteDrawer({ roles }: { roles: TeamRole[] }) {
+export function InviteDrawer({ roles, emailEnabled = false }: { roles: TeamRole[]; emailEnabled?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needStepUp, setNeedStepUp] = useState(false);
   const [role, setRole] = useState("");
-  const [done, setDone] = useState<{ token: string; email: string; roleLabel: string } | null>(null);
-  const last = useRef<{ email: string; name: string; role: string } | null>(null);
+  const [done, setDone] = useState<{ token: string; email: string; roleLabel: string; emailed?: boolean } | null>(null);
+  const last = useRef<{ email: string; name: string; role: string; send_email: boolean } | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const choices = roles.filter((r) => r.assignable_by_me);
   const close = () => { setOpen(false); setError(null); setNeedStepUp(false); if (done) router.refresh(); setDone(null); setRole(""); trigger.current?.focus(); };
 
-  async function send(p: { email: string; name: string; role: string }) {
+  async function send(p: { email: string; name: string; role: string; send_email: boolean }) {
     setBusy(true); setError(null);
     try {
       const res = await fetch("/bff/team/invites", { method: "POST", headers: { "content-type": "application/json" }, cache: "no-store", body: JSON.stringify(p) });
-      const j = (await res.json().catch(() => ({}))) as { error?: string; token?: string; email?: string; role_label?: string };
-      if (res.ok && j.token) { setNeedStepUp(false); setDone({ token: j.token, email: j.email ?? p.email, roleLabel: j.role_label ?? "" }); return; }
+      const j = (await res.json().catch(() => ({}))) as { error?: string; token?: string; email?: string; role_label?: string; emailed?: boolean };
+      if (res.ok && j.token) { setNeedStepUp(false); setDone({ token: j.token, email: j.email ?? p.email, roleLabel: j.role_label ?? "", emailed: p.send_email ? j.emailed === true : undefined }); return; }
       if (j.error === "mfa_recent_required") { setNeedStepUp(true); return; }
       setError(TEAM_ERROR[j.error ?? "failed"] ?? TEAM_ERROR.failed);
     } catch { setError(TEAM_ERROR.failed); } finally { setBusy(false); }
@@ -41,14 +41,14 @@ export function InviteDrawer({ roles }: { roles: TeamRole[] }) {
         {done ? (
           <div className="grid gap-4 text-sm" data-testid="invite-done">
             <p><strong>{done.email}</strong> foi convidada como <strong>{done.roleLabel}</strong>. Ela escolhe o próprio nome e a própria senha ao abrir o link.</p>
-            <SecretLink url={inviteLink(typeof window === "undefined" ? "" : window.location.origin, done.token)} validity="72 horas" title="Link do convite" />
+            <SecretLink url={inviteLink(typeof window === "undefined" ? "" : window.location.origin, done.token)} validity="72 horas" title="Link do convite" emailed={done.emailed} />
             <button type="button" onClick={close} className="min-h-touch rounded-btn border border-line px-4">Concluir</button>
           </div>
         ) : (
           <form onSubmit={(e) => {
             e.preventDefault();
             const fd = new FormData(e.currentTarget);
-            last.current = { email: String(fd.get("email") ?? "").trim(), name: String(fd.get("name") ?? "").trim(), role };
+            last.current = { email: String(fd.get("email") ?? "").trim(), name: String(fd.get("name") ?? "").trim(), role, send_email: emailEnabled && fd.get("send_email") === "on" };
             void send(last.current);
           }} className="grid gap-4 text-sm" data-testid="invite-form">
             {error && <p role="alert" data-testid="invite-error" className="text-danger">{error}</p>}
@@ -77,6 +77,12 @@ export function InviteDrawer({ roles }: { roles: TeamRole[] }) {
                 </label>
               ))}
             </fieldset>
+            {emailEnabled && (
+              <label className="flex items-start gap-2" data-testid="invite-email-option">
+                <input type="checkbox" name="send_email" className="mt-1 size-4" />
+                <span>Enviar também por e-mail<span className="block text-xs text-muted">O link vai para o e-mail acima. Ele vale uma vez só e continua aparecendo aqui.</span></span>
+              </label>
+            )}
             <button type="submit" disabled={busy || !role} className="min-h-touch rounded-btn bg-accent px-4 font-medium text-[color:var(--on-accent)] disabled:opacity-60">{busy ? "Criando…" : "Criar convite"}</button>
           </form>
         )}

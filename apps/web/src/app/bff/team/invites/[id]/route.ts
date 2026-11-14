@@ -8,13 +8,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!sameOrigin(req)) return reply({ error: "forbidden" }, 403);
   const { id } = await ctx.params;
   if (!UUID.test(id)) return reply({ error: "bad_request" }, 400);
-  let b: { action?: unknown };
+  let b: { action?: unknown; send_email?: unknown };
   try { b = JSON.parse(await req.text()); } catch { return reply({ error: "bad_request" }, 400); }
   if (b.action === "renew") {
-    const r = await apiPost(`/v1/team/invites/${id}/renew`, undefined, {});
+    const r = await apiPost(`/v1/team/invites/${id}/renew${b.send_email === true ? "?send_email=true" : ""}`, undefined, {});
     if (r.status === 201) {
-      const j = r.json as { id?: string; token?: string; expires_at?: string; role_label?: string; email?: string };
-      return reply({ ok: true, id: j.id, token: j.token, expires_at: j.expires_at, role_label: j.role_label, email: j.email }, 201);
+      const j = r.json as { id?: string; token?: string; expires_at?: string; role_label?: string; email?: string; emailed?: boolean };
+      return reply({ ok: true, id: j.id, token: j.token, expires_at: j.expires_at, role_label: j.role_label, email: j.email, emailed: j.emailed }, 201);
     }
     return teamFailure(r.status, r.json);
   }

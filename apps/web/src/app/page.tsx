@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { DataFreshness, EmptyState, ErrorState, Kpi, PageHeader, StatusPill } from "@/components/ui";
 import { api, apiSafe } from "@/lib/api";
+import { meStatus } from "@/lib/meStatus";
+import { scopeNotice } from "@/lib/orgSecurity";
 import { getSession } from "@/lib/session";
 import type { Edge, IncidentList, Olt, Onu, Workspace } from "@/lib/types";
 
@@ -17,6 +19,7 @@ export default async function Overview() {
   const [onus, olts, edges] = await Promise.all([
     apiSafe<Onu[]>("/v1/onus?limit=1000"), apiSafe<Olt[]>("/v1/olts?limit=200"), apiSafe<Edge[]>("/v1/edges"),
   ]);
+  const me = await meStatus();
   const onuList = onus.data ?? [];
   const stale = onuList.filter((o) => o.freshness !== "fresh").length;
   const down = onuList.filter((o) => ["offline", "los", "dying_gasp"].includes(o.status) && o.freshness === "fresh").length;
@@ -26,6 +29,7 @@ export default async function Overview() {
   return (
     <AppShell active="/" user="1">
       <PageHeader title="Visão Geral" subtitle="Estado da rede e prioridades de hoje" helpSlug="visao-geral/visao-geral" />
+      {me?.scope?.restricted && <p role="status" data-testid="scope-notice" className="mb-4 rounded-btn border border-line bg-surface-2 px-3 py-2 text-sm text-muted">{scopeNotice(me.scope.olts)} Você vê só a rede dentro do seu escopo.</p>}
       <section aria-label="Indicadores" className="grid grid-cols-2 gap-3 md:grid-cols-4" data-testid="kpis">
         <Kpi label="ONUs online" value={online} />
         <Kpi label="ONUs fora" value={down} hint="apenas dados atualizados" />

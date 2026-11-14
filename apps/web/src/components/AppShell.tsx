@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { can, meStatus } from "@/lib/meStatus";
 import { CommandPalette } from "./CommandPalette";
 import { Icon } from "./Icon";
 import { MobileMenu } from "./MobileMenu";
@@ -16,7 +17,12 @@ export const NAV = [
   { href: "/administracao/modulos", label: "Administração", icon: "settings" },
 ] as const; // 6 áreas (limite do design system); a Ajuda fica na barra superior
 
-export function AppShell({ active, children, user }: { active: string; children: ReactNode; user?: string }) {
+/** Quem tem ESCOPO (ADR-0049 D2) só lê rede: os itens de menu cujas permissões não vieram em /v1/auth/me somem. Sem escopo (ou sem saber) o menu é o de sempre. */
+const NEEDS: Record<string, string[]> = { "/assinantes": ["customers:read"], "/operacoes": ["jobs:read"], "/administracao/modulos": ["members:read", "tenant:security_policy", "tokens:manage", "webhooks:manage"] };
+
+export async function AppShell({ active, children, user }: { active: string; children: ReactNode; user?: string }) {
+  const me = user ? await meStatus() : null;
+  const nav = me?.scope?.restricted ? NAV.filter((n) => !NEEDS[n.href] || NEEDS[n.href].some((p) => can(me, p))) : NAV;
   return (
     <div className="min-h-screen md:grid md:grid-cols-[232px_1fr]">
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-10 focus:bg-surface focus:p-3">Ir para o conteúdo</a>
@@ -24,7 +30,7 @@ export function AppShell({ active, children, user }: { active: string; children:
         <div className="sticky top-0 p-3">
           <div className="px-3 py-3 text-lg font-semibold tracking-tight">FiberCore</div>
           <nav aria-label="Principal" className="space-y-1">
-            {NAV.map((n) => (
+            {nav.map((n) => (
               <Link key={n.href} href={n.href} aria-current={active === n.href ? "page" : undefined}
                 className={`flex min-h-touch items-center gap-3 whitespace-nowrap rounded-btn px-3 text-sm ${active === n.href ? "bg-accent-soft font-medium text-accent" : "text-muted hover:bg-surface-2"}`}>
                 <Icon name={n.icon} />{n.label}
@@ -35,7 +41,7 @@ export function AppShell({ active, children, user }: { active: string; children:
       </aside>
       <div className="min-w-0">
         <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-line bg-surface px-4 py-2 md:px-8">
-          <div className="flex items-center gap-2 md:hidden"><MobileMenu items={NAV} active={active} /><span className="font-semibold tracking-tight">FiberCore</span></div>
+          <div className="flex items-center gap-2 md:hidden"><MobileMenu items={nav} active={active} /><span className="font-semibold tracking-tight">FiberCore</span></div>
           <form action="/rede" method="get" role="search" className="hidden w-full max-w-md md:block">
             <label htmlFor="q" className="sr-only">Buscar ONU por serial</label>
             <input id="q" name="serial" placeholder="Buscar ONU por serial" autoComplete="off"

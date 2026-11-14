@@ -4,11 +4,13 @@ import { AppShell } from "@/components/AppShell";
 import { Avatar } from "@/components/Avatar";
 import { InviteActions } from "@/components/InviteActions";
 import { InviteDrawer } from "@/components/InviteDrawer";
+import { MemberScope } from "@/components/MemberScope";
 import { PersonManage } from "@/components/PersonManage";
 import { PlatformDelegations, RevokeDelegation } from "@/components/PlatformDelegations";
 import { TeamTabs } from "@/components/TeamTabs";
 import { EmptyState, ErrorState, PageHeader } from "@/components/ui";
 import { apiSafe } from "@/lib/api";
+import { scopeBadge } from "@/lib/orgSecurity";
 import { RISK } from "@/lib/roles";
 import { ACTIVITY_FILTERS, ago, sentence, when } from "@/lib/team";
 import type { MeInfo, PermissionInfo, PlatformDelegationList, RoleList, Team, TeamActivity } from "@/lib/types";
@@ -40,14 +42,14 @@ function Summary({ t }: { t: Team }) {
 
 type Row = {
   key: string; name: string; email: string; role: string; role_label: string; summary: string; kind: "member" | "invite"; self: boolean;
-  mfa: boolean | null; status: "ativo" | "pendente" | "vencido"; note: string | null; testid: string;
+  mfa: boolean | null; status: "ativo" | "pendente" | "vencido"; note: string | null; testid: string; scope?: { restricted: boolean; pops: number; olts: number };
 };
 
 function rowsOf(t: Team, q: string, funcao: string): Row[] {
   const needle = q.trim().toLowerCase();
   const info = new Map(t.roles.map((r) => [r.role, r.summary]));
   const members: Row[] = t.members.map((m) => ({ key: m.user_id, name: m.name, email: m.email, role: m.role, role_label: m.role_label, summary: m.role_summary, kind: "member", self: m.is_self,
-    mfa: m.mfa_enabled, status: "ativo", note: null, testid: `person-${m.email}` }));
+    mfa: m.mfa_enabled, status: "ativo", note: null, testid: `person-${m.email}`, scope: m.scope }));
   const invites: Row[] = t.invites.map((i) => ({ key: i.id, name: i.name ?? "", email: i.email, role: i.role, role_label: i.role_label, summary: info.get(i.role) ?? "", kind: "invite", self: false,
     mfa: null, status: i.expired ? "vencido" : "pendente", testid: `invite-${i.email}`,
     note: `${i.by ? `Convidado por ${i.by} ` : "Convidado "}${ago(i.created_at)} · ${i.expired ? "link vencido, gere outro" : `vale até ${when(i.expires_at)}`}` }));
@@ -63,6 +65,7 @@ function Status({ r }: { r: Row }) {
       {r.status === "vencido" && <span className={`${PILL} border-warn text-warn`}>Convite vencido</span>}
       {r.mfa === true && <span className={`${PILL} border-ok text-ok`}>2 etapas ligada</span>}
       {r.mfa === false && <span className={`${PILL} border-line text-muted`}>2 etapas desligada</span>}
+      {r.kind === "member" && r.scope && <span className={`${PILL} ${r.scope.restricted ? "border-accent text-accent" : "border-line text-muted"}`} data-testid="person-scope">{scopeBadge(r.scope)}</span>}
     </div>
   );
 }
@@ -88,9 +91,9 @@ function People({ t, q, funcao }: { t: Team; q: string; funcao: string }) {
   const action = (r: Row) => {
     if (r.self) return <Link href="/conta/seguranca" data-testid="my-security" className="inline-flex min-h-touch items-center rounded-btn border border-line px-3 text-sm hover:bg-bg">Minha segurança</Link>;
     if (!t.me.can_manage) return null;
-    if (r.kind === "invite") return <InviteActions id={r.key} email={r.email} />;
+    if (r.kind === "invite") return <InviteActions id={r.key} email={r.email} emailEnabled={t.email_enabled === true} />;
     const m = memberOf.get(r.key)!;
-    return <PersonManage m={m} roles={t.roles} canManage={t.me.can_manage} />;
+    return <div className="flex flex-wrap justify-end gap-2">{m.can_scope && <MemberScope userId={m.user_id} name={m.name} />}<PersonManage m={m} roles={t.roles} canManage={t.me.can_manage} emailEnabled={t.email_enabled === true} /></div>;
   };
   return (
     <div className="grid gap-4">
@@ -236,7 +239,7 @@ export default async function Equipe({ searchParams }: { searchParams: Promise<S
   const shell = (children: React.ReactNode) => (
     <AppShell active="/administracao/modulos" user="1">
       <PageHeader title="Equipe e acessos" subtitle="Quem entra, o que cada pessoa pode fazer e o que mudou" helpSlug="administracao/equipe-e-acessos">
-        {team.data?.me.can_manage ? <InviteDrawer roles={team.data.roles} /> : null}
+        {team.data?.me.can_manage ? <InviteDrawer roles={team.data.roles} emailEnabled={team.data.email_enabled === true} /> : null}
       </PageHeader>
       <AdminTabs current="/administracao/equipe" />
       {children}

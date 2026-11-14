@@ -19,7 +19,7 @@ ui_route: "/administracao/equipe"
 
 1. Em **Administração → Equipe e acessos**, clique em **Convidar pessoa**.
 2. Digite o e-mail (o nome é opcional) e escolha a **função**. Cada cartão diz o que a pessoa pode e não pode fazer.
-3. Clique em **Criar convite**. Aparece um **link**: clique em **Copiar link** e envie por WhatsApp ou e-mail. O painel não envia nada sozinho.
+3. Clique em **Criar convite**. Aparece um **link**: clique em **Copiar link** e envie por WhatsApp ou e-mail. O painel não envia nada sozinho. (Se a plataforma estiver configurada para e-mail, aparece a caixa **Enviar também por e-mail**: desmarcada por padrão, é um ato seu; o link continua aparecendo na tela.)
 4. A pessoa abre o link, escolhe o nome e uma senha (mínimo de 12 caracteres) e entra. Você nunca vê a senha dela.
 
 O link vale por 72 horas e funciona uma vez. Ele só aparece na hora; se perder, use **Gerar novo link** (o anterior para de valer) ou **Cancelar convite**. Se a pessoa já tem conta (por exemplo, em outro provedor), ela digita a senha que já tem para aceitar.

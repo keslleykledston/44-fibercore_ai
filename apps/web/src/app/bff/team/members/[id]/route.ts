@@ -8,13 +8,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!sameOrigin(req)) return reply({ error: "forbidden" }, 403);
   const { id } = await ctx.params;
   if (!UUID.test(id)) return reply({ error: "bad_request" }, 400);
-  let b: { action?: unknown; reason?: unknown };
+  let b: { action?: unknown; reason?: unknown; send_email?: unknown };
   try { b = JSON.parse(await req.text()); } catch { return reply({ error: "bad_request" }, 400); }
   if (b.action === "reset") {
-    const r = await apiPost(`/v1/team/members/${id}/password-reset`, undefined, {});
+    const r = await apiPost(`/v1/team/members/${id}/password-reset${b.send_email === true ? "?send_email=true" : ""}`, undefined, {});
     if (r.status === 201) {
-      const j = r.json as { token?: string; expires_at?: string };
-      return reply({ ok: true, token: j.token, expires_at: j.expires_at }, 201);
+      const j = r.json as { token?: string; expires_at?: string; emailed?: boolean };
+      return reply({ ok: true, token: j.token, expires_at: j.expires_at, emailed: j.emailed }, 201);
     }
     return teamFailure(r.status, r.json);
   }
