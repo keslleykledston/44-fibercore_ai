@@ -1,0 +1,5 @@
+GPON Temperature Voltage Tx Bias Current  Tx Power    Rx Power   End Of Life Status
+==== =========== ======= =============== =========== =========== ==================
+ 1       35 C    3.205 V      14 mA       3.328 dBm  -31.549 dBm         OK        
+ 2       34 C    3.266 V      14 mA       3.295 dBm  -29.655 dBm         OK        
+ 3       38 C    3.221 V      14 mA       3.492 dBm  -26.383 dBm         OK        

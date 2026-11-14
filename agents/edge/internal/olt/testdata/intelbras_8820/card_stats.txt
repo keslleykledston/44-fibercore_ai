@@ -1,0 +1,4 @@
+ ------ cpu % utilization ------    ------ memory (KB) ------       Card Memory         Uptime                    
+ slot     idle       usage        %Used      Total       Avail       Status         ddd:hh:mm:ss     s/w version 
+======   =======    =======      =======   =========   ==========   ==============  ==============  ==============
+ 1        78.1       21.9         36.0      1028352     539604      1 - OK          110:16:55:11    2.112

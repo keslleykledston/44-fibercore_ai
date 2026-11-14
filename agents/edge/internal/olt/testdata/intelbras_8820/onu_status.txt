@@ -1,0 +1,45 @@
+
+GPON 1
+
+     Serial                OMCI Config     OLT         ONU       Distance            GPON            Uptime
+ONU  Number    OperStatus   Status       Rx Power    Rx Power      (km)          ONU Status        ddd:hh:mm:ss    Auto
+=== ========= =========== ============= =========== ==========  =========== ==================== ================ ====== 
+1   5E000001  Inactive    -             -           -           -           DGI                  -                yes    
+2   5E000002  Active      OK            -20.09 dBm  -17.72 dBm  0.269                            19:2:20:42       yes    
+3   5E000003  Inactive    -             -           -           -           LOAMI                -                yes    
+4   5E000004  Active      OK            -31.55 dBm  -30.46 dBm  0.316                            0:1:4:22         yes    
+5   5E000005  Active      OK            -23.02 dBm  -22.44 dBm  0.117                            0:7:12:49        yes    
+6   5E000006  Active      OK            -25.09 dBm  -23.01 dBm  0.142                            6:13:49:7        yes    
+27  5E000007  Active      OK            -26.20 dBm  -24.95 dBm  1.127                            0:2:34:14        yes    
+34  5E000008  Active      OK            -26.99 dBm  -24.32 dBm  0.178                            19:2:20:38       yes    
+44  5E000009  Active      OK            -26.20 dBm  -24.82 dBm  0.35                             6:19:8:30        yes    
+45  5E00000A  Active      OK            -27.96 dBm  -24.56 dBm  0.562                            9:17:52:17       yes    
+53  5E00000B  Active      OK            -20.71 dBm  -19.25 dBm  0.75                             0:2:32:50        yes    
+56  5E00000C  Active      OK            -30.46 dBm  -25.85 dBm  0.262                            3:21:49:15       yes    
+71  5E00000D  Active      OK            -22.15 dBm  -21.25 dBm  0.348                            11:6:23:8        yes    
+
+Configured ONUs: 13, Active ONUs = 11
+OLT total configured = 283
+
+GPON 2
+
+     Serial                OMCI Config     OLT         ONU       Distance            GPON            Uptime
+ONU  Number    OperStatus   Status       Rx Power    Rx Power      (km)          ONU Status        ddd:hh:mm:ss    Auto
+=== ========= =========== ============= =========== ==========  =========== ==================== ================ ====== 
+1   5E100001  Active      OK            -24.10 dBm  -22.05 dBm  0.512                            2:3:4:5          yes    
+2   5E100002  Inactive    -             -           -           -                                -                -                yes    
+3   5E100003  Inactive    -             -           -           -           LOBI                 -                yes    
+
+Configured ONUs: 3, Active ONUs = 1
+OLT total configured = 283
+
+
+GPON 3
+
+     Serial                OMCI Config     OLT         ONU       Distance            GPON            Uptime
+ONU  Number    OperStatus   Status       Rx Power    Rx Power      (km)          ONU Status        ddd:hh:mm:ss    Auto
+=== ========= =========== ============= =========== ==========  =========== ==================== ================ ====== 
+
+Configured ONUs: 0, Active ONUs = 0
+OLT total configured = 283
+

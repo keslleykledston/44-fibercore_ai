@@ -201,7 +201,7 @@ func TestOLTSNMPTransportValidation(t *testing.T) {
 		"pace out of range":                 `,"transport":"snmp","snmp_address":"192.0.2.10:161","snmp_community_file":"/c","snmp_pace_ms":99999`,
 		"pace below the 1s floor":           `,"transport":"snmp","snmp_address":"192.0.2.10:161","snmp_community_file":"/c","snmp_pace_ms":200`,
 		"budget above the cap":              `,"transport":"snmp","snmp_address":"192.0.2.10:161","snmp_community_file":"/c","snmp_max_requests":5000`,
-		"unknown transport":                 `,"transport":"telnet","address":"192.0.2.10:22"`,
+		"unknown transport":                 `,"transport":"ftp","address":"192.0.2.10:22"`,
 		"snmp fields without the transport": `,"snmp_address":"192.0.2.10:161","address":"192.0.2.10:22","username":"u","secret_file":"/s","host_key_sha256":"SHA256:abc"`,
 	} {
 		if _, err := Load(write(t, 0o600, good(olt(extra))), "v"); err == nil {
@@ -699,5 +699,47 @@ func TestPingSectionValidation(t *testing.T) {
 	both := speedCfg(okSpeed+okPing, `"speed_test_download","ping_test"`, `,"10.20.5.9:8080"`, okWAN)
 	if _, err := Load(write(t, 0o600, good(both)), "v"); err != nil {
 		t.Errorf("speed and ping together must load: %v", err)
+	}
+}
+
+func TestOLTTelnetTransportIsExplicitOptInAndOnlyForVendorsThatDeclareIt(t *testing.T) {
+	olt := func(vendor, extra string) string {
+		return `,"allowlist":["192.0.2.10:23","192.0.2.10:22","olt.example:23"],"olts":[{"name":"A","vendor":"` + vendor + `"` + extra + `}]`
+	}
+	login := `,"username":"ro","secret_file":"/s"`
+	okTelnet := `,"transport":"telnet","allow_telnet":true,"address":"192.0.2.10:23"` + login
+	cfg, err := Load(write(t, 0o600, good(olt("intelbras", okTelnet))), "v")
+	if err != nil {
+		t.Fatalf("a telnet intelbras OLT with the opt-in must load (no pon_ports: the device lists them): %v", err)
+	}
+	if o := cfg.OLTs[0]; o.Transport != "telnet" || !o.AllowTelnet || o.Vendor != "intelbras" {
+		t.Fatalf("fields not loaded: %+v", o)
+	}
+	if _, err := Load(write(t, 0o600, good(olt("intelbras", okTelnet+`,"pon_ports":["1","8"]`))), "v"); err != nil {
+		t.Fatalf("telnet pon_ports are bare numbers: %v", err)
+	}
+	for name, body := range map[string]string{
+		"telnet without allow_telnet (default false)": olt("intelbras", `,"transport":"telnet","address":"192.0.2.10:23"`+login),
+		"allow_telnet false written out":              olt("intelbras", `,"transport":"telnet","allow_telnet":false,"address":"192.0.2.10:23"`+login),
+		"intelbras on the default (ssh) transport":    olt("intelbras", `,"allow_telnet":true,"address":"192.0.2.10:22"`+login+`,"host_key_sha256":"SHA256:abc","pon_ports":["1"]`),
+		"huawei over telnet":                          olt("huawei", okTelnet+`,"pon_ports":["0/0/1"]`),
+		"zte over telnet":                             olt("zte", okTelnet+`,"pon_ports":["1/1/1"]`),
+		"allow_telnet on an ssh entry":                olt("huawei", `,"allow_telnet":true,"address":"192.0.2.10:22"`+login+`,"host_key_sha256":"SHA256:abc","pon_ports":["0/0/1"]`),
+		"destination not in the allowlist":            olt("intelbras", `,"transport":"telnet","allow_telnet":true,"address":"192.0.2.99:23"`+login),
+		"host name instead of an IP literal":          olt("intelbras", `,"transport":"telnet","allow_telnet":true,"address":"olt.example:23"`+login),
+		"no login at all":                             olt("intelbras", `,"transport":"telnet","allow_telnet":true,"address":"192.0.2.10:23"`),
+		"host key on a telnet entry":                  olt("intelbras", okTelnet+`,"host_key_sha256":"SHA256:abc"`),
+		"ssh mode on a telnet entry":                  olt("intelbras", okTelnet+`,"ssh_mode":"shell"`),
+		"snmp field on a telnet entry":                olt("intelbras", okTelnet+`,"snmp_address":"192.0.2.10:161"`),
+		"pon port in the ssh form":                    olt("intelbras", okTelnet+`,"pon_ports":["0/0/1"]`),
+	} {
+		if _, err := Load(write(t, 0o600, good(body)), "v"); err == nil {
+			t.Errorf("%s: must be rejected", name)
+		}
+	}
+	// without allow_telnet the refusal is the clear one
+	_, err = Load(write(t, 0o600, good(olt("intelbras", `,"transport":"telnet","address":"192.0.2.10:23"`+login))), "v")
+	if err == nil || !strings.Contains(err.Error(), "allow_telnet") || !strings.Contains(err.Error(), "CLEAR TEXT") {
+		t.Fatalf("the refusal must name allow_telnet and the clear-text risk: %v", err)
 	}
 }

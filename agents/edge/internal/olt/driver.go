@@ -104,6 +104,9 @@ var Registry = []Homologation{
 	{"datacom", "DM46", "8.2.", LevelIdentified, "real capture 2026-11-14, read-only; parser golden; NOT enough for observed (checklist: PON paginada, ONU com causas de queda)"},
 	{"datacom", "DM46", "9.6.", LevelIdentified, "real capture 2026-11-14, read-only; parser golden; NOT enough for observed (checklist: PON paginada, ONU com causas de queda)"},
 	{"datacom", "DM46", "5.8.", LevelIdentified, "real capture 2026-11-14, read-only (DM4610 HW2); parser golden; NOT enough for observed (checklist: PON paginada, ONU com causas de queda)"},
+	// Real read-only capture over Telnet (testdata/intelbras_8820, sanitized). It has no empty PON of a live device, no ONU of a PON with a second slot and nothing
+	// about how the OLT reports a PON that is down: stays "identified" until the promotion checklist in DRIVER_SDK_INTERFACE.md is met.
+	{"intelbras", "OLT8820", "2.112", LevelIdentified, "real capture 2026-11-14 read-only (testdata/intelbras_8820); NOT enough for observed"},
 }
 
 // Lookup returns the level for an identity, or ErrUnsupportedFirmware when the firmware has no fixture coverage.

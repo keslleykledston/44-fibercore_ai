@@ -28,6 +28,15 @@ Pendências: mTLS (ADR-0011), assinatura/anti-replay de jobs (Sprint 3), SNMP/SS
  "secret_file":"/etc/fibercore-edge/olt-datacom-exemplo.secret","host_key_sha256":"SHA256:...","pon_ports":["1/1/1","1/1/2"]}
 ```
 SSH `exec` (padrão, sem pty). `pon_ports` vazio = o driver descobre as PONs por `show interface gpon | nomore`. A host key fixada continua obrigatória; SNMP não existe para este vendor. Somente leitura: comandos exatos em `docs/engineering/DRIVER_SDK_INTERFACE.md` (seção Datacom DmOS). O nível declarado é `identified`.
+## Exemplo: OLT Intelbras 8820i por Telnet (TEXTO CLARO, opt-in explícito; valores fictícios)
+```json
+{"name":"olt-exemplo-intelbras","vendor":"intelbras","transport":"telnet","allow_telnet":true,"address":"192.0.2.20:23",
+ "username":"leitura","secret_file":"/etc/fibercore-edge/olt-intelbras.secret"}
+```
+- **Telnet não tem criptografia nem chave de host**: o usuário e a senha cruzam a rede em claro. Por isso são exigidos, **nesta OLT**, `"transport":"telnet"` **e** `"allow_telnet":true` (padrão `false`: sem ele a configuração é recusada com erro claro) e o destino em `allowlist` como IP literal (`192.0.2.20:23`). Use só em rede de gerência isolada; um usuário **somente leitura** na OLT; a senha só em arquivo 0600 (nunca em log nem em erro).
+- Só o driver `intelbras` declara Telnet; `huawei` e `zte` recusam `transport:"telnet"`, e `intelbras` recusa SSH/SNMP. Campos de SSH (`host_key_sha256`, `ssh_mode`, `legacy_ssh`...), `snmp_*`, `last_down` e `down_times` não valem aqui.
+- `pon_ports` é opcional (a OLT lista as próprias PONs em `olt show port`); quando informado é o número da PON (`"1"`, `"8"`), não `0/0/1`.
+- Uma sessão por coleta, e o Edge só envia o login, `card stats`, `olt show port`, `onu status` (lista exata, nenhum `?`) e `logout` ao fechar. Serial = 8 hex do `onu status`; Rx = "ONU Rx Power" quando existe. Nível `identified`: nenhuma PON é declarada completa (ver `docs/engineering/DRIVER_SDK_INTERFACE.md`).
 
 ## Exemplo: OLT por SNMP (v2c, somente leitura; valores fictícios)
 ```json

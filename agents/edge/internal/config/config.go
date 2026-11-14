@@ -135,7 +135,7 @@ func (d BenchDeviceConfig) ID() string { return d.OUI + "-" + d.ProductClass + "
 // OLTConfig describes one OLT the Edge may READ. Its address must also be listed in `allowlist`.
 type OLTConfig struct {
 	Name       string `json:"name"`
-	Vendor     string `json:"vendor"` // huawei | zte | datacom
+	Vendor     string `json:"vendor"` // huawei | zte | datacom | intelbras
 	Address    string `json:"address"`
 	Username   string `json:"username"`
 	SecretFile string `json:"secret_file"`
@@ -156,6 +156,9 @@ type OLTConfig struct {
 	CollectSeconds          int      `json:"collect_seconds"`     // minimum seconds between two collections of THIS olt (0 = default: 900 for cli, every cycle for snmp)
 	CooldownSeconds         int      `json:"cooldown_seconds"`    // seconds to leave this olt alone after a failure (0 = default: 900 cli, 300 snmp)
 	LegacySSH               bool     `json:"legacy_ssh"`          // explicit per-OLT opt-in to old SSH algorithms (SHA1 DH, ssh-rsa, AES-CBC)
+	// AllowTelnet: explicit per-OLT opt-in to the CLEAR-TEXT Telnet transport (transport "telnet"; vendors that only speak Telnet, today intelbras). Default false: a telnet entry without it
+	// is refused at validation. There is no host key to pin: the destination is an IP literal in `allowlist`, and the login crosses the network unprotected.
+	AllowTelnet bool `json:"allow_telnet"`
 	// LastDown (CLI huawei entries only): also read the OLT's own "last down time" of the offline ONUs over SNMP (read-only), at most every
 	// EverySeconds, and add it to the snapshots this entry sends. It never changes which OLT the snapshot belongs to.
 	LastDown *LastDownConfig `json:"last_down"`
@@ -226,6 +229,12 @@ func (l LastDownConfig) Every() time.Duration {
 }
 
 var ponRe = regexp.MustCompile(`^\d+/\d+/\d+$`)
+
+// telnetPonRe: the PON of a Telnet-only OLT is the bare port number the device itself prints (intelbras: "GPON 3").
+var telnetPonRe = regexp.MustCompile(`^[1-9]\d{0,2}$`)
+
+// vendorSpeaksTelnet: the vendors whose driver is written for the read-only Telnet transport. Telnet is never accepted for any other.
+func vendorSpeaksTelnet(v string) bool { return v == "intelbras" }
 
 var uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
@@ -464,8 +473,17 @@ func (c *Config) Validate() error {
 			errs = append(errs, fmt.Errorf("%s: name required, unique, <=128 chars", p))
 		}
 		seen[o.Name] = true
-		if o.Vendor != "huawei" && o.Vendor != "zte" && o.Vendor != "datacom" {
-			errs = append(errs, fmt.Errorf("%s: vendor must be huawei, zte or datacom", p))
+		if o.Vendor != "huawei" && o.Vendor != "zte" && o.Vendor != "datacom" && o.Vendor != "intelbras" {
+			errs = append(errs, fmt.Errorf("%s: vendor must be huawei, zte, datacom or intelbras", p))
+		}
+		if o.Transport == "telnet" && !vendorSpeaksTelnet(o.Vendor) {
+			errs = append(errs, fmt.Errorf("%s: transport telnet is not available for vendor %q", p, o.Vendor))
+		}
+		if o.Vendor == "intelbras" && o.Transport != "telnet" {
+			errs = append(errs, fmt.Errorf("%s: vendor intelbras only speaks telnet (transport telnet and allow_telnet true)", p))
+		}
+		if o.AllowTelnet && o.Transport != "telnet" {
+			errs = append(errs, fmt.Errorf("%s: allow_telnet only applies to transport telnet", p))
 		}
 		if o.Transport != "snmp" {
 			if _, _, err := net.SplitHostPort(o.Address); err != nil || !allowed[strings.ToLower(o.Address)] {
@@ -525,8 +543,20 @@ func (c *Config) Validate() error {
 			if o.Username != "" || o.SecretFile != "" || o.HostKeySHA256 != "" || o.SSHMode != "" || o.Profile != "" || o.LegacySSH || o.SSHPagerSpace {
 				errs = append(errs, fmt.Errorf("%s: ssh fields are not allowed with transport snmp", p))
 			}
+		case "telnet":
+			// clear text, no host key: only with the explicit opt-in, a login from the file(s) and none of the SSH/SNMP-only fields
+			if !o.AllowTelnet {
+				errs = append(errs, fmt.Errorf("%s: transport telnet is CLEAR TEXT and needs allow_telnet true on this olt (explicit opt-in)", p))
+			}
+			if o.CredentialsFile == "" && (o.Username == "" || o.SecretFile == "") {
+				errs = append(errs, fmt.Errorf("%s: username and secret_file required (or a credentials_file)", p))
+			}
+			if o.HostKeySHA256 != "" || o.SSHMode != "" || o.Profile != "" || o.LegacySSH || o.SSHPagerSpace || o.LastDown != nil || o.DownTimes != nil ||
+				o.SNMPAddress != "" || o.SNMPCommunityFile != "" || o.SNMPPaceMillis != 0 || o.SNMPMaxRequests != 0 {
+				errs = append(errs, fmt.Errorf("%s: ssh_*, host_key_sha256, profile, last_down, down_times and snmp_* fields are not allowed with transport telnet", p))
+			}
 		default:
-			errs = append(errs, fmt.Errorf("%s: transport must be cli or snmp", p))
+			errs = append(errs, fmt.Errorf("%s: transport must be cli, snmp or telnet", p))
 		}
 		if l := o.LastDown; l != nil {
 			h, _, err := net.SplitHostPort(l.SNMPAddress)
@@ -559,11 +589,15 @@ func (c *Config) Validate() error {
 			(o.CooldownSeconds != 0 && (o.CooldownSeconds < 60 || o.CooldownSeconds > 86400)) {
 			errs = append(errs, fmt.Errorf("%s: collect_seconds/cooldown_seconds must be 0 (default) or 60..86400", p))
 		}
-		if len(o.PonPorts) == 0 || len(o.PonPorts) > 256 {
+		if (len(o.PonPorts) == 0 && o.Transport != "telnet") || len(o.PonPorts) > 256 { // telnet: the device lists its own PONs
 			errs = append(errs, fmt.Errorf("%s: pon_ports required (1..256)", p))
 		}
 		for _, pp := range o.PonPorts {
-			if !ponRe.MatchString(pp) {
+			if o.Transport == "telnet" {
+				if !telnetPonRe.MatchString(pp) {
+					errs = append(errs, fmt.Errorf("%s: invalid pon port %q (telnet: the PON number, e.g. 3)", p, pp))
+				}
+			} else if !ponRe.MatchString(pp) {
 				errs = append(errs, fmt.Errorf("%s: invalid pon port %q", p, pp))
 			} else if o.Profile == "huawei_ma56_r015" && !olt.ValidR015Port(pp) {
 				errs = append(errs, fmt.Errorf("%s: pon port %q outside huawei_ma56_r015 limits (frame 0, slot 0..17, port 0..15)", p, pp))

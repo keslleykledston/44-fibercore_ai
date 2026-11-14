@@ -168,6 +168,9 @@ func main() {
 			case "datacom":
 				drv = olt.Datacom{}
 			}
+			if o.Vendor == "intelbras" {
+				drv = olt.Intelbras{}
+			}
 			if o.Profile == "huawei_ma56_r015" {
 				enabled := map[string]bool{} // supervised captures (ADR-0032): ONLY the listed IDs are enabled on this driver, so the session allowlist admits exactly them
 				for _, cp := range o.Capture {
@@ -179,6 +182,18 @@ func main() {
 				Name: o.Name, Driver: drv, Ports: o.PonPorts, AllowUnverified: o.AllowUnverifiedFirmware, CloudID: o.CloudID,
 				SNMPKey: config.DeviceKey(o.Address), Interval: o.OLTInterval(), Cooldown: o.OLTCooldown(),
 				Open: func(ctx context.Context) (olt.Session, func(), error) {
+					if o.Transport == "telnet" { // CLEAR TEXT, explicit opt-in (config: allow_telnet); the login comes from the same 0600 file(s)
+						user, pw, err := o.SSHLogin()
+						if err != nil {
+							return nil, nil, err
+						}
+						s, err := olt.DialTelnet(ctx, olt.TelnetConfig{Addr: o.Address, User: user, Password: pw, Dial: al.DialContext,
+							Prompt: olt.IntelbrasPrompt, Allowed: drv.Allowed, Noise: olt.IntelbrasNoise})
+						if err != nil {
+							return nil, nil, err
+						}
+						return s, func() { s.Close() }, nil
+					}
 					user, pw, err := o.SSHLogin() // ADR-0045: credentials_file wins field by field, else username/secret_file; read at every session, fail-closed
 					if err != nil {
 						return nil, nil, err
