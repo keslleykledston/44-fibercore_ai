@@ -142,8 +142,9 @@ def catalog_supported(vendor: str | None, firmware: str | None = None, query_id:
     the list of ONTs waiting for authorisation (`olt.autofind`); Datacom and Intelbras answer only the connection test. The Edge enforces the same rule on its side."""
     if (vendor or "").lower() != "huawei":
         return query_id == "olt.connection"
-    if (firmware or "").upper().startswith("MA5800V100R02"):   # the validated MA5800 release family (profile huawei_ma58_r02x); the Edge refuses any other release itself
-        return query_id in ("olt.connection", "olt.autofind")
+    fw = (firmware or "").upper()
+    if fw.startswith("MA5800V"):   # the MA5800 family never gets the MA5600 catalog; only the releases the Edge profile was validated on (R022, R024) answer the autofind list
+        return query_id == "olt.connection" or (query_id == "olt.autofind" and fw.startswith(("MA5800V100R022", "MA5800V100R024")))
     return True
 
 

@@ -67,3 +67,11 @@ def test_ma5800_answers_the_connection_test_and_the_autofind_list_and_nothing_el
         assert r.status_code == 422 and r.json()["detail"] == "vendor_not_supported", q
     dm = _olt(client, seed, inv, vendor="datacom", model="DM4610 HW2", firmware="5.8.0-065")
     assert _ask(client, h, dm, "olt.autofind").status_code == 422   # no driver reads the waiting list on Datacom yet
+
+
+def test_an_unvalidated_ma5800_release_answers_only_the_connection_test():
+    assert olt_query.catalog_supported("huawei", "MA5800V100R022C11", "olt.autofind") and olt_query.catalog_supported("huawei", "MA5800V100R024C11", "olt.autofind")
+    assert not olt_query.catalog_supported("huawei", "MA5800V100R023C10", "olt.autofind")
+    assert olt_query.catalog_supported("huawei", "MA5800V100R023C10", "olt.connection")
+    assert not olt_query.catalog_supported("huawei", "MA5800V100R023C10", "olt.board")
+    assert olt_query.catalog_supported("huawei", "MA5600V800R015C00", "olt.board")   # the MA5600 keeps its catalog

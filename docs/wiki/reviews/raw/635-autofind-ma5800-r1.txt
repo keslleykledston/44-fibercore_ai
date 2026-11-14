@@ -1,0 +1,15 @@
+## MEDIUM
+
+- [olt_query.py](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/apps/api/app/core/olt_query.py:145): A firmware prefix of `MA5800V100R02` lets the cloud gate `olt.autofind` through for every R02 release. The Edge accepts only R022 and R024 in [huawei_ma5800.go](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/agents/edge/internal/olt/huawei_ma5800.go:52). Other R02 releases therefore bypass the cloud’s `vendor_not_supported` check and are rejected only later by the Edge profile check. Narrow the cloud prefix to the validated releases or otherwise align its support check with the Edge.
+
+## Checks
+
+- I found no path in the changed MA5800 code that sends a write command or a command outside its allowlist. Autofind runs through the read-only, budgeted session in [olt_queries.go](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/agents/edge/internal/collector/olt_queries.go:120).
+- The autofind parser discards `Password`, `Loid`, and `Checkcode` values, and rejects unrecognized output with `bad_output` in [query_parse.go](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/agents/edge/internal/olt/query_parse.go:547).
+- Removing `quit` leaves the session available for the queued autofind query, then the collection closes it via `defer closeFn()` in [olt.go](/data/home-moved/Projects/_legacy_lowercase_projects/44-FiberCore/agents/edge/internal/collector/olt.go:255).
+- The parser fails closed on unexpected listing lines and requires the entry count to match the footer count.
+
+Read-only review only; I did not run tests or edit files.
+
+Codex session ID: 01a1db9a-3e94-7810-b87d-ef8400849cc5
+Resume in Codex: codex resume 01a1db9a-3e94-7810-b87d-ef8400849cc5
