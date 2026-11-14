@@ -54,3 +54,16 @@ def test_datacom_and_a_telnet_olt_can_be_tested_and_everything_else_needs_the_hu
     assert _ask(client, h, ib, "olt.version").status_code == 422
     hw = _olt(client, seed, inv)   # the Huawei default of the fixtures keeps the catalog
     assert _ask(client, h, hw, "olt.board").status_code != 422
+
+
+def test_ma5800_answers_the_connection_test_and_the_autofind_list_and_nothing_else_of_the_catalog(client, seed, inv, on, migrated):  # noqa: F811
+    _flag(migrated, seed["A"])
+    h = hdr(client, "alice", seed, "A")
+    ma = _olt(client, seed, inv, vendor="huawei", model="MA5800-X2", firmware="MA5800V100R024C11")
+    assert _test(client, h, ma).status_code == 200
+    assert _ask(client, h, ma, "olt.autofind").status_code != 422
+    for q in ("olt.board", "olt.version", "olt.time", "olt.profile.line"):
+        r = _ask(client, h, ma, q)
+        assert r.status_code == 422 and r.json()["detail"] == "vendor_not_supported", q
+    dm = _olt(client, seed, inv, vendor="datacom", model="DM4610 HW2", firmware="5.8.0-065")
+    assert _ask(client, h, dm, "olt.autofind").status_code == 422   # no driver reads the waiting list on Datacom yet

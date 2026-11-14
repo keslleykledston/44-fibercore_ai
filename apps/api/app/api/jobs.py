@@ -187,11 +187,11 @@ def create_preview(body: PreviewIn, idempotency_key: str, p: Principal, conn: Co
     elif body.params:
         raise HTTPException(422, "this operation accepts no parameters yet")  # strict: nothing free-form reaches an Edge
     table = {"olt": "olts", "cpe": "cpes"}[op.target]
-    tgt = conn.execute(text(f"SELECT edge_id{', vendor, model' if table == 'olts' else ''} FROM {table} WHERE id = :i"), {"i": body.target_id}).first()  # noqa: S608
+    tgt = conn.execute(text(f"SELECT edge_id{', vendor, firmware' if table == 'olts' else ''} FROM {table} WHERE id = :i"), {"i": body.target_id}).first()  # noqa: S608
     if tgt is None:
         raise HTTPException(404, "target not found")
-    if body.operation == "olt_query" and params.get("query_id") != "olt.connection" and not olt_query.catalog_supported(tgt.vendor):
-        raise HTTPException(422, "vendor_not_supported")   # ADR-0053: this OLT answers only the connection test
+    if body.operation == "olt_query" and not olt_query.catalog_supported(tgt.vendor, tgt.firmware, str(params.get("query_id"))):
+        raise HTTPException(422, "vendor_not_supported")   # ADR-0053/0054: this OLT does not carry that read (Datacom/Intelbras: connection test; MA5800: plus the autofind list)
     if body.operation == "olt_query" and tgt.edge_id is None:
         raise HTTPException(409, "olt_without_edge")
     ih = _intent_hash(body.operation, op.target, body.target_id, params)

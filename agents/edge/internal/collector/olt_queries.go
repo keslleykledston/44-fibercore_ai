@@ -163,6 +163,26 @@ func (q *Queries) DrainWith(ctx context.Context, src OLTSource, raw olt.Session,
 			}
 			return 0
 		}
+		if ma, ok := src.Driver.(olt.HuaweiMA58); ok && e.Intent.QueryID == "olt.autofind" {
+			// The MA5800 has no catalog, only these reads: the connection test (below) and the list of ONTs waiting for authorisation, over the session the snapshot elevated.
+			runCtx, stop := context.WithDeadline(ctx, leaseEnd)
+			out, err := ma.RunAutofind(runCtx, sess)
+			stop()
+			if err != nil {
+				fail(err)
+				return ran
+			}
+			typed, err := olt.ParseResult("olt.autofind", out)
+			if err != nil {
+				fail(err)
+				return ran
+			}
+			if err := q.persistResult(e.JobID, typed); err != nil {
+				_, _ = q.Store.AbortBatch(cloudID, "olt_busy")
+				return ran
+			}
+			continue
+		}
 		if !queryCatalogDriver(src.Driver) {
 			// Datacom, Intelbras and Huawei MA5800 have no `olt_query` catalog: they answer ONLY the connection test, with the identity their own driver already reads
 			// (allowlisted, read-only, the same read the collection starts with). Any other query ends alone and nothing is sent.

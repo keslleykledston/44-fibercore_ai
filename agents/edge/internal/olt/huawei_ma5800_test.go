@@ -126,7 +126,7 @@ func TestMA58RealCaptureSnapshotIsProvenCompleteWithCausesAndSerials(t *testing.
 	if !strings.HasPrefix(by[0].Serial, "49544253") { // "ITBS"
 		t.Fatalf("ONT 0 serial %s", by[0].Serial)
 	}
-	want := []string{"display version", "enable", "display ont info summary 0/1/0", "display ont info 0 1 0 all", "quit"}
+	want := []string{"display version", "enable", "display ont info summary 0/1/0", "display ont info 0 1 0 all"}
 	if !reflect.DeepEqual(dev.sent, want) {
 		t.Fatalf("commands:\n got %v\nwant %v", dev.sent, want)
 	}
@@ -280,7 +280,7 @@ func TestMA58EnableIsTheFirstStepAfterIdentificationAndTheSessionEndsWithQuit(t 
 	if len(snap.PONs) != 2 || snap.PONs[1].Verified { // the serial listing of ANOTHER port can never verify this PON
 		t.Fatalf("pons=%+v", snap.PONs)
 	}
-	want := []string{"display version", "enable", "display ont info summary 0/1/0", "display ont info 0 1 0 all", "display ont info summary 0/1/1", "display ont info 0 1 1 all", "quit"}
+	want := []string{"display version", "enable", "display ont info summary 0/1/0", "display ont info 0 1 0 all", "display ont info summary 0/1/1", "display ont info 0 1 1 all"}
 	if !reflect.DeepEqual(dev.sent, want) {
 		t.Fatalf("commands:\n got %v\nwant %v", dev.sent, want)
 	}
@@ -292,8 +292,8 @@ func TestMA58EnableIsTheFirstStepAfterIdentificationAndTheSessionEndsWithQuit(t 
 				t.Errorf("enable must come right after display version, at %d", i)
 			}
 		}
-		if c == "quit" && i != len(dev.sent)-1 {
-			t.Errorf("quit must be the last command, at %d", i)
+		if c == "quit" {
+			t.Errorf("the MA5800 asks a (y/n) question on quit and the shell never answers: no quit at %d", i)
 		}
 		if !(HuaweiMA58{}).Allowed(c) || !SafeCommand(c) {
 			t.Errorf("sent a command outside the allowlist: %q", c)
@@ -309,12 +309,10 @@ func TestMA58EnableIsTheFirstStepAfterIdentificationAndTheSessionEndsWithQuit(t 
 	}
 }
 
-func TestMA58QuitFailureChangesNothing(t *testing.T) {
-	dev := ma58Device(t)
-	dev.fails["quit"] = errors.New("Are you sure to log out? (y/n)[n]: (the shell never answers)")
-	snap, err := ma58Snap(t, dev, ma58Zone, "0/1/0")
-	if err != nil || len(snap.ONUs) != 57 || !snap.PONs[0].Verified {
-		t.Fatalf("a failing quit must not lose a finished collection: err=%v pons=%+v", err, snap.PONs)
+func TestMA58QuitIsNeverSentNorAllowed(t *testing.T) {
+	// real MA5800: `quit` asks "Are you sure to log out? (y/n)[n]:" and the shell never answers, leaving the prompt pending for the next command of the session
+	if (HuaweiMA58{}).Allowed("quit") {
+		t.Fatal("quit must not be in the allowlist")
 	}
 }
 
@@ -386,7 +384,7 @@ func TestMA58OnlyTheCapturedReleasesGetEnableAndTheOntCommands(t *testing.T) {
 func TestMA58AllowlistIsExactAndReadOnly(t *testing.T) {
 	d := HuaweiMA58{}
 	for _, ok := range []string{
-		"display version", "enable", "quit", "display ont info summary 0/1/0", "display ont info summary 0/21/15", "display ont info 0 1 0 all",
+		"display version", "enable", "display ont autofind all", "display ont info summary 0/1/0", "display ont info summary 0/21/15", "display ont info 0 1 0 all",
 		"display ont info 0 17 15 all", "display ont info summary 0/0/0",
 	} {
 		if !d.Allowed(ok) {
@@ -399,7 +397,7 @@ func TestMA58AllowlistIsExactAndReadOnly(t *testing.T) {
 		"config", "system-view", "diagnose", "undo ont add 0 1", "reset", "reboot", "save", "quit config", "enable password", "enable 15", "disable", "return",
 		"interface gpon 0/1", "display ont info summary 1/1/0", "display ont info summary 0/22/0", "display ont info summary 0/1/16", "display ont info summary 0/01/0",
 		"display ont info summary 0/1/0 extra", "display ont info 0 1 0 all; reboot", "display ont info 0 1 0 all | include x", "display ont info 1 1 0 all",
-		"display ont info 0 22 0 all", "display ont info 0 1 16 all", "display ont info 0/1/0 all", "display ont optical-info 0/1/0 all", "display ont autofind all",
+		"display ont info 0 22 0 all", "display ont info 0 1 16 all", "display ont info 0/1/0 all", "display ont optical-info 0/1/0 all", "display ont autofind", "display ont autofind all x", "display ont autofind 0/1/0",
 		"display board 0", "display ont info summary 0/1/x", " enable", "enable ", "Enable", "display version\nreboot", "enable;config", "", strings.Repeat("a", 200),
 	} {
 		if _, err := ro.Run(context.Background(), bad); !errors.Is(err, ErrCommandDenied) {
@@ -507,7 +505,7 @@ func TestMA58FixturesAreSanitized(t *testing.T) {
 			t.Errorf("%s: carries an IP address", e.Name())
 		}
 		for _, tk := range token.FindAllString(b, -1) {
-			if !serial.MatchString(tk) && !strings.HasPrefix(tk, "MA5800V100R02") { // only synthetic serials and the firmware string may look like a serial
+			if !serial.MatchString(tk) && !strings.HasPrefix(tk, "MA5800V100R02") && tk != "automatically" { // only synthetic serials and the firmware string may look like a serial
 				t.Errorf("%s: token %q is neither a synthetic serial nor the version", e.Name(), tk)
 			}
 		}
@@ -537,5 +535,46 @@ func TestMA58PortWithNoOntIsAnEmptyUnverifiedPonNotAFailure(t *testing.T) {
 	// "This board does not exist" stays a failure
 	if _, err := ma58Snap(t, ma58Device(t), ma58Zone, "0/2/0"); err == nil {
 		t.Fatal("a missing board must still fail")
+	}
+}
+
+// Real capture, MA5800 R022C11 and R024C11 (2026-11-14), no ONT waiting: the same empty answer as the MA5600 R015.
+func TestMA58AutofindEmptyListIsAnEmptyResult(t *testing.T) {
+	dev := &ma58Session{out: map[string]string{"display ont autofind all": ma58Wire(t, "display_ont_autofind_all_empty.txt", "display ont autofind all", ma58Priv)}, fails: map[string]error{}}
+	out, err := (HuaweiMA58{}).RunAutofind(context.Background(), dev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := ParseResult("olt.autofind", out)
+	if err != nil || !strings.Contains(string(raw), "[]") {
+		t.Fatalf("raw=%s err=%v", raw, err)
+	}
+	if !reflect.DeepEqual(dev.sent, []string{"display ont autofind all"}) {
+		t.Fatalf("sent %v", dev.sent)
+	}
+}
+
+// The layout WITH entries was not seen on this family: it is only accepted when it is the one verified on the R015 (synthetic reuse), and anything else fails closed.
+func TestMA58AutofindWithEntryUsesTheVerifiedLayoutAndRefusesTheRest(t *testing.T) {
+	b, err := os.ReadFile(r015Dir + "display_ont_autofind_all.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dev := &ma58Session{out: map[string]string{"display ont autofind all": string(b)}, fails: map[string]error{}}
+	out, err := (HuaweiMA58{}).RunAutofind(context.Background(), dev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ParseResult("olt.autofind", out); err != nil {
+		t.Fatal(err)
+	}
+	dev.out["display ont autofind all"] = "  Command:\n  display ont autofind all\n  Some new layout nobody saw\n"
+	out, _ = (HuaweiMA58{}).RunAutofind(context.Background(), dev)
+	if _, err := ParseResult("olt.autofind", out); err == nil {
+		t.Fatal("an unknown layout must be a bad output")
+	}
+	dev.out["display ont autofind all"] = "  % Unknown command, the error locates at '^'\n"
+	if _, err := (HuaweiMA58{}).RunAutofind(context.Background(), dev); err == nil {
+		t.Fatal("a device rejection must be an error")
 	}
 }

@@ -25,7 +25,7 @@ import (
 // The count in the summary header is the in-band proof that the listing is complete (an interactive shell cannot prove where a command ends), exactly
 // like the R015 footer. Anything that does not add up leaves PON.Verified=false.
 var (
-	ma58Allowed = regexp.MustCompile(`^(display version|enable|quit|` +
+	ma58Allowed = regexp.MustCompile(`^(display version|enable|display ont autofind all|` +
 		`display ont info summary 0/(?:[0-9]|1[0-9]|2[01])/(?:[0-9]|1[0-5])|` +
 		`display ont info 0 (?:[0-9]|1[0-9]|2[01]) (?:[0-9]|1[0-5]) all)$`)
 	ma58PortRe = regexp.MustCompile(`^0/([0-9]|1[0-9]|2[01])/([0-9]|1[0-5])$`)
@@ -134,9 +134,8 @@ func (h HuaweiMA58) Snapshot(ctx context.Context, s Session, ports []string) (Sn
 		snap.ONUs = append(snap.ONUs, onus...)
 		snap.PONs = append(snap.PONs, pon)
 	}
-	// Leave the session. Best effort: everything was already read, a device that asks a question or drops the link here changes nothing, and the
-	// shell never answers a question.
-	_, _ = s.Run(ctx, "quit")
+	// No `quit` here: the MA5800 answers it with "Are you sure to log out? (y/n)" (real capture 2026-11-14) and the shell never answers a question, so the prompt would
+	// stay pending and glue itself to whatever is typed next (the `olt_query` batch runs in this same session). Closing the SSH channel ends the session.
 	return snap, nil
 }
 
@@ -310,3 +309,32 @@ func parseMA58Port(path, summary, all string, zone *time.Location) ([]ONU, PON) 
 	}
 	return onus, PON{Path: path, Status: ponStatus(len(onus)), Verified: verified}
 }
+
+// RunAutofind lists the ONTs the OLT has detected and nobody has authorised (`display ont autofind all`, read-only). It is meant for the session a collection already holds,
+// where the snapshot has elevated with `enable`. Real MA5800 R022C11 / R024C11 (2026-11-14), both with nothing waiting: "Failure: The automatically found ONTs do not
+// exist" (the same empty answer as the MA5600 R015). A listing WITH entries has not been observed on this family: the shared parser (parseAutofind) accepts only the layout it
+// verified on the R015 and fails closed (`bad_output`) on anything else.
+func (h HuaweiMA58) RunAutofind(ctx context.Context, s Session) (string, error) {
+	out, err := s.Run(ctx, "display ont autofind all")
+	if err != nil {
+		return "", err
+	}
+	if !ma58NoAutofind.MatchString(out) && ma58CLIError.MatchString(out) {
+		return "", fmt.Errorf("huawei ma58: device rejected %q%s", "display ont autofind all", rejection(out))
+	}
+	return ma58DropCommandEcho(out, "display ont autofind all"), nil
+}
+
+// ma58DropCommandEcho removes the "Command:" block the MA5800 prints before its answer (the label and the command it repeats), which is not part of the listing.
+func ma58DropCommandEcho(out, cmd string) string {
+	kept := []string{}
+	for _, l := range strings.Split(out, "\n") {
+		if t := strings.TrimSpace(l); t == "Command:" || t == cmd {
+			continue
+		}
+		kept = append(kept, l)
+	}
+	return strings.Join(kept, "\n")
+}
+
+var ma58NoAutofind = regexp.MustCompile(`(?mi)^\s*Failure\s*:\s*The automatically found ONTs do not exist\s*$`)

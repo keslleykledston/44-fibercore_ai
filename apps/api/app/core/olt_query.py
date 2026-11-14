@@ -137,10 +137,14 @@ def _is_slot(v) -> bool:
 _CONN_PRODUCT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/ -]{1,39}$")   # a Datacom model is "DM4610 HW2": the space is real
 
 
-def catalog_supported(vendor: str | None) -> bool:
-    """ADR-0053: the `olt_query` catalog exists only for Huawei. Datacom and Intelbras answer only the connection test (a Huawei profile without the catalog, such as the
-    MA5800, is refused by the Edge itself as `query_not_enabled`: the cloud does not know the Edge's profile)."""
-    return (vendor or "").lower() == "huawei"
+def catalog_supported(vendor: str | None, firmware: str | None = None, query_id: str = "") -> bool:
+    """ADR-0053/0054: which `olt_query` reads an OLT can answer. The full catalog exists only for Huawei MA5600 (R015). The Huawei MA5800 answers just the connection test and
+    the list of ONTs waiting for authorisation (`olt.autofind`); Datacom and Intelbras answer only the connection test. The Edge enforces the same rule on its side."""
+    if (vendor or "").lower() != "huawei":
+        return query_id == "olt.connection"
+    if (firmware or "").upper().startswith("MA5800V100R02"):   # the validated MA5800 release family (profile huawei_ma58_r02x); the Edge refuses any other release itself
+        return query_id in ("olt.connection", "olt.autofind")
+    return True
 
 
 def check_result(query_id: str, data) -> bool:

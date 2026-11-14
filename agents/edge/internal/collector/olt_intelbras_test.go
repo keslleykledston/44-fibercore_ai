@@ -167,3 +167,43 @@ func TestConnectionTestUsesTheIdentityTheSnapshotAlreadyRead(t *testing.T) {
 		t.Fatalf("the connection test sent extra commands: %v vs %v", raw.sent, base.sent)
 	}
 }
+
+// MA5800 session: serves the real (sanitized) `display version` and the real empty autofind answer, and records every command.
+type ma58QuerySession struct{ sent []string }
+
+func (f *ma58QuerySession) Run(_ context.Context, cmd string) (string, error) {
+	f.sent = append(f.sent, cmd)
+	dir := filepath.Join("..", "olt", "testdata", "huawei_ma5800_r02x")
+	n := map[string]string{"display version": "display_version_user_r024c11.txt", "display ont autofind all": "display_ont_autofind_all_empty.txt"}[cmd]
+	if n == "" {
+		return "", errors.New("unexpected " + cmd)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, n))
+	return string(b), err
+}
+
+// The MA5800 answers `olt.autofind` (the ONTs waiting for authorisation) over the session the collection holds, and nothing else of the catalog.
+func TestMA58AutofindQueryRunsInTheCollectionSession(t *testing.T) {
+	raw := &ma58QuerySession{}
+	store := &oltquery.Store{Path: filepath.Join(t.TempDir(), "q.json")}
+	src := OLTSource{Name: "OLT-MA58", Driver: olt.HuaweiMA58{}, CloudID: qCloud,
+		Open: func(context.Context) (olt.Session, func(), error) { return raw, func() {}, nil }}
+	c := &OLT{EdgeID: "e1", Sources: []OLTSource{src}, Queries: &Queries{Store: store, Lease: fakeLease{qCloud: 1}}}
+	enqueue(t, store, "job-af", "olt.autofind")
+	enqueue(t, store, "job-board", "olt.board")
+	if _, err := c.Collect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	e, ok, _ := store.Get("job-af")
+	if !ok || e.State != oltquery.Executed || len(e.Result) == 0 {
+		t.Fatalf("autofind: %+v", e)
+	}
+	if b, ok, _ := store.Get("job-board"); !ok || b.State == oltquery.Executed {
+		t.Fatalf("olt.board must not run on the MA5800: %+v", b)
+	}
+	for _, cmd := range raw.sent {
+		if cmd != "display version" && cmd != "display ont autofind all" {
+			t.Fatalf("unexpected command %q", cmd)
+		}
+	}
+}
