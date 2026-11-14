@@ -5,7 +5,7 @@ Status: **Accepted e construída** | Data: 2026-11-14 | Owner: Claude Code (impl
 Origem: o responsável pediu o teste de conexão pela plataforma nas OLTs reais dos clientes. Hoje a nuvem recusava Telnet (`422 protocol_not_supported`), o catálogo `olt_query` é só Huawei MA5600 R015 e a flag `olt_query` só existia na organização K3G (`409 olt_query_disabled`).
 
 ## Decisão
-**D1 — O teste é a identidade que o próprio driver já lê.** `olt.connection` (ADR-0041) passa a valer para qualquer OLT estática do Edge com `cloud_id`: Datacom (`show platform`), Intelbras (`card stats` + banner) e Huawei MA5800 (`display version`). O Edge roda a leitura na sessão da coleta, depois dos comandos dela, sob o mesmo arrendamento assinado, guarda de intervalo e orçamento (1 por 15 min, 4 por hora, por OLT). Nenhum comando novo: são os da allowlist exata do driver.
+**D1 — O teste é a identidade que o próprio driver já lê.** `olt.connection` (ADR-0041) passa a valer para qualquer OLT estática do Edge com `cloud_id`: Datacom (`show platform`), Intelbras (`card stats` + banner) e Huawei MA5800 (`display version`). O Edge responde na sessão da coleta, depois dos comandos dela, **com a identidade que a própria coleta já leu no início dessa sessão** (nenhum comando a mais é enviado à OLT), sob o mesmo arrendamento assinado, guarda de intervalo e orçamento (1 por 15 min, 4 por hora, por OLT). Nenhum comando novo: são os da allowlist exata do driver.
 
 **D2 — Só o teste, nada mais.** Para esses drivers qualquer outra consulta do catálogo termina sozinha como `query_not_enabled` (nada é enviado ao equipamento), e a nuvem recusa antes com `422 vendor_not_supported` quando o fabricante não é Huawei. A flag `olt_query` por organização continua decidindo se o teste é oferecido.
 
@@ -17,7 +17,7 @@ Origem: o responsável pediu o teste de conexão pela plataforma nas OLTs reais 
 
 ## Riscos
 - **R-1:** o teste espera a próxima janela de coleta (até ~18 min), como todo `olt_query`.
-- **R-2:** MA5800 após `quit` da coleta: a sessão pode já estar encerrada e a leitura falhar como `session_error`; verificado no uso real (ver runbook).
+- **R-2 (ocorreu no uso real):** a primeira versão lia a identidade de novo depois da coleta; na Huawei MA5800 a coleta termina a sessão com `quit` e o teste falhou com `session_error`. Corrigido: o teste usa a identidade já lida na mesma sessão.
 - **R-3:** a nuvem não conhece o perfil do Edge: uma consulta de catálogo a uma Huawei MA5800 passa pela nuvem e é recusada pelo Edge.
 
 ## Provas
