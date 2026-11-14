@@ -59,7 +59,7 @@ export const apiLogin = (email: string, password: string, clientIp?: string) => 
 export const apiMfaVerify = (mfaToken: string, code: string, clientIp?: string) => postJson("/v1/auth/mfa/verify", { mfa_token: mfaToken, code }, clientIp);
 
 /** POST server-side com o token da sessão. Devolve status e corpo JSON (se houver). */
-export async function apiPost(path: string, body?: BodyInit, headers: Record<string, string> = {}, method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" = "POST"): Promise<{ status: number; json: unknown }> {
+export async function apiPost(path: string, body?: BodyInit, headers: Record<string, string> = {}, method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" = "POST"): Promise<{ status: number; json: unknown; headers?: Headers }> {
   const { token, workspace } = await getSession();
   if (!token) return { status: 401, json: null };
   const res = await fetch(`${API}${path}`, {
@@ -68,7 +68,7 @@ export async function apiPost(path: string, body?: BodyInit, headers: Record<str
   });
   let json: unknown = null;
   try { json = await res.json(); } catch { /* sem corpo */ }
-  return { status: res.status, json };
+  return { status: res.status, json, headers: res.headers };
 }
 
 export type MfaStatus = { enabled: boolean; recovery_codes_left: number; enrolment_available: boolean; required: boolean };

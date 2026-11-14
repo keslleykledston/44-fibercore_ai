@@ -98,6 +98,7 @@ export default async function Organizacoes({ searchParams }: { searchParams: Pro
             className="inline-flex min-h-touch items-center rounded-btn border border-line px-3 text-sm hover:bg-bg">Ver organizações mais antigas</Link></p>
         )}
         {antes && <p className="mt-2"><Link href="/plataforma/organizacoes" className="inline-flex min-h-touch items-center rounded-btn px-3 text-sm text-accent hover:underline">← Voltar às mais recentes</Link></p>}
+        <p className="mt-2"><Link href="/plataforma/encerramentos" data-testid="org-encerramentos-link" className="inline-flex min-h-touch items-center rounded-btn px-3 text-sm text-accent hover:underline">Encerramentos (registro permanente) →</Link></p>
         <p className="mt-2 text-xs text-muted">Só contagens e rótulos: nenhum dado de assinante, de OLT ou de ONU aparece aqui. Para suspender, reativar, renomear ou mudar recursos, abra a organização.</p>
       </section>
       <section aria-label="Nova organização" className="panel p-4" data-testid="org-nova">

@@ -15,7 +15,18 @@ export const FLEET_FLASH: Record<string, string> = {
   permissao: "Seu papel não permite esta ação.", nome: "Já existe uma OLT (ou POP) com esse nome.", invalido: "Algum campo está fora do formato. Confira os textos de ajuda de cada campo.",
   edge: "O Edge escolhido não existe neste provedor.", popinexistente: "O POP escolhido não existe neste provedor.", desligado: "O recurso Frota de OLTs está desligado para este provedor.",
   falha: "Não foi possível concluir. Tente novamente.",
+  limiteolts: "Limite de OLTs desta organização atingido. Peça ao operador da plataforma para ajustar.",
 };
+/** ADR-0047 D3: 409 `limit_reached` ao cadastrar OLT. Com os números da API (X-Limit-*) a frase diz "X de Y"; sem eles, a frase geral. Só inteiros passam. */
+export function oltLimitText(atual: unknown, max: unknown): string {
+  const digits = (v: unknown) => (typeof v === "string" || typeof v === "number") && /^\d{1,7}$/.test(String(v));   // "" e null não são zero: viram a frase geral
+  const a = Number(atual), m = Number(max);
+  return digits(atual) && digits(max)
+    ? `Limite de OLTs desta organização atingido (${a} de ${m}). Peça ao operador da plataforma para ajustar.` : FLEET_FLASH.limiteolts;
+}
+/** Mensagem do erro devolvido pelo BFF ao formulário (JSON `{detail, atual?, max?}`). */
+export const fleetErrorText = (j: { detail?: string; atual?: unknown; max?: unknown } | null): string =>
+  j?.detail === "limiteolts" ? oltLimitText(j.atual, j.max) : FLEET_FLASH[j?.detail ?? ""] ?? FLEET_FLASH.falha;
 export const CRED_HELP = "O NOME do segredo guardado no Edge (letras minúsculas, números, . _ -). Nunca digite senha, community ou chave aqui: login, senha e community vão pelo cartão “Credenciais da OLT” da página da OLT (cifrados no navegador até o Edge), quando esse recurso estiver ligado.";
 
 /** Teste de conexão (parte B): leitura somente leitura da identidade da OLT pelo Edge, com orçamento de 1 por 15 min e 4 por hora por OLT. */

@@ -76,6 +76,11 @@ export async function POST(req: Request) {
     const o = t.status === 200 ? (t.json as { outcome?: string } | null)?.outcome : null;
     return back(req, `/rede/frota/${id}?ok=${o === "cached" ? "oltcomtestecache" : o ? "oltcomteste" : "oltsemteste"}`);
   }
+  if (r.status === 409 && detail === "limit_reached") {   // ADR-0047 D3: limite técnico da organização (os números vêm dos cabeçalhos X-Limit-*)
+    const num = (k: string) => { const v = r.headers?.get(k) ?? ""; return /^\d{1,7}$/.test(v) ? v : ""; };
+    const atual = num("x-limit-current"), max = num("x-limit-max");
+    return asJson ? reply(409, "limiteolts", { atual, max }) : back(req, `/rede/frota?erro=limiteolts${atual && max ? `&atual=${atual}&max=${max}` : ""}`);
+  }
   const why = r.status === 403 ? (JSON.stringify(r.json ?? {}).includes("feature_disabled") ? "desligado" : "permissao") : r.status === 409 ? "nome"
     : r.status === 422 ? (["protocol_required", "telnet_has_no_ssh_fields"].includes(detail) ? "protocolo" : detail === "snmp_transport_needs_v2c" ? "snmpv2" : "invalido")
     : r.status === 404 ? (JSON.stringify(r.json ?? {}).includes("pop") ? "popinexistente" : "edge") : "falha";

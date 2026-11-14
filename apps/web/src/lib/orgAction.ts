@@ -15,6 +15,6 @@ export async function orgAction(req: Request, id: string, path: string, method: 
   const r = await apiPost(`/v1/platform/organizations/${id}${path}`, JSON.stringify(payload), { "Content-Type": "application/json" }, method);
   if (r.status === 401) return back(req, "/login");
   const to = `/plataforma/organizacoes/${id}`;
-  if (r.status === 200) return back(req, `${to}?ok=${(r.json as { changed?: boolean } | null)?.changed === false ? "semmudanca" : okCode}`);
+  if (r.status === 200 || r.status === 201) return back(req, `${to}?ok=${(r.json as { changed?: boolean } | null)?.changed === false ? "semmudanca" : okCode}`);
   return back(req, `${to}?erro=${orgError(r.status, r.json)}`);
 }

@@ -186,6 +186,30 @@ test("ciclo de vida: detalhe, recursos, renomear, suspender (o usuário vê o av
   await row("onu_discovery").getByRole("button", { name: "Aplicar" }).click();
   await expect(row("onu_discovery").getByTestId("org-recurso-atual")).toHaveText("Desligado");
 
+  // limites técnicos (ADR-0047 D3): padrão, ajuste com motivo, selo "ajustado" e volta ao padrão
+  const lim = (k: string) => page.locator(`[data-testid="org-limite"][data-limit="${k}"]`);
+  await expect(page.getByTestId("org-limites")).toContainText("nada existente é removido");
+  await expect(page.getByTestId("org-limites")).not.toContainText(/plano|preço|cobrança/i);
+  await expect(lim("max_olts").getByTestId("org-limite-origem")).toHaveText("padrão");
+  await expect(lim("max_edges").getByTestId("org-limite-uso")).toHaveText("0");
+  await lim("max_olts").getByRole("spinbutton").fill("7");
+  await lim("max_members").getByRole("checkbox").check();
+  await page.getByTestId("org-limites").getByLabel(/Motivo/).fill("Piloto pequeno");
+  await page.getByTestId("org-limites-enviar").click();
+  await expect(page.getByTestId("org-flash")).toContainText("Limites atualizados");
+  await expect(lim("max_olts").getByTestId("org-limite-vigor")).toHaveText("7");
+  await expect(lim("max_olts").getByTestId("org-limite-origem")).toHaveText("ajustado");
+  await expect(lim("max_members").getByTestId("org-limite-origem")).toHaveText("padrão");
+  await page.getByTestId("org-limites").getByLabel(/Motivo/).fill("Sem mudança");     // nada preenchido: nada muda (mensagem de erro curta)
+  await page.getByTestId("org-limites-enviar").click();
+  await expect(page.getByTestId("org-erro")).toContainText("Preencha pelo menos um campo");
+  await lim("max_olts").getByRole("checkbox").check();
+  await page.getByTestId("org-limites").getByLabel(/Motivo/).fill("Voltou ao padrão");
+  await page.getByTestId("org-limites-enviar").click();
+  await expect(lim("max_olts").getByTestId("org-limite-origem")).toHaveText("padrão");
+  await expect(page.getByTestId("org-historico")).toContainText("OLTs: padrão → 7");
+  await expect(page.getByTestId("org-historico")).toContainText("OLTs: 7 → padrão");
+
   // renomear
   await page.getByLabel(/Novo nome/).fill(`${org} Renomeada`);
   await page.getByTestId("org-nome-enviar").click();
@@ -212,6 +236,26 @@ test("ciclo de vida: detalhe, recursos, renomear, suspender (o usuário vê o av
   await page.getByTestId("org-estado-enviar").click();
   await expect(page.getByTestId("org-flash")).toContainText("Organização suspensa");
   await expect(page.getByTestId("org-estado")).toContainText("Suspensa");
+  // encerramento (ADR-0050): a tela só PEDE; carência de 7 dias; cancelar; um novo pedido; reativar cancela
+  const enc = page.getByTestId("org-encerramento");
+  await expect(enc).toContainText("não apaga nada");
+  await expect(enc).toContainText("não baixa dados");
+  await expect(enc).not.toContainText(/plano|preço|cobrança/i);
+  await enc.getByLabel(/Motivo do pedido/).fill("Cliente encerrou o contrato");
+  await page.getByTestId("org-encerramento-pedir").click();
+  await expect(page.getByTestId("org-flash")).toContainText("Nada foi apagado");
+  await expect(page.getByTestId("org-encerramento-estado")).toContainText("Pedido aberto");
+  await expect(page.getByTestId("org-encerramento-carencia")).not.toContainText("vencida");
+  await expect(page.getByTestId("org-encerramento-aguarde")).toBeVisible();
+  await expect(page.getByTestId("org-encerramento-dono")).toHaveCount(0);       // dentro da carência o dono não tem o que fazer
+  expect(await ax("main")).toEqual([]);
+  await enc.getByLabel(/Motivo do cancelamento/).fill("Mudou de ideia");
+  await page.getByTestId("org-encerramento-cancelar").click();
+  await expect(page.getByTestId("org-flash")).toContainText("Pedido de encerramento cancelado");
+  await expect(page.getByTestId("org-encerramento-anterior")).toContainText("Pedido anterior cancelado");
+  await enc.getByLabel(/Motivo do pedido/).fill("Pedido de novo");
+  await page.getByTestId("org-encerramento-pedir").click();
+  await expect(page.getByTestId("org-encerramento-estado")).toContainText("Pedido aberto");
   await page.goto("/plataforma/organizacoes");
   await expect(page.getByTestId("org-linha").filter({ hasText: `${org} Renomeada` }).getByTestId("org-estado-linha")).toContainText("Suspensa");
   // o usuário da organização vê o aviso; o motivo não aparece
@@ -231,6 +275,7 @@ test("ciclo de vida: detalhe, recursos, renomear, suspender (o usuário vê o av
   await page.getByTestId("org-estado-enviar").click();
   await expect(page.getByTestId("org-flash")).toContainText("Organização reativada");
   await expect(page.getByTestId("org-estado")).toContainText("Ativa");
+  await expect(page.getByTestId("org-encerramento")).toHaveCount(0);               // reativar cancelou o pedido e a seção some
   await up.goto("/");
   await expect(up.getByRole("heading", { name: "Visão Geral" })).toBeVisible();      // sem novo login
   await expect(up.getByTestId("org-suspensa-aviso")).toHaveCount(0);
@@ -241,4 +286,13 @@ test("ciclo de vida: detalhe, recursos, renomear, suspender (o usuário vê o av
   await expect(hist).toContainText("motivo: Contrato encerrado");
   await expect(hist).toContainText("onu_discovery: padrão → ligado");
   await expect(hist).toContainText("Renomeada");
+  // (o histórico do detalhe ainda não traz os eventos platform.closure.*: o registro está em /plataforma/encerramentos)
+  // registro permanente: a lista de encerramentos mostra o pedido cancelado, sem dado de pessoa
+  await page.goto("/plataforma/organizacoes");
+  await page.getByTestId("org-encerramentos-link").click();
+  await expect(page.getByRole("heading", { name: "Encerramentos" })).toBeVisible();
+  const linha = page.getByTestId("enc-linha").filter({ hasText: `${org} Renomeada` }).first();
+  await expect(linha.getByTestId("enc-estado")).toHaveText("Pedido cancelado");
+  expect(await ax("main")).toEqual([]);
+  await expect(page.getByTestId("enc-lista")).not.toContainText("@");
 });

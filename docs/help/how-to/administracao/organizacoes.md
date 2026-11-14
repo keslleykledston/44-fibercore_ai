@@ -4,7 +4,7 @@ slug: "administracao/organizacoes"
 role: [platform_operator]
 status: draft
 product_version: "0.1.0"
-last_verified: "2026-11-13"
+last_verified: "2026-11-14"
 help_owner: "Plataforma FiberCore"
 ui_route: "/plataforma/organizacoes"
 ---
@@ -47,6 +47,31 @@ Na lista, clique no **nome** da organização. O detalhe mostra o **estado**, a 
 - **Histórico:** quando, quem (conta alegada) e o que mudou, com o motivo.
 
 Se você tentar repetir o estado atual, a tela responde **Nada mudou** e não grava histórico novo.
+
+## Limites técnicos
+
+No detalhe, o cartão **Limites técnicos** mostra, para **Edges**, **OLTs** e **Membros**, o **uso** atual, o limite **em vigor** e a **origem** (`padrão` ou `ajustado`). Mostra também o orçamento de **ingestão** da organização (lotes por minuto e rajada), que divide a carga do servidor entre organizações. São proteções técnicas do servidor, não um plano comercial.
+
+- **Mudar:** digite o novo número no campo (vazio = não muda), escreva o **motivo** (3 a 200 caracteres) e clique em **Aplicar limites**.
+- **Voltar ao padrão:** marque **Voltar ao padrão** no campo e aplique. O valor padrão aparece ao lado da caixa.
+- **Efeito:** ao atingir o limite, **cadastrar** mais uma OLT (tela ou Edge), um Edge ou um membro responde `limit_reached` ("Limite de OLTs desta organização atingido (X de Y)"). **Reduzir abaixo do uso atual só impede novos cadastros; nada existente é removido nem bloqueado.**
+- **Membros:** o uso de membros vem com os **convites abertos** logo abaixo (cada convite aberto reserva um lugar até ser aceito, cancelado ou vencer).
+- **Quem vê:** só a conta operadora. A organização vê apenas a mensagem de limite atingido e deve pedir o ajuste ao operador.
+- O histórico mostra **Limites alterados** com o de→para ("OLTs: padrão → 7") e o motivo.
+
+## Encerrar uma organização
+
+Só uma organização **suspensa** (e que **não seja de demonstração**) pode ser encerrada. **A tela não apaga nada e o operador não baixa dados da organização**: ela só **pede** o encerramento. Quem exporta e apaga é o **dono do sistema**, no servidor, depois de uma **carência de 7 dias**.
+
+1. Suspenda a organização (veja acima).
+2. Na seção **Encerrar organização**, escreva o **motivo** (3 a 200 caracteres) e clique em **Pedir encerramento**. A tela mostra **Pedido aberto** e até quando vai a **carência**.
+3. **Dentro da carência** nada mais é necessário: você pode **Cancelar pedido** (com motivo) a qualquer momento. **Reativar a organização também cancela o pedido.**
+4. **Passada a carência**, a tela mostra o passo a passo **para o dono**, com os dois comandos a rodar no servidor (a tela não os executa):
+   - `org-export <id> --out ARQUIVO.tar.gz`: exporta os dados (o arquivo contém dado pessoal de cliente final: guarde com o cuidado de um backup);
+   - `org-close <id> --confirm-name '<nome exato>' --export-file ARQUIVO.tar.gz`: apaga a organização e **não tem volta**. Rode antes com `--dry-run` para ver as conferências.
+5. O link **Encerramentos (registro permanente)**, na lista de organizações, mostra o **registro que fica** depois do apagamento: nome, motivo, datas e quantas linhas foram apagadas. Não há dado de pessoa nele.
+
+O histórico da organização mostra **Encerramento pedido** e **Encerramento cancelado**, com o motivo.
 
 ## Limites e cuidados
 

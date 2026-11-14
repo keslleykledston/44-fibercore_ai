@@ -7,19 +7,19 @@ import { apiSafe } from "@/lib/api";
 import { featuresOn } from "@/lib/features";
 import { OltReadiness } from "@/components/OltReadiness";
 import { OltRegisterForm } from "@/components/OltRegisterForm";
-import { FLEET_FLASH, type FleetOlt, type Pop } from "@/lib/fleet";
+import { FLEET_FLASH, oltLimitText, type FleetOlt, type Pop } from "@/lib/fleet";
 import type { Edge } from "@/lib/types";
 
 const field = "min-h-touch rounded-btn border border-line bg-bg px-3";
 
-export default async function Frota({ searchParams }: { searchParams: Promise<{ ok?: string | string[]; erro?: string | string[] }> }) {
+export default async function Frota({ searchParams }: { searchParams: Promise<{ ok?: string | string[]; erro?: string | string[]; atual?: string | string[]; max?: string | string[] }> }) {
   if (!(await featuresOn("fleet_manager"))) notFound();   // recurso desligado: a tela não existe
   const sp = await searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
   const ok = one(sp.ok), erro = one(sp.erro);
   const [olts, pops, edges, assets, secrets, provision] = await Promise.all([apiSafe<{ items: FleetOlt[] }>("/v1/fleet/olts"), apiSafe<{ items: Pop[] }>("/v1/pops"), apiSafe<Edge[]>("/v1/edges"), featuresOn("device_assets"), featuresOn("fleet_secrets"), featuresOn("fleet_provision")]);
   if (olts.status === 403) return <AppShell active="/rede" user="1"><ErrorState title="Sem permissão" hint="Seu papel não permite ver a frota de OLTs." /></AppShell>;
-  const msg = ok && FLEET_FLASH[ok] ? FLEET_FLASH[ok] : erro && FLEET_FLASH[erro] ? FLEET_FLASH[erro] : null;
+  const msg = erro === "limiteolts" ? oltLimitText(one(sp.atual), one(sp.max)) : ok && FLEET_FLASH[ok] ? FLEET_FLASH[ok] : erro && FLEET_FLASH[erro] ? FLEET_FLASH[erro] : null;
   const list = olts.data?.items ?? [], popList = pops.data?.items ?? [], edgeList = edges.data ?? [];
   return (
     <AppShell active="/rede" user="1">

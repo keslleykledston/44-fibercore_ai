@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ConnectionFields } from "@/components/ConnectionFields";
 import { FormHelp } from "@/components/FormHelp";
 import { PopCombobox } from "@/components/PopCombobox";
-import { ADDRESS_HELP, CRED_HELP, FLEET_FLASH, FLEET_VENDORS, SNMP_VERSIONS, type Pop } from "@/lib/fleet";
+import { ADDRESS_HELP, CRED_HELP, FLEET_FLASH, FLEET_VENDORS, SNMP_VERSIONS, fleetErrorText, type Pop } from "@/lib/fleet";
 import { connectionPlain, DEFAULT_PORT, EDGE_VENDORS, hostKeyProblem, ipLiteralProblem, portProblem, TRUST_COMMAND, VENDOR_WARNING } from "@/lib/oltConnection";
 import { fetchSealKey, sealAndDeliver, sealSupported } from "@/lib/oltDeliver";
 import { plainProblem, type Plain } from "@/lib/oltSeal";
@@ -55,13 +55,13 @@ export function OltRegisterForm({ edges, pops, secretsOn, provisionOn }: { edges
       const body: Record<string, string> = {};
       for (const [k, v] of fd.entries()) if (typeof v === "string") body[k] = v;
       const r = await fetch("/bff/frota/olts", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-      const j = (await r.json().catch(() => null)) as { id?: string; detail?: string } | null;
+      const j = (await r.json().catch(() => null)) as { id?: string; detail?: string; atual?: unknown; max?: unknown } | null;
       if (r.status === 201 && j?.id) {
         if (body.mgmt_address) setDraftAddress(j.id, body.mgmt_address);
         router.push(`/rede/frota/${j.id}?ok=oltassistente#passos`);
         return;
       }
-      setErr(FLEET_FLASH[j?.detail ?? ""] ?? FLEET_FLASH.falha);
+      setErr(fleetErrorText(j));
     } catch {
       setErr(FLEET_FLASH.falha);
     } finally {
@@ -111,8 +111,8 @@ export function OltRegisterForm({ edges, pops, secretsOn, provisionOn }: { edges
       const body: Record<string, string> = {};
       for (const [k, v] of fd.entries()) if (typeof v === "string") body[k] = v;
       const r = await fetch("/bff/frota/olts", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-      const j = (await r.json().catch(() => null)) as { id?: string; detail?: string } | null;
-      if (r.status !== 201 || !j?.id) { const t = FLEET_FLASH[j?.detail ?? ""] ?? FLEET_FLASH.falha; set("cadastro", "error", t); for (const k of ["conexao", "credencial", "confirmacao"]) if (steps.find((x) => x.key === k)!.state === "wait") set(k, "skip", "Não feito: o cadastro falhou."); return; }
+      const j = (await r.json().catch(() => null)) as { id?: string; detail?: string; atual?: unknown; max?: unknown } | null;
+      if (r.status !== 201 || !j?.id) { const t = fleetErrorText(j); set("cadastro", "error", t); for (const k of ["conexao", "credencial", "confirmacao"]) if (steps.find((x) => x.key === k)!.state === "wait") set(k, "skip", "Não feito: o cadastro falhou."); return; }
       const id = j.id;
       set("cadastro", "ok");
       setDraftAddress(id, address);   // só em memória: se algo falhar, a página da OLT já traz o endereço no passo da conexão
