@@ -179,7 +179,7 @@ func (c *Client) Deliver(ctx context.Context, kind string, payload []byte) (Outc
 		return o, err
 	}
 	path, ok := map[string]string{"olt_snapshot": "/v1/edge/olt-snapshots", "cpe_snapshot": "/v1/edge/cpe-snapshots", "cpe_state": "/v1/edge/cpe-state", "speed_health": "/v1/edge/speed-health",
-		"acs_status": "/v1/edge/acs-status"}[kind]
+		"acs_status": "/v1/edge/acs-status", "olt_autofind": "/v1/edge/olt-autofind"}[kind]
 	if !ok {
 		return Rejected, fmt.Errorf("unknown kind %q", kind)
 	}

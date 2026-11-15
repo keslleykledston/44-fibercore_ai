@@ -135,6 +135,7 @@ func main() {
 	}
 
 	var oltCol *collector.OLT
+	var autofind []collector.AutofindSource
 	if len(cfg.OLTs) > 0 || cfg.ManagedOLTs != nil {
 		oc := &collector.OLT{EdgeID: cfg.EdgeID, Guard: collector.FileGuard{Path: guardPath},
 			OnCollected: func(name string, took time.Duration, items int, err error) {
@@ -235,6 +236,9 @@ func main() {
 				}
 			}
 			oc.Sources = append(oc.Sources, src)
+			if every := o.AutofindEvery(); every > 0 { // ADR-0055: its own short, paced session; the same opener, driver and device lock as the collection
+				autofind = append(autofind, collector.AutofindSource{Src: src, Every: every})
+			}
 		}
 		if cfg.ManagedOLTs != nil { // ADR-0046: the managed OLTs are read from the local registry at EVERY round; only the locally trusted ones are collected
 			pol, mstore, err := openManaged(cfg)
@@ -250,6 +254,9 @@ func main() {
 		}
 		oltCol = oc
 		collectors = append(collectors, oc)
+		if len(autofind) > 0 {
+			collectors = append(collectors, &collector.Autofind{EdgeID: cfg.EdgeID, OLT: oc, Sources: autofind})
+		}
 	}
 
 	var verifier *jobs.Verifier

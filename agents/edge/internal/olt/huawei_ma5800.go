@@ -3,6 +3,7 @@ package olt
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -338,3 +339,32 @@ func ma58DropCommandEcho(out, cmd string) string {
 }
 
 var ma58NoAutofind = regexp.MustCompile(`(?mi)^\s*Failure\s*:\s*The automatically found ONTs do not exist\s*$`)
+
+// AutofindReader is a driver that can read, on a session of its own, the list of ONTs waiting for authorisation and hand it over typed (the closed shape of `olt.autofind`).
+type AutofindReader interface {
+	ReadAutofind(ctx context.Context, s Session) (json.RawMessage, error)
+}
+
+// ReadAutofind is the whole short session of the periodic autofind read: `display version` (the profile only runs on the releases it was validated on), `enable`, then the
+// one listing. Three commands, all read-only, all in the allowlist. The result is the typed list; an output that is not the verified layout is a bad output, never guessed.
+func (h HuaweiMA58) ReadAutofind(ctx context.Context, s Session) (json.RawMessage, error) {
+	id, err := h.Identify(ctx, s)
+	if err != nil {
+		return nil, err
+	}
+	if !isMA58R02x(id) {
+		return nil, fmt.Errorf("huawei_ma58_r02x profile on %s %s (validated only on %s)", id.Model, id.Firmware, strings.Join(ma58Releases, ", "))
+	}
+	out, err := s.Run(ctx, "enable")
+	if err != nil {
+		return nil, err
+	}
+	if ma58CLIError.MatchString(out) || !ma58EnableOK(out) {
+		return nil, fmt.Errorf("huawei ma58: enable did not reach the privileged view; nothing else was sent")
+	}
+	list, err := h.RunAutofind(ctx, s)
+	if err != nil {
+		return nil, err
+	}
+	return ParseResult("olt.autofind", list)
+}

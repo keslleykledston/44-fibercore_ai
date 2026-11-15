@@ -172,6 +172,9 @@ type OLTConfig struct {
 	// ClockOffsetMinutes (profile huawei_ma58_r02x only): the OLT clock's offset from UTC in minutes (e.g. -180). The MA5800 prints its last
 	// down times without a zone; absent = they are NOT reported (never guessed). The status and the down cause are reported either way.
 	ClockOffsetMinutes *int `json:"clock_offset_minutes"`
+	// AutofindSeconds (ADR-0055, profile huawei_ma58_r02x only): read the list of ONTs waiting for authorisation (`display ont autofind all`, read-only) every this many
+	// seconds, in a short session of its own (login, `enable`, one command) paced apart from the collection. 0 = off; otherwise 300..3600.
+	AutofindSeconds int `json:"autofind_seconds"`
 	// CloudID is the id of this OLT in the Cloud (lower-case UUID): what an olt_query job names. Only OLTs that have it take queries.
 	CloudID string `json:"cloud_id"`
 	// Capture (ADR-0032): supervised, ONE-TIME captures of queries that are not validated yet; the raw output stays on this host (captures/, 0700/0600, deleted after 24 h).
@@ -514,6 +517,9 @@ func (c *Config) Validate() error {
 		if o.ClockOffsetMinutes != nil && (o.Profile != "huawei_ma58_r02x" || *o.ClockOffsetMinutes < -720 || *o.ClockOffsetMinutes > 840) {
 			errs = append(errs, fmt.Errorf("%s: clock_offset_minutes needs profile huawei_ma58_r02x and a value in -720..840", p))
 		}
+		if o.AutofindSeconds != 0 && (o.Profile != "huawei_ma58_r02x" || o.AutofindSeconds < 300 || o.AutofindSeconds > 3600) {
+			errs = append(errs, fmt.Errorf("%s: autofind_seconds needs profile huawei_ma58_r02x and a value of 0 (off) or 300..3600", p))
+		}
 		if o.SSHPagerSpace && o.SSHMode != "shell" {
 			errs = append(errs, fmt.Errorf("%s: ssh_pager_space requires ssh_mode shell", p))
 		}
@@ -734,6 +740,11 @@ func (o OLTConfig) OLTInterval() time.Duration {
 		return 0
 	}
 	return 15 * time.Minute
+}
+
+// AutofindEvery is how often the autofind list is read (0 = never).
+func (o OLTConfig) AutofindEvery() time.Duration {
+	return time.Duration(o.AutofindSeconds) * time.Second
 }
 
 func (o OLTConfig) OLTCooldown() time.Duration { return time.Duration(o.CooldownSeconds) * time.Second }

@@ -578,3 +578,29 @@ func TestMA58AutofindWithEntryUsesTheVerifiedLayoutAndRefusesTheRest(t *testing.
 		t.Fatal("a device rejection must be an error")
 	}
 }
+
+// The periodic autofind read is its own short session: version check, `enable`, ONE listing, in this order, nothing else.
+func TestMA58ReadAutofindIsThreeReadCommandsInOrder(t *testing.T) {
+	dev := ma58Device(t)
+	dev.out["display ont autofind all"] = ma58Wire(t, "display_ont_autofind_all_empty.txt", "display ont autofind all", ma58Priv)
+	raw, err := (HuaweiMA58{}).ReadAutofind(context.Background(), dev)
+	if err != nil || string(raw) != `{"entries":[]}` {
+		t.Fatalf("raw=%s err=%v", raw, err)
+	}
+	if want := []string{"display version", "enable", "display ont autofind all"}; !reflect.DeepEqual(dev.sent, want) {
+		t.Fatalf("commands %v, want %v", dev.sent, want)
+	}
+}
+
+func TestMA58ReadAutofindRefusesAnUnvalidatedReleaseAndADeniedEnable(t *testing.T) {
+	dev := ma58Device(t)
+	dev.out["display version"] = strings.ReplaceAll(dev.out["display version"], "MA5800V100R024C11", "MA5800V100R023C10")
+	if _, err := (HuaweiMA58{}).ReadAutofind(context.Background(), dev); err == nil || len(dev.sent) != 1 {
+		t.Fatalf("an unvalidated release must stop after `display version`: err=%v sent=%v", err, dev.sent)
+	}
+	dev = ma58Device(t)
+	dev.out["enable"] = "  % Unknown command, the error locates at '^'\n"
+	if _, err := (HuaweiMA58{}).ReadAutofind(context.Background(), dev); err == nil || len(dev.sent) != 2 {
+		t.Fatalf("a denied enable must stop there: err=%v sent=%v", err, dev.sent)
+	}
+}

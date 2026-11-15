@@ -39,7 +39,7 @@ export default async function Pendentes({ searchParams }: { searchParams: Promis
   const askedAge = read?.status === 200 && read.data && typeof read.data.asked_age_seconds === "number" && Number.isFinite(read.data.asked_age_seconds) ? read.data.asked_age_seconds : null;
   const inFuture = askedAge !== null && askedAge < -300;   // carimbada no futuro além da tolerância da API (5 min): leitura inválida, nunca "recente"
   const ageMin = askedAge !== null && !inFuture ? Math.max(0, Math.floor(askedAge / 60)) : null;
-  const readFresh = askedAge !== null && !inFuture && askedAge <= 3600 && read?.data?.source === "job";
+  const readFresh = askedAge !== null && !inFuture && askedAge <= 3600 && (read?.data?.source === "job" || read?.data?.source === "routine");
   const nEntries = Array.isArray(read?.data?.data?.entries) ? read!.data!.data!.entries!.length : null;
   const readLine = !sel ? null : inFuture ? "A última leitura do Edge está carimbada no futuro e não pode ser usada: uma fila vazia não prova que não há ONUs aguardando."
     : read?.status === 200 && ageMin !== null ? (readFresh ? `Última leitura do Edge há ${ageMin} min: ${nEntries ?? "?"} ONU(s) detectada(s) na OLT.` : `A última leitura do Edge é antiga (há ${ageMin >= 120 ? `${Math.floor(ageMin / 60)} h` : `${ageMin} min`}): não dá para afirmar o que está aguardando agora.`)

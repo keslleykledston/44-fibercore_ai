@@ -11,10 +11,11 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import Connection, text
 
-from app.api.deps import TENANT_CONN, Principal, require
+from app.api.deps import TENANT_CONN, Principal, edge_ingest_limit, require
+from app.api.inventory import _bound_edge, _check_observed
 from app.api.routes import audit
 from app.core import features
 from app.core import onu_discovery as od
@@ -85,6 +86,63 @@ def import_observations(olt_id: UUID, body: ImportIn, p: Principal = Depends(req
 SYNC_MAX_AGE = od.FRESH_FOR   # the autofind list is the OLT's CURRENT state: a read older than the freshness window is not turned into sightings, ask the OLT again
 
 
+def apply_entries(conn: Connection, tenant_id: UUID, olt_id: UUID, entries: list[dict], asked: datetime, by: UUID | None) -> tuple[int, int, int]:
+    """Turn an already checked `olt.autofind` list into `edge_read` sightings (the only authoritative source); idempotent per read (a read not newer than a sighting changes
+    nothing). Shared by the on-demand sync and by the Edge's periodic push."""
+    created = updated = unchanged = 0
+    for e in entries:
+        r = conn.execute(
+            text("INSERT INTO onu_discovery_observations (tenant_id, olt_id, pon_path, serial, vendor_hint, source, first_seen_at, last_seen_at, created_by) "
+                 "VALUES (:t,:o,:pon,:s,:v,'edge_read',:at,:at,:by) "
+                 "ON CONFLICT (tenant_id, olt_id, pon_path, serial, source) DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at, seen_count = onu_discovery_observations.seen_count + 1, "
+                 "vendor_hint = COALESCE(EXCLUDED.vendor_hint, onu_discovery_observations.vendor_hint) WHERE onu_discovery_observations.last_seen_at < EXCLUDED.last_seen_at "
+                 "RETURNING (xmax = 0) AS inserted"),
+            {"t": tenant_id, "o": olt_id, "pon": e["pon_path"], "s": e["serial"], "v": e["vendor"], "at": asked, "by": by}).first()
+        if r is None:
+            unchanged += 1
+        elif r.inserted:
+            created += 1
+        else:
+            updated += 1
+    return created, updated, unchanged
+
+
+class AutofindPush(BaseModel):
+    """The Edge's periodic read of the OLT's autofind list (ADR-0055): the list is the OLT's CURRENT state, so an empty one is a valid answer."""
+    model_config = ConfigDict(extra="forbid")
+    edge_id: UUID
+    observed_at: datetime
+    name: str = Field(min_length=1, max_length=200)
+    entries: list[dict] = Field(max_length=128)
+
+    _obs = field_validator("observed_at")(_check_observed)
+
+
+@router.post("/v1/edge/olt-autofind", status_code=202)
+def ingest_autofind(body: AutofindPush, p: Principal = Depends(require("inventory:write")), _rl: None = Depends(edge_ingest_limit), conn: Connection = TENANT_CONN) -> dict:
+    """The Edge's own periodic `olt.autofind` read (it asks no job, takes no lease: one read-only command on its own paced session). Same checks as the on-demand read: the closed
+    typed shape, the OLT owned by THIS Edge, the tenant flag. Stored as the cache's `routine` read and turned into `edge_read` sightings in the same transaction. Nothing is
+    authorised or removed; a serial the list no longer shows is not touched (it ages into `stale`)."""
+    from app.core import olt_cache, olt_query
+    _bound_edge(p, body.edge_id)
+    if not features.enabled(conn, p.tenant_id, "onu_discovery"):
+        return {"status": "ignored_feature_off"}   # not an error: an Edge keeps reading and the organisation may turn the queue on later
+    row = conn.execute(text("SELECT id, edge_id, owner_epoch FROM olts WHERE name = :n FOR UPDATE"), {"n": body.name}).first()
+    if row is None:
+        raise HTTPException(404, "olt not found")
+    if row.edge_id != body.edge_id:
+        raise HTTPException(409, "olt name owned by another edge")
+    data = {"entries": body.entries}
+    if not olt_query.check_result("olt.autofind", data):
+        raise HTTPException(422, "not the typed shape of olt.autofind")
+    if not olt_cache.store_latest(conn, p.tenant_id, row.id, "olt.autofind", "", data, row.owner_epoch, body.observed_at, source="routine"):
+        return {"status": "ignored_stale", "olt_id": str(row.id)}
+    created, updated, unchanged = apply_entries(conn, p.tenant_id, row.id, body.entries, body.observed_at, None)
+    if created:   # a new ONU waiting is worth a line in the audit; the 10-minute heartbeat of an unchanged list is not
+        audit(conn, p, "discovery.observations.edge_pushed", "olt", str(row.id), {"source": "edge_read", "created": created, "entries": len(body.entries)})
+    return {"status": "accepted", "olt_id": str(row.id), "created": created, "updated": updated, "unchanged": unchanged}
+
+
 @router.post("/v1/olts/{olt_id}/onus/unregistered/sync")
 def sync_from_read(olt_id: UUID, p: Principal = Depends(require("discovery:import")), conn: Connection = TENANT_CONN) -> dict:
     """Turn the Edge's last typed read of the OLT's autofind list (`olt.autofind`, already checked against its closed shape by the job that brought it) into `edge_read`
@@ -98,7 +156,7 @@ def sync_from_read(olt_id: UUID, p: Principal = Depends(require("discovery:impor
     got = olt_cache.latest(conn, olt_id, "olt.autofind", "")
     if got is None:
         raise HTTPException(409, "no_read: ask the OLT for its autofind list first (query olt.autofind)")
-    if got.get("source") != "job":
+    if got.get("source") not in ("job", "routine"):   # a read the Edge made from the equipment: asked on demand, or its periodic autofind (ADR-0055)
         raise HTTPException(409, "read_not_from_the_equipment")
     now = datetime.now(UTC)
     asked = datetime.fromisoformat(got["asked_at"])
@@ -108,21 +166,7 @@ def sync_from_read(olt_id: UUID, p: Principal = Depends(require("discovery:impor
         raise HTTPException(409, "read_too_old: ask the OLT again")
     if not olt_query.check_result("olt.autofind", got["data"]):   # the cache is trusted only as far as its shape: checked again at the point of use
         raise HTTPException(409, "read_not_usable")
-    created = updated = unchanged = 0
-    for e in got["data"]["entries"]:
-        r = conn.execute(
-            text("INSERT INTO onu_discovery_observations (tenant_id, olt_id, pon_path, serial, vendor_hint, source, first_seen_at, last_seen_at, created_by) "
-                 "VALUES (:t,:o,:pon,:s,:v,'edge_read',:at,:at,:by) "
-                 "ON CONFLICT (tenant_id, olt_id, pon_path, serial, source) DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at, seen_count = onu_discovery_observations.seen_count + 1, "
-                 "vendor_hint = COALESCE(EXCLUDED.vendor_hint, onu_discovery_observations.vendor_hint) WHERE onu_discovery_observations.last_seen_at < EXCLUDED.last_seen_at "
-                 "RETURNING (xmax = 0) AS inserted"),
-            {"t": p.tenant_id, "o": olt_id, "pon": e["pon_path"], "s": e["serial"], "v": e["vendor"], "at": asked, "by": p.id}).first()
-        if r is None:
-            unchanged += 1
-        elif r.inserted:
-            created += 1
-        else:
-            updated += 1
+    created, updated, unchanged = apply_entries(conn, p.tenant_id, olt_id, got["data"]["entries"], asked, p.id)
     audit(conn, p, "discovery.observations.synced", "olt", str(olt_id), {"source": "edge_read", "created": created, "updated": updated, "unchanged": unchanged})
     return {"olt_id": str(olt_id), "source": "edge_read", "created": created, "updated": updated, "unchanged": unchanged, "entries": len(got["data"]["entries"]),
             "asked_at": asked.isoformat(), "age_seconds": int((now - asked).total_seconds())}

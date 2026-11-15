@@ -815,3 +815,32 @@ func TestConnectionTestOnDatacomIntelbrasAndMA58(t *testing.T) {
 		t.Error("a generic huawei entry (no profile) keeps no cloud_id")
 	}
 }
+
+// ADR-0055: the periodic autofind read is only for the MA5800 profile, off by default, and never faster than every 5 minutes.
+func TestAutofindSecondsOnlyOnTheMA58ProfileAndInRange(t *testing.T) {
+	mk := func(olt string) string {
+		return `,"allowlist":["10.0.0.1:22"],"olts":[` + olt + `]`
+	}
+	ma := func(extra string) string {
+		return `{"name":"M","vendor":"huawei","profile":"huawei_ma58_r02x","address":"10.0.0.1:22","username":"u","secret_file":"/s","host_key_sha256":"SHA256:abc","pon_ports":["0/1/0"],"ssh_mode":"shell"` + extra + `}`
+	}
+	for _, ok := range []string{"", `,"autofind_seconds":0`, `,"autofind_seconds":300`, `,"autofind_seconds":600`, `,"autofind_seconds":3600`} {
+		if _, err := Load(write(t, 0o600, good(mk(ma(ok)))), "v"); err != nil {
+			t.Errorf("%q must load: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{`,"autofind_seconds":299`, `,"autofind_seconds":3601`, `,"autofind_seconds":-1`} {
+		if _, err := Load(write(t, 0o600, good(mk(ma(bad)))), "v"); err == nil {
+			t.Errorf("%q must be refused", bad)
+		}
+	}
+	generic := `{"name":"G","vendor":"huawei","address":"10.0.0.1:22","username":"u","secret_file":"/s","host_key_sha256":"SHA256:abc","pon_ports":["0/1/0"],"autofind_seconds":600}`
+	if _, err := Load(write(t, 0o600, good(mk(generic))), "v"); err == nil {
+		t.Error("another profile must not take autofind_seconds")
+	}
+	var c OLTConfig
+	c.AutofindSeconds = 600
+	if c.AutofindEvery() != 10*time.Minute {
+		t.Error("AutofindEvery")
+	}
+}

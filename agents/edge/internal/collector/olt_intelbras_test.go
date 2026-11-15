@@ -174,7 +174,7 @@ type ma58QuerySession struct{ sent []string }
 func (f *ma58QuerySession) Run(_ context.Context, cmd string) (string, error) {
 	f.sent = append(f.sent, cmd)
 	dir := filepath.Join("..", "olt", "testdata", "huawei_ma5800_r02x")
-	n := map[string]string{"display version": "display_version_user_r024c11.txt", "display ont autofind all": "display_ont_autofind_all_empty.txt"}[cmd]
+	n := map[string]string{"display version": "display_version_user_r024c11.txt", "enable": "enable_ok.txt", "display ont autofind all": "display_ont_autofind_all_empty.txt"}[cmd]
 	if n == "" {
 		return "", errors.New("unexpected " + cmd)
 	}
@@ -202,7 +202,7 @@ func TestMA58AutofindQueryRunsInTheCollectionSession(t *testing.T) {
 		t.Fatalf("olt.board must not run on the MA5800: %+v", b)
 	}
 	for _, cmd := range raw.sent {
-		if cmd != "display version" && cmd != "display ont autofind all" {
+		if cmd != "display version" && cmd != "display ont autofind all" && cmd != "enable" {
 			t.Fatalf("unexpected command %q", cmd)
 		}
 	}
