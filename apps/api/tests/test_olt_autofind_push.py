@@ -69,6 +69,10 @@ def test_the_push_is_refused_when_the_shape_the_olt_or_the_edge_is_wrong(client,
     assert client.post("/v1/edge/olt-autofind", headers=agent(client, inv, "a2"), json=body).status_code == 409   # the OLT belongs to a1's Edge
     future = datetime.now(UTC) + timedelta(hours=1)
     assert _push(client, inv, name, [], when=future).status_code == 422
+    r = _push(client, inv, name, [ENTRY], when=datetime.now(UTC) - timedelta(minutes=16))   # an old replay is ignored, not stored
+    assert r.status_code == 202 and r.json()["status"] == "ignored_too_old"
+    with migrated.begin() as c:
+        assert c.execute(text("SELECT count(*) FROM onu_discovery_observations")).scalar() == 0
     assert _push(client, inv, name, [ENTRY] * 2).status_code == 422                          # a serial listed twice is not the closed shape
 
 

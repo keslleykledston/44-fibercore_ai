@@ -190,6 +190,7 @@
 | GET | `/v1/edge/jobs/next` | `jobs:execute` |
 | POST | `/v1/edge/jobs/{job_id}/result` | `jobs:execute` |
 | POST | `/v1/edge/managed-olts/state` | `jobs:execute` |
+| POST | `/v1/edge/olt-autofind` | `inventory:write` |
 | POST | `/v1/edge/olt-snapshots` | `inventory:write` |
 | POST | `/v1/edge/seal-key` | `jobs:execute` |
 | GET | `/v1/edge/secret-deliveries/next` | `jobs:execute` |

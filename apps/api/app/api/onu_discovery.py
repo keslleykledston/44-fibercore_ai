@@ -83,6 +83,7 @@ def import_observations(olt_id: UUID, body: ImportIn, p: Principal = Depends(req
     return {"olt_id": str(olt_id), "source": body.source, "created": created, "updated": updated}
 
 
+PUSH_MAX_AGE = timedelta(minutes=15)   # the age the cache lets an autofind read answer (olt_cache.DEFAULT_TTL): older than that is history, not the OLT's current list
 SYNC_MAX_AGE = od.FRESH_FOR   # the autofind list is the OLT's CURRENT state: a read older than the freshness window is not turned into sightings, ask the OLT again
 
 
@@ -132,6 +133,8 @@ def ingest_autofind(body: AutofindPush, p: Principal = Depends(require("inventor
         raise HTTPException(404, "olt not found")
     if row.edge_id != body.edge_id:
         raise HTTPException(409, "olt name owned by another edge")
+    if datetime.now(UTC) - body.observed_at > PUSH_MAX_AGE:   # an Edge that comes back from an outage replays an old list: it is not turned into sightings (not an error: nothing to resend)
+        return {"status": "ignored_too_old", "olt_id": str(row.id)}
     data = {"entries": body.entries}
     if not olt_query.check_result("olt.autofind", data):
         raise HTTPException(422, "not the typed shape of olt.autofind")
